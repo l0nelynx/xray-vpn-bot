@@ -1,0 +1,19 @@
+  services:
+    tgbot:
+      build: SteamPaymentBot
+      image: alpine
+      command: python main.py
+      networks:
+        - bot_net
+      volumes:
+        - /var/run/docker.sock:/var/run/docker.sock
+        - .:/app
+
+    target:
+      image: alpine
+      command: sleep infinity
+      networks:
+        - bot_net
+
+  networks:
+    bot_net:
