@@ -1,10 +1,10 @@
 build:
-	docker build -t steambot:latest .
+	docker build -t cheezy-vpn-bot:latest .
 run:
-	docker run --env-file .env --restart=unless-stopped --mount type=bind,source=$(CURDIR)/db/db.sqlite3,target=/usr/src/app/db.sqlite3 -it -d --name steambot steambot
+	docker run --env-file .env --restart=unless-stopped --mount type=bind,source=$(CURDIR)/db/db.sqlite3,target=/usr/src/app/db.sqlite3 -it -d --name cheezy-vpn-bot cheezy-vpn-bot
 stop:
-	docker stop steambot
+	docker stop cheezy-vpn-bot
 attach:
-	docker attach steambot
+	docker attach cheezy-vpn-bot
 dell:
-	docker rm steambot
+	docker rm cheezy-vpn-bot
