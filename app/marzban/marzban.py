@@ -45,12 +45,13 @@ class MarzbanAsync:
                 print(error_text)
                 raise Exception("Ошибка аутентификации")
 
-    async def add_user(self, template, name, usrid, limit, res_strat):
+    async def add_user(self, template, name, usrid, limit, res_strat,expire):
         """Создание пользователя"""
         template["username"] = name
         template["id"] = f"id{usrid}"
         template["data_limit"] = limit
         template["data_limit_reset_strategy"] = f"{res_strat}"
+        template["expire"] = expire
 
         headers = {
             "Authorization": f"{self.token_type} {self.access_token}",
@@ -72,11 +73,12 @@ class MarzbanAsync:
                 print(f"Ошибка {response.status}: {error_text}")
                 return response.status
 
-    async def set_user(self, template, name, limit, res_strat):
+    async def set_user(self, template, name, limit, res_strat, expire):
         """Создание пользователя"""
         del template["username"]
         template["data_limit"] = limit
         template["data_limit_reset_strategy"] = f"{res_strat}"
+        template["expire"] = expire
         headers = {
             "Authorization": f"{self.token_type} {self.access_token}",
             "Content-Type": "application/json"

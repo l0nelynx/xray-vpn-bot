@@ -22,8 +22,12 @@ premium_button = InlineKeyboardButton(
     text="🔒Приобрести CheezeVPN Premium⭐️",
     callback_data='Premium')
 
+extend_button = InlineKeyboardButton(
+    text="🔒Продлить на 1 Месяц | 100⭐️",
+    callback_data='Extend_Month')
+
 howto_button = InlineKeyboardButton(
-    text="Как установить",
+    text="Инструкция по установке",
     callback_data='Others')
 
 free_button = InlineKeyboardButton(
@@ -31,9 +35,9 @@ free_button = InlineKeyboardButton(
     callback_data='Free')
 
 android_button = InlineKeyboardButton(
-    text="Android",
-    web_app=WebAppInfo(url=os.environ["URL_PSNUS"])
-)
+    text="Android/IOS",
+    callback_data='Android_Help')
+
 ios_button = InlineKeyboardButton(
     text="IOS",
     web_app=WebAppInfo(url=os.environ["URL_NINT"])
@@ -53,13 +57,18 @@ main = InlineKeyboardMarkup(inline_keyboard=[[premium_button],
                                              [free_button]])
 
 others = InlineKeyboardMarkup(inline_keyboard=[[android_button],
-                                               [ios_button],
-                                               [win_button],
-                                               [linux_button],
+                                               #[ios_button],
+                                               #[win_button],
+                                               #[linux_button],
                                                [to_main_button]])
-pay_methods = InlineKeyboardMarkup(inline_keyboard=[[paystars_button]])
-pay_tariffs = InlineKeyboardMarkup(inline_keyboard=[[paystars_month]])
+pay_methods = InlineKeyboardMarkup(inline_keyboard=[[paystars_button],
+                                                    [to_main_button]])
+pay_tariffs = InlineKeyboardMarkup(inline_keyboard=[[paystars_month],
+                                                    [to_main_button]])
+pay_extend_month = InlineKeyboardMarkup(inline_keyboard=[[extend_button],
+                                                         [to_main_button]])
 
 
 def connect(link):
-    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="v2RayTun", web_app=WebAppInfo(url=link))]])
+    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="Подробнее", web_app=WebAppInfo(url=link))],
+                                                 [to_main_button]])
