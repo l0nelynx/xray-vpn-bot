@@ -15,7 +15,7 @@ paystars_button = InlineKeyboardButton(
     callback_data='Stars_Plans')
 
 paystars_month = InlineKeyboardButton(
-    text="🔒БЕЗЛИМИТ - 1 Месяц | 100⭐️",
+    text="🔒БЕЗЛИМИТ - 1 Месяц | 150⭐️",
     callback_data='Month_Plan')
 
 premium_button = InlineKeyboardButton(
@@ -23,7 +23,7 @@ premium_button = InlineKeyboardButton(
     callback_data='Premium')
 
 extend_button = InlineKeyboardButton(
-    text="🔒Продлить на 1 Месяц | 100⭐️",
+    text="🔒Продлить на 1 Месяц | 150⭐️",
     callback_data='Extend_Month')
 
 howto_button = InlineKeyboardButton(

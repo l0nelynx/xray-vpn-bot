@@ -75,7 +75,7 @@ async def premium(callback: CallbackQuery):
 @router.callback_query(F.data == 'Free')
 async def premium(callback: CallbackQuery):
     async with mz.MarzbanAsync() as marz:
-        await callback.answer('Бесплатная версия (20 Гб в месяц)')
+        await callback.answer('Бесплатная версия (5 Гб в месяц)')
         user_info = await marz.get_user(name=callback.from_user.username)
         if user_info == 404:
             print(user_info)
@@ -83,7 +83,7 @@ async def premium(callback: CallbackQuery):
                 template=mz.vless_template,
                 name=f"{callback.from_user.username}",
                 usrid=f"{callback.from_user.id}",
-                limit=20*1024*1024*1024,
+                limit=5*1024*1024*1024,
                 res_strat="month",  # no_reset day week month year
                 expire=(int(time.time()+30*24*60*60))
             )
@@ -107,7 +107,7 @@ async def premium(callback: CallbackQuery):
                 buyer_nfo = await marz.set_user(
                 template=mz.vless_template,
                 name=f"{callback.from_user.username}",
-                limit=20*1024*1024*1024,
+                limit=5*1024*1024*1024,
                 res_strat="month",  # no_reset day week month year
                 expire=(int(time.time()+30*24*60*60))
                 )
@@ -126,31 +126,16 @@ async def stars_plan(callback: CallbackQuery):
 @router.callback_query(F.data == 'Month_Plan')
 async def stars_month_plan(callback: CallbackQuery):
     await callback.answer('Оплата подписки на месяц')
-    prices = [LabeledPrice(label="XTR", amount=1)]
+    prices = [LabeledPrice(label="XTR", amount=150)]
     await bot.send_invoice(
         callback.from_user.id,
         title="Оплата подписки на месяц",
-        description=f"Покупка за 1 ⭐️!",
+        description=f"Покупка за 150 ⭐️!",
         prices=prices,
         provider_token="",
         payload="channel_support",
         currency="XTR",
-        reply_markup=payment_keyboard(check_amount(1)),
-    )
-    logging.info("Запускаю инвойс")
-
-
-@router.message(Command("donate"))
-async def send_invoice_handler(message: Message, command: CommandObject):
-    prices = [LabeledPrice(label="XTR", amount=check_amount(command.args))]
-    await message.answer_invoice(
-        title="Поддержка канала",
-        description=f"Поддержать сервис на {check_amount(command.args)} ⭐️!",
-        prices=prices,
-        provider_token="",
-        payload="channel_support",
-        currency="XTR",
-        reply_markup=payment_keyboard(check_amount(command.args)),
+        reply_markup=payment_keyboard(check_amount(150)),
     )
     logging.info("Запускаю инвойс")
 
@@ -165,7 +150,7 @@ async def pre_checkout_handler(pre_checkout_query: PreCheckoutQuery):
 async def success_payment_handler(message: Message):
     await message.answer(text="🥳Оплата прошла успешно!🤗")
     async with mz.MarzbanAsync() as marz:
-        # await message.answer('Бесплатная версия (20 Гб в месяц)')
+        # await message.answer('Бесплатная версия (5 Гб в месяц)')
         user_info = await marz.get_user(name=message.from_user.username)
         if user_info == 404:
             print(user_info)
