@@ -147,7 +147,7 @@ async def handle_crypto_payment(invoice, message):
 @router.callback_query(F.data == 'Month_Plan')
 async def stars_month_plan(callback: CallbackQuery):
     await callback.answer('Оплата подписки на месяц')
-    prices = [LabeledPrice(label="XTR", amount=1)]
+    prices = [LabeledPrice(label="XTR", amount=150)]
     await bot.send_invoice(
         callback.from_user.id,
         title="Оплата подписки на месяц",
