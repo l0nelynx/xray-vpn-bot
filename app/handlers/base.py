@@ -74,7 +74,7 @@ async def premium(callback: CallbackQuery):
 
 
 @router.callback_query(F.data == 'Free')
-async def premium(callback: CallbackQuery):
+async def free_buy(callback: CallbackQuery):
     async with mz.MarzbanAsync() as marz:
         await callback.answer('Бесплатная версия (5 Гб в месяц)')
         user_info = await marz.get_user(name=callback.from_user.username)
@@ -88,7 +88,10 @@ async def premium(callback: CallbackQuery):
                 res_strat="month",  # no_reset day week month year
                 expire=(int(time.time()+30*24*60*60))
             )
-            expire_day = round((buyer_nfo["expire"] - time.time()) / (24 * 60 * 60))
+            if buyer_nfo["expire"] is None:
+                expire_day = "Unlimited"
+            else:
+                expire_day = round((buyer_nfo["expire"] - time.time()) / (24 * 60 * 60))
             sub_link = buyer_nfo["subscription_url"]
             await callback.message.answer(text=f"<b>Подписка оформлена</b>\n"
                                                f"Подписка будет действовать дней: {expire_day}\n"
@@ -98,7 +101,10 @@ async def premium(callback: CallbackQuery):
             print(user_info["username"])
             sub_link = user_info["subscription_url"]
             status = user_info["status"]
-            expire_day = round((user_info["expire"] - time.time()) / (24 * 60 * 60))
+            if user_info["expire"] is None:
+                expire_day = "Unlimited"
+            else:
+                expire_day = round((user_info["expire"] - time.time()) / (24 * 60 * 60))
             if status == "active":
                 await callback.message.answer(text=f"<b>Подписка уже активна</b>\n"
                                                    f"Осталось дней: {expire_day}\n"

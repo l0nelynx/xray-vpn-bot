@@ -31,7 +31,10 @@ async def success_payment_handler(message: Message):
                 res_strat="no_reset",  # no_reset day week month year
                 expire=(int(time.time()+30*24*60*60))
             )
-            expire_day = round((buyer_nfo["expire"] - time.time()) / (24 * 60 * 60))
+            if buyer_nfo["expire"] is None:
+                expire_day = "Unlimited"
+            else:
+                expire_day = round((buyer_nfo["expire"] - time.time()) / (24 * 60 * 60))
             sub_link = buyer_nfo["subscription_url"]
             await message.answer(text=f"❤️Cпасибо за покупку!\n\n"
                                       f"<b>Подписка оформлена</b>\n"
@@ -43,7 +46,10 @@ async def success_payment_handler(message: Message):
             sub_link = user_info["subscription_url"]
             status = user_info["status"]
             limit = user_info["data_limit"]
-            expire_day = round((user_info["expire"] - time.time()) / (24 * 60 * 60))
+            if user_info["expire"] is None:
+                expire_day = "Unlimited"
+            else:
+                expire_day = round((user_info["expire"] - time.time()) / (24 * 60 * 60))
             if status == "active" and limit is None:
                 buyer_nfo = await marz.set_user(
                     template=mz.vless_template,
