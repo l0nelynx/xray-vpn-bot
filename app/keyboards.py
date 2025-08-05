@@ -14,9 +14,17 @@ paystars_button = InlineKeyboardButton(
     text="🔒Telegram Stars⭐️",
     callback_data='Stars_Plans')
 
+paycryptobot_button = InlineKeyboardButton(
+    text="🔒Crypto⭐️",
+    callback_data='Crypto_Plans')
+
 paystars_month = InlineKeyboardButton(
     text="🔒БЕЗЛИМИТ - 1 Месяц | 150⭐️",
     callback_data='Month_Plan')
+
+paycryptobot_month = InlineKeyboardButton(
+    text="🔒БЕЗЛИМИТ - 1 Месяц | 2 USDT",
+    callback_data='Crypto_Month_Plan')
 
 premium_button = InlineKeyboardButton(
     text="🔒Приобрести CheezeVPN Premium⭐️",
@@ -62,9 +70,12 @@ others = InlineKeyboardMarkup(inline_keyboard=[[android_button],
                                                #[linux_button],
                                                [to_main_button]])
 pay_methods = InlineKeyboardMarkup(inline_keyboard=[[paystars_button],
+                                                    [paycryptobot_button],
                                                     [to_main_button]])
-pay_tariffs = InlineKeyboardMarkup(inline_keyboard=[[paystars_month],
+starspay_tariffs = InlineKeyboardMarkup(inline_keyboard=[[paystars_month],
                                                     [to_main_button]])
+cryptospay_tariffs = InlineKeyboardMarkup(inline_keyboard=[[paycryptobot_month],
+                                                         [to_main_button]])
 pay_extend_month = InlineKeyboardMarkup(inline_keyboard=[[extend_button],
                                                          [to_main_button]])
 
