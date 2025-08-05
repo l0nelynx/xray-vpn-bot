@@ -131,10 +131,10 @@ async def stars_plan(callback: CallbackQuery):
 
 
 @router.callback_query(F.data == 'Crypto_Month_Plan')
-async def cryptobot_month_plan(callback: CallbackQuery, message):
+async def cryptobot_month_plan(callback: CallbackQuery):
     invoice = await cp.create_invoice(2, "USDT")
-    await message.answer(f"pay: {invoice.bot_invoice_url}")
-    invoice.poll(message=message)
+    await callback.message.answer(f"pay: {invoice.bot_invoice_url}")
+    invoice.poll(message=callback.message)
     logging.info("Запускаю инвойс")
 
 
