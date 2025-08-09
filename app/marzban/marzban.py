@@ -112,9 +112,10 @@ class MarzbanAsync:
             if response.status == 200:
                 print("Успешный запрос!")
                 response_data = await response.json()
-                print(response_data.get("username", "No inbounds data"))
-                print(response_data.get("subscription_url", "No inbounds data"))
-                print(response_data.get("links", "No inbounds data"))
+                #print(response_data.get("username", "No inbounds data"))
+                print(response_data)
+                #print(response_data.get("subscription_url", "No inbounds data"))
+                #print(response_data.get("links", "No inbounds data"))
                 #                print("Ответ сервера:", response_data)
                 return response_data
             else:

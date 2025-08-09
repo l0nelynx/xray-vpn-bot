@@ -14,6 +14,8 @@ class Secrets:
     auth_name: str = os.environ["AUTH_NAME"]
     auth_pass: str = os.environ["AUTH_PASS"]
     cryptobot_token: str = os.environ["CRYPTO_BOT_TOKEN"]
+    stars_price: str = os.environ["STARS_PRICE"]
+    crypto_price: str = os.environ["CRYPTO_PRICE"]
 
 
 
