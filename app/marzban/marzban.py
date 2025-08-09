@@ -1,6 +1,5 @@
-from app.marzban.templates import vless_template
 from app.settings import Secrets
-import asyncio
+
 import aiohttp
 import json
 
@@ -45,7 +44,7 @@ class MarzbanAsync:
                 print(error_text)
                 raise Exception("Ошибка аутентификации")
 
-    async def add_user(self, template, name, usrid, limit, res_strat,expire):
+    async def add_user(self, template, name, usrid, limit, res_strat, expire):
         """Создание пользователя"""
         template["username"] = name
         template["id"] = f"id{usrid}"
@@ -112,10 +111,10 @@ class MarzbanAsync:
             if response.status == 200:
                 print("Успешный запрос!")
                 response_data = await response.json()
-                #print(response_data.get("username", "No inbounds data"))
+                # print(response_data.get("username", "No inbounds data"))
                 print(response_data)
-                #print(response_data.get("subscription_url", "No inbounds data"))
-                #print(response_data.get("links", "No inbounds data"))
+                # print(response_data.get("subscription_url", "No inbounds data"))
+                # print(response_data.get("links", "No inbounds data"))
                 #                print("Ответ сервера:", response_data)
                 return response_data
             else:

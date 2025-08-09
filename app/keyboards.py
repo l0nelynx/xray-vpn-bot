@@ -1,8 +1,7 @@
-import os
-
 from aiogram.types import InlineKeyboardButton, WebAppInfo, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.filters.callback_data import CallbackData
+
 from app.settings import Secrets
 
 price_stars = Secrets.stars_price
@@ -67,16 +66,13 @@ android_button = InlineKeyboardButton(
     callback_data='Android_Help')
 
 ios_button = InlineKeyboardButton(
-    text="IOS",
-    web_app=WebAppInfo(url=os.environ["URL_NINT"])
+    text="IOS"
 )
 win_button = InlineKeyboardButton(
-    text="Windows",
-    web_app=WebAppInfo(url=os.environ["URL_PSCARD"])
+    text="Windows"
 )
 linux_button = InlineKeyboardButton(
-    text="Linux",
-    web_app=WebAppInfo(url=os.environ["URL_XBOX"])
+    text="Linux"
 )
 to_main_button = InlineKeyboardButton(text='На главную', callback_data='Main')
 # Собираем клавиатуру

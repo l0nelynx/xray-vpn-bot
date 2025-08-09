@@ -16,9 +16,8 @@ class Secrets:
     cryptobot_token: str = os.environ["CRYPTO_BOT_TOKEN"]
     stars_price: str = os.environ["STARS_PRICE"]
     crypto_price: str = os.environ["CRYPTO_PRICE"]
-
-
-
+    free_traffic: str = os.environ["FREE_TRAFFIC"]
+    free_days: str = os.environ["FREE_DAYS"]
 
 
 bot = Bot(token=Secrets.token)

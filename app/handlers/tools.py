@@ -1,19 +1,10 @@
-import logging
 import time
-from aiogram import F, Router
-from aiogram.types import Message, CallbackQuery
-from aiogram.filters import Command, CommandObject
-from aiogram.types import LabeledPrice, PreCheckoutQuery
-from app.settings import bot, cp
-from app.handlers.events import start_bot, stop_bot, userlist
-from app.utils import check_amount
-from app.handlers.events import main_menu, main_call
-from app.locale.lang_ru import text_help
-import app.database.requests as rq
 import app.marzban.marzban as mz
-from app.keyboards import payment_keyboard
 import app.keyboards as kb
-from app.settings import Secrets
+
+from aiogram.types import Message, CallbackQuery
+
+from app.handlers.events import main_menu
 
 
 def time_to_unix(days: int):
@@ -138,7 +129,7 @@ async def success_payment_handler(message: Message, tariff_days):
 
 async def free_sub_handler(callback, free_days, free_limit):
     user_info = await get_user_info(callback)
-    #user_info = await get_user_info(message)
+    # user_info = await get_user_info(message)
     if user_info == 404:
         print("User not found - making a new one")
         buyer_nfo = await add_new_user_info(callback.from_user.username,
@@ -150,14 +141,15 @@ async def free_sub_handler(callback, free_days, free_limit):
         expire_day = await get_user_days(buyer_nfo)
         sub_link = buyer_nfo["subscription_url"]
         await callback.message.answer(text=f"<b>Подписка оформлена</b>\n"
-                                  f"Подписка будет действовать дней: {expire_day}\n"
-                                  f"Ваша ссылка для подключения:\n"
-                                  f"<code>{sub_link}</code>", parse_mode="HTML", reply_markup=kb.connect(sub_link))
+                                           f"Подписка будет действовать дней: {expire_day}\n"
+                                           f"Ваша ссылка для подключения:\n"
+                                           f"<code>{sub_link}</code>", parse_mode="HTML",
+                                      reply_markup=kb.connect(sub_link))
     else:
         print("User found setting up new user info")
         sub_link = user_info["subscription_url"]
-        status = user_info["status"]
-        limit = user_info["data_limit"]
+        # status = user_info["status"]
+        # limit = user_info["data_limit"]
         if user_info["expire"] is None:
             expire_day = "Unlimited"
         else:
@@ -167,10 +159,10 @@ async def free_sub_handler(callback, free_days, free_limit):
                                         'month',
                                         free_days)
         await callback.message.answer(text=f"<b>Подписка успешно продлена еще на месяц</b>\n"
-                                  f"Осталось дней: {expire_day}\n"
-                                  f"Ваша ссылка для подключения:\n"
-                                  f"<code>{sub_link}</code>", parse_mode="HTML",
-                             reply_markup=kb.connect(sub_link))
+                                           f"Осталось дней: {expire_day}\n"
+                                           f"Ваша ссылка для подключения:\n"
+                                           f"<code>{sub_link}</code>", parse_mode="HTML",
+                                      reply_markup=kb.connect(sub_link))
 
 
 async def subscription_info(callback: CallbackQuery):
@@ -183,10 +175,11 @@ async def subscription_info(callback: CallbackQuery):
     if user_info["expire"] is None:
         expire_day = "Unlimited"
     else:
-        expire_day  = await get_user_days(user_info)
+        expire_day = await get_user_days(user_info)
     if status == "active" and limit is None:
         await callback.message.edit_text(f"Pro подписка активна\n"
                                          f"Осталось дней: {expire_day}\n", reply_markup=kb.connect(sub_link))
     else:
         await callback.message.edit_text("Free подписка активна\n"
                                          f"Осталось дней: {expire_day}\n", reply_markup=kb.connect(sub_link))
+
