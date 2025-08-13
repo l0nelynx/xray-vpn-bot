@@ -1,0 +1,13 @@
+# First of all you need to set up these variables and tokens in config.yml
+
+token: "yourbottoken"
+admin_id: "id" # Admin Telegram ID
+marz_url: "https://example.com:8000" # Marzban API/Dashboard address
+auth_name: "John" # Marzban API login
+auth_pass: "Internet" # Marzban API password
+crypto: "UQCiOJeH4xC_XtyNcFXNX9MpHxc7NMyD1BkCeKFcBuC9tfVH" # Crypto to support me
+crypto_bot_token: "JohnBitcoin" # API token for CryptoBot
+stars_price: 150 # Base price of 1-month plan in TG_Stars
+crypto_price: 2 # Base price of 1-month plan in USDT
+free_traffic: 5 # Traffic limit in Gb for FREE plan
+free_days: 30 # Plan limit in Days for FREE plan

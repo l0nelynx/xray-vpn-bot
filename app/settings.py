@@ -1,24 +1,33 @@
-from dataclasses import dataclass
+import yaml
+import os
+
+from pathlib import Path
+
 from aiogram import Bot
 from aiosend import CryptoPay
-import os
-from dotenv import load_dotenv
-load_dotenv()
 
 
-@dataclass
-class Secrets:
-    token: str = os.environ["TOKEN"]
-    admin_id: int = int(os.environ["ADMIN_ID"])
-    marz_url: str = os.environ["MARZ_URL"]
-    auth_name: str = os.environ["AUTH_NAME"]
-    auth_pass: str = os.environ["AUTH_PASS"]
-    cryptobot_token: str = os.environ["CRYPTO_BOT_TOKEN"]
-    stars_price: str = os.environ["STARS_PRICE"]
-    crypto_price: str = os.environ["CRYPTO_PRICE"]
-    free_traffic: str = os.environ["FREE_TRAFFIC"]
-    free_days: str = os.environ["FREE_DAYS"]
+def load_config(file_path="config.yml"):
+    # Получаем абсолютный путь к файлу
+    config_path = Path(__file__).parent.parent / file_path
+
+    if not config_path.exists():
+        raise FileNotFoundError(f"Config file not found: {config_path}")
+
+    with open(config_path, 'r') as stream:
+        try:
+            return yaml.safe_load(stream)
+        except yaml.YAMLError as exc:
+            raise ValueError(f"Error parsing YAML: {exc}")
 
 
-bot = Bot(token=Secrets.token)
-cp = CryptoPay(Secrets.cryptobot_token)
+# Загрузка конфигурации при импорте модуля
+try:
+    secrets = load_config()
+except Exception as e:
+    print(f"⚠️ Error loading secrets: {e}")
+    secrets = {}  # Fallback to empty dict
+
+
+bot = Bot(token=secrets.get('token'))
+cp = CryptoPay(secrets.get('crypto_bot_token'))

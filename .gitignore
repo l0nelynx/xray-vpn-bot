@@ -3,3 +3,6 @@ SteamPaymentBot/.idea
 .venv
 Tg_payment.iml
 db.sqlite3
+config.yml
+freekassa.py
+marz.py

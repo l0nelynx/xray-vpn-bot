@@ -1,5 +1,6 @@
 import time
 import app.marzban.marzban as mz
+import app.marzban.templates as templates
 import app.keyboards as kb
 
 from aiogram.types import Message, CallbackQuery
@@ -25,7 +26,7 @@ async def get_user_info(message: Message):
 async def add_new_user_info(name, userid, limit, res_strat, expire_days: int):
     async with mz.MarzbanAsync() as marz:
         buyer_nfo = await marz.add_user(
-            template=mz.vless_template,
+            template=templates.vless_template,
             name=f"{name}",
             usrid=f"{userid}",
             limit=limit,
@@ -38,7 +39,7 @@ async def add_new_user_info(name, userid, limit, res_strat, expire_days: int):
 async def set_user_info(name, limit, res_strat, expire_days: int):
     async with mz.MarzbanAsync() as marz:
         buyer_nfo = await marz.set_user(
-            template=mz.vless_template,
+            template=templates.vless_template,
             name=f"{name}",
             limit=limit,
             res_strat=res_strat,  # no_reset day week month year

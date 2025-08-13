@@ -1,4 +1,4 @@
-from app.settings import Secrets
+from app.settings import secrets
 
 import aiohttp
 import json
@@ -24,12 +24,12 @@ class MarzbanAsync:
         """Получение токена авторизации"""
         auth_data = {
             "grant_type": "password",
-            "username": Secrets.auth_name,
-            "password": Secrets.auth_pass,
+            "username": secrets.get('auth_name'),
+            "password": secrets.get('auth_pass'),
             "scope": ""
         }
         async with self.session.post(
-                Secrets.marz_url + "/api/admin/token",
+                secrets.get('marz_url') + "/api/admin/token",
                 data=auth_data,
                 headers={"Content-Type": "application/x-www-form-urlencoded"}
         ) as response:
@@ -57,7 +57,7 @@ class MarzbanAsync:
             "Content-Type": "application/json"
         }
         async with self.session.post(
-                Secrets.marz_url + "/api/user",
+                secrets.get('marz_url') + "/api/user",
                 data=json.dumps(template),
                 headers=headers
         ) as response:
@@ -83,7 +83,7 @@ class MarzbanAsync:
             "Content-Type": "application/json"
         }
         async with self.session.put(
-                Secrets.marz_url + f"/api/user/{name}",
+                secrets.get('marz_url') + f"/api/user/{name}",
                 data=json.dumps(template),
                 headers=headers
         ) as response:
@@ -105,7 +105,7 @@ class MarzbanAsync:
             "Content-Type": "application/json"
         }
         async with self.session.get(
-                Secrets.marz_url + f"/api/user/{name}",
+                secrets.get('marz_url') + f"/api/user/{name}",
                 headers=headers
         ) as response:
             if response.status == 200:

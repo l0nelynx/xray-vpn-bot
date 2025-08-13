@@ -2,10 +2,10 @@ from aiogram.types import InlineKeyboardButton, WebAppInfo, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.filters.callback_data import CallbackData
 
-from app.settings import Secrets
+from app.settings import secrets
 
-price_stars = Secrets.stars_price
-price_crypto = Secrets.crypto_price
+price_stars = secrets.get('stars_price')
+price_crypto = secrets.get('crypto_price')
 
 
 class PaymentCallbackData(CallbackData, prefix=""):

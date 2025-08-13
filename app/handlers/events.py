@@ -1,6 +1,6 @@
 import os
 
-from app.settings import bot, Secrets
+from app.settings import bot, secrets
 from app.views import start_bot_msg, stop_bot_msg
 from app.database.models import async_main
 import app.keyboards as kb
@@ -8,7 +8,7 @@ import app.database.requests as rq
 
 
 async def start_bot():
-    await bot.send_message(Secrets.admin_id, start_bot_msg())
+    await bot.send_message(secrets.get('admin_id'), start_bot_msg())
     await async_main()  # Создание таблиц БД при запуске
 
 
@@ -20,14 +20,14 @@ async def userlist():
             return
         else:
             usrids = f"{usrids}\n{User.tg_id}"
-    await bot.send_message(chat_id=Secrets.admin_id, text=usrids)
+    await bot.send_message(chat_id=secrets.get('admin_id'), text=usrids)
 
 
 async def stop_bot():
-    await bot.send_message(Secrets.admin_id, stop_bot_msg())
+    await bot.send_message(secrets.get('admin_id'), stop_bot_msg())
 
 
-crypto = os.environ["CRYPTO"]
+crypto = secrets.get('crypto')
 
 text_base = ("<b>🔓 *Добро пожаловать в CheezyVPN!* 🔓</b>\n\n"
              "🚀 <b>Забудь о региональных блокировках 🚫 и медленном интернете 🐢!"

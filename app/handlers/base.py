@@ -1,6 +1,7 @@
 import app.database.requests as rq
 import app.keyboards as kb
 
+
 from aiogram import F, Router
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
@@ -8,13 +9,12 @@ from aiogram.filters import Command
 from app.handlers.events import userlist
 from app.handlers.tools import startup_user_dialog, free_sub_handler, subscription_info
 from app.locale.lang_ru import text_help
-from app.settings import Secrets
-
+from app.settings import secrets
 
 router = Router()
 
 
-@router.message(Command("start"))   # Start command handler
+@router.message(Command("start"))  # Start command handler
 async def cmd_start(message: Message):
     await rq.set_user(message.from_user.id)
     await startup_user_dialog(message)
@@ -26,7 +26,7 @@ async def others(callback: CallbackQuery):
     await startup_user_dialog(callback)
 
 
-@router.message(Command("users"), F.from_user.id == Secrets.admin_id)   # List of users in db (admin only)
+@router.message(Command("users"), F.from_user.id == secrets.get('admin_id'))  # List of users in db (admin only)
 async def user_db_check(message: Message):
     await message.answer('Making a user list from db')
     await userlist()
@@ -47,7 +47,7 @@ async def others(callback: CallbackQuery):
 
 @router.callback_query(F.data == 'Free')
 async def free_buy(callback: CallbackQuery):
-    await free_sub_handler(callback, Secrets.free_days, Secrets.free_traffic)
+    await free_sub_handler(callback, secrets.get('free_days'), secrets.get('free_traffic'))
 
 
 @router.callback_query(F.data == 'Sub_Info')
