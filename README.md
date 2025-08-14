@@ -49,6 +49,7 @@ python main.py
 | ``run``     | Start container in background |
 | ``stop``    | Stop running container        |
 | ``dell``    | Remove container              |
+| ``run_it``    | Start container with interactive mode option             |
 ### Environment Setup
 Create virtual environment:
 ```bash
