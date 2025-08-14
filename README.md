@@ -71,4 +71,4 @@ Project Structure
 └── requirements.txt
 ```
 ## License
-MIT License - see [LICENSE](file:///LICENSE) for details
+MIT License - see [LICENSE](https://github.com/l0nelynx/xray-vpn-bot/blob/main/LICENSE) for details
