@@ -71,4 +71,4 @@ Project Structure
 └── requirements.txt
 ```
 ## License
-MIT License - see LICENSE file for details
+MIT License - see [LICENSE](file:///LICENSE) for details
