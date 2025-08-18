@@ -5,6 +5,7 @@ Simple Telegram bot for selling VPN subscriptions powered by Marzban VPN.
 ## Features
 - Sell VPN subscriptions via Telegram
 - Integration with Marzban VPN API
+- Support Bot
 
 ## Quick Start
 
@@ -17,7 +18,7 @@ Simple Telegram bot for selling VPN subscriptions powered by Marzban VPN.
 ```bash
 cp config-example.yml config.yml
 ```
-2. Edit config.yml with your sensitive data:
+2. Edit config.yml with your sensitive data (see ``config-example.yml``):
 ```yaml
 token: "yourbottoken"
 admin_id: "id" # Admin Telegram ID
@@ -40,7 +41,7 @@ make run    # Start container
 ### Run locally
 ```bash
 pip install -r requirements.txt
-python main.py
+python main.py && python support.py
 ```
 ### Makefile Commands
 | **command** | **description**               |
