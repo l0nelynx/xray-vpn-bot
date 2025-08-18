@@ -6,6 +6,7 @@ from typing import Callable, Dict
 
 from app.settings import secrets
 from app.tariffs import tariffs_stars, tariffs_crypto
+
 # from app.utils import discount
 
 price_stars = secrets.get('stars_price')
@@ -205,7 +206,14 @@ cryptospay_tariffs = create_tariff_keyboard(tariff=tariffs_crypto, method='crypt
 pay_extend_month = InlineKeyboardMarkup(inline_keyboard=[[extend_button],
                                                          [to_main_button]])
 to_main = InlineKeyboardMarkup(inline_keyboard=[[to_main_button]])
-
+agreement_menu = InlineKeyboardMarkup(inline_keyboard=[
+    [InlineKeyboardButton(text="Полный текст",
+                          web_app=WebAppInfo(url=secrets.get('agreement_url'))
+                          )], [to_main_button]])
+policy_menu = InlineKeyboardMarkup(inline_keyboard=[
+    [InlineKeyboardButton(text="Полный текст",
+                          web_app=WebAppInfo(url=secrets.get('policy_url'))
+                          )], [to_main_button]])
 
 
 def connect(link):

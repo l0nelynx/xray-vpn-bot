@@ -27,13 +27,13 @@ async def cmd_start(message: Message):
 @router.callback_query(F.data == 'Agreement')  # Start command handler
 async def user_agreement(callback: CallbackQuery):
     await callback.message.edit_text(text=lang.user_agreement, parse_mode='HTML',
-                                     reply_markup=kb.to_main)
+                                     reply_markup=kb.agreement_menu)
 
 
 @router.callback_query(F.data == 'Privacy')  # Start command handler
 async def user_agreement(callback: CallbackQuery):
     await callback.message.edit_text(text=lang.privacy_policy, parse_mode='HTML',
-                                     reply_markup=kb.to_main)
+                                     reply_markup=kb.policy_menu)
 
 
 # @router.message(Command("pay"))  # Start command handler
