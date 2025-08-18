@@ -8,6 +8,8 @@ services:
       - type: bind
         source: ./db/db.sqlite3
         target: /usr/src/app/db.sqlite3
+    ports:
+      - "5000:5000"
     restart: unless-stopped
     tty: true
     stdin_open: true
@@ -16,6 +18,4 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.sup
-    ports:
-      - "5000:5000"
     restart: unless-stopped
