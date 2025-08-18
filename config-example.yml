@@ -14,6 +14,8 @@ free_traffic: 5 # Traffic limit in Gb for FREE plan
 free_days: 30 # Plan limit in Days for FREE plan
 language: ru # Language (Available now = [ ru ])
 
+support_bot_id: "@JohnSupport"
+
 uvicorn_host: '0.0.0.0'
 uvicorn_port: 1337
 crystal_webhook_host: 'http://john.website.ogryn:1337'
