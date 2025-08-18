@@ -1,10 +1,20 @@
 import yaml
 import os
-
+import asyncio
+import uvicorn
+from fastapi import FastAPI
 from pathlib import Path
 
 from aiogram import Bot
 from aiosend import CryptoPay
+
+app_uvi = FastAPI()
+
+
+async def run_webserver():
+    config = uvicorn.Config(app_uvi, host=secrets.get('uvicorn_host'), port=secrets.get('uvicorn_port'))
+    server = uvicorn.Server(config)
+    await server.serve()
 
 
 def load_config(file_path="config.yml"):
@@ -31,3 +41,5 @@ except Exception as e:
 
 bot = Bot(token=secrets.get('token'))
 cp = CryptoPay(secrets.get('crypto_bot_token'))
+
+

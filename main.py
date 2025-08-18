@@ -1,7 +1,8 @@
 import logging
 import asyncio
+
 from aiogram import Dispatcher
-from app.settings import bot, cp
+from app.settings import bot, cp, run_webserver
 from app.handlers.events import start_bot, stop_bot
 from app.handlers.base import router as router_base
 from app.handlers.payments import router as router_payments
@@ -15,10 +16,16 @@ dp.startup.register(start_bot)
 dp.shutdown.register(stop_bot)
 
 
+async def on_startup(dispatcher, **kwargs):
+    """Действия при запуске бота"""
+    asyncio.create_task(run_webserver())  # Запуск Uvicorn в фоне
+
+
 async def main():
+    dp.startup.register(on_startup)
     await asyncio.gather(
         dp.start_polling(bot),
-        cp.start_polling(),
+        cp.start_polling()
     )
 
 
