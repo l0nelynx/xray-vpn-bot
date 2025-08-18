@@ -8,4 +8,4 @@ RUN touch db.sqlite3
 
 COPY . .
 
-CMD ["/bin/bash", "-c", "python main.py"]
+CMD ["/bin/bash", "-c", "python main.py && python support.py"]
