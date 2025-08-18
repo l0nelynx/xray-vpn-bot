@@ -1,19 +1,21 @@
-  services:
-    tgbot:
-      build: SteamPaymentBot
-      image: alpine
-      command: python main.py
-      networks:
-        - bot_net
-      volumes:
-        - /var/run/docker.sock:/var/run/docker.sock
-        - .:/app
-
-    target:
-      image: alpine
-      command: sleep infinity
-      networks:
-        - bot_net
-
-  networks:
-    bot_net:
+services:
+  cheezy-vpn-bot:
+    container_name: cheezy-vpn-bot
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - type: bind
+        source: ./db/db.sqlite3
+        target: /usr/src/app/db.sqlite3
+    restart: unless-stopped
+    tty: true
+    stdin_open: true
+  cheezy-sup-bot:
+    container_name: cheezy-sup-bot
+    build:
+      context: .
+      dockerfile: Dockerfile.sup
+    ports:
+      - "5000:5000"
+    restart: unless-stopped
