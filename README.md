@@ -38,7 +38,7 @@ free_days: 30 # Plan limit in Days for FREE plan
 make build  # Build Docker image
 make run    # Start container
 ```
-### Run with Docker Compose (bot VPN and support bots)
+### Run with Docker Compose (both VPN and support bots)
 ```bash
 docker compose build  # Build Docker images
 docker compose up -d    # Start containers
