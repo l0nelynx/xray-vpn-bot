@@ -86,11 +86,10 @@ async def payment_process_background(payment_data: dict):
                                        reply_markup=kb.connect(sub_link))
 
             else:
-                buyer_nfo = await tools.add_new_user_info(usrname,
-                                                          usrid,
-                                                          0,
-                                                          "no_reset",
-                                                          tariff_days)
+                buyer_nfo = await tools.set_user_info(usrid,
+                                                      limit=0,
+                                                      res_strat="no_reset",
+                                                      expire_days=tariff_days)
                 expire_day = await tools.get_user_days(buyer_nfo)
                 sub_link = buyer_nfo["subscription_url"]
                 await bot.send_message(chat_id=usrid, text=f"❤️Cпасибо за покупку!\n\n"

@@ -113,11 +113,10 @@ async def success_payment_handler(message: Message, tariff_days):
                                  reply_markup=kb.connect(sub_link))
 
         else:
-            buyer_nfo = await add_new_user_info(message.from_user.username,
-                                                message.from_user.id,
-                                                0,
-                                                "no_reset",
-                                                tariff_days)
+            buyer_nfo = await set_user_info(message.from_user.username,
+                                            limit=0,
+                                            res_strat="no_reset",
+                                            expire_days=tariff_days)
             expire_day = await get_user_days(buyer_nfo)
             sub_link = buyer_nfo["subscription_url"]
             await message.answer(text=f"❤️Cпасибо за покупку!\n\n"
@@ -183,4 +182,3 @@ async def subscription_info(callback: CallbackQuery):
     else:
         await callback.message.edit_text("Free подписка активна\n"
                                          f"Осталось дней: {expire_day}\n", reply_markup=kb.connect(sub_link))
-
