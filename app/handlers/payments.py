@@ -2,10 +2,12 @@ import logging
 import app.keyboards as kb
 
 from aiogram import F, Router
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.types import LabeledPrice, PreCheckoutQuery
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from aiogram.filters import Command
+from app.settings import secrets
 
 from app.settings import bot, cp
 from app.handlers.tools import success_payment_handler
@@ -29,6 +31,20 @@ async def premium(callback: CallbackQuery, state: FSMContext):
     await callback.answer('Покупка Premium подписки')
     await callback.message.edit_text(text=text_pay_method, parse_mode="HTML",
                                      reply_markup=kb.pay_methods)
+    await state.set_state(PaymentState.PaymentMethod)
+
+
+@router.message(Command("test"), F.from_user.id == secrets.get('admin_id'))  # Testing ground
+async def test_button(message: Message, state: FSMContext):
+    await message.answer('Testing only')
+    await message.answer(
+        "Интеграция платежной системы",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="КУПИТЬ", callback_data="SBP_Plans")]
+            ]
+        )
+    )
     await state.set_state(PaymentState.PaymentMethod)
 
 
