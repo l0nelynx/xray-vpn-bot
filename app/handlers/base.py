@@ -35,8 +35,8 @@ async def user_agreement(callback: CallbackQuery):
                                      reply_markup=kb.policy_menu)
 
 
-@router.message(Command("pay"), F.from_user.id == secrets.get('admin_id'))  # Testing ground
-async def cmd_buy(message: Message):
+@router.message(Command("test"), F.from_user.id == secrets.get('admin_id'))  # Testing ground
+async def test_button(message: Message):
     await message.answer('Testing only')
     await message.answer(
         "Интеграция платежной системы",
