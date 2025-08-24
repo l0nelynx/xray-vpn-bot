@@ -16,10 +16,10 @@ async def get_user_days(user_nfo):
     return round((user_nfo["expire"] - time.time()) / (24 * 60 * 60))
 
 
-async def get_user_info(message: Message):
+async def get_user_info(username):
     async with mz.MarzbanAsync() as marz:
         # await message.answer('Бесплатная версия (5 Гб в месяц)')
-        user_info = await marz.get_user(name=message.from_user.username)
+        user_info = await marz.get_user(name=username)
         return user_info
 
 
@@ -49,7 +49,7 @@ async def set_user_info(name, limit, res_strat, expire_days: int):
 
 
 async def startup_user_dialog(message):
-    user_info = await get_user_info(message)
+    user_info = await get_user_info(message.from_user.username)
     print(f"handler_type:{type(message).__name__}")
     if type(message).__name__ != "Message":
         message = message.message.edit_text
@@ -74,7 +74,7 @@ async def startup_user_dialog(message):
 
 async def success_payment_handler(message: Message, tariff_days):
     await message.answer(text="🥳Оплата прошла успешно!🤗")
-    user_info = await get_user_info(message)
+    user_info = await get_user_info(message.from_user.username)
     if user_info == 404:
         # print(user_info)
         print("Пользователь не найден - создание нового согласно тарифу")
@@ -129,7 +129,7 @@ async def success_payment_handler(message: Message, tariff_days):
 
 
 async def free_sub_handler(callback, free_days, free_limit):
-    user_info = await get_user_info(callback)
+    user_info = await get_user_info(callback.from_user.username)
     # user_info = await get_user_info(message)
     if user_info == 404:
         print("User not found - making a new one")
@@ -167,7 +167,7 @@ async def free_sub_handler(callback, free_days, free_limit):
 
 
 async def subscription_info(callback: CallbackQuery):
-    user_info = await get_user_info(callback)
+    user_info = await get_user_info(callback.from_user.username)
     print(callback.from_user.username)
     print(user_info)
     sub_link = user_info["subscription_url"]

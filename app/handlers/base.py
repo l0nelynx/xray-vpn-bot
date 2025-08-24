@@ -1,4 +1,3 @@
-import asyncio
 
 import app.database.requests as rq
 import app.keyboards as kb
@@ -12,7 +11,7 @@ from app.handlers.events import userlist
 from app.handlers.tools import startup_user_dialog, free_sub_handler, subscription_info
 # from app.locale.lang_ru import text_help
 from app.settings import secrets
-from app.utils import create_smart_invoice
+# from app.utils import create_smart_invoice
 
 router = Router()
 lang = eval(f"{secrets.get('language')}")
@@ -36,24 +35,16 @@ async def user_agreement(callback: CallbackQuery):
                                      reply_markup=kb.policy_menu)
 
 
-# @router.message(Command("pay"))  # Start command handler
-# async def cmd_buy(message: Message):
-#     await message.answer(
-#         "Интеграция платежной системы",
-#         reply_markup=InlineKeyboardMarkup(
-#             inline_keyboard=[
-#                 [InlineKeyboardButton(text="КУПИТЬ", callback_data="payment_test")]
-#             ]
-#         )
-#     )
-
-
-@router.callback_query(F.data == 'payment_test')  # Start command handler
-async def payment_test(callback: CallbackQuery):
-    print("Callback init")
-    link = await create_smart_invoice()
-    await callback.message.answer(link)
-    print("Invoice init")
+@router.message(Command("pay"), F.from_user.id == secrets.get('admin_id'))  # Testing ground
+async def cmd_buy(message: Message):
+    await message.answer(
+        "Интеграция платежной системы",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="КУПИТЬ", callback_data="SBP_Plans")]
+            ]
+        )
+    )
 
 
 @router.callback_query(F.data == 'Main')

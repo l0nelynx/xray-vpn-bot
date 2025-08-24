@@ -14,24 +14,24 @@ cp = CrystalPay(auth_login=secrets.get('crystal_login'),
                 )
 
 
-# пример фильтрации
-async def is_payed(invoice: CallbackInvoice):
-    return invoice.rub_amount >= 100
+# # пример фильтрации
+# async def is_payed(invoice: CallbackInvoice):
+#     return invoice.rub_amount >= 100
+#
+#
+# async def anti_unavailable_is_payed(invoice: CallbackInvoice):
+#     return invoice.state == InvoiceState.payed
+#
+#
+# @cp.callback_invoice(is_payed, anti_unavailable_is_payed)  # <- возможность добавлять несколько фильтров
+# async def pay_cp(invoice: CallbackInvoice):
+#     print(f'Пришло: {invoice.rub_amount}')
 
-
-async def anti_unavailable_is_payed(invoice: CallbackInvoice):
-    return invoice.state == InvoiceState.payed
-
-
-@cp.callback_invoice(is_payed, anti_unavailable_is_payed)  # <- возможность добавлять несколько фильтров
-async def pay_cp(invoice: CallbackInvoice):
-    print(f'Пришло: {invoice.rub_amount}')
-
-
-async def create_smart_invoice():
-    invoice = await cp.invoice.create(100, callback_url=f'{host}/pay/crystalpay')
-    print(invoice.url)
-    return invoice.url
+#
+# async def create_smart_invoice():
+#     invoice = await cp.invoice.create(100, callback_url=f'{host}/pay/crystalpay')
+#     print(invoice.url)
+#     return invoice.url
 
 
 # Here some utils

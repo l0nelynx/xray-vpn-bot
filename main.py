@@ -2,10 +2,16 @@ import logging
 import asyncio
 
 from aiogram import Dispatcher
-from app.settings import bot, cp, run_webserver
+
+from app.handlers.tools import success_payment_handler
+from app.settings import bot, cp, run_webserver, app_uvi, secrets
 from app.handlers.events import start_bot, stop_bot
 from app.handlers.base import router as router_base
 from app.handlers.payments import router as router_payments
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+import app.database.requests as rq
+from app.platega.handlers import payment_webhook_handler
+from fastapi import FastAPI, Request, BackgroundTasks
 
 # import subprocess
 # Инициализация бота
@@ -14,6 +20,11 @@ dp.include_router(router_base)
 dp.include_router(router_payments)
 dp.startup.register(start_bot)
 dp.shutdown.register(stop_bot)
+
+
+@app_uvi.post("/payment_webhook")
+async def payment_webhook(request: Request, background_tasks: BackgroundTasks):
+    await payment_webhook_handler(request, background_tasks)
 
 
 async def on_startup(dispatcher, **kwargs):

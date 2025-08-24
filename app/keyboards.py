@@ -5,13 +5,14 @@ from aiogram.filters.callback_data import CallbackData
 from typing import Callable, Dict
 
 from app.settings import secrets
-from app.tariffs import tariffs_stars, tariffs_crypto
+from app.tariffs import tariffs_stars, tariffs_crypto, tariffs_sbp
 
 # from app.utils import discount
 
 price_stars = secrets.get('stars_price')
 price_crypto = secrets.get('crypto_price')
 price_discount = secrets.get('discount')
+sbp_price = secrets.get('sbp_price')
 
 
 class PaymentCallbackData(CallbackData, prefix=""):
@@ -127,6 +128,10 @@ paycryptobot_button = InlineKeyboardButton(
     text="🔒Crypto⭐️",
     callback_data='Crypto_Plans')
 
+paysbp_button = InlineKeyboardButton(
+    text="🔒СБП⭐️",
+    callback_data='SBP_Plans')
+
 to_pay_method_back = InlineKeyboardButton(
     text="Назад",
     callback_data='Premium')
@@ -198,10 +203,12 @@ others = InlineKeyboardMarkup(inline_keyboard=[[android_button],
                                                [to_main_button]])
 pay_methods = InlineKeyboardMarkup(inline_keyboard=[[paystars_button],
                                                     [paycryptobot_button],
+                                                    # [paysbp_button],
                                                     [to_main_button]])
 
 starspay_tariffs = create_tariff_keyboard(tariff=tariffs_stars, method='stars', base_price=price_stars)
 cryptospay_tariffs = create_tariff_keyboard(tariff=tariffs_crypto, method='crypto', base_price=price_crypto)
+sbp_tariffs = create_tariff_keyboard(tariff=tariffs_sbp, method='SBP', base_price=sbp_price)
 
 pay_extend_month = InlineKeyboardMarkup(inline_keyboard=[[extend_button],
                                                          [to_main_button]])

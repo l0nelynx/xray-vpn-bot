@@ -11,6 +11,7 @@ from app.settings import bot, cp
 from app.handlers.tools import success_payment_handler
 from app.locale.lang_ru import text_pay_method, text_extend_pay_method
 
+from app.platega.platega import create_sbp_link
 
 router = Router()
 
@@ -46,10 +47,16 @@ async def stars_plan(callback: CallbackQuery, state: FSMContext):
         await callback.message.edit_text('Выберите тарифный план', reply_markup=kb.starspay_tariffs)
         print("Stars has been chosen")
         await state.set_state(PaymentState.PaymentTariff)
-    else:
+    elif action == 'Crypto_Plans':
         await callback.message.edit_text('Выберите тарифный план', reply_markup=kb.cryptospay_tariffs)
         print("Crypto has been chosen")
         await state.set_state(PaymentState.PaymentTariff)
+    elif action == 'SBP_Plans':
+        await callback.message.edit_text('Выберите тарифный план', reply_markup=kb.sbp_tariffs)
+        print("SBP has been chosen")
+        await state.set_state(PaymentState.PaymentTariff)
+    else:
+        print("Wrong callback from methods keyboard")
 
 
 @router.callback_query(kb.PaymentCallbackData.filter(F.tag == "data"), PaymentState.PaymentTariff)
@@ -71,11 +78,16 @@ async def invoice_handler(callback: CallbackQuery, callback_data: kb.PaymentCall
             reply_markup=kb.payment_keyboard(int(amount)),
         )
         logging.info("Запускаю инвойс")
-    else:
+    elif method == 'crypto':
         invoice = await cp.create_invoice(amount, "USDT")
         await callback.message.edit_text(f"pay: {invoice.bot_invoice_url}")
         invoice.poll(message=callback.message)
         logging.info("Запускаю инвойс")
+    elif method == 'SBP':
+        link = await create_sbp_link(callback=callback, amount=amount, days=days)
+        await callback.message.edit_text(f"Ссылка для оплаты: {link}")
+    else:
+        print('WRONG METHOD FROM KEYBOARD!')
     await state.update_data(PaymentDays=days)
     await state.set_state(PaymentState.PaymentInvoice)
 
