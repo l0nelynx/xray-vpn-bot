@@ -8,7 +8,7 @@ services:
       - type: bind
         source: ./db/db.sqlite3
         target: /usr/src/app/db.sqlite3
-      - /var/lib/marzban/certs/:./uvicorn/ssl
+      - /var/lib/marzban/certs/:/usr/src/app/uvicorn/ssl
     ports:
       - "5000:5000"
     restart: unless-stopped
