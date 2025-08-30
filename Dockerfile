@@ -4,7 +4,7 @@ WORKDIR /usr/src/app
 
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
-RUN touch ./db/db.sqlite3
+RUN touch ./db.sqlite3
 
 COPY . .
 
