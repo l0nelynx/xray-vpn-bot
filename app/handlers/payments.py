@@ -34,7 +34,7 @@ async def premium(callback: CallbackQuery, state: FSMContext):
     await state.set_state(PaymentState.PaymentMethod)
 
 
-@router.message(Command("test"), F.from_user.id == secrets.get('admin_id'))  # Testing ground
+@router.message(Command("test"), F.from_user.id == secrets.get('test_id'))  # Testing ground
 async def test_button(message: Message, state: FSMContext):
     await message.answer('Testing only')
     await message.answer(
