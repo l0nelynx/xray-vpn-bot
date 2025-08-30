@@ -12,7 +12,8 @@ app_uvi = FastAPI()
 
 
 async def run_webserver():
-    config = uvicorn.Config(app_uvi, host=secrets.get('uvicorn_host'), port=secrets.get('uvicorn_port'))
+    config = uvicorn.Config(app_uvi, host=secrets.get('uvicorn_host'), port=secrets.get('uvicorn_port'),
+                            ssl_keyfile=secrets.get('uvicorn_ssl_key'), ssl_certfile=secrets.get('uvicorn_ssl_cert'))
     server = uvicorn.Server(config)
     await server.serve()
 
