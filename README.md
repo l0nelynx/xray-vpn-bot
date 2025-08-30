@@ -32,7 +32,10 @@ free_traffic: 5 # Traffic limit in Gb for FREE plan
 free_days: 30 # Plan limit in Days for FREE plan
 ```
 3. IMPORTANT SECURITY: Add config.yml to .gitignore to prevent exposing sensitive data!
-
+4. Create sqlite3.db:
+```bash
+touch ./db/db.sqlite3
+```
 ### Run with Docker (only VPN bot)
 ```bash
 make build  # Build Docker image
