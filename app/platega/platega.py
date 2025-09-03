@@ -103,7 +103,7 @@ async def create_sbp_link(callback: CallbackQuery, amount, days: int):
         transaction_id = uuid.uuid4()
     print(transaction_id)
     async with PaymentProcessor(secrets.get('platega_merchant_id'), secrets.get('platega_api_key'),
-                                secrets.get('bot_url'), secrets.get('platega_url')) as processor:
+                                secrets.get('bot_url'), secrets.get('api_url')) as processor:
         data = await processor.create_payment_link(
             method=2,
             transaction_id=f"{transaction_id}",

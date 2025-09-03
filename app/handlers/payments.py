@@ -14,6 +14,7 @@ from app.handlers.tools import success_payment_handler
 from app.locale.lang_ru import text_pay_method, text_extend_pay_method
 
 from app.platega.platega import create_sbp_link
+from app.api.a_pay import create_sbp_link as apays_create_sbp_link
 
 router = Router()
 
@@ -34,7 +35,7 @@ async def premium(callback: CallbackQuery, state: FSMContext):
     await state.set_state(PaymentState.PaymentMethod)
 
 
-@router.message(Command("test"), F.from_user.id == secrets.get('test_id'))  # Testing ground
+@router.message(Command("test1"), F.from_user.id == secrets.get('test_id'))  # Testing ground
 async def test_button(message: Message, state: FSMContext):
     await message.answer('Testing only')
     await message.answer(
@@ -42,6 +43,20 @@ async def test_button(message: Message, state: FSMContext):
         reply_markup=InlineKeyboardMarkup(
             inline_keyboard=[
                 [InlineKeyboardButton(text="КУПИТЬ", callback_data="SBP_Plans")]
+            ]
+        )
+    )
+    await state.set_state(PaymentState.PaymentMethod)
+
+
+@router.message(Command("test2"), F.from_user.id == secrets.get('test_id'))  # Testing ground
+async def test_button(message: Message, state: FSMContext):
+    await message.answer('Testing only')
+    await message.answer(
+        "Интеграция платежной системы",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="КУПИТЬ", callback_data="SBP_Apay")]
             ]
         )
     )
@@ -69,6 +84,10 @@ async def stars_plan(callback: CallbackQuery, state: FSMContext):
         await state.set_state(PaymentState.PaymentTariff)
     elif action == 'SBP_Plans':
         await callback.message.edit_text('Выберите тарифный план', reply_markup=kb.sbp_tariffs)
+        print("SBP has been chosen")
+        await state.set_state(PaymentState.PaymentTariff)
+    elif action == 'SBP_Apay':
+        await callback.message.edit_text('Выберите тарифный план', reply_markup=kb.sbp_apay_tariffs)
         print("SBP has been chosen")
         await state.set_state(PaymentState.PaymentTariff)
     else:
@@ -101,6 +120,9 @@ async def invoice_handler(callback: CallbackQuery, callback_data: kb.PaymentCall
         logging.info("Запускаю инвойс")
     elif method == 'SBP':
         link = await create_sbp_link(callback=callback, amount=amount, days=days)
+        await callback.message.edit_text(f"Ссылка для оплаты: {link}")
+    elif method == 'SBP_APAY':
+        link = await apays_create_sbp_link(callback=callback, amount=amount, days=days)
         await callback.message.edit_text(f"Ссылка для оплаты: {link}")
     else:
         print('WRONG METHOD FROM KEYBOARD!')

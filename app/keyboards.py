@@ -209,7 +209,7 @@ pay_methods = InlineKeyboardMarkup(inline_keyboard=[[paystars_button],
 starspay_tariffs = create_tariff_keyboard(tariff=tariffs_stars, method='stars', base_price=price_stars)
 cryptospay_tariffs = create_tariff_keyboard(tariff=tariffs_crypto, method='crypto', base_price=price_crypto)
 sbp_tariffs = create_tariff_keyboard(tariff=tariffs_sbp, method='SBP', base_price=sbp_price)
-
+sbp_apay_tariffs = create_tariff_keyboard(tariff=tariffs_sbp, method='SBP_APAY', base_price=sbp_price)
 pay_extend_month = InlineKeyboardMarkup(inline_keyboard=[[extend_button],
                                                          [to_main_button]])
 to_main = InlineKeyboardMarkup(inline_keyboard=[[to_main_button]])
