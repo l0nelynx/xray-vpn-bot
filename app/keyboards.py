@@ -125,7 +125,7 @@ paystars_button = InlineKeyboardButton(
     callback_data='Stars_Plans')
 
 paycryptobot_button = InlineKeyboardButton(
-    text="🔒Crypto⭐️",
+    text="🔒CryptoBot⭐️",
     callback_data='Crypto_Plans')
 
 paysbp_button = InlineKeyboardButton(
@@ -133,7 +133,11 @@ paysbp_button = InlineKeyboardButton(
     callback_data='SBP_Plans')
 
 apays_button = InlineKeyboardButton(
-    text="🔒Карта⭐️",
+    text="🔒Банковская карта/перевод⭐️",
+    callback_data='SBP_Apay')
+
+crystal_button = InlineKeyboardButton(
+    text="🔒Криптовалюта⭐️",
     callback_data='SBP_Apay')
 
 to_pay_method_back = InlineKeyboardButton(
@@ -207,6 +211,7 @@ others = InlineKeyboardMarkup(inline_keyboard=[[android_button],
                                                [to_main_button]])
 pay_methods = InlineKeyboardMarkup(inline_keyboard=[[paystars_button],
                                                     [paycryptobot_button],
+                                                    [crystal_button],
                                                     # [paysbp_button],
                                                     [apays_button],
                                                     [to_main_button]])
@@ -215,6 +220,8 @@ starspay_tariffs = create_tariff_keyboard(tariff=tariffs_stars, method='stars', 
 cryptospay_tariffs = create_tariff_keyboard(tariff=tariffs_crypto, method='crypto', base_price=price_crypto)
 sbp_tariffs = create_tariff_keyboard(tariff=tariffs_sbp, method='SBP', base_price=sbp_price)
 sbp_apay_tariffs = create_tariff_keyboard(tariff=tariffs_sbp, method='SBP_APAY', base_price=sbp_price)
+crystal_tariffs = create_tariff_keyboard(tariff=tariffs_sbp, method='CRYSTAL', base_price=sbp_price)
+
 pay_extend_month = InlineKeyboardMarkup(inline_keyboard=[[extend_button],
                                                          [to_main_button]])
 to_main = InlineKeyboardMarkup(inline_keyboard=[[to_main_button]])

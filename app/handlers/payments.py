@@ -91,6 +91,10 @@ async def stars_plan(callback: CallbackQuery, state: FSMContext):
         await callback.message.edit_text('Выберите тарифный план', reply_markup=kb.sbp_apay_tariffs)
         print("SBP has been chosen")
         await state.set_state(PaymentState.PaymentTariff)
+    elif action == 'Crystal_plans':
+        await callback.message.edit_text('Выберите тарифный план', reply_markup=kb.crystal_tariffs)
+        print("Crystal has been chosen")
+        await state.set_state(PaymentState.PaymentTariff)
     else:
         print("Wrong callback from methods keyboard")
 
@@ -121,10 +125,13 @@ async def invoice_handler(callback: CallbackQuery, callback_data: kb.PaymentCall
         logging.info("Запускаю инвойс")
     elif method == 'SBP':
         link = await create_sbp_link(callback=callback, amount=amount, days=days)
-        await callback.message.edit_text(f"Ссылка для оплаты: {link}")
+        await callback.message.edit_text(f"Ссылка для оплаты: {link}", reply_markup=kb.to_main)
     elif method == 'SBP_APAY':
+        link = await apays_create_sbp_link(callback=callback, amount=amount, days=days)
+        await callback.message.edit_text(f"Ссылка для оплаты: {link}", reply_markup=kb.to_main)
+    elif method == 'CRYSTAL':
         link = await crystal_create_link(callback, amount, 'RUB', days)
-        await callback.message.edit_text(f"Ссылка для оплаты: {link}")
+        await callback.message.edit_text(f"Ссылка для оплаты: {link}", reply_markup=kb.to_main)
     else:
         print('WRONG METHOD FROM KEYBOARD!')
     await state.update_data(PaymentDays=days)
