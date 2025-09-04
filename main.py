@@ -12,6 +12,7 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 import app.database.requests as rq
 from app.platega.handlers import payment_webhook_handler
 from app.api.a_pay import payment_webhook_handler as apays_webhook_handler
+from app.api.crystal_pay import payment_webhook_handler as crystal_webhook_handler
 from fastapi import FastAPI, Request, BackgroundTasks
 
 # import subprocess
@@ -31,6 +32,11 @@ async def payment_webhook(request: Request, background_tasks: BackgroundTasks):
 @app_uvi.post("/apays_webhook")
 async def payment_webhook(request: Request, background_tasks: BackgroundTasks):
     await apays_webhook_handler(request, background_tasks)
+
+
+@app_uvi.post("/crystal_webhook")
+async def payment_webhook(request: Request, background_tasks: BackgroundTasks):
+    await crystal_webhook_handler(request, background_tasks)
 
 
 async def on_startup(dispatcher, **kwargs):

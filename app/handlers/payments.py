@@ -15,6 +15,7 @@ from app.locale.lang_ru import text_pay_method, text_extend_pay_method
 
 from app.platega.platega import create_sbp_link
 from app.api.a_pay import create_sbp_link as apays_create_sbp_link
+from app.api.crystal_pay import crystal_create_link
 
 router = Router()
 
@@ -122,7 +123,7 @@ async def invoice_handler(callback: CallbackQuery, callback_data: kb.PaymentCall
         link = await create_sbp_link(callback=callback, amount=amount, days=days)
         await callback.message.edit_text(f"Ссылка для оплаты: {link}")
     elif method == 'SBP_APAY':
-        link = await apays_create_sbp_link(callback=callback, amount=amount, days=days)
+        link = await crystal_create_link(callback, amount, 'RUB', days)
         await callback.message.edit_text(f"Ссылка для оплаты: {link}")
     else:
         print('WRONG METHOD FROM KEYBOARD!')
