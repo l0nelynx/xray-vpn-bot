@@ -138,7 +138,7 @@ apays_button = InlineKeyboardButton(
 
 crystal_button = InlineKeyboardButton(
     text="🔒Криптовалюта⭐️",
-    callback_data='SBP_Apay')
+    callback_data='Crystal_plans')
 
 to_pay_method_back = InlineKeyboardButton(
     text="Назад",
