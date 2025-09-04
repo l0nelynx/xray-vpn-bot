@@ -20,7 +20,7 @@ async def payment_process_background(order_id: str):
     userdata = await rq.get_full_transaction_info(order_id)
     usrid = userdata["user_tg_id"]
     usrname = userdata["username"]
-    tariff_days = 30  # Take from db here
+    tariff_days = userdata["days_ordered"]  # Take from db here
     if userdata['status'] == 'created':
         await bot.send_message(chat_id=secrets.get('admin_id'),
                                text=f"Транзакция ID - {order_id}")
