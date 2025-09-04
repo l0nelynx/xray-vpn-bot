@@ -49,7 +49,8 @@ class CrystalUtils:
                         headers={'Content-Type': 'application/json'}
                 ) as response:
                     response_data = await response.json()
-
+                    print('POST')
+                    print(params)
                     if response_data.get("error"):
                         raise Exception(response_data.get('errors', 'Unknown error'))
 
