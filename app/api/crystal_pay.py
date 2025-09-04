@@ -323,7 +323,7 @@ async def payment_webhook_handler(request: Request, background_tasks: Background
                 print("Signature is valid!")
                 print('Оплата подтверждена')
                 print(f'ID транзакции - {payment_data["id"]}')
-                background_tasks.add_task(payment_process_background, payment_data['id'])
+                background_tasks.add_task(payment_process_background, f"{payment_data['id']}")
                 return {"status": "success"}
 
     except Exception as e:
