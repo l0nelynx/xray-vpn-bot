@@ -55,7 +55,7 @@ async def payment_process_background(order_id: str):
             else:
                 expire_day = await tools.get_user_days(user_info)
             if status == "active" and limit is None:
-                buyer_nfo = await tools.set_user_info(usrname,
+                buyer_nfo = await tools.set_user_info(name=usrname,
                                                       limit=0,
                                                       res_strat='no_reset',
                                                       expire_days=(expire_day + tariff_days))
@@ -68,7 +68,7 @@ async def payment_process_background(order_id: str):
                                        reply_markup=kb.connect(sub_link))
 
             else:
-                buyer_nfo = await tools.set_user_info(usrname,
+                buyer_nfo = await tools.set_user_info(name=usrname,
                                                       limit=0,
                                                       res_strat="no_reset",
                                                       expire_days=tariff_days)
@@ -80,3 +80,5 @@ async def payment_process_background(order_id: str):
                                                            f"Ваша ссылка для подключения:\n"
                                                            f"<code>{sub_link}</code>", parse_mode="HTML",
                                        reply_markup=kb.connect(sub_link))
+    else:
+        print('Double webhook detected')
