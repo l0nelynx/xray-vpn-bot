@@ -54,7 +54,7 @@ class PaymentProcessor:
             await self.session.close()
 
     async def create_payment_link(self, order_id: str,
-                                  amount: int) -> Optional[str]:
+                                  amount: float) -> Optional[str]:
         headers = {
             'Content-Type': 'application/json'
         }
@@ -62,8 +62,8 @@ class PaymentProcessor:
         body = {
             "client_id": self.client_id,
             "order_id": f"{order_id}",
-            "amount": amount*100,
-            "sign": f'{hashlib.md5(f"{order_id}:{amount*100}:{self.secret}".encode()).hexdigest()}'
+            "amount": amount,
+            "sign": f'{hashlib.md5(f"{order_id}:{amount}:{self.secret}".encode()).hexdigest()}'
 
         }
         # Логируем запрос (без секретных данных в продакшене)

@@ -18,7 +18,7 @@ sbp_price = secrets.get('sbp_price')
 class PaymentCallbackData(CallbackData, prefix=""):
     tag: str
     method: str
-    amount: int
+    amount: float
     days: int
 
 
@@ -59,13 +59,14 @@ class TariffKeyboardBuilder:
         self.discount_func = discount_func or self.default_discount
 
     @staticmethod
-    def default_discount(amount: int, discount_percent: int) -> int:
+    def default_discount(amount: float, discount_percent: int) -> float:
         """Стандартная функция расчета скидки"""
-        return round(amount * (1 - discount_percent / 100))
+        print(amount * (1 - discount_percent / 100))
+        return amount * (1 - discount_percent / 100)
 
-    def calculate_amount(self) -> int:
+    def calculate_amount(self) -> float:
         """Рассчет итоговой суммы с учетом скидки"""
-        monthly_cost = round(self.price * (self.days / 30))
+        monthly_cost = self.price * (self.days / 30)
         print(monthly_cost)
         return self.discount_func(monthly_cost, self.disc)
 
@@ -90,7 +91,7 @@ class TariffKeyboardBuilder:
 def create_tariff_keyboard(
         tariff: Dict[str, dict],
         method: str,
-        base_price: int,
+        base_price,
         discount_func: Callable[[float, int], float] = None
 ) -> InlineKeyboardMarkup:
     # Формируем список строк (каждая строка - список из одной кнопки)
@@ -165,8 +166,12 @@ free_button = InlineKeyboardButton(
     callback_data='Free')
 
 android_button = InlineKeyboardButton(
-    text="Android/IOS",
+    text="Android/IOS - V2RayTun",
     callback_data='Android_Help')
+
+windows_button = InlineKeyboardButton(
+    text="Windows/Linux - Throne",
+    callback_data='Windows_Help')
 
 ios_button = InlineKeyboardButton(
     text="IOS"
@@ -205,6 +210,7 @@ main_free = InlineKeyboardMarkup(inline_keyboard=[[premium_button],
                                                   [privacy_button]])
 
 others = InlineKeyboardMarkup(inline_keyboard=[[android_button],
+                                               [windows_button],
                                                # [ios_button],
                                                # [win_button],
                                                # [linux_button],
@@ -244,3 +250,8 @@ def connect(link):
                                                                        web_app=WebAppInfo(url=link)
                                                                        )],
                                                  [to_main_button]])
+
+
+# Создаем клавиатуру с кнопкой отмены
+cancel_keyboard = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="Отменить рассылку",
+                                                                              callback_data="cancel_broadcast")]])

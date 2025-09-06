@@ -106,16 +106,16 @@ async def invoice_handler(callback: CallbackQuery, callback_data: kb.PaymentCall
     days = callback_data.days
     if method == 'stars':
         await callback.answer('Оплата подписки в ⭐')
-        prices = [LabeledPrice(label="XTR", amount=amount)]
+        prices = [LabeledPrice(label="XTR", amount=int(round(amount)))]
         await bot.send_invoice(
             callback.from_user.id,
             title="Оплата подписки на месяц",
-            description=f"Покупка за {amount} ⭐️!",
+            description=f"Покупка за {int(round(amount))} ⭐️!",
             prices=prices,
             provider_token="",
             payload="channel_support",
             currency="XTR",
-            reply_markup=kb.payment_keyboard(int(amount)),
+            reply_markup=kb.payment_keyboard(int(round(amount))),
         )
         logging.info("Запускаю инвойс")
     elif method == 'crypto':
@@ -124,9 +124,11 @@ async def invoice_handler(callback: CallbackQuery, callback_data: kb.PaymentCall
         invoice.poll(message=callback.message)
         logging.info("Запускаю инвойс")
     elif method == 'SBP':
+        amount = int(round(amount))
         link = await create_sbp_link(callback=callback, amount=amount, days=days)
         await callback.message.edit_text(f"Ссылка для оплаты: {link}", reply_markup=kb.to_main)
     elif method == 'SBP_APAY':
+        amount = int(round(amount*100))
         link = await apays_create_sbp_link(callback=callback, amount=amount, days=days)
         await callback.message.edit_text(f"Ссылка для оплаты: {link}", reply_markup=kb.to_main)
     elif method == 'CRYSTAL':
