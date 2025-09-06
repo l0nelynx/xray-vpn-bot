@@ -178,7 +178,9 @@ async def subscription_info(callback: CallbackQuery):
         expire_day = await get_user_days(user_info)
     if status == "active" and limit is None:
         await callback.message.edit_text(f"Pro подписка активна\n"
+                                         f"Ссылка для подключения: {sub_link}\n"
                                          f"Осталось дней: {expire_day}\n", reply_markup=kb.connect(sub_link))
     else:
         await callback.message.edit_text("Free подписка активна\n"
+                                         f"Ссылка для подключения: {sub_link}\n"
                                          f"Осталось дней: {expire_day}\n", reply_markup=kb.connect(sub_link))
