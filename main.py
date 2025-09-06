@@ -15,6 +15,7 @@ from app.api.a_pay import payment_webhook_handler as apays_webhook_handler
 from app.api.crystal_pay import payment_webhook_handler as crystal_webhook_handler
 from fastapi import FastAPI, Request, BackgroundTasks
 
+from app.handlers.broadcast import admin_broadcast
 # import subprocess
 # Инициализация бота
 dp = Dispatcher()
