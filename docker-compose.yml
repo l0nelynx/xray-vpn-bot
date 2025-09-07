@@ -9,6 +9,7 @@ services:
         source: ./db/db.sqlite3
         target: /usr/src/app/db.sqlite3
       - /var/lib/marzban/certs/:/usr/src/app/uvicorn/ssl
+      - ./config.yml:/usr/src/app/config.yml
     ports:
       - "5000:5000"
     restart: unless-stopped
