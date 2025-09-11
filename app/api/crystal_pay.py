@@ -1,15 +1,16 @@
-import aiohttp
-import json
 import hashlib
 import hmac
-import asyncio
+import json
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict
+
+import aiohttp
+from aiogram.types import CallbackQuery
 from fastapi import Request, BackgroundTasks
-from app.api.handlers import payment_process_background
-from app.settings import bot, secrets
+
 import app.database.requests as rq
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from app.api.handlers import payment_process_background
+from app.settings import secrets
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)

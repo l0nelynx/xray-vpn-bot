@@ -1,10 +1,11 @@
 import time
-import app.marzban.marzban as mz
-import app.marzban.templates as templates
-import app.keyboards as kb
 
 from aiogram.types import Message, CallbackQuery
 
+import app.keyboards as kb
+import app.marzban.marzban as mz
+import app.locale.lang_ru as ru
+import app.marzban.templates as templates
 from app.handlers.events import main_menu
 
 

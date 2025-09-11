@@ -1,21 +1,17 @@
 import logging
+
 import asyncio
-
 from aiogram import Dispatcher
+from fastapi import Request, BackgroundTasks
 
-from app.handlers.tools import success_payment_handler
-from app.settings import bot, cp, run_webserver, app_uvi, secrets
-from app.handlers.events import start_bot, stop_bot
-from app.handlers.base import router as router_base
-from app.handlers.payments import router as router_payments
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
-import app.database.requests as rq
-from app.platega.handlers import payment_webhook_handler
 from app.api.a_pay import payment_webhook_handler as apays_webhook_handler
 from app.api.crystal_pay import payment_webhook_handler as crystal_webhook_handler
-from fastapi import FastAPI, Request, BackgroundTasks
+from app.handlers.base import router as router_base
+from app.handlers.events import start_bot, stop_bot
+from app.handlers.payments import router as router_payments
+from app.platega.handlers import payment_webhook_handler
+from app.settings import bot, cp, run_webserver, app_uvi
 
-from app.handlers.broadcast import admin_broadcast
 # import subprocess
 # Инициализация бота
 dp = Dispatcher()

@@ -1,12 +1,12 @@
-import aiohttp
-import json
-import uuid
-from typing import Optional, Dict, Any
 import logging
+import uuid
+from typing import Optional
 
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
-from app.settings import secrets
+import aiohttp
+from aiogram.types import CallbackQuery
+
 import app.database.requests as rq
+from app.settings import secrets
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)

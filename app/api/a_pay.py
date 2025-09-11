@@ -1,20 +1,16 @@
-import requests, hashlib, aiohttp
-import aiohttp
-import json
-import uuid
-from typing import Optional, Dict, Any
+import hashlib
 import logging
+import uuid
+from typing import Optional
 
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
-import app.database.requests as rq
-
-from app.settings import bot, secrets
-
-import app.keyboards as kb
-import app.handlers.tools as tools
-
+import aiohttp
+from aiogram.types import CallbackQuery
 from fastapi import Request, BackgroundTasks
+
+import app.database.requests as rq
+import app.locale.lang_ru as ru
 from app.api.handlers import payment_process_background
+from app.settings import secrets
 
 # order_id = "abc123"
 # amount = 10000

@@ -1,13 +1,8 @@
 import asyncio
-
-from aiogram import Bot, Dispatcher, types
+from aiogram import Bot
 from aiogram.types import Message
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-
 
 # Ваша модель пользователя
-from app.database.models import User, async_session
 from app.database.requests import get_users
 from app.settings import secrets
 

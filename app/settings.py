@@ -1,12 +1,10 @@
-import yaml
-import os
-import asyncio
-import uvicorn
-from fastapi import FastAPI
 from pathlib import Path
 
+import uvicorn
+import yaml
 from aiogram import Bot
 from aiosend import CryptoPay
+from fastapi import FastAPI
 
 app_uvi = FastAPI()
 

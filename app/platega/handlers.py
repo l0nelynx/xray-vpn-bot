@@ -1,12 +1,11 @@
 import logging
 
-from app.settings import bot, secrets
+from fastapi import Request, BackgroundTasks
 
 import app.database.requests as rq
-import app.keyboards as kb
 import app.handlers.tools as tools
-
-from fastapi import Request, BackgroundTasks
+import app.keyboards as kb
+from app.settings import bot, secrets
 
 pt_key = secrets.get('platega_api_key')
 pt_id = secrets.get('platega_merchant_id')

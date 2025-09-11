@@ -1,12 +1,9 @@
-import os
-import asyncio
+import app.database.requests as rq
+import app.keyboards as kb
+import app.locale.lang_ru as ru
+from app.database.models import async_main
 from app.settings import bot, secrets
 from app.views import start_bot_msg, stop_bot_msg
-from app.database.models import async_main
-from app.settings import run_webserver
-import app.keyboards as kb
-import app.database.requests as rq
-import app.locale.lang_ru as ru
 
 lang = eval(f"{secrets.get('language')}")
 crypto = secrets.get('crypto')

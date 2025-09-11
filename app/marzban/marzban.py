@@ -1,7 +1,8 @@
-from app.settings import secrets
+import json
 
 import aiohttp
-import json
+
+from app.settings import secrets
 
 
 class MarzbanAsync:

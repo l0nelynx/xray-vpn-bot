@@ -1,6 +1,7 @@
-from app.database.models import async_session
-from app.database.models import User, Transaction
 from sqlalchemy import select
+
+from app.database.models import User, Transaction
+from app.database.models import async_session
 
 
 async def set_user(tg_id):
