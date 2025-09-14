@@ -2,7 +2,7 @@ import logging
 
 import asyncio
 from aiogram import Dispatcher
-from fastapi import Request, BackgroundTasks
+from fastapi import Request, BackgroundTasks, Response
 
 from app.api.a_pay import payment_webhook_handler as apays_webhook_handler
 from app.api.crystal_pay import payment_webhook_handler as crystal_webhook_handler
@@ -38,8 +38,8 @@ async def payment_webhook(request: Request, background_tasks: BackgroundTasks):
 
 
 @app_uvi.post("/digiseller_webhook")
-async def payment_webhook(request: Request):
-    await digiseller_webhook_handler(request)
+async def payment_webhook(request: Request, response: Response):
+    await digiseller_webhook_handler(request, response)
 
 
 async def on_startup(dispatcher, **kwargs):

@@ -68,7 +68,7 @@ def get_variant_info(json_file_path, variant_id, field=None):
         return None
 
 
-async def payment_webhook_handler(request: Request):
+async def payment_webhook_handler(request: Request, response: Response):
     try:
         payment_data = await request.json()
         # Получаем данные платежа
@@ -90,7 +90,7 @@ async def payment_webhook_handler(request: Request):
                 sign = generate_signature(payment_data['id'], payment_data['inv'], secrets.get('dig_pass'))
                 if payment_data['sign'] == sign:
                     usrid = uuid.uuid4()
-                    buyer_nfo = await tools.add_new_user_info("dig_id"+payment_data["inv"],
+                    buyer_nfo = await tools.add_new_user_info("dig_id" + payment_data["inv"],
                                                               usrid,
                                                               limit=0,
                                                               res_strat="no_reset",
@@ -105,17 +105,21 @@ async def payment_webhook_handler(request: Request):
                         "error": ""
                     }
                     response_payload = {
-                            "headers": {
-                                "Content-Type": "application/json"
-                            },
-                            "body": success_response
-                        }
+                        "headers": {
+                            "Content-Type": "application/json"
+                        },
+                        "body": success_response
+                    }
                     print(success_response)
-                    return Response(
-                        content=json.dumps(success_response),
-                        media_type="application/json",
-                        status_code=200
-                    )
+                    response.status_code = 200
+                    response.body = success_response
+                    return response
+                else:
+                    return 400
+            else:
+                return 400
+        else:
+            return 400
     except Exception as e:
         logging.error(f"Ошибка обработки платежа: {e}")
         return {"status": "error", "message": str(e)}
