@@ -6,6 +6,7 @@ from fastapi import Request, BackgroundTasks
 
 from app.api.a_pay import payment_webhook_handler as apays_webhook_handler
 from app.api.crystal_pay import payment_webhook_handler as crystal_webhook_handler
+from app.api.digiseller import payment_webhook_handler as digiseller_webhook_handler
 from app.handlers.base import router as router_base
 from app.handlers.events import start_bot, stop_bot
 from app.handlers.payments import router as router_payments
@@ -38,7 +39,7 @@ async def payment_webhook(request: Request, background_tasks: BackgroundTasks):
 
 @app_uvi.post("/digiseller_webhook")
 async def payment_webhook(request: Request, background_tasks: BackgroundTasks):
-    await crystal_webhook_handler(request, background_tasks)
+    await digiseller_webhook_handler(request, background_tasks)
 
 
 async def on_startup(dispatcher, **kwargs):
