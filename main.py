@@ -2,11 +2,11 @@ import logging
 
 import asyncio
 from aiogram import Dispatcher
-from fastapi import Request, BackgroundTasks, Response
-
+from fastapi import Request, BackgroundTasks, Response, HTTPException
 from app.api.a_pay import payment_webhook_handler as apays_webhook_handler
 from app.api.crystal_pay import payment_webhook_handler as crystal_webhook_handler
-from app.api.digiseller import payment_webhook_handler as digiseller_webhook_handler
+# from app.api.digiseller import payment_webhook_handler as digiseller_webhook_handler
+from app.api.digiseller import payment_async_logic, DigisellerResponse
 from app.handlers.base import router as router_base
 from app.handlers.events import start_bot, stop_bot
 from app.handlers.payments import router as router_payments
@@ -37,9 +37,28 @@ async def payment_webhook(request: Request, background_tasks: BackgroundTasks):
     await crystal_webhook_handler(request, background_tasks)
 
 
-@app_uvi.post("/digiseller_webhook")
-async def payment_webhook(request: Request, response: Response):
-    await digiseller_webhook_handler(request, response)
+@app_uvi.post("/digiseller_webhook2", response_model=DigisellerResponse)
+async def payment_webhook(request: Request):
+    try:
+        payment_data = await request.json()
+        link = await payment_async_logic(payment_data)
+        return {
+            "id": payment_data['id'],
+            "inv": int(payment_data['inv']),
+            "goods": f"{link}",
+            "error": ""
+        }
+    except Exception as e:
+        logging.error(f"Ошибка обработки платежа: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "id": "",
+                "inv": 0,
+                "goods": "",
+                "error": "Internal server error"
+            }
+        )
 
 
 async def on_startup(dispatcher, **kwargs):
