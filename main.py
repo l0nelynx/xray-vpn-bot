@@ -36,6 +36,11 @@ async def payment_webhook(request: Request, background_tasks: BackgroundTasks):
     await crystal_webhook_handler(request, background_tasks)
 
 
+@app_uvi.post("/digiseller_webhook")
+async def payment_webhook(request: Request, background_tasks: BackgroundTasks):
+    await crystal_webhook_handler(request, background_tasks)
+
+
 async def on_startup(dispatcher, **kwargs):
     """Действия при запуске бота"""
     asyncio.create_task(run_webserver())  # Запуск Uvicorn в фоне

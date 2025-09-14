@@ -10,6 +10,7 @@ services:
         target: /usr/src/app/db.sqlite3
       - /var/lib/marzban/certs/:/usr/src/app/uvicorn/ssl
       - ./config.yml:/usr/src/app/config.yml
+      - ./dig_data.json:/usr/src/app/dig_data.json
     ports:
       - "5000:5000"
     restart: unless-stopped
