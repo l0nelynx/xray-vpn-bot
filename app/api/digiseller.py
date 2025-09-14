@@ -83,7 +83,7 @@ async def payment_webhook_handler(request: Request):
             print(f'Наличие заказа в БД:{order_id_check}')
             if order_id_check is None:
                 print('В списке обработанных заказов - заказа нет')
-                tariff_id = payment_data['options']['user_data']
+                tariff_id = payment_data['options'][0]['user_data']
                 print(tariff_id)
                 print(JSON_PATH)
                 days = get_variant_info(JSON_PATH, tariff_id, 'days')
