@@ -7,7 +7,7 @@ import uuid
 import app.handlers.tools as tools
 import sys
 from typing import Dict
-
+from fastapi import Response
 import aiohttp
 from aiogram.types import CallbackQuery
 from fastapi import Request, BackgroundTasks
@@ -111,7 +111,11 @@ async def payment_webhook_handler(request: Request):
                             "body": success_response
                         }
                     print(success_response)
-                    return success_response
+                    return Response(
+                        content=json.dumps(success_response),
+                        media_type="application/json",
+                        status_code=200
+                    )
     except Exception as e:
         logging.error(f"Ошибка обработки платежа: {e}")
         return {"status": "error", "message": str(e)}
