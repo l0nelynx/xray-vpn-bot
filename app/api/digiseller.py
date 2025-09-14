@@ -90,7 +90,7 @@ async def payment_webhook_handler(request: Request):
                 sign = generate_signature(payment_data['id'], payment_data['inv'], secrets.get('dig_pass'))
                 if payment_data['sign'] == sign:
                     usrid = uuid.uuid4()
-                    buyer_nfo = await tools.add_new_user_info(payment_data["inv"],
+                    buyer_nfo = await tools.add_new_user_info("dig_id"+payment_data["inv"],
                                                               usrid,
                                                               limit=0,
                                                               res_strat="no_reset",
