@@ -88,14 +88,17 @@ async def payment_webhook_handler(request: Request):
             )
 
         if payment_data['id'] == secrets.get('dig_item_id'):
+            print('Id магазина обнаружен')
             order_id_check = await rq.get_full_transaction_info(payment_data["inv"])
 
             if order_id_check is None:
+                print('Регистрация новой транзакции')
                 tariff_id = payment_data['options'][0]['user_data']
                 days = get_variant_info(JSON_PATH, tariff_id, 'days')
                 sign = generate_signature(payment_data['id'], payment_data['inv'], secrets.get('dig_pass'))
 
                 if payment_data.get('sign') == sign:
+                    print('Подпись подтверждена')
                     usrid = uuid.uuid4()
                     buyer_nfo = await tools.add_new_user_info(
                         "dig_id" + payment_data["inv"],
@@ -104,7 +107,14 @@ async def payment_webhook_handler(request: Request):
                         res_strat="no_reset",
                         expire_days=days
                     )
+                    await rq.set_user(int(payment_data["inv"]))
+                    await rq.create_transaction(user_tg_id=int(payment_data["inv"]),
+                                                user_transaction=f"{usrid}",
+                                                username="dig_id" + payment_data["inv"],
+                                                days=days)
 
+                    print('Отправка ссылки на подписку')
+                    print(buyer_nfo['subscription_url'])
                     success_response = {
                         "id": payment_data['id'],
                         "inv": int(payment_data['inv']),  # Преобразуем в int как требуется
@@ -112,8 +122,11 @@ async def payment_webhook_handler(request: Request):
                         "error": ""
                     }
 
-                    # Возвращаем ответ с правильным форматом
-                    return success_response
+                    return Response(
+                        media_type="application/json",
+                        content=json.dumps(success_response)
+                        #status_code=500
+                    )
                 else:
                     error_response = {
                         "id": payment_data['id'],
