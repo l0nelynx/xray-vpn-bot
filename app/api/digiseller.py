@@ -95,12 +95,15 @@ async def payment_webhook_handler(request: Request):
                                                               limit=0,
                                                               res_strat="no_reset",
                                                               expire_days=days)
+                    print(buyer_nfo['subscription_url'])
                     success_response = {
-                        "status": "success",
+                        # "status": "success",
                         "id": payment_data['id'],
-                        "inv": payment_data["inv"],
-                        "goods": f"{buyer_nfo['subscription_url']}"
+                        "inv": f"{payment_data['inv']}",
+                        "goods": f"{buyer_nfo['subscription_url']}",
+                        "error": ""
                     }
+                    print(success_response)
                     return success_response
     except Exception as e:
         logging.error(f"Ошибка обработки платежа: {e}")
