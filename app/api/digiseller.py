@@ -124,8 +124,8 @@ async def payment_webhook_handler(request: Request):
 
                     return Response(
                         media_type="application/json",
-                        content=json.dumps(success_response)
-                        #status_code=500
+                        content=json.dumps(success_response),
+                        status_code=500
                     )
                 else:
                     error_response = {
