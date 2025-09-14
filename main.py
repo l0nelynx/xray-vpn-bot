@@ -54,8 +54,8 @@ async def payment_webhook(request: Request):
             detail={
                 "id": "",
                 "inv": 0,
-                "goods": "",
-                "error": "Internal server error"
+                "goods": ""
+                # "error": "Internal server error"
             }
         )
 
