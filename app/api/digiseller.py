@@ -110,7 +110,7 @@ async def payment_webhook_handler(request: Request):
                             "body": success_response
                         }
                     print(success_response)
-                    return response_payload
+                    return {"status": "error", "message": "bruh"}
     except Exception as e:
         logging.error(f"Ошибка обработки платежа: {e}")
         return {"status": "error", "message": str(e)}
