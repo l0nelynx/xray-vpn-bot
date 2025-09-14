@@ -103,8 +103,14 @@ async def payment_webhook_handler(request: Request):
                         "goods": f"{buyer_nfo['subscription_url']}",
                         "error": ""
                     }
+                    response_payload = {
+                            "headers": {
+                                "Content-Type": "application/json"
+                            },
+                            "body": success_response
+                        }
                     print(success_response)
-                    return success_response
+                    return response_payload
     except Exception as e:
         logging.error(f"Ошибка обработки платежа: {e}")
         return {"status": "error", "message": str(e)}
