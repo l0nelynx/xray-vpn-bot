@@ -68,7 +68,7 @@ def get_variant_info(json_file_path, variant_id, field=None):
         return None
 
 
-async def payment_webhook_handler(request: Request):
+async def payment_webhook_handler(request: Request, response: Response):
     try:
         payment_data = await request.json()
         logging.info(f"Получен вебхук от магазина: {payment_data}")
@@ -121,12 +121,8 @@ async def payment_webhook_handler(request: Request):
                         "goods": buyer_nfo['subscription_url'],
                         "error": ""
                     }
-
-                    return Response(
-                        media_type="application/json",
-                        content=json.dumps(success_response),
-                        status_code=500
-                    )
+                    response.body = success_response
+                    return response.body
                 else:
                     error_response = {
                         "id": payment_data['id'],
