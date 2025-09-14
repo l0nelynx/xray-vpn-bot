@@ -68,7 +68,7 @@ def get_variant_info(json_file_path, variant_id, field=None):
         return None
 
 
-async def payment_webhook_handler(request: Request, background_tasks: BackgroundTasks):
+async def payment_webhook_handler(request: Request):
     try:
         payment_data = await request.json()
         # Получаем данные платежа
@@ -100,7 +100,6 @@ async def payment_webhook_handler(request: Request, background_tasks: Background
                         "goods": f"{buyer_nfo['subscription_url']}"
                     }
                     return success_response
-
     except Exception as e:
         logging.error(f"Ошибка обработки платежа: {e}")
         return {"status": "error", "message": str(e)}

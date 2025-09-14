@@ -38,8 +38,8 @@ async def payment_webhook(request: Request, background_tasks: BackgroundTasks):
 
 
 @app_uvi.post("/digiseller_webhook")
-async def payment_webhook(request: Request, background_tasks: BackgroundTasks):
-    await digiseller_webhook_handler(request, background_tasks)
+async def payment_webhook(request: Request):
+    await digiseller_webhook_handler(request)
 
 
 async def on_startup(dispatcher, **kwargs):
