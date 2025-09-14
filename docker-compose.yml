@@ -21,4 +21,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.sup
+    volumes:
+      - ./config.yml:/usr/src/app/config.yml
     restart: unless-stopped
