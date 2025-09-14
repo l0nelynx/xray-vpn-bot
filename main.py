@@ -43,10 +43,9 @@ async def payment_webhook(request: Request):
         payment_data = await request.json()
         link = await payment_async_logic(payment_data)
         return {
-            "id": payment_data['id'],
+            "id": f"{payment_data['id']}",
             "inv": int(payment_data['inv']),
-            "goods": f"{link}",
-            "error": ""
+            "goods": f"{link}"
         }
     except Exception as e:
         logging.error(f"Ошибка обработки платежа: {e}")
