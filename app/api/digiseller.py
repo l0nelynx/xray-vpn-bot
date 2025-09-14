@@ -68,58 +68,151 @@ def get_variant_info(json_file_path, variant_id, field=None):
         return None
 
 
-async def payment_webhook_handler(request: Request, response: Response):
+async def payment_webhook_handler(request: Request):
     try:
         payment_data = await request.json()
-        # Получаем данные платежа
         logging.info(f"Получен вебхук от магазина: {payment_data}")
-        print('REQUEST HEADERS:')
-        print(request.headers)
-        print('____________DATA PROCESSING______________')
-        print(payment_data['id'])
-        print(secrets.get('dig_item_id'))
+
+        # Проверяем обязательные поля
+        if 'id' not in payment_data or 'inv' not in payment_data or 'options' not in payment_data:
+            error_response = {
+                "id": "",
+                "inv": 0,
+                "goods": "",
+                "error": "Missing required fields: id, inv or options"
+            }
+            return Response(
+                content=json.dumps(error_response),
+                media_type="application/json",
+                status_code=400
+            )
+
         if payment_data['id'] == secrets.get('dig_item_id'):
             order_id_check = await rq.get_full_transaction_info(payment_data["inv"])
-            print(f'Наличие заказа в БД:{order_id_check}')
+
             if order_id_check is None:
-                print('В списке обработанных заказов - заказа нет')
                 tariff_id = payment_data['options'][0]['user_data']
-                print(tariff_id)
-                print(JSON_PATH)
                 days = get_variant_info(JSON_PATH, tariff_id, 'days')
                 sign = generate_signature(payment_data['id'], payment_data['inv'], secrets.get('dig_pass'))
-                if payment_data['sign'] == sign:
+
+                if payment_data.get('sign') == sign:
                     usrid = uuid.uuid4()
-                    buyer_nfo = await tools.add_new_user_info("dig_id" + payment_data["inv"],
-                                                              usrid,
-                                                              limit=0,
-                                                              res_strat="no_reset",
-                                                              expire_days=days)
-                    print(buyer_nfo['subscription_url'])
+                    buyer_nfo = await tools.add_new_user_info(
+                        "dig_id" + payment_data["inv"],
+                        usrid,
+                        limit=0,
+                        res_strat="no_reset",
+                        expire_days=days
+                    )
+
                     success_response = {
-                        "status": "success",
-                        "message": "error",
                         "id": payment_data['id'],
-                        "inv": f"{payment_data['inv']}",
-                        "goods": f"{buyer_nfo['subscription_url']}",
+                        "inv": int(payment_data['inv']),  # Преобразуем в int как требуется
+                        "goods": buyer_nfo['subscription_url'],
                         "error": ""
                     }
-                    response_payload = {
-                        "headers": {
-                            "Content-Type": "application/json"
-                        },
-                        "body": success_response
-                    }
-                    print(success_response)
-                    response.status_code = 200
-                    response.body = success_response
-                    return response
+
+                    # Возвращаем ответ с правильным форматом
+                    return success_response
                 else:
-                    return 400
+                    error_response = {
+                        "id": payment_data['id'],
+                        "inv": int(payment_data['inv']),
+                        "goods": "",
+                        "error": "Invalid signature"
+                    }
+                    return Response(
+                        content=json.dumps(error_response),
+                        media_type="application/json",
+                        status_code=400
+                    )
             else:
-                return 400
+                error_response = {
+                    "id": payment_data['id'],
+                    "inv": int(payment_data['inv']),
+                    "goods": "",
+                    "error": "Order already processed"
+                }
+                return Response(
+                    content=json.dumps(error_response),
+                    media_type="application/json",
+                    status_code=400
+                )
         else:
-            return 400
+            error_response = {
+                "id": "",
+                "inv": 0,
+                "goods": "",
+                "error": "Invalid item ID"
+            }
+            return Response(
+                content=json.dumps(error_response),
+                media_type="application/json",
+                status_code=400
+            )
+
     except Exception as e:
         logging.error(f"Ошибка обработки платежа: {e}")
-        return {"status": "error", "message": str(e)}
+
+        return Response(
+            media_type="application/json",
+            status_code=500
+        )
+
+
+
+# async def payment_webhook_handler(request: Request, response: Response):
+#     try:
+#         payment_data = await request.json()
+#         # Получаем данные платежа
+#         logging.info(f"Получен вебхук от магазина: {payment_data}")
+#         print('REQUEST HEADERS:')
+#         print(request.headers)
+#         print('____________DATA PROCESSING______________')
+#         print(payment_data['id'])
+#         print(secrets.get('dig_item_id'))
+#         if payment_data['id'] == secrets.get('dig_item_id'):
+#             order_id_check = await rq.get_full_transaction_info(payment_data["inv"])
+#             print(f'Наличие заказа в БД:{order_id_check}')
+#             if order_id_check is None:
+#                 print('В списке обработанных заказов - заказа нет')
+#                 tariff_id = payment_data['options'][0]['user_data']
+#                 print(tariff_id)
+#                 print(JSON_PATH)
+#                 days = get_variant_info(JSON_PATH, tariff_id, 'days')
+#                 sign = generate_signature(payment_data['id'], payment_data['inv'], secrets.get('dig_pass'))
+#                 if payment_data['sign'] == sign:
+#                     usrid = uuid.uuid4()
+#                     buyer_nfo = await tools.add_new_user_info("dig_id" + payment_data["inv"],
+#                                                               usrid,
+#                                                               limit=0,
+#                                                               res_strat="no_reset",
+#                                                               expire_days=days)
+#                     print(buyer_nfo['subscription_url'])
+#                     success_response = {
+#                         "status": "success",
+#                         "message": "error",
+#                         "id": payment_data['id'],
+#                         "inv": f"{payment_data['inv']}",
+#                         "goods": f"{buyer_nfo['subscription_url']}",
+#                         "error": ""
+#                     }
+#                     response_payload = {
+#                         "headers": {
+#                             "Content-Type": "application/json"
+#                         },
+#                         "body": success_response
+#                     }
+#                     print(success_response)
+#                     # response.status_code = 200
+#                     response.body = success_response
+#                     return response
+#                 else:
+#                     return 400
+#             else:
+#                 return 400
+#         else:
+#             return 400
+#     except Exception as e:
+#         logging.error(f"Ошибка обработки платежа: {e}")
+#         return {"status": "error", "message": str(e)}
