@@ -76,12 +76,14 @@ async def payment_webhook_handler(request: Request):
         print('REQUEST HEADERS:')
         print(request.headers)
         print('____________DATA PROCESSING______________')
+        print(payment_data['id'])
+        print(secrets.get('dig_item_id'))
         if payment_data['id'] == secrets.get('dig_item_id'):
             order_id_check = await rq.get_full_transaction_info(payment_data["inv"])
             print(f'Наличие заказа в БД:{order_id_check}')
             if order_id_check is None:
                 print('В списке обработанных заказов - заказа нет')
-                tariff_id = payment_data['options']['variants'][0]['variant_id']
+                tariff_id = payment_data['options']['user_data']
                 print(tariff_id)
                 print(JSON_PATH)
                 days = get_variant_info(JSON_PATH, tariff_id, 'days')
