@@ -47,9 +47,9 @@ async def payment_webhook(request: Request):
          #   "inv": int(payment_data['inv']),
          #   "goods": f"{link}"
         #}
-        return HTTPException(
+        return JSONResponse(
             status_code=200,
-            detail={
+            content={
                 "id": f"{payment_data['id']}",
                 "inv": int(payment_data['inv']),
                 "goods": f"{link}"
