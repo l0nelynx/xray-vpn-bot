@@ -51,7 +51,7 @@ async def payment_webhook(request: Request, response: Response):
                 "id": f"{payment_data['id']}",
                 "inv": f"{payment_data['inv']}",
                 "goods": f"{link}",
-                "error": f"{None}"
+                "error": ""
         }
         response.status_code = 200
         return content
