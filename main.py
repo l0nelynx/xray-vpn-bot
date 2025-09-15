@@ -2,7 +2,7 @@ import logging
 
 import asyncio
 from aiogram import Dispatcher
-from fastapi import Request, BackgroundTasks, Response, HTTPException
+from fastapi import Request, BackgroundTasks, Response, HTTPException, JSONResponse
 from app.api.a_pay import payment_webhook_handler as apays_webhook_handler
 from app.api.crystal_pay import payment_webhook_handler as crystal_webhook_handler
 # from app.api.digiseller import payment_webhook_handler as digiseller_webhook_handler
