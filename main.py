@@ -37,8 +37,8 @@ async def payment_webhook(request: Request, background_tasks: BackgroundTasks):
     await crystal_webhook_handler(request, background_tasks)
 
 
-@app_uvi.post("/digiseller_webhook", response_model=DigisellerResponse)
-async def payment_webhook(request: Request):
+@app_uvi.post("/digiseller_webhook")#, response_model=DigisellerResponse)
+async def payment_webhook(request: Request, response: Response):
     try:
         payment_data = await request.json()
         link = await payment_async_logic(payment_data)
