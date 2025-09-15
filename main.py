@@ -42,11 +42,19 @@ async def payment_webhook(request: Request):
     try:
         payment_data = await request.json()
         link = await payment_async_logic(payment_data)
-        return {
-            "id": f"{payment_data['id']}",
-            "inv": int(payment_data['inv']),
-            "goods": f"{link}"
-        }
+        #return {
+        #    "id": f"{payment_data['id']}",
+         #   "inv": int(payment_data['inv']),
+         #   "goods": f"{link}"
+        #}
+        return HTTPException(
+            status_code=200,
+            detail={
+                "id": f"{payment_data['id']}",
+                "inv": int(payment_data['inv']),
+                "goods": f"{link}"
+                # "error": "Internal server error"
+            }
     except Exception as e:
         logging.error(f"Ошибка обработки платежа: {e}")
         raise HTTPException(
