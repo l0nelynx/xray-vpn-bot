@@ -47,15 +47,13 @@ async def payment_webhook(request: Request):
          #   "inv": int(payment_data['inv']),
          #   "goods": f"{link}"
         #}
-        return Response(
-            status_code=200,
-            content={
+        content={
                 "id": f"{payment_data['id']}",
                 "inv": int(payment_data['inv']),
                 "goods": f"{link}"
-                # "error": "Internal server error"
-            }
-        )
+        }
+        response.status_code = 200
+        return content
     except Exception as e:
         logging.error(f"Ошибка обработки платежа: {e}")
         raise HTTPException(
