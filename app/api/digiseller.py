@@ -92,7 +92,9 @@ async def payment_async_logic(payment_data):
     if payment_data['id'] == secrets.get('dig_item_id'):
         print('Id магазина обнаружен')
         order_id_check = await rq.get_full_transaction_info(payment_data["inv"])
-        if order_id_check is None:
+        user_info = await tools.get_user_info("dig_id" + payment_data["inv"])
+        #if order_id_check is None:
+        if user_info == 404:
             print('Регистрация новой транзакции')
             tariff_id = payment_data['options'][0]['user_data']
             days = get_variant_info(JSON_PATH, tariff_id, 'days')
@@ -123,3 +125,8 @@ async def payment_async_logic(payment_data):
                                        f"<b>Link </b><code>{buyer_nfo['subscription_url']}</code>",
                                        parse_mode="HTML")
                 return buyer_nfo['subscription_url']
+            else:
+                return 400
+        else:
+            return user_info['subscription_url']
+                
