@@ -50,7 +50,8 @@ async def payment_webhook(request: Request, response: Response):
         content={
                 "id": f"{payment_data['id']}",
                 "inv": f"{payment_data['inv']}",
-                "goods": f"{link}"
+                "goods": f"{link}",
+                "error": Null
         }
         response.status_code = 200
         return content
@@ -61,8 +62,8 @@ async def payment_webhook(request: Request, response: Response):
             detail={
                 "id": "",
                 "inv": "0",
-                "goods": ""
-                # "error": "Internal server error"
+                "goods": "",
+                "error": "Internal server error"
             }
         )
 
