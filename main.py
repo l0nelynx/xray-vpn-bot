@@ -55,6 +55,7 @@ async def payment_webhook(request: Request):
                 "goods": f"{link}"
                 # "error": "Internal server error"
             }
+        )
     except Exception as e:
         logging.error(f"Ошибка обработки платежа: {e}")
         raise HTTPException(
