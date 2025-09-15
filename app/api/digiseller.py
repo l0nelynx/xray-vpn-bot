@@ -66,6 +66,25 @@ def get_variant_info(json_file_path, merchant_id, variant_id, field=None):
         return None
 
 
+def extract_dig_items(secrets_in):
+    result = {}
+    index = 0
+    while True:
+        key = f"dig_item_id_{index}"
+        value = secrets_in.get(key)
+        if value is None:
+            break
+        result[index] = value
+        index += 1
+    return result
+
+
+def check_id_exists_efficient(target_id, secrets_in):
+    dig_items = extract_dig_items(secrets_in)
+    values_set = set(dig_items.values())
+    return target_id in values_set
+
+
 async def payment_async_logic(payment_data):
     logging.info(f"Получен вебхук от магазина: {payment_data}")
     # Проверяем обязательные поля
@@ -77,12 +96,12 @@ async def payment_async_logic(payment_data):
             "error": "Missing required fields: id, inv or options"
         }
         return 400
-
-    if payment_data['id'] == secrets.get('dig_item_id'):
+    if check_id_exists_efficient(payment_data['id'], secrets):
+    #if payment_data['id'] == secrets.get('dig_item_id'):
         print('Id магазина обнаружен')
         order_id_check = await rq.get_full_transaction_info(payment_data["inv"])
         user_info = await tools.get_user_info("dig_id" + payment_data["inv"])
-        #if order_id_check is None:
+        # if order_id_check is None:
         if user_info == 404:
             print('Регистрация новой транзакции')
             merchant_id = payment_data['options'][0]['id']
@@ -109,14 +128,13 @@ async def payment_async_logic(payment_data):
                 print('Отправка ссылки на подписку')
                 print(buyer_nfo['subscription_url'])
                 await bot.send_message(chat_id=secrets.get('admin_id'), text=f"<b>Digiseller Order</b>\n\n"
-                                       f"<b>Id </b>{payment_data['inv']}\n"
-                                       f"<b>Days </b>{days}\n"
-                                       f"<b>UserId </b>{usrid}\n"
-                                       f"<b>Link </b><code>{buyer_nfo['subscription_url']}</code>",
+                                                                             f"<b>Id </b>{payment_data['inv']}\n"
+                                                                             f"<b>Days </b>{days}\n"
+                                                                             f"<b>UserId </b>{usrid}\n"
+                                                                             f"<b>Link </b><code>{buyer_nfo['subscription_url']}</code>",
                                        parse_mode="HTML")
                 return buyer_nfo['subscription_url']
             else:
                 return 400
         else:
             return user_info['subscription_url']
-                
