@@ -29,7 +29,7 @@ class DigisellerResponse(BaseModel):
     id: str
     inv: int
     goods: str
-    # error: str
+    error: str
 
 
 def generate_signature(id_value, inv_value, password):
