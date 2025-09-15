@@ -48,24 +48,13 @@ def generate_signature(id_value, inv_value, password):
     return hashlib.md5(signature_string.encode('utf-8')).hexdigest()
 
 
-def get_variant_info(json_file_path, variant_id, field=None):
-    """
-    Получает информацию о варианте по ID
-
-    Args:
-        json_file_path (str): Путь к JSON-файлу
-        variant_id (str/int): ID варианта
-        field (str, optional): Конкретное поле для получения (если None, возвращает весь объект)
-
-    Returns:
-        dict/int/str: Запрошенная информация или None, если вариант не найден
-    """
+def get_variant_info(json_file_path, merchant_id, variant_id, field=None):
     try:
         with open(json_file_path, 'r', encoding='utf-8') as file:
             data = json.load(file)
 
         variant_id_str = str(variant_id)
-        variant_info = data['var_ids']['variants'].get(variant_id_str)
+        variant_info = data['var_ids'][f'{merchant_id}']['variants'].get(variant_id_str)
 
         if variant_info is None:
             return None
@@ -96,8 +85,9 @@ async def payment_async_logic(payment_data):
         #if order_id_check is None:
         if user_info == 404:
             print('Регистрация новой транзакции')
+            merchant_id = payment_data['options'][0]['id']
             tariff_id = payment_data['options'][0]['user_data']
-            days = get_variant_info(JSON_PATH, tariff_id, 'days')
+            days = get_variant_info(JSON_PATH, merchant_id, tariff_id, 'days')
             sign = generate_signature(payment_data['id'], payment_data['inv'], secrets.get('dig_pass'))
             print(sign)
             print(payment_data.get('sign'))
