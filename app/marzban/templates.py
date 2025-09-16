@@ -8,7 +8,8 @@ vless_template = {
     },
     "inbounds": {
         "vless": [
-            "VLESS+TCP+REALITY+9696"
+            "VLESS+TCP+REALITY+9696",
+            "VLESS+XHTTP+REALITY+9797"
         ]
     },
     "expire": 0,
