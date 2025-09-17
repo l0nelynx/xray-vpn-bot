@@ -84,7 +84,7 @@ async def admin_broadcast(message: Message, test_flag: int = 0):
     await message.answer("📨 Рассылка начата...")
 
     # Выполняем рассылку
-    report, failed_users = await broadcast_message(message.bot, broadcast_text, test_flag)
+    report, failed_users = await broadcast_message(message.bot, broadcast_text, 'HTML', test_flag)
 
     # Отправляем отчет администратору
     await message.answer(report, parse_mode='HTML')
