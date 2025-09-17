@@ -9,7 +9,7 @@ from app.settings import secrets
 ADMIN_IDS = [secrets.get('admin_id')]
 
 
-async def broadcast_message(bot: Bot, message_text: str, parse_mode: str = 'HTML'):
+async def broadcast_message(bot: Bot, message_text: str, parse_mode: str = 'HTML', test_flag: int):
     """
     Функция рассылки сообщения всем пользователям
     """
@@ -23,24 +23,30 @@ async def broadcast_message(bot: Bot, message_text: str, parse_mode: str = 'HTML
         success_count = 0
         fail_count = 0
         failed_users = []
+        if test_flag == 0:
+            # Отправляем сообщение каждому пользователю
+            for user in users:
+                try:
+                    await bot.send_message(
+                        chat_id=user.tg_id,
+                        text=message_text,
+                        parse_mode=parse_mode
+                    )
+                    success_count += 1
 
-        # Отправляем сообщение каждому пользователю
-        for user in users:
-            try:
-                await bot.send_message(
-                    chat_id=user.tg_id,
-                    text=message_text,
-                    parse_mode=parse_mode
-                )
-                success_count += 1
+                    # Небольшая задержка, чтобы не превысить лимиты Telegram
+                    await asyncio.sleep(0.1)
 
-                # Небольшая задержка, чтобы не превысить лимиты Telegram
-                await asyncio.sleep(0.1)
-
-            except Exception as e:
-                fail_count += 1
-                failed_users.append((user.tg_id, str(e)))
-                print(f"Не удалось отправить сообщение пользователю {user.tg_id}: {e}")
+                except Exception as e:
+                    fail_count += 1
+                    failed_users.append((user.tg_id, str(e)))
+                    print(f"Не удалось отправить сообщение пользователю {user.tg_id}: {e}")
+        else:
+            await bot.send_message(
+                        chat_id=secrets.get('admin_id'),
+                        text=message_text,
+                        parse_mode=parse_mode
+            )
 
         # Формируем отчет о рассылке
         report = (
@@ -57,7 +63,7 @@ async def broadcast_message(bot: Bot, message_text: str, parse_mode: str = 'HTML
 
 
 # Обработчик команды для администратора
-async def admin_broadcast(message: Message):
+async def admin_broadcast(message: Message, test_flag: int):
     # Проверяем, является ли пользователь администратором
     if message.from_user.id not in ADMIN_IDS:  # ADMIN_IDS - список ID администраторов
         await message.answer("У вас нет прав для выполнения этой команды.")
@@ -75,7 +81,7 @@ async def admin_broadcast(message: Message):
     await message.answer("📨 Рассылка начата...")
 
     # Выполняем рассылку
-    report, failed_users = await broadcast_message(message.bot, broadcast_text)
+    report, failed_users = await broadcast_message(message.bot, broadcast_text, test_flag)
 
     # Отправляем отчет администратору
     await message.answer(report, parse_mode='HTML')
