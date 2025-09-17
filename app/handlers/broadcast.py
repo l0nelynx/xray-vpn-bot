@@ -30,7 +30,8 @@ async def broadcast_message(bot: Bot, message_text: str, parse_mode: str = 'HTML
                     await bot.send_message(
                         chat_id=user.tg_id,
                         text=message_text,
-                        parse_mode=parse_mode
+                        parse_mode=parse_mode,
+                        disable_web_page_preview=True
                     )
                     success_count += 1
 
@@ -45,7 +46,8 @@ async def broadcast_message(bot: Bot, message_text: str, parse_mode: str = 'HTML
             await bot.send_message(
                         chat_id=secrets.get('admin_id'),
                         text=message_text,
-                        parse_mode=parse_mode
+                        parse_mode=parse_mode,
+                        disable_web_page_preview=True
             )
 
         # Формируем отчет о рассылке
