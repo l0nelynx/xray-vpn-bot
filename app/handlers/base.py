@@ -83,7 +83,7 @@ async def broadcast_make(message: Message):
     await message.answer('Making a broadcast')
     #command_args: str = message.get_args()
     #print(command_args)
-    await admin_broadcast(message, test_flag=0)
+    await admin_broadcast(message, test_flag='')
 
 
 @router.message(Command("broadcast_test"), F.from_user.id == secrets.get('admin_id'))  #
@@ -91,7 +91,16 @@ async def broadcast_make(message: Message):
     await message.answer('Making a broadcast')
     #command_args: str = message.get_args()
     #print(command_args)
-    await admin_broadcast(message, test_flag=1)
+    await admin_broadcast(message, test_flag='test')
+
+
+
+@router.message(Command("broadcast_news"), F.from_user.id == secrets.get('admin_id'))  #
+async def broadcast_make(message: Message):
+    await message.answer('Making a broadcast')
+    #command_args: str = message.get_args()
+    #print(command_args)
+    await admin_broadcast(message, test_flag='news', secrets.get('news_id'))
 
 
 broadcast_active = False
