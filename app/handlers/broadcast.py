@@ -9,7 +9,7 @@ from app.settings import secrets
 ADMIN_IDS = [secrets.get('admin_id')]
 
 
-async def broadcast_message(bot: Bot, message_text: str, parse_mode: str = 'HTML', test_flag: int = 0, post_id = secrets.get('admin_id')):
+async def broadcast_message(bot: Bot, message_text: str, parse_mode: str = 'HTML', test_flag: str = '', post_id = secrets.get('admin_id')):
     """
     Функция рассылки сообщения всем пользователям
     """
@@ -23,7 +23,7 @@ async def broadcast_message(bot: Bot, message_text: str, parse_mode: str = 'HTML
         success_count = 0
         fail_count = 0
         failed_users = []
-        if test_flag == 0:
+        if test_flag == '':
             # Отправляем сообщение каждому пользователю
             for user in users:
                 try:
@@ -65,17 +65,17 @@ async def broadcast_message(bot: Bot, message_text: str, parse_mode: str = 'HTML
 
 
 # Обработчик команды для администратора
-async def admin_broadcast(message: Message, test_flag: int = 0, post_id):
+async def admin_broadcast(message: Message, test_flag: str = '', post_id):
     # Проверяем, является ли пользователь администратором
     if message.from_user.id not in ADMIN_IDS:  # ADMIN_IDS - список ID администраторов
         await message.answer("У вас нет прав для выполнения этой команды.")
         return
 
     # Получаем текст для рассылки (всё после команды /broadcast)
-    if test_flag == 0:
-        broadcast_text = message.text.replace('/broadcast', '').strip()
-    else:
-        broadcast_text = message.text.replace('/broadcast_test', '').strip()
+   # if test_flag == 0:
+   #     broadcast_text = message.text.replace('/broadcast', '').strip()
+   # else:
+    broadcast_text = message.text.replace('/broadcast'+test_flag, '').strip()
 
     if not broadcast_text:
         await message.answer("Укажите текст для рассылки после команды /broadcast")
