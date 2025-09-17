@@ -91,7 +91,7 @@ async def broadcast_make(message: Message):
     await message.answer('Making a broadcast')
     #command_args: str = message.get_args()
     #print(command_args)
-    await admin_broadcast(message, test_flag='test')
+    await admin_broadcast(message, test_flag='_test')
 
 
 
@@ -100,7 +100,7 @@ async def broadcast_make(message: Message):
     await message.answer('Making a broadcast')
     #command_args: str = message.get_args()
     #print(command_args)
-    await admin_broadcast(message, test_flag='news', post_id=secrets.get('news_id'))
+    await admin_broadcast(message, test_flag='_news', post_id=secrets.get('news_id'))
 
 
 broadcast_active = False
