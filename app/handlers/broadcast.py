@@ -9,7 +9,7 @@ from app.settings import secrets
 ADMIN_IDS = [secrets.get('admin_id')]
 
 
-async def broadcast_message(bot: Bot, message_text: str, parse_mode: str = 'HTML', test_flag: int = 0):
+async def broadcast_message(bot: Bot, message_text: str, parse_mode: str = 'HTML', test_flag: int = 0, post_id = secrets.get('admin_id')):
     """
     Функция рассылки сообщения всем пользователям
     """
@@ -44,7 +44,7 @@ async def broadcast_message(bot: Bot, message_text: str, parse_mode: str = 'HTML
                     print(f"Не удалось отправить сообщение пользователю {user.tg_id}: {e}")
         else:
             await bot.send_message(
-                        chat_id=secrets.get('admin_id'),
+                        chat_id=post_id,
                         text=message_text,
                         parse_mode=parse_mode,
                         disable_web_page_preview=True
@@ -65,7 +65,7 @@ async def broadcast_message(bot: Bot, message_text: str, parse_mode: str = 'HTML
 
 
 # Обработчик команды для администратора
-async def admin_broadcast(message: Message, test_flag: int = 0):
+async def admin_broadcast(message: Message, test_flag: int = 0, post_id):
     # Проверяем, является ли пользователь администратором
     if message.from_user.id not in ADMIN_IDS:  # ADMIN_IDS - список ID администраторов
         await message.answer("У вас нет прав для выполнения этой команды.")
@@ -86,7 +86,10 @@ async def admin_broadcast(message: Message, test_flag: int = 0):
     await message.answer("📨 Рассылка начата...")
 
     # Выполняем рассылку
-    report, failed_users = await broadcast_message(message.bot, broadcast_text, 'HTML', test_flag)
+    if post_id:
+        report, failed_users = await broadcast_message(message.bot, broadcast_text, 'HTML', test_flag, post_id)
+    else:
+        report, failed_users = await broadcast_message(message.bot, broadcast_text, 'HTML', test_flag)
 
     # Отправляем отчет администратору
     await message.answer(report, parse_mode='HTML')
