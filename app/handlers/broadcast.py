@@ -70,7 +70,10 @@ async def admin_broadcast(message: Message, test_flag: int = 0):
         return
 
     # Получаем текст для рассылки (всё после команды /broadcast)
-    broadcast_text = message.text.replace('/broadcast', '').strip()
+    if test_flag == 0:
+        broadcast_text = message.text.replace('/broadcast', '').strip()
+    else:
+        broadcast_text = message.text.replace('/broadcast_test', '').strip()
 
     if not broadcast_text:
         await message.answer("Укажите текст для рассылки после команды /broadcast")
