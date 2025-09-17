@@ -9,7 +9,7 @@ from app.settings import secrets
 ADMIN_IDS = [secrets.get('admin_id')]
 
 
-async def broadcast_message(bot: Bot, message_text: str, parse_mode: str = 'HTML', test_flag: int):
+async def broadcast_message(bot: Bot, message_text: str, parse_mode: str = 'HTML', test_flag: int = 0):
     """
     Функция рассылки сообщения всем пользователям
     """
@@ -63,7 +63,7 @@ async def broadcast_message(bot: Bot, message_text: str, parse_mode: str = 'HTML
 
 
 # Обработчик команды для администратора
-async def admin_broadcast(message: Message, test_flag: int):
+async def admin_broadcast(message: Message, test_flag: int = 0):
     # Проверяем, является ли пользователь администратором
     if message.from_user.id not in ADMIN_IDS:  # ADMIN_IDS - список ID администраторов
         await message.answer("У вас нет прав для выполнения этой команды.")
