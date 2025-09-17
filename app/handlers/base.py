@@ -81,28 +81,21 @@ async def get_subscription_info(callback: CallbackQuery):
 @router.message(Command("broadcast"), F.from_user.id == secrets.get('admin_id'))  #
 async def broadcast_make(message: Message):
     await message.answer('Making a broadcast')
-    #command_args: str = message.get_args()
-    #print(command_args)
     await admin_broadcast(message, test_flag='')
 
 
 @router.message(Command("broadcast_test"), F.from_user.id == secrets.get('admin_id'))  #
 async def broadcast_make(message: Message):
-    await message.answer('Making a broadcast')
-    #command_args: str = message.get_args()
-    #print(command_args)
+    await message.answer('Making a test broadcast to this chat')
     await admin_broadcast(message, test_flag='_test')
-
 
 
 @router.message(Command("broadcast_news"), F.from_user.id == secrets.get('admin_id'))  #
 async def broadcast_make(message: Message):
-    await message.answer('Making a broadcast')
-    #command_args: str = message.get_args()
-    #print(command_args)
+    await message.answer('Making a broadcast to a new channel')
     await admin_broadcast(message, test_flag='_news', post_id=secrets.get('news_id'))
 
-
+# broadcast activity flag
 broadcast_active = False
 
 
