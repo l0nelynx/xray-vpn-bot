@@ -7,10 +7,10 @@ import app.keyboards as kb
 import app.locale.lang_ru as ru
 from app.handlers.broadcast import admin_broadcast
 from app.handlers.events import userlist
-from app.handlers.tools import startup_user_dialog, free_sub_handler, subscription_info
+from app.handlers.tools import startup_user_dialog, free_sub_handler, subscription_info, check_tg_subscription
 # from app.locale.lang_ru import text_help
 from app.settings import secrets
-
+from app.settings import bot
 # from app.utils import create_smart_invoice
 
 router = Router()
@@ -105,3 +105,18 @@ async def cancel_broadcast(callback_query: CallbackQuery):
     broadcast_active = False
     await callback_query.answer("Рассылка будет остановлена после отправки текущего пакета сообщений",
                                 reply_markup=kb.cancel_keyboard)
+
+
+@router.message(Command("subcheck"), F.from_user.id == secrets.get('admin_id'))  #
+async def broadcast_make(message: Message):
+    await message.answer('Making a test of sub check handler', reply_markup=kb.subcheck)
+
+
+@router.callback_query(F.data == 'sub_check')  # Start command handler
+async def sub_check(callback: CallbackQuery):
+    sub_status = await check_tg_subscription(bot=bot, chat_id=secrets.get('news_id'), user_id=callback.from_user.id)
+    print(callback.from_user.id)
+    print(secrets.get("admin_id"))
+    print(sub_status)
+    if sub_status:
+        await free_sub_handler(callback, secrets.get('free_days'), secrets.get('free_traffic')+10, True)

@@ -7,6 +7,9 @@ import app.marzban.marzban as mz
 import app.locale.lang_ru as ru
 import app.marzban.templates as templates
 from app.handlers.events import main_menu
+from aiogram import Bot
+# from aiogram.types import ChatMemberUnion
+from aiogram.enums.chat_member_status import ChatMemberStatus
 
 
 def time_to_unix(days: int):
@@ -128,7 +131,7 @@ async def success_payment_handler(message: Message, tariff_days):
                                  reply_markup=kb.connect(sub_link))
 
 
-async def free_sub_handler(callback, free_days, free_limit):
+async def free_sub_handler(callback, free_days, free_limit, override=False):
     user_info = await get_user_info(callback.from_user.username)
     # user_info = await get_user_info(message)
     if user_info == 404:
@@ -153,17 +156,26 @@ async def free_sub_handler(callback, free_days, free_limit):
         # limit = user_info["data_limit"]
         if user_info["expire"] is None:
             expire_day = "Unlimited"
+            new_expire_day = "Unlimited"
         else:
-            expire_day = free_days
-        buyer_nfo = await set_user_info(callback.from_user.username,
-                                        free_limit * 1024 * 1024 * 1024,
-                                        'month',
-                                        free_days)
-        await callback.message.answer(text=f"<b>Подписка успешно продлена еще на месяц</b>\n"
-                                           f"Осталось дней: {expire_day}\n"
-                                           f"Ваша ссылка для подключения:\n"
-                                           f"<code>{sub_link}</code>", parse_mode="HTML",
-                                      reply_markup=kb.connect(sub_link))
+            expire_day = await get_user_days(user_info)
+        new_expire_day = free_days
+        if user_info["expire"] == 0 or override or user_info["status"] != 'active':
+            buyer_nfo = await set_user_info(callback.from_user.username,
+                                            free_limit * 1024 * 1024 * 1024,
+                                            'month',
+                                            free_days)
+            await callback.message.answer(text=f"<b>Подписка успешно обновлена</b>\n"
+                                               f"Осталось дней: {new_expire_day}\n"
+                                               f"Ваша ссылка для подключения:\n"
+                                               f"<code>{sub_link}</code>", parse_mode="HTML",
+                                          reply_markup=kb.connect(sub_link))
+        else:
+            await callback.message.answer(text=f"<b>Бесплатная подписка уже активна</b>\n"
+                                               f"Осталось дней: {expire_day}\n"
+                                               f"Ваша ссылка для подключения:\n"
+                                               f"<code>{sub_link}</code>", parse_mode="HTML",
+                                          reply_markup=kb.connect(sub_link))
 
 
 async def subscription_info(callback: CallbackQuery):
@@ -185,3 +197,27 @@ async def subscription_info(callback: CallbackQuery):
         await callback.message.edit_text("Free подписка активна\n"
                                          f"Ссылка для подключения: {sub_link}\n"
                                          f"Осталось дней: {expire_day}\n", reply_markup=kb.connect(sub_link))
+
+
+async def check_tg_subscription(bot: Bot, chat_id: int, user_id: int) -> bool:
+    """
+    Проверяет, подписан ли пользователь на канал.
+
+    Args:
+        bot: Экземпляр объекта Bot.
+        chat_id: ID чата (канала), на который нужно проверить подписку.
+        user_id: ID пользователя.
+
+    Returns:
+        True, если пользователь подписан, иначе False.
+    """
+    try:
+        member = await bot.get_chat_member(chat_id=chat_id, user_id=user_id)
+        # Статус 'member' означает, что пользователь подписан на канал.
+        # Статус 'restricted' или 'left' означает, что пользователь не подписан.
+        return (member.status == ChatMemberStatus.MEMBER
+                or member.status == ChatMemberStatus.CREATOR
+                or member.status == ChatMemberStatus.ADMINISTRATOR)
+    except Exception as e:
+        print(f"Ошибка при проверке подписки: {e}")
+        return False

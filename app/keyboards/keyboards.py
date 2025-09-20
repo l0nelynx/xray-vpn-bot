@@ -2,6 +2,10 @@ from app.keyboards.buttons import *
 from app.keyboards.tools import *
 from app.tariffs import *
 
+buy_from_broadcast = InlineKeyboardMarkup(inline_keyboard=[[premium_button],
+                                                           #  [howto_button],
+                                                           [subcheck_button]])
+
 main_new = InlineKeyboardMarkup(inline_keyboard=[[premium_button],
                                                  [howto_button],
                                                  [free_button],
@@ -46,6 +50,8 @@ crystal_tariffs = create_tariff_keyboard(tariff=tariffs_sbp, method='CRYSTAL', b
 
 pay_extend_month = InlineKeyboardMarkup(inline_keyboard=[[extend_button],
                                                          [to_main_button]])
+subcheck = InlineKeyboardMarkup(inline_keyboard=[[subcheck_button],
+                                                 [to_main_button]])
 
 to_main = InlineKeyboardMarkup(inline_keyboard=[[to_main_button]])
 

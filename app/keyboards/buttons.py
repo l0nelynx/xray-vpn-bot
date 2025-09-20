@@ -74,6 +74,10 @@ privacy_button = InlineKeyboardButton(
     text="Политика конфиденциальности",
     callback_data='Privacy')
 
+subcheck_button = InlineKeyboardButton(
+    text="Получить бонус за подписку",
+    callback_data='sub_check')
+
 
 def to_web_info_button(link, text: str):
     return [InlineKeyboardButton(text=text,

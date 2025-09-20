@@ -4,6 +4,7 @@ from aiogram.types import Message
 
 from app.database.requests import get_users
 from app.settings import secrets
+import app.keyboards.keyboards as kb
 
 ADMIN_IDS = [secrets.get('admin_id')]
 
@@ -26,7 +27,8 @@ async def broadcast_message(bot: Bot, message_text: str,
                         chat_id=user.tg_id,
                         text=message_text,
                         parse_mode=parse_mode,
-                        disable_web_page_preview=True
+                        disable_web_page_preview=True,
+                        reply_markup=kb.buy_from_broadcast
                     )
                     success_count += 1
                     await asyncio.sleep(0.1)  # latency to avoid Telegram limitations
@@ -41,7 +43,8 @@ async def broadcast_message(bot: Bot, message_text: str,
                 chat_id=post_id,
                 text=message_text,
                 parse_mode=parse_mode,
-                disable_web_page_preview=True
+                disable_web_page_preview=True,
+                reply_markup=kb.buy_from_broadcast
             )
         report = (
             f"📊 <b>Отчет о рассылке</b>\n\n"
