@@ -1,6 +1,5 @@
 from aiogram.types import InlineKeyboardButton, WebAppInfo
 
-
 paystars_button = InlineKeyboardButton(
     text="🔒Telegram Stars⭐️",
     callback_data='Stars_Plans')
@@ -83,4 +82,4 @@ def to_web_info_button(link, text: str):
 
 
 cancel_broadcast_button = InlineKeyboardButton(text="Отменить рассылку",
-                                                callback_data="cancel_broadcast")
+                                               callback_data="cancel_broadcast")

@@ -7,3 +7,5 @@ config.yml
 freekassa.py
 marz.py
 dig_data.json
+venv
+Deprecated

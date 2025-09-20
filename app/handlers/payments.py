@@ -12,7 +12,6 @@ from app.api.a_pay import create_sbp_link as apays_create_sbp_link
 from app.api.crystal_pay import crystal_create_link
 from app.handlers.tools import success_payment_handler
 from app.locale.lang_ru import text_pay_method, text_extend_pay_method
-from app.platega.platega import create_sbp_link
 from app.settings import bot, cp
 from app.settings import secrets
 
@@ -35,34 +34,6 @@ async def premium(callback: CallbackQuery, state: FSMContext):
     await state.set_state(PaymentState.PaymentMethod)
 
 
-@router.message(Command("test1"), F.from_user.id == secrets.get('test_id'))  # Testing ground
-async def test_button(message: Message, state: FSMContext):
-    await message.answer('Testing only')
-    await message.answer(
-        "Интеграция платежной системы",
-        reply_markup=InlineKeyboardMarkup(
-            inline_keyboard=[
-                [InlineKeyboardButton(text="КУПИТЬ", callback_data="SBP_Plans")]
-            ]
-        )
-    )
-    await state.set_state(PaymentState.PaymentMethod)
-
-
-@router.message(Command("test2"), F.from_user.id == secrets.get('test_id'))  # Testing ground
-async def test_button(message: Message, state: FSMContext):
-    await message.answer('Testing only')
-    await message.answer(
-        "Интеграция платежной системы",
-        reply_markup=InlineKeyboardMarkup(
-            inline_keyboard=[
-                [InlineKeyboardButton(text="КУПИТЬ", callback_data="SBP_Apay")]
-            ]
-        )
-    )
-    await state.set_state(PaymentState.PaymentMethod)
-
-
 @router.callback_query(F.data == 'Extend_Month')
 async def premium(callback: CallbackQuery, state: FSMContext):
     await callback.answer('Продление Premium подписки')
@@ -73,26 +44,17 @@ async def premium(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(PaymentState.PaymentMethod)
 async def stars_plan(callback: CallbackQuery, state: FSMContext):
-    action = callback.data
-    if action == 'Stars_Plans':
-        await callback.message.edit_text('Выберите тарифный план', reply_markup=kb.starspay_tariffs)
-        print("Stars has been chosen")
-        await state.set_state(PaymentState.PaymentTariff)
-    elif action == 'Crypto_Plans':
-        await callback.message.edit_text('Выберите тарифный план', reply_markup=kb.cryptospay_tariffs)
-        print("Crypto has been chosen")
-        await state.set_state(PaymentState.PaymentTariff)
-    elif action == 'SBP_Plans':
-        await callback.message.edit_text('Выберите тарифный план', reply_markup=kb.sbp_tariffs)
-        print("SBP has been chosen")
-        await state.set_state(PaymentState.PaymentTariff)
-    elif action == 'SBP_Apay':
-        await callback.message.edit_text('Выберите тарифный план', reply_markup=kb.sbp_apay_tariffs)
-        print("SBP has been chosen")
-        await state.set_state(PaymentState.PaymentTariff)
-    elif action == 'Crystal_plans':
-        await callback.message.edit_text('Выберите тарифный план', reply_markup=kb.crystal_tariffs)
-        print("Crystal has been chosen")
+    keyboards = {
+        'Stars_Plans': kb.starspay_tariffs,
+        'Crypto_Plans': kb.cryptospay_tariffs,
+        'SBP_Plans': kb.sbp_tariffs,
+        'SBP_Apay': kb.sbp_apay_tariffs,
+        'Crystal_plans': kb.crystal_tariffs
+    }
+
+    if keyboard := keyboards.get(callback.data):
+        await callback.message.edit_text('Выберите тарифный план', reply_markup=keyboard)
+        print(f"{callback.data.split('_')[0]} has been chosen")
         await state.set_state(PaymentState.PaymentTariff)
     else:
         print("Wrong callback from methods keyboard")
@@ -122,12 +84,12 @@ async def invoice_handler(callback: CallbackQuery, callback_data: kb.PaymentCall
         await callback.message.edit_text(f"pay: {invoice.bot_invoice_url}")
         invoice.poll(message=callback.message)
         logging.info("Запускаю инвойс")
-    elif method == 'SBP':
-        amount = int(round(amount))
-        link = await create_sbp_link(callback=callback, amount=amount, days=days)
-        await callback.message.edit_text(f"Ссылка для оплаты: {link}", reply_markup=kb.to_main)
+    # elif method == 'SBP':
+    #     amount = int(round(amount))
+    #     link = await create_sbp_link(callback=callback, amount=amount, days=days)
+    #     await callback.message.edit_text(f"Ссылка для оплаты: {link}", reply_markup=kb.to_main)
     elif method == 'SBP_APAY':
-        amount = int(round(amount*100))
+        amount = int(round(amount * 100))
         link = await apays_create_sbp_link(callback=callback, amount=amount, days=days)
         await callback.message.edit_text(f"Ссылка для оплаты: {link}", reply_markup=kb.to_main)
     elif method == 'CRYSTAL':

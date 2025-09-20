@@ -6,11 +6,10 @@ from fastapi import Request, BackgroundTasks, Response, HTTPException
 from app.api.a_pay import payment_webhook_handler as apays_webhook_handler
 from app.api.crystal_pay import payment_webhook_handler as crystal_webhook_handler
 # from app.api.digiseller import payment_webhook_handler as digiseller_webhook_handler
-from app.api.digiseller import payment_async_logic, DigisellerResponse
+from app.api.digiseller import payment_async_logic
 from app.handlers.base import router as router_base
 from app.handlers.events import start_bot, stop_bot
 from app.handlers.payments import router as router_payments
-from app.platega.handlers import payment_webhook_handler
 from app.settings import bot, cp, run_webserver, app_uvi
 
 # import subprocess
@@ -20,11 +19,6 @@ dp.include_router(router_base)
 dp.include_router(router_payments)
 dp.startup.register(start_bot)
 dp.shutdown.register(stop_bot)
-
-
-@app_uvi.post("/payment_webhook")
-async def payment_webhook(request: Request, background_tasks: BackgroundTasks):
-    await payment_webhook_handler(request, background_tasks)
 
 
 @app_uvi.post("/apays_webhook")
@@ -37,17 +31,12 @@ async def payment_webhook(request: Request, background_tasks: BackgroundTasks):
     await crystal_webhook_handler(request, background_tasks)
 
 
-@app_uvi.post("/digiseller_webhook")#, response_model=DigisellerResponse)
+@app_uvi.post("/digiseller_webhook")
 async def payment_webhook(request: Request, response: Response):
     try:
         payment_data = await request.json()
         link = await payment_async_logic(payment_data)
-        #return {
-        #    "id": f"{payment_data['id']}",
-         #   "inv": int(payment_data['inv']),
-         #   "goods": f"{link}"
-        #}
-        content={
+        content = {
                 "id": f"{payment_data['id']}",
                 "inv": f"{payment_data['inv']}",
                 "goods": f"{link}",
