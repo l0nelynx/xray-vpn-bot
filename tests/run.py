@@ -6,7 +6,6 @@ import os
 url_new = 'http://0.0.0.0:5000/digiseller_webhook'
 headers_new = {
     'Content-Type': 'application/json'
-
 }
 body_new = {}
 
