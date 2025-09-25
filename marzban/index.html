@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Основная информация о подписке и способах подключения">
+    <title>Страница подписки</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        const expireDateInit = "{% if not user.expire %}∞{% else %}{% set current_timestamp = now().timestamp() %}{{ user.expire | datetime }}{% endif %}";
+        let expireDateVar = expireDateInit.includes("∞") ? "∞" : new Date(expireDateInit).toLocaleString("ru-RU").replace(",", "");
+    </script>
+</head>
+<body class="bg-gray-900 text-gray-100 font-sans">
+<!-- Modal -->
+<div id="telegram-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+    <div class="bg-gray-800 rounded-[12px] p-6 w-full max-w-md flex flex-col items-center gap-4">
+        <img src="https://cdn-icons-png.flaticon.com/128/5968/5968804.png" alt="Telegram" class="w-12 h-12">
+        <p class="text-center text-sm sm:text-base text-gray-300">Чтобы быть в курсе последних новостей и для обратной связи подпишитесь на канал в Telegram.</p>
+        <div class="flex gap-4 w-full justify-center">
+            <a href="https://t.me/LowCostVPN" target="_blank" class="bg-[#00AEA5] hover:bg-[#009893] text-white px-4 py-2 rounded-[12px] text-sm sm:text-base w-1/2 text-center">Подписаться</a>
+            <button id="close-modal" class="bg-[#00AEA5] hover:bg-[#009893] text-white px-4 py-2 rounded-[12px] text-sm sm:text-base w-1/2">Закрыть</button>
+        </div>
+    </div>
+</div>
+<main class="container mx-auto px-4 sm:px-6 pt-16 max-w-5xl">
+    <div class="flex flex-col md:flex-row md:space-x-6 space-y-6 md:space-y-0">
+        <!-- Left Column: Subscription, Support, and Routing -->
+        <div class="md:w-1/2 space-y-6">
+            <!-- Subscription Section -->
+            <section class="bg-gray-800 rounded-lg shadow-sm p-4">
+                <h3 class="text-lg sm:text-xl font-semibold mb-4 text-center flex items-center justify-center">
+                    <img src="https://cdn-icons-png.flaticon.com/128/10629/10629607.png" alt="Подписка" class="w-5 h-5 mr-2"> Подписка
+                </h3>
+                <div class="hidden">{{ user.username }}</div>
+                <ul class="space-y-3">
+                    <li class="flex justify-between items-center text-sm sm:text-base">
+                        <span class="flex items-center"><img src="https://cdn-icons-png.flaticon.com/128/16929/16929825.png" alt="Статус" class="w-5 h-5 mr-2"> Статус</span>
+                        <span class="flex items-center gap-2">
+                  {% if user.status.value == 'active' %}
+                  <span class="w-3 h-3 rounded-full bg-green-500"></span>Активна
+                  {% elif user.status.value == 'limited' %}
+                  <span class="w-3 h-3 rounded-full bg-yellow-500"></span>Ограничена
+                  {% elif user.status.value == 'expired' %}
+                  <span class="w-3 h-3 rounded-full bg-red-500"></span>Истекла
+                  {% else %}
+                  <span class="w-3 h-3 rounded-full bg-red-500"></span>Заблокирована
+                  {% endif %}
+                </span>
+                    </li>
+                    <li class="flex justify-between items-center text-sm sm:text-base">
+                        <span class="flex items-center"><img src="https://cdn-icons-png.flaticon.com/128/8361/8361703.png" alt="Тариф" class="w-5 h-5 mr-2"> Тариф</span>
+                        <span id="free" class="bg-[#4C9B2B] text-black px-1 py-0.002 rounded-[8px] inline-block hidden"><b>Бесплатный</b></span>
+                        <span id="paid" class="bg-[#E87B35] text-black px-1 py-0.002 rounded-[8px] inline-block hidden"><b>Платный</b></span>
+                        <span id="test" class="bg-[#50A1DB] text-black px-1 py-0.002 rounded-[8px] inline-block hidden"><b>Пробный</b></span>
+                        <span id="eternal" class="bg-[#B3333A] text-black px-1 py-0.002 rounded-[8px] inline-block hidden"><b>Вечный</b></span>
+                    </li>
+                    <li class="flex justify-between items-center text-sm sm:text-base">
+                        <span class="flex items-center"><img src="https://cdn-icons-png.flaticon.com/128/17877/17877534.png" alt="Трафик" class="w-5 h-5 mr-2"> Трафик</span>
+                        <span>{{ user.used_traffic | bytesformat }} / {% if not user.data_limit %}∞{% else %}{{ user.data_limit | bytesformat }}{% endif %}</span>
+                    </li>
+                    <li class="flex justify-between items-center text-sm sm:text-base">
+                        <span class="flex items-center"><img src="https://cdn-icons-png.flaticon.com/128/2784/2784459.png" alt="Истекает" class="w-5 h-5 mr-2"> Истекает</span>
+                        <span id="expire"></span>
+                        <script>document.getElementById('expire').innerHTML = expireDateVar;</script>
+                    </li>
+                    <li class="flex items-center text-sm sm:text-base">
+                        <a href="https://t.me/" target="_blank" rel="noopener noreferrer" class="text-gray-100 flex items-center">
+                            <img src="https://cdn-icons-png.flaticon.com/128/5968/5968804.png" alt="Telegram" class="w-5 h-5 mr-2"> Канал в Telegram
+                        </a>
+                    </li>
+                </ul>
+            </section>
+            <!-- Support Section -->
+            <section id="support-section" class="bg-gray-800 rounded-lg shadow-sm p-4 hidden">
+                <h3 class="text-lg sm:text-xl font-semibold mb-4 text-center flex items-center justify-center">
+                    <img src="https://cdn-icons-png.flaticon.com/128/10693/10693025.png" alt="Поддержка" class="w-5 h-5 mr-2"> Поддержка
+                </h3>
+                <div class="text-sm sm:text-base text-gray-300">
+                    <p class="mt-2">Дорогой друг!<br/><br/><font color="green"><b>Для тебя сервис все еще бесплатный!</b></font><br/><br/>...но если у тебя есть возможно и желание на ежемесячной основе оказать посильную помощь - используй кнопку ниже.<br/><br/><font color="yellow">Всего 50 рублей в месяц и сервис будет оставаться на плаву.</font> 😉</p><br/>
+                </div>
+                <div class="py-2 flex justify-center">
+                    <div class="w-full max-w-[330px]">
+                        <iframe src="https://yoomoney.ru/" class="w-full max-w-[330px] h-[50px] border-0" allowtransparency="true" scrolling="no"></iframe>
+                    </div>
+                </div>
+            </section>
+            <!-- Routing Section (Desktop: under Support) -->
+            <section class="bg-gray-800 rounded-lg shadow-sm p-4 md:block hidden">
+                <h3 class="text-lg sm:text-xl font-semibold mb-4 text-center flex items-center justify-center">
+                    <img src="https://cdn-icons-png.flaticon.com/128/1257/1257385.png" alt="Роутинг" class="w-5 h-5 mr-2"> Роутинг
+                </h3>
+                <div class="py-2 flex flex-col items-center gap-4">
+                    <a href="happ://routing/add/eyJSZW1vdGVETlNUeXBlIjoiRG9IIiwiQmxvY2tTaXRlcyI6W10sIkdlb2lwVXJsIjoiaHR0cHM6XC9cL2dpdGh1Yi5jb21cL0xveWFsc29sZGllclwvdjJyYXktcnVsZXMtZGF0XC9yZWxlYXNlc1wvbGF0ZXN0XC9kb3dubG9hZFwvZ2VvaXAuZGF0IiwiVXNlQ2h1bmtGaWxlcyI6dHJ1ZSwiRG9tZXN0aWNETlNEb21haW4iOiJodHRwczpcL1wvZG5zLmdvb2dsZVwvZG5zLXF1ZXJ5IiwiRG5zSG9zdHMiOnsiZG5zLmdvb2dsZSI6IjguOC44LjgiLCJjbG91ZGZsYXJlLWRucy5jb20iOiIxLjEuMS4xIn0sIk5hbWUiOiJpZGlzay1yb3V0aW5nIiwiQmxvY2tJcCI6W10sIlByb3h5U2l0ZXMiOlsiZ2Vvc2l0ZTppbnN0YWdyYW0iLCJnZW9zaXRlOmZhY2Vib29rIiwiZ2Vvc2l0ZTp5b3V0dWJlIiwiZ2Vvc2l0ZTpnb29nbGUtcGxheSJdLCJEaXJlY3RJcCI6WyIxMC4wLjAuMFwvOCIsIjEwMC42NC4wLjBcLzEwIiwiMTcyLjE2LjAuMFwvMTIiLCIxOTIuMTY4LjAuMFwvMTYiLCIxNjkuMjU0LjAuMFwvMTYiLCIyMjQuMC4wLjBcLzQiLCIyNTUuMjU1LjI1NS4yNTUiXSwiR2Vvc2l0ZVVybCI6Imh0dHBzOlwvXC9naXRodWIuY29tXC9Mb3lhbHNvbGRpZXJcL3YycmF5LXJ1bGVzLWRhdFwvcmVsZWFzZXNcL2xhdGVzdFwvZG93bmxvYWRcL2dlb3NpdGUuZGF0IiwiUHJveHlJcCI6W10sIkZha2VEbnMiOmZhbHNlLCJEb21lc3RpY0ROU0lwIjoiOC44LjguOCIsIkRpcmVjdFNpdGVzIjpbXSwiR2xvYmFsUHJveHkiOmZhbHNlLCJSZW1vdGVETlNEb21haW4iOiJodHRwczpcL1wvY2xvdWRmbGFyZS1kbnMuY29tXC9kbnMtcXVlcnkiLCJMYXN0VXBkYXRlZCI6MTc1Nzc5NDQzMCwiUmVtb3RlRE5TSXAiOiIxLjEuMS4xIiwiRG9tZXN0aWNETlNUeXBlIjoiRG9IIiwiRG9tYWluU3RyYXRlZ3kiOiJJUElmTm9uTWF0Y2gifQ==" target="_blank" class="flex items-center justify-between bg-[#00AEA5] hover:bg-[#009893] text-white text-sm sm:text-base font-bold px-4 py-2 rounded-[12px] w-full max-w-xs h-[46px]">
+                        <span>Добавить роутинг</span>
+                        <img src="https://cdn-icons-png.flaticon.com/128/1257/1257385.png" alt="Добавить роутинг" class="w-5 h-5">
+                    </a>
+                    <div class="text-sm font-medium text-gray-300">
+                        <p>При добавлении Роутинга у вас будут доступны следующие сервисы:</p>
+                        <br/>
+                        <center>
+                            <p class="inline-flex gap-2">
+                                <span class="bg-orange-500 text-black px-1 py-0.5 rounded-[8px] inline-block">Instagram</span>
+                                <span class="bg-orange-500 text-black px-1 py-0.5 rounded-[8px] inline-block">Facebook</span>
+                                <span class="bg-orange-500 text-black px-1 py-0.5 rounded-[8px] inline-block">YouTube</span>
+                                <span class="bg-orange-500 text-black px-1 py-0.5 rounded-[8px] inline-block">Google Play</span>
+                            </p>
+                        </center>
+                        <br/>
+                        <p class="mt-2">Остальные ресурсы будут работать без VPN. Т.е. не будет проблем с доступом к российским сайтам, банкам и различным порталам.</p>
+                    </div>
+                </div>
+            </section>
+        </div>
+        <!-- Right Column: Server Status, Applications, and Routing (Mobile) -->
+        <div class="md:w-1/2 space-y-6">
+            <!-- Server Status Section -->
+            <section class="bg-gray-800 rounded-lg shadow-sm p-4">
+                <h3 class="text-lg sm:text-xl font-semibold mb-4 text-center flex items-center justify-center">
+                    <img src="https://cdn-icons-png.flaticon.com/128/16929/16929825.png" alt="Статус серверов" class="w-5 h-5 mr-2"> Статус серверов
+                </h3>
+                <div class="py-2 text-sm sm:text-base">
+                    <img src="https://status.idisk.cloud/badge/vpn-ru/dot?animate=ping" alt="Нидерланды" class="inline-block mr-2" />🇷🇺 Россия<br/>
+                    <img src="https://status.idisk.cloud/badge/vpn-nl/dot?animate=ping" alt="Нидерланды" class="inline-block mr-2" />🇳🇱 Нидерланды<br/>
+                    <img src="https://status.idisk.cloud/badge/vpn-pl/dot?animate=ping" alt="Польша" class="inline-block mr-2" />🇵🇱 Польша<br/>
+                    <img src="https://status.idisk.cloud/badge/vpn-am/dot?animate=ping" alt="Польша" class="inline-block mr-2" />🇦🇲 Армения<br/>
+                    <img src="https://status.idisk.cloud/badge/vpn-hk/dot?animate=ping" alt="Польша" class="inline-block mr-2" />🇭🇰 Гонконг
+                </div>
+            </section>
+            <!-- Applications Section -->
+            <section class="bg-gray-800 rounded-lg shadow-sm p-4">
+                <h3 class="text-lg sm:text-xl font-semibold mb-4 text-center flex items-center justify-center">
+                    <img src="https://cdn-icons-png.flaticon.com/128/1085/1085784.png" alt="Приложения" class="w-5 h-5 mr-2"> Приложения
+                </h3>
+                <div class="flex flex-wrap justify-center gap-2 mb-4">
+                    <button class="platform-btn px-4 py-2 text-sm sm:text-base bg-gray-700 text-gray-100 rounded-[12px] hover:bg-gray-600 active:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-400" data-platform="ios">iOS</button>
+                    <button class="platform-btn px-4 py-2 text-sm sm:text-base bg-gray-700 text-gray-100 rounded-[12px] hover:bg-gray-600 active:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-400" data-platform="android">Android</button>
+                    <button class="platform-btn px-4 py-2 text-sm sm:text-base bg-gray-700 text-gray-100 rounded-[12px] hover:bg-gray-600 active:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-400" data-platform="macos">macOS</button>
+                    <button class="platform-btn px-4 py-2 text-sm sm:text-base bg-gray-700 text-gray-100 rounded-[12px] hover:bg-gray-600 active:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-400" data-platform="windows">Windows</button>
+                    <button class="platform-btn px-4 py-2 text-sm sm:text-base bg-gray-700 text-gray-100 rounded-[12px] hover:bg-gray-600 active:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-400" data-platform="tv">TV</button>
+                </div>
+                <div class="flex flex-col items-center gap-4" id="download-buttons">
+                    <a id="download-btn" href="https://apps.apple.com/ru/app/happ-proxy-utility-plus/id6746188973" target="_blank" class="flex items-center justify-between bg-[#00AEA5] hover:bg-[#009893] text-white text-sm sm:text-base font-bold px-4 py-2 rounded-[12px] w-full max-w-xs h-[46px]">
+                        <span>Скачать</span>
+                        <img id="download-icon" class="w-5 h-5" src="https://cdn-icons-png.flaticon.com/128/5977/5977575.png" alt="iOS icon">
+                    </a>
+                    <a id="subscribe-btn" href="happ://add/" target="_blank" class="flex items-center justify-between bg-[#00AEA5] hover:bg-[#009893] text-white text-sm sm:text-base font-bold px-4 py-2 rounded-[12px] w-full max-w-xs h-[46px]">
+                        <span>Добавить подписку</span>
+                        <img id="subscribe-icon" class="w-5 h-5" src="https://cdn-icons-png.flaticon.com/128/10629/10629607.png" alt="Добавить подписку">
+                    </a>
+                </div>
+                <div class="mt-4">
+                    <h5 class="text-sm font-medium mb-2 text-gray-300 text-center">Инструкция по подключению</h5>
+                    <ul class="text-sm list-none space-y-1 text-gray-300" id="instructions">
+                        <li><span class="text-red-500">•</span> Нажмите "Скачать", чтобы установить приложение.</li>
+                        <li><span class="text-red-500">•</span> Нажмите "Добавить подписку", чтобы добавить локации в приложение.</li>
+                    </ul>
+                </div>
+            </section>
+            <!-- Routing Section (Mobile: under Applications) -->
+            <section class="bg-gray-800 rounded-lg shadow-sm p-4 md:hidden">
+                <h3 class="text-lg sm:text-xl font-semibold mb-4 text-center flex items-center justify-center">
+                    <img src="https://cdn-icons-png.flaticon.com/128/1257/1257385.png" alt="Роутинг" class="w-5 h-5 mr-2"> Роутинг
+                </h3>
+                <div class="py-2 flex flex-col items-center gap-4">
+                    <a href="happ://routing/add/eyJSZW1vdGVETlNUeXBlIjoiRG9IIiwiQmxvY2tTaXRlcyI6W10sIkdlb2lwVXJsIjoiaHR0cHM6XC9cL2dpdGh1Yi5jb21cL0xveWFsc29sZGllclwvdjJyYXktcnVsZXMtZGF0XC9yZWxlYXNlc1wvbGF0ZXN0XC9kb3dubG9hZFwvZ2VvaXAuZGF0IiwiVXNlQ2h1bmtGaWxlcyI6dHJ1ZSwiRG9tZXN0aWNETlNEb21haW4iOiJodHRwczpcL1wvZG5zLmdvb2dsZVwvZG5zLXF1ZXJ5IiwiRG5zSG9zdHMiOnsiZG5zLmdvb2dsZSI6IjguOC44LjgiLCJjbG91ZGZsYXJlLWRucy5jb20iOiIxLjEuMS4xIn0sIk5hbWUiOiJpZGlzay1yb3V0aW5nIiwiQmxvY2tJcCI6W10sIlByb3h5U2l0ZXMiOlsiZ2Vvc2l0ZTppbnN0YWdyYW0iLCJnZW9zaXRlOmZhY2Vib29rIiwiZ2Vvc2l0ZTp5b3V0dWJlIiwiZ2Vvc2l0ZTpnb29nbGUtcGxheSJdLCJEaXJlY3RJcCI6WyIxMC4wLjAuMFwvOCIsIjEwMC42NC4wLjBcLzEwIiwiMTcyLjE2LjAuMFwvMTIiLCIxOTIuMTY4LjAuMFwvMTYiLCIxNjkuMjU0LjAuMFwvMTYiLCIyMjQuMC4wLjBcLzQiLCIyNTUuMjU1LjI1NS4yNTUiXSwiR2Vvc2l0ZVVybCI6Imh0dHBzOlwvXC9naXRodWIuY29tXC9Mb3lhbHNvbGRpZXJcL3YycmF5LXJ1bGVzLWRhdFwvcmVsZWFzZXNcL2xhdGVzdFwvZG93bmxvYWRcL2dlb3NpdGUuZGF0IiwiUHJveHlJcCI6W10sIkZha2VEbnMiOmZhbHNlLCJEb21lc3RpY0ROU0lwIjoiOC44LjguOCIsIkRpcmVjdFNpdGVzIjpbXSwiR2xvYmFsUHJveHkiOmZhbHNlLCJSZW1vdGVETlNEb21haW4iOiJodHRwczpcL1wvY2xvdWRmbGFyZS1kbnMuY29tXC9kbnMtcXVlcnkiLCJMYXN0VXBkYXRlZCI6MTc1Nzc5NDQzMCwiUmVtb3RlRE5TSXAiOiIxLjEuMS4xIiwiRG9tZXN0aWNETlNUeXBlIjoiRG9IIiwiRG9tYWluU3RyYXRlZ3kiOiJJUElmTm9uTWF0Y2gifQ==" target="_blank" class="flex items-center justify-between bg-[#00AEA5] hover:bg-[#009893] text-white text-sm sm:text-base font-bold px-4 py-2 rounded-[12px] w-full max-w-xs h-[46px]">
+                        <span>Добавить роутинг</span>
+                        <img src="https://cdn-icons-png.flaticon.com/128/1257/1257385.png" alt="Добавить роутинг" class="w-5 h-5">
+                    </a>
+                    <div class="text-sm sm:text-base text-gray-300">
+                        <p>При добавлении Роутинга у вас будут доступны следующие сервисы:</p>
+                        <br/>
+                        <center>
+                            <p class="inline-flex gap-2">
+                                <span class="bg-orange-500 text-black px-1 py-0.5 rounded-[8px] inline-block">Instagram</span>
+                                <span class="bg-orange-500 text-black px-1 py-0.5 rounded-[8px] inline-block">Facebook</span>
+                                <span class="bg-orange-500 text-black px-1 py-0.5 rounded-[8px] inline-block">YouTube</span>
+                                <span class="bg-orange-500 text-black px-1 py-0.5 rounded-[8px] inline-block">Google Play</span>
+                            </p>
+                        </center>
+                        <br/>
+                        <p class="mt-2">Остальные ресурсы будут работать без VPN. Т.е. не будет проблем с доступом к российским сайтам, банкам и различным порталам.</p>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+</main>
+<script type="text/javascript">
+    window.userData = {{ user.username | tojson | safe }};
+    function showNotification(notificationElementId) {
+      let notification = document.getElementById(notificationElementId);
+      notification.classList.remove('hidden');
+      setTimeout(() => {
+        notification.classList.add('hidden');
+      }, 3000);
+    }
+    function copyToClipboard(text) {
+      navigator.clipboard.writeText(text);
+    }
+    const platformButtons = document.querySelectorAll('.platform-btn');
+    const downloadButtonsContainer = document.getElementById('download-buttons');
+    const instructionsContainer = document.getElementById('instructions');
+    const platformLinks = {
+      ios: {
+        download: 'https://apps.apple.com/ru/app/happ-proxy-utility-plus/id6746188973',
+        subscribe: 'happ://add/' + window.location.href + '#Title',
+        icon: 'https://cdn-icons-png.flaticon.com/128/5977/5977575.png'
+      },
+      android: {
+        download: 'https://github.com/Happ-proxy/happ-android/releases/latest/download/Happ.apk',
+        subscribe: 'happ://add/' + window.location.href + '#Title',
+        icon: 'https://cdn-icons-png.flaticon.com/128/2504/2504881.png'
+      },
+      macos: {
+        download: 'https://apps.apple.com/ru/app/happ-proxy-utility-plus/id6746188973',
+        subscribe: 'happ://add/' + window.location.href + '#Title',
+        icon: 'https://cdn-icons-png.flaticon.com/128/5977/5977575.png'
+      },
+      windows: {
+        download: 'https://github.com/Happ-proxy/happ-desktop/releases/latest/download/setup-Happ.x86.exe',
+        subscribe: 'happ://add/' + window.location.href + '#Title',
+        icon: 'https://cdn-icons-png.flaticon.com/128/2504/2504927.png'
+      },
+      tv: {
+        appleTV: 'https://apps.apple.com/us/app/happ-proxy-utility-for-tv/id6748297274',
+        androidTV: 'https://github.com/Happ-proxy/happ-android/releases/latest/download/Happ.apk',
+        icon: 'https://cdn-icons-png.flaticon.com/128/5495/5495816.png'
+      }
+    };
+    platformButtons.forEach(button => {
+      button.addEventListener('click', () => {
+        platformButtons.forEach(btn => btn.classList.remove('bg-gray-600', 'ring-2', 'ring-blue-400'));
+        button.classList.add('bg-gray-600', 'ring-2', 'ring-blue-400');
+        downloadButtonsContainer.innerHTML = '';
+        if (button.dataset.platform === 'tv') {
+          downloadButtonsContainer.innerHTML = `
+            <a id="apple-tv-btn" href="${platformLinks.tv.appleTV}" target="_blank" class="flex items-center justify-between bg-[#00AEA5] hover:bg-[#009893] text-white text-sm sm:text-base font-bold px-4 py-2 rounded-[12px] w-full max-w-xs h-[46px]">
+              <span>Скачать для Apple TV</span>
+              <img class="w-5 h-5" src="${platformLinks.tv.icon}" alt="TV icon">
+            </a>
+            <a id="android-tv-btn" href="${platformLinks.tv.androidTV}" target="_blank" class="flex items-center justify-between bg-[#00AEA5] hover:bg-[#009893] text-white text-sm sm:text-base font-bold px-4 py-2 rounded-[12px] w-full max-w-xs h-[46px]">
+              <span>Скачать для Android TV</span>
+              <img class="w-5 h-5" src="${platformLinks.tv.icon}" alt="TV icon">
+            </a>
+          `;
+          instructionsContainer.innerHTML = `
+            <li><span class="text-red-500">•</span> Нажмите "Скачать для Apple TV" или "Скачать для Android TV", чтобы установить приложение.</li>
+          `;
+        } else {
+          downloadButtonsContainer.innerHTML = `
+            <a id="download-btn" href="${platformLinks[button.dataset.platform].download}" target="_blank" class="flex items-center justify-between bg-[#00AEA5] hover:bg-[#009893] text-white text-sm sm:text-base font-bold px-4 py-2 rounded-[12px] w-full max-w-xs h-[46px]">
+              <span>Скачать</span>
+              <img id="download-icon" class="w-5 h-5" src="${platformLinks[button.dataset.platform].icon}" alt="${button.dataset.platform} icon">
+            </a>
+            <a id="subscribe-btn" href="${platformLinks[button.dataset.platform].subscribe}" target="_blank" class="flex items-center justify-between bg-[#00AEA5] hover:bg-[#009893] text-white text-sm sm:text-base font-bold px-4 py-2 rounded-[12px] w-full max-w-xs h-[46px]">
+              <span>Добавить подписку</span>
+              <img id="subscribe-icon" class="w-5 h-5" src="https://cdn-icons-png.flaticon.com/128/10629/10629607.png" alt="Добавить подписку">
+            </a>
+          `;
+          instructionsContainer.innerHTML = `
+            <li><span class="text-red-500">•</span> Нажмите "Скачать", чтобы установить приложение.</li>
+            <li><span class="text-red-500">•</span> Нажмите "Добавить подписку", чтобы добавить локации в приложение.</li>
+          `;
+        }
+      });
+    });
+    // Set default active button (iOS)
+    document.querySelector('.platform-btn[data-platform="ios"]').classList.add('bg-gray-600', 'ring-2', 'ring-blue-400');
+    // Modal and Support section visibility logic
+    document.addEventListener('DOMContentLoaded', () => {
+      const modal = document.getElementById('telegram-modal');
+      const closeModalBtn = document.getElementById('close-modal');
+      const supportSection = document.getElementById('support-section');
+      const freeSection = document.getElementById('free');
+      const paidSection = document.getElementById('paid');
+      const testSection = document.getElementById('test');
+      const eternalSection = document.getElementById('eternal');
+      if (!localStorage.getItem('modalClosed')) {
+        modal.classList.remove('hidden');
+      }
+      closeModalBtn.addEventListener('click', () => {
+        modal.classList.add('hidden');
+        localStorage.setItem('modalClosed', 'true');
+      });
+      if (window.userData.includes("free")) {
+        supportSection.classList.remove('hidden');
+        freeSection.classList.remove('hidden');
+        console.log('Блок поддержки показан');
+      } else {
+        supportSection.classList.add('hidden');
+        freeSection.classList.add('hidden');
+        console.log('Блок поддержки скрыт (paid)');
+      }
+      if (window.userData.includes("paid")) {
+        paidSection.classList.remove('hidden');
+      } else {
+        paidSection.classList.add('hidden');
+      }
+      if (window.userData.includes("test")) {
+        testSection.classList.remove('hidden');
+      } else {
+        testSection.classList.add('hidden');
+      }
+      if (["free", "paid", "test"].some(value => window.userData.includes(value))) {
+        eternalSection.classList.add('hidden');
+      } else {
+        eternalSection.classList.remove('hidden');
+      }
+    });
+</script>
+</body>
+</html>

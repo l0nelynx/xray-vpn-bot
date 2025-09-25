@@ -45,7 +45,7 @@ free_button = InlineKeyboardButton(
     callback_data='Free')
 
 android_button = InlineKeyboardButton(
-    text="Android/IOS - V2RayTun",
+    text="Android/IOS - Happ",
     callback_data='Android_Help')
 
 windows_button = InlineKeyboardButton(
