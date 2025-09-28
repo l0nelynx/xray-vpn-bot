@@ -1,5 +1,5 @@
 import json
-
+import uuid
 import aiohttp
 
 from app.settings import secrets
@@ -48,7 +48,8 @@ class MarzbanAsync:
     async def add_user(self, template, name, usrid, limit, res_strat, expire):
         """Создание пользователя"""
         template["username"] = name
-        template["proxies"]["vless"]["id"] = f"id{usrid}"
+        usrid_new = usrid = uuid.uuid4()
+        template["proxies"]["vless"]["id"] = f"id{usrid_new}"
         template["data_limit"] = limit
         template["data_limit_reset_strategy"] = f"{res_strat}"
         template["expire"] = expire
