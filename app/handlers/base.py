@@ -69,8 +69,20 @@ async def others(callback: CallbackQuery):
 
 
 @router.callback_query(F.data == 'Free')
+async def free_version_menu(callback: CallbackQuery):
+    # await free_sub_handler(callback, secrets.get('free_days'), secrets.get('free_traffic'))
+    await callback.message.edit_text(text=ru.free_menu, parse_mode='HTML', disable_web_page_preview=True,
+                                     reply_markup=kb.subcheck_free)
+
+
+@router.callback_query(F.data == 'subcheck_free')
 async def free_buy(callback: CallbackQuery):
-    await free_sub_handler(callback, secrets.get('free_days'), secrets.get('free_traffic'))
+    sub_status = await check_tg_subscription(bot=bot, chat_id=secrets.get('news_id'), user_id=callback.from_user.id)
+    if sub_status:
+        await free_sub_handler(callback, secrets.get('free_days'), secrets.get('free_traffic'))
+    else:
+        await callback.message.edit_text(text=ru.free_menu_notsub, parse_mode='HTML', disable_web_page_preview=True,
+                                         reply_markup=kb.subcheck_free)
 
 
 @router.callback_query(F.data == 'Sub_Info')

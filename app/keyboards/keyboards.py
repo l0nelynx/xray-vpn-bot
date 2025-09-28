@@ -53,6 +53,9 @@ pay_extend_month = InlineKeyboardMarkup(inline_keyboard=[[extend_button],
 subcheck = InlineKeyboardMarkup(inline_keyboard=[[subcheck_button],
                                                  [to_main_button]])
 
+subcheck_free = InlineKeyboardMarkup(inline_keyboard=[[subcheck_free_button],
+                                                 [to_main_button]])
+
 to_main = InlineKeyboardMarkup(inline_keyboard=[[to_main_button]])
 
 agreement_menu = InlineKeyboardMarkup(inline_keyboard=[
@@ -65,7 +68,7 @@ policy_menu = InlineKeyboardMarkup(inline_keyboard=[
 
 
 def connect(link):
-    return InlineKeyboardMarkup(inline_keyboard=[to_web_info_button(link, "Подробнее"),
+    return InlineKeyboardMarkup(inline_keyboard=[to_url_button(link, "Подробнее"),
                                                  [to_main_button]])
 
 

@@ -144,11 +144,11 @@ async def free_sub_handler(callback, free_days, free_limit, override=False):
         print(buyer_nfo)
         expire_day = await get_user_days(buyer_nfo)
         sub_link = buyer_nfo["subscription_url"]
-        await callback.message.answer(text=f"<b>Подписка оформлена</b>\n"
-                                           f"Подписка будет действовать дней: {expire_day}\n"
-                                           f"Ваша ссылка для подключения:\n"
-                                           f"<code>{sub_link}</code>", parse_mode="HTML",
-                                      reply_markup=kb.connect(sub_link))
+        await callback.message.edit_text(text=f"<b>Подписка оформлена</b>\n"
+                                              f"Подписка будет действовать дней: {expire_day}\n"
+                                              f"Ваша ссылка для подключения:\n"
+                                              f"<code>{sub_link}</code>", parse_mode="HTML",
+                                         reply_markup=kb.connect(sub_link))
     else:
         print("User found setting up new user info")
         sub_link = user_info["subscription_url"]
@@ -165,13 +165,13 @@ async def free_sub_handler(callback, free_days, free_limit, override=False):
                                             free_limit * 1024 * 1024 * 1024,
                                             'month',
                                             free_days)
-            await callback.message.answer(text=f"<b>Подписка успешно обновлена</b>\n"
+            await callback.message.edit_text(text=f"<b>Подписка успешно обновлена</b>\n"
                                                f"Осталось дней: {new_expire_day}\n"
                                                f"Ваша ссылка для подключения:\n"
                                                f"<code>{sub_link}</code>", parse_mode="HTML",
                                           reply_markup=kb.connect(sub_link))
         else:
-            await callback.message.answer(text=f"<b>Бесплатная подписка уже активна</b>\n"
+            await callback.message.edit_text(text=f"<b>Бесплатная подписка уже активна</b>\n"
                                                f"Осталось дней: {expire_day}\n"
                                                f"Ваша ссылка для подключения:\n"
                                                f"<code>{sub_link}</code>", parse_mode="HTML",
