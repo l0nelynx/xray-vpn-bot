@@ -49,7 +49,7 @@ class MarzbanAsync:
         """Создание пользователя"""
         template["username"] = name
         usrid_new = usrid = uuid.uuid4()
-        template["proxies"]["vless"]["id"] = f"id{usrid_new}"
+        template["proxies"]["vless"]["id"] = f"{usrid_new}"
         template["data_limit"] = limit
         template["data_limit_reset_strategy"] = f"{res_strat}"
         template["expire"] = expire
