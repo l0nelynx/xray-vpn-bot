@@ -48,7 +48,7 @@ class MarzbanAsync:
     async def add_user(self, template, name, usrid, limit, res_strat, expire):
         """Создание пользователя"""
         template["username"] = name
-        template["id"] = f"id{usrid}"
+        template["proxies"]["vless"]["id"] = f"id{usrid}"
         template["data_limit"] = limit
         template["data_limit_reset_strategy"] = f"{res_strat}"
         template["expire"] = expire
