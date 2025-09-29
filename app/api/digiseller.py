@@ -1,21 +1,14 @@
 import hashlib
-import hmac
 import json
 import logging
 import os
 import uuid
 import app.handlers.tools as tools
 from pydantic import BaseModel
-from app.settings import bot, secrets
-import sys
-from typing import Dict
-from fastapi import Response
-import aiohttp
-from aiogram.types import CallbackQuery
-from fastapi import Request, BackgroundTasks
+from app.settings import bot
 
 import app.database.requests as rq
-from app.api.handlers import payment_process_background
+
 from app.settings import secrets
 
 # Настройка логирования
@@ -97,7 +90,7 @@ async def payment_async_logic(payment_data):
         }
         return 400
     if check_id_exists_efficient(payment_data['id'], secrets):
-    #if payment_data['id'] == secrets.get('dig_item_id'):
+        # if payment_data['id'] == secrets.get('dig_item_id'):
         print('Id магазина обнаружен')
         order_id_check = await rq.get_full_transaction_info(payment_data["inv"])
         user_info = await tools.get_user_info("dig_id" + payment_data["inv"])
@@ -127,11 +120,12 @@ async def payment_async_logic(payment_data):
                                             days=days)
                 print('Отправка ссылки на подписку')
                 print(buyer_nfo['subscription_url'])
-                await bot.send_message(chat_id=secrets.get('admin_id'), text=f"<b>Digiseller Order</b>\n\n"
-                                                                             f"<b>Id </b>{payment_data['inv']}\n"
-                                                                             f"<b>Days </b>{days}\n"
-                                                                             f"<b>UserId </b>{usrid}\n"
-                                                                             f"<b>Link </b><code>{buyer_nfo['subscription_url']}</code>",
+                await bot.send_message(chat_id=secrets.get('admin_id'),
+                                       text=f"<b>Digiseller Order</b>\n\n"
+                                            f"<b>Id </b>{payment_data['inv']}\n"
+                                            f"<b>Days </b>{days}\n"
+                                            f"<b>UserId </b>{usrid}\n"
+                                            f"<b>Link </b><code>{buyer_nfo['subscription_url']}</code>",
                                        parse_mode="HTML")
                 return buyer_nfo['subscription_url']
             else:

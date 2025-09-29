@@ -8,10 +8,10 @@ import app.locale.lang_ru as ru
 from app.handlers.broadcast import admin_broadcast
 from app.handlers.events import userlist
 from app.handlers.tools import startup_user_dialog, free_sub_handler, subscription_info, check_tg_subscription
-# from app.locale.lang_ru import text_help
+
 from app.settings import secrets
 from app.settings import bot
-# from app.utils import create_smart_invoice
+
 
 router = Router()
 lang = eval(f"{secrets.get('language')}")

@@ -12,20 +12,6 @@ import app.locale.lang_ru as ru
 from app.api.handlers import payment_process_background
 from app.settings import secrets
 
-# order_id = "abc123"
-# amount = 10000
-# secret = "your_secret"
-# sign = hashlib.md5(f"{order_id}:{amount}:{secret}".encode()).hexdigest()
-#
-# params = {
-#     "client_id": 123,
-#     "order_id": order_id,
-#     "amount": amount,
-#     "sign": sign
-# }
-#
-# response = requests.get("https://apays.io/backend/create_order", params=params)
-# print(response.json())
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)

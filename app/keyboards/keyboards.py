@@ -2,9 +2,10 @@ from app.keyboards.buttons import *
 from app.keyboards.tools import *
 from app.tariffs import *
 
-buy_from_broadcast = InlineKeyboardMarkup(inline_keyboard=[[premium_button],
+buy_from_broadcast = InlineKeyboardMarkup(inline_keyboard=[to_url_button(secrets.get('bot_url'), "Приобрести подписку")
                                                            #  [howto_button],
-                                                           [subcheck_button]])
+                                                           # [subcheck_button]
+                                                           ])
 
 main_new = InlineKeyboardMarkup(inline_keyboard=[[premium_button],
                                                  [howto_button],

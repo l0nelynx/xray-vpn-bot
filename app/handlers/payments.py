@@ -1,11 +1,11 @@
 import logging
 
 from aiogram import F, Router
-from aiogram.filters import Command
+
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import LabeledPrice, PreCheckoutQuery
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import Message, CallbackQuery
 
 import app.keyboards as kb
 from app.api.a_pay import create_sbp_link as apays_create_sbp_link
@@ -13,7 +13,7 @@ from app.api.crystal_pay import crystal_create_link
 from app.handlers.tools import success_payment_handler
 from app.locale.lang_ru import text_pay_method, text_extend_pay_method
 from app.settings import bot, cp
-from app.settings import secrets
+
 
 router = Router()
 
