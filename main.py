@@ -6,7 +6,7 @@ from fastapi import Request, BackgroundTasks, Response, HTTPException
 from app.api.a_pay import payment_webhook_handler as apays_webhook_handler
 from app.api.crystal_pay import payment_webhook_handler as crystal_webhook_handler
 # from app.api.digiseller import payment_webhook_handler as digiseller_webhook_handler
-from app.api.digiseller import payment_async_logic
+from app.api.digiseller import payment_async_logic, payment_async_logic_ggsell
 from app.api.ggsel import send_message
 from app.handlers.base import router as router_base
 from app.handlers.events import start_bot, stop_bot
@@ -63,16 +63,18 @@ async def payment_webhook(request: Request, response: Response):
 async def payment_webhook(request: Request, response: Response):
     try:
         payment_data = await request.json()
-        link = await payment_async_logic(payment_data)
-
-        content = {
-                "id": f"{payment_data['id']}",
-                "inv": f"{payment_data['inv']}",
-                "goods": f"{link}",
-                "error": ""
-        }
-        response.status_code = 200
-        return 200
+        link = await payment_async_logic_ggsell(payment_data)
+        # content = {
+        #         "id": f"{payment_data['id']}",
+        #         "inv": f"{payment_data['inv']}",
+        #         "goods": f"{link}",
+        #         "error": ""
+        # }
+        # response.status_code = 200
+        if link == 200:
+            return 200
+        else:
+            return link
     except Exception as e:
         logging.error(f"Ошибка обработки платежа: {e}")
         raise HTTPException(

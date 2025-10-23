@@ -133,6 +133,27 @@ async def payment_async_logic(payment_data):
         else:
             return user_info['subscription_url']
 
+async def payment_async_logic_ggsell(payment_data):
+    logging.info(f"Получен вебхук от магазина: {payment_data}")
+    # Проверяем обязательные поля
+    # if 'id' not in payment_data or 'inv' not in payment_data or 'options' not in payment_data:
+    #     error_response = {
+    #         "id": "",
+    #         "inv": 0,
+    #         "goods": "",
+    #         "error": "Missing required fields: id, inv or options"
+    #     }
+    #     return 400
+    if check_id_exists_efficient(payment_data['product']['id'], secrets):
+        # if payment_data['id'] == secrets.get('dig_item_id'):
+        print('Id магазина обнаружен')
+        print(payment_data)
+        return 200
+    else:
+        print('error id not found')
+        return 400
+
+
 async def payment_async_logic_new(payment_data):
     logging.info(f"Получен вебхук от магазина: {payment_data}")
     # Проверяем обязательные поля
