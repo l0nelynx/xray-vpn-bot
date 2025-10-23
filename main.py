@@ -43,7 +43,6 @@ async def payment_webhook(request: Request, response: Response):
                 "goods": f"{link}",
                 "error": ""
         }
-        await send_message(int(payment_data['id']), f"Ваша ключ-ссылка для подключения: {link}")
         response.status_code = 200
         return content
     except Exception as e:
@@ -75,7 +74,8 @@ async def payment_webhook(request: Request, response: Response):
         if link == 200:
             return 200
         else:
-            return link
+            await send_message(int(payment_data['id']), f"Ваша ключ-ссылка для подключения: {link}")
+            return 200
     except Exception as e:
         logging.error(f"Ошибка обработки платежа: {e}")
         raise HTTPException(
