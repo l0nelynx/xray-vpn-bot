@@ -63,6 +63,7 @@ async def payment_webhook(request: Request, response: Response):
 async def payment_webhook(request: Request, response: Response):
     try:
         payment_data = await request.json()
+        print(payment_data)
         link = await payment_async_logic_ggsell(payment_data)
         # content = {
         #         "id": f"{payment_data['id']}",
