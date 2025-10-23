@@ -150,6 +150,7 @@ async def payment_async_logic_ggsell(payment_data):
             return 400
         else:
             print('Availability check for product id request')
+            print(payment_data['product']['id'])
             if check_id_exists_efficient(payment_data['product']['id'], secrets):
                 # if payment_data['id'] == secrets.get('dig_item_id'):
                 print('Id магазина обнаружен')
