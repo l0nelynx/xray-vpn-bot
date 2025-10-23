@@ -139,6 +139,10 @@ async def payment_async_logic(payment_data):
 
 async def payment_async_logic_ggsell(payment_data):
     logging.info(f"Получен вебхук от магазина: {payment_data}")
+    await bot.send_message(chat_id=secrets.get('admin_id'),
+                           text=f"<b>GGSEL WEBHOOK:</b>\n\n"
+                                f"<b>Content: \n</b><code>{payment_data}</code>",
+                           parse_mode="HTML")
     # Проверяем обязательные поля
     if 'ID_I' not in payment_data or 'AMOUNT' not in payment_data or 'SHA256' not in payment_data:
         if 'product' not in payment_data:
