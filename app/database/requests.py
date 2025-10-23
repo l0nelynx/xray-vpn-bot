@@ -19,7 +19,7 @@ async def get_users():
 
 
 # Пример создания новой транзакции
-async def create_transaction(user_tg_id: int, user_transaction: str, username: str, days: int):
+async def create_transaction(user_tg_id: int, user_transaction: str, username: str, days: int, uuid: str = 'None'):
     async with async_session() as session:
         # Находим пользователя по tg_id
         user = await session.scalar(
@@ -30,6 +30,7 @@ async def create_transaction(user_tg_id: int, user_transaction: str, username: s
             # Создаем новую транзакцию
             new_transaction = Transaction(
                 transaction_id=user_transaction,
+                vless_uuid = uuid,
                 username=username,
                 order_status='created',
                 days_ordered=days,
@@ -79,6 +80,35 @@ async def get_full_transaction_info(transaction_id: str):
             transaction, user = row
             return {
                 "transaction_id": transaction.transaction_id,
+                "vless_uuid": transaction.vless_uuid,
+                "username": transaction.username,
+                "status": transaction.order_status,
+                "user_tg_id": user.tg_id,
+                "user_db_id": user.id,
+                "days_ordered": transaction.days_ordered
+                # Добавьте другие поля по необходимости
+            }
+        else:
+            return None
+
+
+async def get_full_username_info(username: str):
+
+    async with async_session() as session:
+        query = (
+            select(Transaction, User)
+            .join(User, User.id == Transaction.user_id)
+            .where(Transaction.transaction_id == username)
+        )
+
+        result = await session.execute(query)
+        row = result.first()
+
+        if row:
+            transaction, user = row
+            return {
+                "transaction_id": transaction.transaction_id,
+                "vless_uuid": transaction.vless_uuid,
                 "username": transaction.username,
                 "status": transaction.order_status,
                 "user_tg_id": user.tg_id,
@@ -113,5 +143,23 @@ async def update_order_status(transaction_id: str, new_status: str) -> bool:
 
         # Обновляем статус
         transaction.order_status = new_status
+        await session.commit()
+        return True
+
+
+async def update_user_vless_uuid(username: str, new_uuid: str) -> bool:
+
+    async with async_session() as session:
+        # Сначала проверяем существование транзакции
+        result = await session.execute(
+            select(Transaction).where(Transaction.username == username)
+        )
+        transaction = result.scalar_one_or_none()
+
+        if transaction is None:
+            return False
+
+        # Обновляем статус
+        transaction.vless_uuid = new_uuid
         await session.commit()
         return True

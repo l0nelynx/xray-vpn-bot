@@ -11,10 +11,20 @@ from app.handlers.tools import startup_user_dialog, free_sub_handler, subscripti
 
 from app.settings import secrets
 from app.settings import bot
-
+from app.api.remnawave.api import create_user, get_user_from_username, update_user
 
 router = Router()
 lang = eval(f"{secrets.get('language')}")
+
+
+# @router.message(Command("create"))  # Start command handler
+# async def cmd_start(message: Message):
+#     # response = await create_user(username=message.from_user.username, days=30, limit_gb=40, descr='TEST')
+#     # await message.answer(response["subscription_url"])
+#     response1 = await get_user_from_username(username=message.from_user.username)
+#     await message.answer(response1["subscription_url"])
+#     response2 = await update_user(user_uuid="e77c0e2d-be53-4ef7-8d04-e65daac72ffe", username=message.from_user.username, days=50, limit_gb=40, descr='TEST')
+#     await message.answer(f"{response2['expire']}")
 
 
 @router.message(Command("start"))  # Start command handler

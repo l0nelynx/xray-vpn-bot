@@ -1,5 +1,8 @@
 import time
 
+import app.api.remnawave.api as rem
+import app.database.requests as rq
+
 from aiogram.types import Message, CallbackQuery
 
 import app.keyboards as kb
@@ -24,7 +27,10 @@ async def get_user_info(username):
     async with mz.MarzbanAsync() as marz:
         # await message.answer('Бесплатная версия (5 Гб в месяц)')
         user_info = await marz.get_user(name=username)
-        return user_info
+    return user_info
+    # REMNAWAVE INTEGRATION
+    # user_info = await rem.get_user_from_username(username)
+    # return user_info
 
 
 async def add_new_user_info(name, userid, limit, res_strat, expire_days: int):
@@ -38,6 +44,16 @@ async def add_new_user_info(name, userid, limit, res_strat, expire_days: int):
             expire=(int(time.time() + time_to_unix(expire_days)))
         )
     return buyer_nfo
+    # REMNAWAVE INTEGRATION
+    # buyer_nfo = await rem.create_user(
+    #     username= name,
+    #     days= expire_days,
+    #     limit_gb= limit,
+    #     descr='created by backend v2'
+    # )
+    # db_upd_status = await rq.update_user_vless_uuid(name, buyer_nfo["uuid"])
+    # print('db is updated: ', db_upd_status)
+    # return buyer_nfo
 
 
 async def set_user_info(name, limit, res_strat, expire_days: int):
@@ -50,6 +66,19 @@ async def set_user_info(name, limit, res_strat, expire_days: int):
             expire=(int(time.time() + time_to_unix(expire_days)))
         )
     return buyer_nfo
+    # REMNAWAVE INTEGRATION
+    # db_userdata = await rq.get_full_username_info(name)
+    # useruid = db_userdata["vless_uuid"]
+    # print("reading from db - uuid by username is:")
+    # print(useruid)
+    # buyer_nfo = await rem.update_user(
+    #     user_uuid= useruid,
+    #     days= expire_days,
+    #     limit_gb= limit,
+    #     username= name,
+    #     descr='updated by backend v2'
+    # )
+    # return buyer_nfo
 
 
 async def startup_user_dialog(message):

@@ -27,6 +27,9 @@ class Transaction(Base):
     # Уникальный идентификатор транзакции
     transaction_id: Mapped[str] = mapped_column(String(100), primary_key=True)
 
+    # Уникальный идентификатор vless
+    vless_uuid: Mapped[str] = mapped_column(String(100))
+
     # Имя пользователя
     username: Mapped[str] = mapped_column(String(50))
 

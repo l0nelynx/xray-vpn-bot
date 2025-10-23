@@ -7,6 +7,7 @@ from app.api.a_pay import payment_webhook_handler as apays_webhook_handler
 from app.api.crystal_pay import payment_webhook_handler as crystal_webhook_handler
 # from app.api.digiseller import payment_webhook_handler as digiseller_webhook_handler
 from app.api.digiseller import payment_async_logic
+from app.api.ggsel import send_message
 from app.handlers.base import router as router_base
 from app.handlers.events import start_bot, stop_bot
 from app.handlers.payments import router as router_payments
@@ -42,6 +43,7 @@ async def payment_webhook(request: Request, response: Response):
                 "goods": f"{link}",
                 "error": ""
         }
+        await send_message(int(payment_data['id']), f"Ваша ключ-ссылка для подключения: {link}")
         response.status_code = 200
         return content
     except Exception as e:
@@ -56,6 +58,32 @@ async def payment_webhook(request: Request, response: Response):
             }
         )
 
+
+@app_uvi.post("/ggsel_webhook")
+async def payment_webhook(request: Request, response: Response):
+    try:
+        payment_data = await request.json()
+        link = await payment_async_logic(payment_data)
+
+        content = {
+                "id": f"{payment_data['id']}",
+                "inv": f"{payment_data['inv']}",
+                "goods": f"{link}",
+                "error": ""
+        }
+        response.status_code = 200
+        return 200
+    except Exception as e:
+        logging.error(f"Ошибка обработки платежа: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "id": "",
+                "inv": "0",
+                "goods": "",
+                "error": "Internal server error"
+            }
+        )
 
 async def on_startup(dispatcher, **kwargs):
     """Действия при запуске бота"""
