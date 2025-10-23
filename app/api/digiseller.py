@@ -78,7 +78,7 @@ def extract_dig_items(secrets_in):
 def check_id_exists_efficient(target_id, secrets_in):
     dig_items = extract_dig_items(secrets_in)
     values_set = set(dig_items.values())
-    return int(target_id) in values_set
+    return str(target_id) in values_set
 
 
 async def payment_async_logic(payment_data):
