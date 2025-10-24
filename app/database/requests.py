@@ -92,6 +92,42 @@ async def get_full_transaction_info(transaction_id: str):
             return None
 
 
+async def get_full_transaction_info_by_id(user_id: int):
+    """
+    Получает полную информацию о транзакции и связанном пользователе
+
+    Args:
+        user_id (int): Идентификатор пользователя
+
+    Returns:
+        dict: Словарь с информацией о транзакции и пользователе или None
+    """
+    async with async_session() as session:
+        query = (
+            select(Transaction, User)
+            .join(User, User.id == Transaction.user_id)
+            .where(User.tg_id == user_id)
+        )
+
+        result = await session.execute(query)
+        row = result.first()
+
+        if row:
+            transaction, user = row
+            return {
+                "transaction_id": transaction.transaction_id,
+                "vless_uuid": transaction.vless_uuid,
+                "username": transaction.username,
+                "status": transaction.order_status,
+                "user_tg_id": user.tg_id,
+                "user_db_id": user.id,
+                "days_ordered": transaction.days_ordered
+                # Добавьте другие поля по необходимости
+            }
+        else:
+            return None
+
+
 async def get_full_username_info(username: str):
 
     async with async_session() as session:

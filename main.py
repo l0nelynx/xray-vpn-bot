@@ -1,6 +1,9 @@
 import logging
 
 import asyncio
+
+import app.api.ggsel as gg
+
 from aiogram import Dispatcher
 from fastapi import Request, BackgroundTasks, Response, HTTPException
 from app.api.a_pay import payment_webhook_handler as apays_webhook_handler
@@ -91,13 +94,14 @@ async def payment_webhook(request: Request, response: Response):
 async def on_startup(dispatcher, **kwargs):
     """Действия при запуске бота"""
     asyncio.create_task(run_webserver())  # Запуск Uvicorn в фоне
+    asyncio.create_task(gg.order_delivery_loop())
 
 
 async def main():
     dp.startup.register(on_startup)
     await asyncio.gather(
         dp.start_polling(bot),
-        cp.start_polling()
+        cp.start_polling(),
     )
 
 
