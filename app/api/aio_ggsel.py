@@ -10,6 +10,12 @@ from app.settings import secrets
 from app.api.digiseller import get_variant_info, JSON_PATH
 import app.database.requests as rq
 
+async def send_alert(message: str):
+    await bot.send_message(chat_id=secrets.get('admin_id'),
+                           text=f"<b>GGSel Alert</b>\n\n"
+                                f"{message}",
+                           parse_mode="HTML")
+
 async def get_token(session):
     timestamp = time.time()
     sign = f"{secrets.get('ggsel_api_key')}"+f"{timestamp}"
@@ -98,8 +104,10 @@ async def check_new_orders(session, top: int = 3, token: str = None):
         order_info = await get_order_info(session, sale['invoice_id'], token=token)
         if order_info['content']['invoice_state'] >= 3 <= 4:
             print(f"Оплаченный заказ #{order_info['content']['content_id']}\ninv_id: {sale['invoice_id']}\noption id: {order_info['content']['options'][0]['user_data_id']}")
+            await send_alert(f"Оплаченный заказ #{order_info['content']['content_id']}\ninv_id: {sale['invoice_id']}\noption id: {order_info['content']['options'][0]['user_data_id']}")
             order_id_check = await rq.get_full_transaction_info_by_id(int("99" + str(order_info['content']['content_id'])))
             if order_id_check is None:
+                await send_alert('Найден новый оплаченный заказ, регистрация заказа')
                 print('Найден новый оплаченный заказ, регистрация заказа')
                 merchant_id = order_info['content']['options'][0]['id']
                 tariff_id = order_info['content']['options'][0]['user_data_id']
@@ -122,9 +130,10 @@ async def check_new_orders(session, top: int = 3, token: str = None):
 async def order_delivery_loop():
     async with aiohttp.ClientSession(base_url="https://seller.ggsel.net") as session:
         while True:
-            # try:
+            try:
                 token = await get_token(session)
-                await check_new_orders(session, top=3, token=token)
-            # except Exception as e:
-            #    print(f"Ошибка при проверке новых заказов: {e}")
-                await asyncio.sleep(300)
+                await check_new_orders(session, top=secrets.get('ggsel_top_value'), token=token)
+            except Exception as e:
+                print(f"Ошибка при проверке новых заказов: {e}")
+                await send_alert(f"Ошибка при проверке новых заказов: {e}")
+                await asyncio.sleep(secrets.get('ggsel_check_interval')*60)
