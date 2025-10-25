@@ -33,26 +33,24 @@ async def get_token():
     data = json.loads(data.decode("utf-8"))
     return data['token']
 
-async def send_message(id_i: int, message: str):
+async def send_message(id_i: int, message: str, token: str):
     payload = json.dumps({
         "message": f"{message}"
     })
     headers = {
         'Content-Type': 'application/json'
     }
-    token = await get_token()
     conn.request("POST", f"/api_sellers/api/debates/v2?token={token}&id_i={id_i}", payload, headers)
     res = conn.getresponse()
     data = res.read()
     print(data.decode("utf-8"))
 
-async def return_last_sales(top: int = 3):
+async def return_last_sales(top: int = 3, token: str = None):
     payload = ''
     headers = {
         'Accept': 'application/json',
         'locale': 'ru-RU'
     }
-    token = await get_token()
     conn.request("GET", f"/api_sellers/api/seller-last-sales?token={token}&seller_id={secrets.get('ggsel_seller_id')}&top={top}", payload, headers)
     res = conn.getresponse()
     status = res.status
@@ -80,13 +78,12 @@ async def return_last_sales(top: int = 3):
     # }
     return json.loads(data.decode("utf-8"))
 
-async def get_order_info(inv_id: int):
+async def get_order_info(inv_id: int, token: str):
     payload = ''
     headers = {
         'Accept': 'application/json',
         'locale': 'ru-RU'
     }
-    token = await get_token()
     conn.request("GET", f"/api_sellers/api/purchase/info/{inv_id}?token={token}", payload, headers)
     res = conn.getresponse()
     data = res.read()
@@ -180,18 +177,18 @@ async def create_subscription_for_order(content_id, days: int):
     return buyer_nfo['subscription_url']
 
 
-async def check_new_orders(top: int = 3):
-    last_sales = await return_last_sales(top=top)
+async def check_new_orders(top: int = 3, token: str = None):
+    last_sales = await return_last_sales(top=top, token=token)
     for sale in last_sales['sales']:
-        order_info = await get_order_info(sale['invoice_id'])
+        order_info = await get_order_info(sale['invoice_id'], token=token)
         if order_info['content']['invoice_state'] >= 3 <= 4:
             # Оплаченный заказ
-            print(f"Оплаченный заказ #{order_info['content']['content_id']}\ninv_id: {sale['invoice_id']}\noption id: {order_info['content']['options']['user_data']}")
+            print(f"Оплаченный заказ #{order_info['content']['content_id']}\ninv_id: {sale['invoice_id']}\noption id: {order_info['content']['options'][0]['user_data_id']}")
             order_id_check = await rq.get_full_transaction_info_by_id(int("99" + order_info['content']['content_id']))
             if order_id_check is None:
                 print('Найден новый оплаченный заказ, регистрация заказа')
-                merchant_id = order_info['content']['options']['id']
-                tariff_id = order_info['content']['options']['user_data']
+                merchant_id = order_info['content']['options'][0]['id']
+                tariff_id = order_info['content']['options'][0]['user_data_id']
                 days = get_variant_info(JSON_PATH, merchant_id, tariff_id, 'days')
                 await rq.set_user(int("99" + order_info['content']['content_id']))
                 await rq.create_transaction(user_tg_id=int("99" + order_info['content']['content_id']),
@@ -201,7 +198,7 @@ async def check_new_orders(top: int = 3):
                 print('Заказ зарегистрирован в базе')
                 link = await create_subscription_for_order(order_info['content']['content_id'],days)
                 print('Подписка сформирована')
-                await send_message(id_i=order_info['content']['content_id'],message=f'Ваша ключ-ссылка: {link}')
+                await send_message(id_i=order_info['content']['content_id'],message=f'Ваша ключ-ссылка: {link}', token=token)
                 print('Сообщение с товаром отправлено покупателю')
             else:
                 print('Заказ уже зарегистрирован в базе')
@@ -212,8 +209,9 @@ async def check_new_orders(top: int = 3):
 
 async def order_delivery_loop():
     while True:
-        try:
-            await check_new_orders(top=3)
-        except Exception as e:
-            print(f"Ошибка при проверке новых заказов: {e}")
-        await asyncio.sleep(300)  # Проверять каждые 5 минут
+        # try:
+            token = await get_token()
+            await check_new_orders(top=3, token=token)
+        # except Exception as e:
+        #    print(f"Ошибка при проверке новых заказов: {e}")
+            await asyncio.sleep(300)  # Проверять каждые 5 минут
