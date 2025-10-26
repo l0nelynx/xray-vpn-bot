@@ -107,7 +107,7 @@ async def check_new_orders(session, top: int = 3, token: str = None):
         order_info = await get_order_info(session, sale['invoice_id'], token=token)
         if order_info['content']['invoice_state'] >= 3 <= 4:
             print(f"Оплаченный заказ #{order_info['content']['content_id']}\ninv_id: {sale['invoice_id']}\noption id: {order_info['content']['options'][0]['user_data_id']}")
-            await send_alert(f"Оплаченный заказ #{order_info['content']['content_id']}\ninv_id: {sale['invoice_id']}\noption id: {order_info['content']['options'][0]['user_data_id']}")
+            # await send_alert(f"Оплаченный заказ #{order_info['content']['content_id']}\ninv_id: {sale['invoice_id']}\noption id: {order_info['content']['options'][0]['user_data_id']}")
             order_id_check = await rq.get_full_transaction_info_by_id(int(f"99{order_info['content']['content_id']}"))
             if order_id_check is None:
                 await send_alert('Найден новый оплаченный заказ, регистрация заказа')
