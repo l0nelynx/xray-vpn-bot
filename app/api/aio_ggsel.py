@@ -4,9 +4,11 @@ import json
 import time
 import hashlib
 import uuid
-from app.settings import bot
-import app.handlers.tools as tools
+from app.settings import ggsel_bot as bot
+# import app.handlers.tools as tools
+from app.handlers.tools import get_user_info, add_new_user_info
 from app.settings import secrets
+# from backend import secrets
 from app.api.digiseller import get_variant_info, JSON_PATH
 import app.database.requests as rq
 
@@ -14,7 +16,8 @@ async def send_alert(message: str):
     await bot.send_message(chat_id=secrets.get('admin_id'),
                            text=f"<b>GGSel Alert</b>\n\n"
                                 f"{message}",
-                           parse_mode="HTML")
+                           parse_mode="HTML",
+                           disable_notification=True)
 
 async def get_token(session):
     timestamp = time.time()
@@ -74,29 +77,29 @@ async def get_order_info(session, inv_id: int, token: str):
         return json.loads(data.decode("utf-8"))
 
 async def create_subscription_for_order(content_id, days: int):
-    usrid = uuid.uuid4()
-    buyer_nfo = await tools.add_new_user_info(
-        "gg_id" + content_id,
-        usrid,
-        limit=0,
-        res_strat="no_reset",
-        expire_days=days
-    )
-    await rq.set_user(int(content_id))
-    await rq.create_transaction(user_tg_id=int(content_id),
-                                user_transaction=f"{usrid}",
-                                username="gg_id" + content_id,
-                                days=days)
-    print('Отправка ссылки на подписку')
-    print(buyer_nfo['subscription_url'])
-    await bot.send_message(chat_id=secrets.get('admin_id'),
-                           text=f"<b>Digiseller Order</b>\n\n"
-                                f"<b>Id </b>99{content_id}\n"
-                                f"<b>Days </b>{days}\n"
-                                f"<b>UserId </b>{usrid}\n"
-                                f"<b>Link </b><code>{buyer_nfo['subscription_url']}</code>",
-                           parse_mode="HTML")
-    return buyer_nfo['subscription_url']
+    user_info = await get_user_info(f"gg_id{content_id}")
+    if user_info == 404:
+        usrid = uuid.uuid4()
+        buyer_nfo = await add_new_user_info(
+            f"gg_id{content_id}",
+            usrid,
+            limit=0,
+            res_strat="no_reset",
+            expire_days=days
+        )
+        print('Отправка ссылки на подписку')
+        print(buyer_nfo['subscription_url'])
+        await bot.send_message(chat_id=secrets.get('admin_id'),
+                               text=f"<b>GGsel Order</b>\n\n"
+                                    f"<b>Id </b>99{content_id}\n"
+                                    f"<b>Days </b>{days}\n"
+                                    f"<b>UserId </b>{usrid}\n"
+                                    f"<b>Link </b><code>{buyer_nfo['subscription_url']}</code>",
+                               parse_mode="HTML")
+        return buyer_nfo['subscription_url']
+    else:
+        print('Пользователь уже существует')
+        return user_info['subscription_url']
 
 async def check_new_orders(session, top: int = 3, token: str = None):
     last_sales = await return_last_sales(session, top=top, token=token)
@@ -105,17 +108,18 @@ async def check_new_orders(session, top: int = 3, token: str = None):
         if order_info['content']['invoice_state'] >= 3 <= 4:
             print(f"Оплаченный заказ #{order_info['content']['content_id']}\ninv_id: {sale['invoice_id']}\noption id: {order_info['content']['options'][0]['user_data_id']}")
             await send_alert(f"Оплаченный заказ #{order_info['content']['content_id']}\ninv_id: {sale['invoice_id']}\noption id: {order_info['content']['options'][0]['user_data_id']}")
-            order_id_check = await rq.get_full_transaction_info_by_id(int("99" + str(order_info['content']['content_id'])))
+            order_id_check = await rq.get_full_transaction_info_by_id(int(f"99{order_info['content']['content_id']}"))
             if order_id_check is None:
                 await send_alert('Найден новый оплаченный заказ, регистрация заказа')
                 print('Найден новый оплаченный заказ, регистрация заказа')
                 merchant_id = order_info['content']['options'][0]['id']
                 tariff_id = order_info['content']['options'][0]['user_data_id']
                 days = get_variant_info(JSON_PATH, merchant_id, tariff_id, 'days')
-                await rq.set_user(int("99" + str(order_info['content']['content_id'])))
-                await rq.create_transaction(user_tg_id=int("99" + str(order_info['content']['content_id'])),
-                                            user_transaction=f"{order_info['content']['cart_uid']}",
-                                            username="gg_id" + str(order_info['content']['content_id']),
+                await rq.set_user(int(f"99{order_info['content']['content_id']}"))
+                await rq.create_transaction(user_tg_id=int(f"99{order_info['content']['content_id']}"),
+                                            # user_transaction=f"{order_info['content']['cart_uid']}",
+                                            user_transaction=f"{uuid.uuid4()}",
+                                            username=f"99{order_info['content']['content_id']}",
                                             days=days)
                 print('Заказ зарегистрирован в базе')
                 link = await create_subscription_for_order(order_info['content']['content_id'],days)
@@ -136,4 +140,4 @@ async def order_delivery_loop():
             except Exception as e:
                 print(f"Ошибка при проверке новых заказов: {e}")
                 await send_alert(f"Ошибка при проверке новых заказов: {e}")
-                await asyncio.sleep(secrets.get('ggsel_check_interval')*60)
+            await asyncio.sleep(secrets.get('ggsel_check_interval')*60)

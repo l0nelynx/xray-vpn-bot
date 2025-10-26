@@ -9,13 +9,6 @@ from fastapi import FastAPI
 app_uvi = FastAPI()
 
 
-async def run_webserver():
-    config = uvicorn.Config(app_uvi, host=secrets.get('uvicorn_host'), port=secrets.get('uvicorn_port'),
-                            ssl_keyfile=secrets.get('uvicorn_ssl_key'), ssl_certfile=secrets.get('uvicorn_ssl_cert'))
-    server = uvicorn.Server(config)
-    await server.serve()
-
-
 def load_config(file_path="config.yml"):
     # Получаем абсолютный путь к файлу
     config_path = Path(__file__).parent.parent / file_path
@@ -29,6 +22,11 @@ def load_config(file_path="config.yml"):
         except yaml.YAMLError as exc:
             raise ValueError(f"Error parsing YAML: {exc}")
 
+async def run_webserver():
+    config = uvicorn.Config(app_uvi, host=secrets.get('uvicorn_host'), port=secrets.get('uvicorn_port'),
+                            ssl_keyfile=secrets.get('uvicorn_ssl_key'), ssl_certfile=secrets.get('uvicorn_ssl_cert'))
+    server = uvicorn.Server(config)
+    await server.serve()
 
 # Загрузка конфигурации при импорте модуля
 try:
@@ -39,6 +37,7 @@ except Exception as e:
 
 
 bot = Bot(token=secrets.get('token'))
+ggsel_bot = Bot(token=secrets.get('ggsel_bot_token'))
 cp = CryptoPay(secrets.get('crypto_bot_token'))
 
 

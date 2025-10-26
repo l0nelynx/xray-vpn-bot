@@ -24,3 +24,20 @@ services:
     volumes:
       - ./config.yml:/usr/src/app/config.yml
     restart: unless-stopped
+#  cheezy-ggsel:
+#    container_name: cheezy-ggsel
+#    build:
+#      context: .
+#      dockerfile: ggsel.Dockerfile
+#    volumes:
+#      - type: bind
+#        source: ./db/db.sqlite3
+#        target: /usr/src/app/db.sqlite3
+#      - /var/lib/marzban/certs/:/usr/src/app/uvicorn/ssl
+#      - ./config.yml:/usr/src/app/config.yml
+#      - ./dig_data.json:/usr/src/app/dig_data.json
+##    ports:
+##      - "5000:5000"
+#    restart: unless-stopped
+#    tty: true
+#    stdin_open: true
