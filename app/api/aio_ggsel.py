@@ -91,10 +91,10 @@ async def create_subscription_for_order(content_id, days: int):
         print(buyer_nfo['subscription_url'])
         await bot.send_message(chat_id=secrets.get('admin_id'),
                                text=f"<b>GGsel Order</b>\n\n"
-                                    f"<b>Id </b>99{content_id}\n"
-                                    f"<b>Days </b>{days}\n"
-                                    f"<b>UserId </b>{usrid}\n"
-                                    f"<b>Link </b><code>{buyer_nfo['subscription_url']}</code>",
+                                    f"<b>GGsel Id: </b><code>{content_id}<code>\n"
+                                    f"<b>Days: </b>{days}\n"
+                                    f"<b>Vless uuid: </b>{usrid}\n"
+                                    f"<b>Link: </b><code>{buyer_nfo['subscription_url']}</code>",
                                parse_mode="HTML")
         return buyer_nfo['subscription_url']
     else:
