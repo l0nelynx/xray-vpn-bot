@@ -125,7 +125,7 @@ async def get_full_transaction_info_by_id(user_id: int):
                 # Добавьте другие поля по необходимости
             }
         else:
-            return None
+            return 404
 
 
 async def get_full_username_info(username: str):
