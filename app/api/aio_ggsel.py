@@ -104,10 +104,13 @@ async def create_subscription_for_order(content_id, days: int):
 async def check_new_orders(session, top: int = 3, token: str = None):
     last_sales = await return_last_sales(session, top=top, token=token)
     for sale in last_sales['sales']:
-        order_id_check = await rq.get_full_transaction_info_by_id(int(f"99{sale['invoice_id']}"))
-        if order_id_check is 404:
+        order_id_check = await rq.get_user_by_tg_id(int(f"99{sale['invoice_id']}"))
+        # print(int(f"99{sale['invoice_id']}"))
+        # print(order_id_check)
+        if order_id_check == 404:
             order_info = await get_order_info(session, sale['invoice_id'], token=token)
             if order_info['content']['invoice_state'] >= 3 <= 4:
+                await rq.set_user(int(f"99{order_info['content']['content_id']}"))
                 print(f"Оплаченный заказ #{order_info['content']['content_id']}\ninv_id: {sale['invoice_id']}\noption id: {order_info['content']['options'][0]['user_data_id']}")
                 # await send_alert(f"Оплаченный заказ #{order_info['content']['content_id']}\ninv_id: {sale['invoice_id']}\noption id: {order_info['content']['options'][0]['user_data_id']}")
                 # order_id_check = await rq.get_full_transaction_info_by_id(int(f"99{order_info['content']['content_id']}"))
@@ -117,7 +120,6 @@ async def check_new_orders(session, top: int = 3, token: str = None):
                 merchant_id = order_info['content']['options'][0]['id']
                 tariff_id = order_info['content']['options'][0]['user_data_id']
                 days = get_variant_info(JSON_PATH, merchant_id, tariff_id, 'days')
-                await rq.set_user(int(f"99{order_info['content']['content_id']}"))
                 await rq.create_transaction(user_tg_id=int(f"99{order_info['content']['content_id']}"),
                                                 # user_transaction=f"{order_info['content']['cart_uid']}",
                                                 user_transaction=f"{uuid.uuid4()}",
@@ -129,7 +131,8 @@ async def check_new_orders(session, top: int = 3, token: str = None):
                 await send_message(session, id_i=order_info['content']['content_id'],message=f'Спасибо за покупку!\nВаша ключ-ссылка: {link}', token=token)
                 print('Сообщение с товаром отправлено покупателю')
             else:
-                print(f"Заказ оплачен: {sale['invoice_id']}")
+                print(f"Заказ оплачен либо отменен: {sale['invoice_id']}")
+                await rq.set_user(int(f"99{order_info['content']['content_id']}"))
         else:
             print('Заказ уже зарегистрирован в базе')
 

@@ -17,6 +17,14 @@ async def get_users():
     async with async_session() as session:
         return await session.scalars(select(User))
 
+async def get_user_by_tg_id(tg_id):
+    async with async_session() as session:
+        user = await session.scalar(select(User).where(User.tg_id == tg_id))
+        if not user:
+            return 404
+        else:
+            return 200
+
 
 # Пример создания новой транзакции
 async def create_transaction(user_tg_id: int, user_transaction: str, username: str, days: int, uuid: str = 'None'):
