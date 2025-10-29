@@ -104,12 +104,14 @@ async def create_subscription_for_order(content_id, days: int):
 async def check_new_orders(session, top: int = 3, token: str = None):
     last_sales = await return_last_sales(session, top=top, token=token)
     for sale in last_sales['sales']:
-        order_info = await get_order_info(session, sale['invoice_id'], token=token)
-        if order_info['content']['invoice_state'] >= 3 <= 4:
-            print(f"Оплаченный заказ #{order_info['content']['content_id']}\ninv_id: {sale['invoice_id']}\noption id: {order_info['content']['options'][0]['user_data_id']}")
-            # await send_alert(f"Оплаченный заказ #{order_info['content']['content_id']}\ninv_id: {sale['invoice_id']}\noption id: {order_info['content']['options'][0]['user_data_id']}")
-            order_id_check = await rq.get_full_transaction_info_by_id(int(f"99{order_info['content']['content_id']}"))
-            if order_id_check is None:
+        order_id_check = await rq.get_full_transaction_info_by_id(int(f"99{sale['invoice_id']}"))
+        if order_id_check is None:
+            order_info = await get_order_info(session, sale['invoice_id'], token=token)
+            if order_info['content']['invoice_state'] >= 3 <= 4:
+                print(f"Оплаченный заказ #{order_info['content']['content_id']}\ninv_id: {sale['invoice_id']}\noption id: {order_info['content']['options'][0]['user_data_id']}")
+                # await send_alert(f"Оплаченный заказ #{order_info['content']['content_id']}\ninv_id: {sale['invoice_id']}\noption id: {order_info['content']['options'][0]['user_data_id']}")
+                # order_id_check = await rq.get_full_transaction_info_by_id(int(f"99{order_info['content']['content_id']}"))
+                # if order_id_check is None:
                 await send_alert('Найден новый оплаченный заказ, регистрация заказа')
                 print('Найден новый оплаченный заказ, регистрация заказа')
                 merchant_id = order_info['content']['options'][0]['id']
@@ -117,27 +119,31 @@ async def check_new_orders(session, top: int = 3, token: str = None):
                 days = get_variant_info(JSON_PATH, merchant_id, tariff_id, 'days')
                 await rq.set_user(int(f"99{order_info['content']['content_id']}"))
                 await rq.create_transaction(user_tg_id=int(f"99{order_info['content']['content_id']}"),
-                                            # user_transaction=f"{order_info['content']['cart_uid']}",
-                                            user_transaction=f"{uuid.uuid4()}",
-                                            username=f"99{order_info['content']['content_id']}",
-                                            days=days)
+                                                # user_transaction=f"{order_info['content']['cart_uid']}",
+                                                user_transaction=f"{uuid.uuid4()}",
+                                                username=f"99{order_info['content']['content_id']}",
+                                                days=days)
                 print('Заказ зарегистрирован в базе')
                 link = await create_subscription_for_order(order_info['content']['content_id'],days)
                 print('Подписка сформирована')
-                await send_message(session, id_i=order_info['content']['content_id'],message=f'Ваша ключ-ссылка: {link}', token=token)
+                await send_message(session, id_i=order_info['content']['content_id'],message=f'Спасибо за покупку!\nВаша ключ-ссылка: {link}', token=token)
                 print('Сообщение с товаром отправлено покупателю')
             else:
-                print('Заказ уже зарегистрирован в базе')
+                print(f"Заказ оплачен: {sale['invoice_id']}")
         else:
-            print(f"Заказ оплачен: {sale['invoice_id']}")
+            print('Заказ уже зарегистрирован в базе')
 
 async def order_delivery_loop():
     async with aiohttp.ClientSession(base_url="https://seller.ggsel.net") as session:
         while True:
+            error_counter = 0
             try:
                 token = await get_token(session)
                 await check_new_orders(session, top=secrets.get('ggsel_top_value'), token=token)
+                error_counter = 0
             except Exception as e:
+                error_counter += 1
                 print(f"Ошибка при проверке новых заказов: {e}")
-                await send_alert(f"Ошибка при проверке новых заказов: {e}")
+                if error_counter > secrets.get('ggsel_error_threshold'):
+                    await send_alert(f"Ошибка при проверке новых заказов: {e}\n Неудачных запросов подряд: {error_counter}")
             await asyncio.sleep(secrets.get('ggsel_check_interval')*60)
