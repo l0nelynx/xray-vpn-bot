@@ -104,7 +104,7 @@ async def create_subscription_for_order(content_id, days: int):
 async def check_new_orders(session, top: int = 3, token: str = None):
     last_sales = await return_last_sales(session, top=top, token=token)
     for sale in last_sales['sales']:
-        order_id_check = await rq.get_user_by_tg_id(int(f"99{sale['invoice_id']}"))
+        order_id_check = await rq.get_full_transaction_info_by_id(int(f"99{sale['invoice_id']}"))
         # print(int(f"99{sale['invoice_id']}"))
         # print(order_id_check)
         if order_id_check == 404:
