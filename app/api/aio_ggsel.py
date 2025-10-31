@@ -41,17 +41,27 @@ async def get_token(session):
         return data['token']
 
 async def send_message(session, id_i: int, message: str, token: str):
-    payload = json.dumps({
-        "message": f"{message}"
-    })
-    headers = {
-        'Content-Type': 'application/json'
-    }
-    async with session.post(f"/api_sellers/api/debates/v2?token={token}&id_i={id_i}",
-                           data=payload, headers=headers) as response:
-        data = await response.read()
-        print(data.decode("utf-8"))
-        await send_alert(f"Отправка товара:{data.decode('utf-8')}")
+    success_counter = 0
+    while success_counter <= secrets.get('ggsel_request_retries'):
+        payload = json.dumps({
+            "message": f"{message}"
+        })
+        headers = {
+            'Content-Type': 'application/json'
+        }
+        async with session.post(f"/api_sellers/api/debates/v2?token={token}&id_i={id_i}",
+                               data=payload, headers=headers) as response:
+            status = response.status
+            print(f'Send goods:{status}')
+            data = await response.read()
+            if status == 200:
+                success_counter = secrets.get('ggsel_request_retries')+1
+                await send_alert(f"Товар успешно отправлен\nСодержимое ответа:{data.decode('utf-8')}")
+            else:
+                print(data.decode("utf-8"))
+                await send_alert(f"Ошибка отправки товара:\n[{status}]:{data.decode('utf-8')}\nПопытка: {success_counter}/{secrets.get('ggsel_request_retries')}\nПовтор через {secrets.get('ggsel_retry_timeout')} секунд")
+                success_counter +=1
+                await asyncio.sleep(secrets.get('ggsel_retry_timeout'))
 
 async def return_last_sales(session, top: int = 3, token: str = None):
     headers = {
