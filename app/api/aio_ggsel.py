@@ -56,7 +56,7 @@ async def send_message(session, id_i: int, message: str, token: str):
             data = await response.read()
             if status == 200:
                 success_counter = secrets.get('ggsel_request_retries')+1
-                await send_alert(f"Товар успешно отправлен\nСодержимое ответа:{data.decode('utf-8')}")
+                await send_alert(f"Товар успешно отправлен\nСодержимое ответа:[{status}]{data.decode('utf-8')}\n<b><a href='https://seller.ggsel.net/messages?chatId={id_i}'>Чат</a></b>")
             else:
                 print(data.decode("utf-8"))
                 await send_alert(f"Ошибка отправки товара:\n[{status}]:{data.decode('utf-8')}\nПопытка: {success_counter}/{secrets.get('ggsel_request_retries')}\nПовтор через {secrets.get('ggsel_retry_timeout')} секунд")

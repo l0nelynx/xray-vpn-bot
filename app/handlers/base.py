@@ -38,7 +38,7 @@ async def cmd_start_test(message: Message):
     async with aiohttp.ClientSession(base_url="https://seller.ggsel.net") as session:
         token = await get_token(session)
         async with aiohttp.ClientSession(base_url="https://seller.ggsel.net") as session2:
-            await send_message(session2,344532, 'Test', token)
+            await send_message(session2,183279, 'Test', token)
 
 @router.callback_query(F.data == 'Agreement')  # Start command handler
 async def user_agreement(callback: CallbackQuery):
