@@ -51,6 +51,7 @@ async def send_message(session, id_i: int, message: str, token: str):
                            data=payload, headers=headers) as response:
         data = await response.read()
         print(data.decode("utf-8"))
+        await send_alert(f"Отправка товара:{data.decode('utf-8')}")
 
 async def return_last_sales(session, top: int = 3, token: str = None):
     headers = {
