@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from app.database.models import User, Transaction
 from app.database.models import async_session
@@ -41,6 +41,7 @@ async def create_transaction(user_tg_id: int, user_transaction: str, username: s
                 vless_uuid = uuid,
                 username=username,
                 order_status='created',
+                delivery_status=0,
                 days_ordered=days,
                 user_id=user.id  # Используем id пользователя из таблицы users
             )
@@ -127,6 +128,7 @@ async def get_full_transaction_info_by_id(user_id: int):
                 "vless_uuid": transaction.vless_uuid,
                 "username": transaction.username,
                 "status": transaction.order_status,
+                "delivery_status": transaction.delivery_status,
                 "user_tg_id": user.tg_id,
                 "user_db_id": user.id,
                 "days_ordered": transaction.days_ordered
@@ -207,3 +209,23 @@ async def update_user_vless_uuid(username: str, new_uuid: str) -> bool:
         transaction.vless_uuid = new_uuid
         await session.commit()
         return True
+
+
+async def update_delivery_status(tg_id: int, new_delivery_status: int):
+    async with async_session() as session:
+        # Находим пользователя по tg_id
+        user = await session.scalar(
+            select(User).where(User.tg_id == tg_id)
+        )
+
+        if user:
+            # Обновляем все транзакции пользователя
+            await session.execute(
+                update(Transaction)
+                .where(Transaction.user_id == user.id)
+                .values(delivery_status=new_delivery_status)
+            )
+            await session.commit()
+            print(f"Updated delivery_status to {new_delivery_status} for user {tg_id}")
+        else:
+            print(f"User with tg_id {tg_id} not found")

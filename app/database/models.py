@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, String, ForeignKey, Index
+from sqlalchemy import BigInteger, String, ForeignKey, Index, Integer
 from sqlalchemy.ext.asyncio import AsyncAttrs, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -35,6 +35,9 @@ class Transaction(Base):
 
     # Статус заказа
     order_status: Mapped[str] = mapped_column(String(50))
+
+    # Количество дней в заказе
+    delivery_status: Mapped[int] = mapped_column(Integer)
 
     # Количество дней в заказе
     days_ordered: Mapped[int] = mapped_column(BigInteger)
