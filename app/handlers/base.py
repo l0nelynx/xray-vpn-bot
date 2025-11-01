@@ -33,7 +33,7 @@ async def cmd_start(message: Message):
     await rq.set_user(message.from_user.id)
     await startup_user_dialog(message)
 
-@router.message(Command("ggtest"))  # Start command handler
+@router.message(Command("ggtest"), F.from_user.id == secrets.get('admin_id'))  # Start command handler
 async def cmd_start_test(message: Message):
     async with aiohttp.ClientSession(base_url="https://seller.ggsel.net") as session:
         token = await get_token(session)
