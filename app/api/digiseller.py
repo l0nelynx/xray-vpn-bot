@@ -4,6 +4,7 @@ import logging
 import os
 import uuid
 import app.handlers.tools as tools
+import app.marzban.templates as templates
 from pydantic import BaseModel
 from app.settings import bot
 
