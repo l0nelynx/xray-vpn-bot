@@ -97,7 +97,8 @@ async def create_subscription_for_order(content_id, days: int):
             usrid,
             limit=0,
             res_strat="no_reset",
-            expire_days=days
+            expire_days=days,
+            template=templates.pro_template
         )
         print('Отправка ссылки на подписку')
         print(buyer_nfo['subscription_url'])
