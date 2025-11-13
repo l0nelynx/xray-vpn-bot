@@ -33,7 +33,7 @@ async def get_user_info(username):
     # return user_info
 
 
-async def add_new_user_info(name, userid, limit, res_strat, expire_days: int):
+async def add_new_user_info(name, userid, limit, res_strat, expire_days: int, template: dict = templates.vless_template):
     async with mz.MarzbanAsync() as marz:
         buyer_nfo = await marz.add_user(
             template=templates.vless_template,
@@ -56,7 +56,7 @@ async def add_new_user_info(name, userid, limit, res_strat, expire_days: int):
     # return buyer_nfo
 
 
-async def set_user_info(name, limit, res_strat, expire_days: int):
+async def set_user_info(name, limit, res_strat, expire_days: int, template: dict = templates.vless_template):
     async with mz.MarzbanAsync() as marz:
         buyer_nfo = await marz.set_user(
             template=templates.vless_template,
@@ -115,7 +115,8 @@ async def success_payment_handler(message: Message, tariff_days):
                                             message.from_user.id,
                                             limit=0,
                                             res_strat="no_reset",
-                                            expire_days=tariff_days)
+                                            expire_days=tariff_days,
+                                           template=templates.pro_template)
         expire_day = await get_user_days(buyer_nfo)
         sub_link = buyer_nfo["subscription_url"]
         await message.answer(text=f"❤️Cпасибо за покупку!\n\n"
@@ -136,7 +137,8 @@ async def success_payment_handler(message: Message, tariff_days):
             buyer_nfo = await set_user_info(message.from_user.username,
                                             limit=0,
                                             res_strat='no_reset',
-                                            expire_days=(expire_day + tariff_days))
+                                            expire_days=(expire_day + tariff_days),
+                                           template=templates.pro_template)
             expire_day = expire_day + tariff_days
             await message.answer(text=f"❤️Cпасибо за покупку!\n\n"
                                       f"<b>Подписка успешно продлена еще на месяц</b>\n"
@@ -149,7 +151,8 @@ async def success_payment_handler(message: Message, tariff_days):
             buyer_nfo = await set_user_info(message.from_user.username,
                                             limit=0,
                                             res_strat="no_reset",
-                                            expire_days=tariff_days)
+                                            expire_days=tariff_days,
+                                           template=templates.pro_template)
             expire_day = await get_user_days(buyer_nfo)
             sub_link = buyer_nfo["subscription_url"]
             await message.answer(text=f"❤️Cпасибо за покупку!\n\n"
