@@ -5,6 +5,7 @@ import time
 import hashlib
 import uuid
 from app.settings import ggsel_bot as bot
+import app.marzban.templates as templates
 # import app.handlers.tools as tools
 from app.handlers.tools import get_user_info, add_new_user_info
 from app.settings import secrets
