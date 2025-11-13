@@ -36,7 +36,7 @@ async def get_user_info(username):
 async def add_new_user_info(name, userid, limit, res_strat, expire_days: int, template: dict = templates.vless_template):
     async with mz.MarzbanAsync() as marz:
         buyer_nfo = await marz.add_user(
-            template=templates.vless_template,
+            template=template,
             name=f"{name}",
             usrid=f"{userid}",
             limit=limit,
@@ -59,7 +59,7 @@ async def add_new_user_info(name, userid, limit, res_strat, expire_days: int, te
 async def set_user_info(name, limit, res_strat, expire_days: int, template: dict = templates.vless_template):
     async with mz.MarzbanAsync() as marz:
         buyer_nfo = await marz.set_user(
-            template=templates.vless_template,
+            template=template,
             name=f"{name}",
             limit=limit,
             res_strat=res_strat,  # no_reset day week month year
