@@ -161,8 +161,8 @@ async def check_new_orders(session, top: int = 3, token: str = None):
 
 async def order_delivery_loop():
     async with aiohttp.ClientSession(base_url="https://seller.ggsel.net") as session:
+        error_counter = 0
         while True:
-            error_counter = 0
             try:
                 token = await get_token(session)
                 await check_new_orders(session, top=secrets.get('ggsel_top_value'), token=token)
