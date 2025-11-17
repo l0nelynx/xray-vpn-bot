@@ -14,6 +14,7 @@ from app.api.digiseller import get_variant_info, JSON_PATH
 import app.database.requests as rq
 
 async def send_alert(message: str):
+    print(message)
     await bot.send_message(chat_id=secrets.get('admin_id'),
                            text=f"<b>GGSel Alert</b>\n\n"
                                 f"{message}",
@@ -142,17 +143,15 @@ async def check_new_orders(session, top: int = 3, token: str = None):
             print(f'Выбран шаблон: {template}')
             if order_id_check == 404:
                 await send_alert('Найден новый оплаченный заказ, регистрация заказа')
-                print('Найден новый оплаченный заказ, регистрация заказа')
                 await rq.create_transaction(user_tg_id=int(f"99{order_info['content']['content_id']}"),
                                                     # user_transaction=f"{order_info['content']['cart_uid']}",
                                                     user_transaction=f"{uuid.uuid4()}",
                                                     username=f"99{order_info['content']['content_id']}",
                                                     days=days)
-                print('Заказ зарегистрирован в базе')
                 link = await create_subscription_for_order(order_info['content']['content_id'],days, template)
-                print('Подписка сформирована')
+                await send_alert('Подписка сформирована')
                 await send_message(session, id_i=order_info['content']['content_id'],message=f'Спасибо за покупку!\nВаша ключ-ссылка: {link}', token=token)
-                print('Сообщение с товаром отправлено покупателю')
+                await send_alert('Сообщение с товаром отправлено покупателю')
             else:
                 print('Заказ уже зарегистрирован в базе')
                 print('Order delivery status:', order_id_check['delivery_status'])
