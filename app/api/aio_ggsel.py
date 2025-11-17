@@ -89,7 +89,7 @@ async def get_order_info(session, inv_id: int, token: str):
         print(data.decode("utf-8"))
         return json.loads(data.decode("utf-8"))
 
-async def create_subscription_for_order(content_id, days: int):
+async def create_subscription_for_order(content_id, days: int, template):
     user_info = await get_user_info(f"gg_id{content_id}")
     if user_info == 404:
         usrid = uuid.uuid4()
@@ -99,7 +99,7 @@ async def create_subscription_for_order(content_id, days: int):
             limit=0,
             res_strat="no_reset",
             expire_days=days,
-            template=templates.pro_template
+            template=template
         )
         print('Отправка ссылки на подписку')
         print(buyer_nfo['subscription_url'])
@@ -130,7 +130,12 @@ async def check_new_orders(session, top: int = 3, token: str = None):
             order_id_check = await rq.get_full_transaction_info_by_id(int(f"99{order_info['content']['content_id']}"))
             merchant_id = order_info['content']['options'][0]['id']
             tariff_id = order_info['content']['options'][0]['user_data_id']
+            location_param_id = order_info['content']['options'][1]['id']
+            location_id = order_info['content']['options'][1]['user_data_id']
             days = get_variant_info(JSON_PATH, merchant_id, tariff_id, 'days')
+            location = get_variant_info(JSON_PATH, location_param_id, location_id, 'template_name')
+            template = getattr(templates, location)
+            print(f'Выбран шаблон: {template}')
             if order_id_check == 404:
                 await send_alert('Найден новый оплаченный заказ, регистрация заказа')
                 print('Найден новый оплаченный заказ, регистрация заказа')
@@ -140,7 +145,7 @@ async def check_new_orders(session, top: int = 3, token: str = None):
                                                     username=f"99{order_info['content']['content_id']}",
                                                     days=days)
                 print('Заказ зарегистрирован в базе')
-                link = await create_subscription_for_order(order_info['content']['content_id'],days)
+                link = await create_subscription_for_order(order_info['content']['content_id'],days, template)
                 print('Подписка сформирована')
                 await send_message(session, id_i=order_info['content']['content_id'],message=f'Спасибо за покупку!\nВаша ключ-ссылка: {link}', token=token)
                 print('Сообщение с товаром отправлено покупателю')
@@ -148,7 +153,7 @@ async def check_new_orders(session, top: int = 3, token: str = None):
                 print('Заказ уже зарегистрирован в базе')
                 print('Order delivery status:', order_id_check['delivery_status'])
                 if order_id_check['delivery_status'] == 0:
-                    link = await create_subscription_for_order(order_info['content']['content_id'], days)
+                    link = await create_subscription_for_order(order_info['content']['content_id'], days, template)
                     await send_message(session, id_i=order_info['content']['content_id'],
                                        message=f'Спасибо за покупку!\nВаша ключ-ссылка: {link}', token=token)
                 else:

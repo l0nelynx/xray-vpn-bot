@@ -67,19 +67,8 @@ async def payment_webhook(request: Request, response: Response):
     try:
         payment_data = await request.json()
         print(payment_data)
-        link = await payment_async_logic_ggsell(payment_data)
-        # content = {
-        #         "id": f"{payment_data['id']}",
-        #         "inv": f"{payment_data['inv']}",
-        #         "goods": f"{link}",
-        #         "error": ""
-        # }
-        # response.status_code = 200
-        if link == 200:
-            return 200
-        else:
-            await send_message(int(payment_data['id']), f"Ваша ключ-ссылка для подключения: {link}")
-            return 200
+        status = await payment_async_logic_ggsell(payment_data)
+        return status
     except Exception as e:
         logging.error(f"Ошибка обработки платежа: {e}")
         raise HTTPException(

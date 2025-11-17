@@ -145,75 +145,7 @@ async def payment_async_logic_ggsell(payment_data):
                            text=f"<b>GGSEL WEBHOOK:</b>\n\n"
                                 f"<b>Content: \n</b><code>{payment_data}</code>",
                            parse_mode="HTML")
-    # Проверяем обязательные поля
-    if 'ID_I' not in payment_data or 'AMOUNT' not in payment_data or 'SHA256' not in payment_data:
-        if 'product' not in payment_data:
-            print('Bad request missing fields')
-            return 400
-        else:
-            print('Availability check for product id request')
-            print(payment_data['product']['id'])
-            if check_id_exists_efficient(payment_data['product']['id'], secrets):
-                # if payment_data['id'] == secrets.get('dig_item_id'):
-                print('Id магазина обнаружен')
-                print(payment_data)
-                return 200
-            else:
-                print('ERROR - product id not found')
-                return 400
-    else:
-        order_id_check = await rq.get_full_transaction_info(payment_data["ID_I"])
-        user_info = await tools.get_user_info("gg_id" + payment_data["ID_I"])
-        # if order_id_check is None:
-        if user_info == 404:
-            print('Регистрация новой транзакции')
-            amount = payment_data['AMOUNT']
-            print('Payed amount: ' + str(amount))
-            # КОСТЫЛЬ РАСЧЕТА ДНЕЙ ПО СУММЕ (ЖДЕМ ФИКСА ОТ GGSELL)
-            if amount > 90 < 250:
-                days = 30
-            elif amount >= 250 < 600:
-                days = 90
-            elif amount >= 600 < 1200:
-                days = 180
-            elif amount >= 1200:
-                days = 365
-            else:
-                days = 7
-            # ПИЗДЕЦ КОРОЧЕ - ЖДЕМ ФИКСА ОТ GGSELL
-            # ПОДПИСЬ GGSELL (КРИВОЙ API С КРИВЫМ ОПИСАНИЕМ - ЖДЕМ ФИКСА)
-            # sign = generate_signature('unique_code_заказа', payment_data['ID_I'], payment_data['ID_D'], 'sha256')
-            # print(sign)
-            # print(payment_data.get('SHA256'))
-            # if payment_data.get('SHA256') == sign:
-                # print('Подпись подтверждена')
-            usrid = uuid.uuid4()
-            buyer_nfo = await tools.add_new_user_info(
-                    "gg_id" + payment_data["ID_I"],
-                    usrid,
-                    limit=0,
-                    res_strat="no_reset",
-                    expire_days=days
-                )
-            await rq.set_user(int("99"+payment_data["ID_I"]))
-            await rq.create_transaction(user_tg_id=int("99"+payment_data["ID_I"]),
-                                            user_transaction=f"{usrid}",
-                                            username="gg_id" + payment_data["ID_I"],
-                                            days=days)
-            print('Отправка ссылки на подписку')
-            print(buyer_nfo['subscription_url'])
-            await bot.send_message(chat_id=secrets.get('admin_id'),
-                                       text=f"<b>Digiseller Order</b>\n\n"
-                                            f"<b>Id </b>{payment_data['ID_I']}\n"
-                                            f"<b>Days </b>{days}\n"
-                                            f"<b>UserId </b>{usrid}\n"
-                                            f"<b>Link </b><code>{buyer_nfo['subscription_url']}</code>",
-                                       parse_mode="HTML")
-            return buyer_nfo['subscription_url']
-            # else:
-                # return 400
-        else:
-            return user_info['subscription_url']
+    return 200
 
 
 async def payment_async_logic_new(payment_data):
