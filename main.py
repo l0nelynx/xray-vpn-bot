@@ -81,6 +81,25 @@ async def payment_webhook(request: Request, response: Response):
             }
         )
 
+@app_uvi.post("/ggsel_webhook_new")
+async def payment_webhook(request: Request, response: Response):
+    try:
+        payment_data = await request.json()
+        print(payment_data)
+        status = await payment_async_logic_ggsell(payment_data)
+        return status
+    except Exception as e:
+        logging.error(f"Ошибка обработки платежа: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "id": "",
+                "inv": "0",
+                "goods": "",
+                "error": "Internal server error"
+            }
+        )
+
 async def on_startup(dispatcher, **kwargs):
     """Действия при запуске бота"""
     asyncio.create_task(run_webserver())  # Запуск Uvicorn в фоне
