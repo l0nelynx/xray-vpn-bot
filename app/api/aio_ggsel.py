@@ -130,7 +130,7 @@ async def check_new_orders(session, top: int = 3, token: str = None):
             order_id_check = await rq.get_full_transaction_info_by_id(int(f"99{order_info['content']['content_id']}"))
             merchant_id = order_info['content']['options'][0]['id']
             tariff_id = order_info['content']['options'][0]['user_data_id']
-            if order_info['content']['options'][1]['id']:
+            if len(order_info['content']['options']) > 1:
                 location_param_id = order_info['content']['options'][1]['id']
                 location_id = order_info['content']['options'][1]['user_data_id']
                 location = get_variant_info(JSON_PATH, location_param_id, location_id, 'template_name')
