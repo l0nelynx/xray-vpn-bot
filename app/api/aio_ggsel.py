@@ -127,7 +127,18 @@ async def create_subscription_for_order(content_id, days: int, template):
         return result
     else:
         print('Пользователь уже существует')
-        return user_info['subscription_url']
+        subscription_link = user_info['subscription_url']
+        vless_0 = user_info['links'][0]
+        if len(user_info['links']) > 1:
+            vless_1 = user_info['links'][1]
+            result = {"sub": subscription_link,
+                "vless_0": vless_0,
+                "vless_1": vless_1}
+        else:
+            result = {"sub": subscription_link,
+                "vless_0": vless_0,
+                "vless_1": " "}
+        return result
 
 async def check_new_orders(session, top: int = 3, token: str = None):
     last_sales = await return_last_sales(session, top=top, token=token)
