@@ -111,7 +111,18 @@ async def create_subscription_for_order(content_id, days: int, template):
                                     f"<b>Vless uuid: </b>{usrid}\n"
                                     f"<b>Link: </b><code>{buyer_nfo['subscription_url']}</code>",
                                parse_mode="HTML")
-        return buyer_nfo['subscription_url']
+        subscription_link = buyer_nfo['subscription_url']
+        vless_0 = buyer_nfo['links'][0]
+        if len(buyer_nfo['links']) > 1:
+            vless_1 = buyer_nfo['links'][1]
+            return {"sub": subscription_link,
+                "vless_0": vless_0,
+                "vless_1": vless_1}
+        else:
+            return {"sub": subscription_link,
+                "vless_0": vless_0,
+                "vless_1": None}
+
     else:
         print('Пользователь уже существует')
         return user_info['subscription_url']
@@ -148,17 +159,23 @@ async def check_new_orders(session, top: int = 3, token: str = None):
                                                     user_transaction=f"{uuid.uuid4()}",
                                                     username=f"99{order_info['content']['content_id']}",
                                                     days=days)
-                link = await create_subscription_for_order(order_info['content']['content_id'],days, template)
+                goods = await create_subscription_for_order(order_info['content']['content_id'],days, template)
                 await send_alert('Подписка сформирована')
-                await send_message(session, id_i=order_info['content']['content_id'],message=f'Спасибо за покупку!\nВаша ключ-ссылка: {link}', token=token)
+                await send_message(session, id_i=order_info['content']['content_id'],message=f'Спасибо за покупку!\nВаша ключ-ссылка: {goods["sub"]}', token=token)
                 await send_alert('Сообщение с товаром отправлено покупателю')
             else:
                 print('Заказ уже зарегистрирован в базе')
                 print('Order delivery status:', order_id_check['delivery_status'])
                 if order_id_check['delivery_status'] == 0:
-                    link = await create_subscription_for_order(order_info['content']['content_id'], days, template)
+                    goods = await create_subscription_for_order(order_info['content']['content_id'], days, template)
                     await send_message(session, id_i=order_info['content']['content_id'],
-                                       message=f'Спасибо за покупку!\nВаша ключ-ссылка: {link}', token=token)
+                                       message=f'Спасибо за покупку!\nВаша V2Ray ссылка для подписки : {goods["sub"]}'
+                                               f'Vless ключ будет ниже, но рекомендуем использовать подписку, т.к. она позволяет:\n'
+                                               f'- упростить процесс подключения на любом устройстве - достаточно просто открыть ее в браузере\n'
+                                               f'- автоматически обновлять конфигурации, когда мы обновляем их для лучшей работы сервиса\n'
+                                               f'- отображать срок истечения подписки\n'
+                                               f'- следить за потреблением трафика\n'
+                                               f'ключ: {goods["vless_0"]} \n{goods["vless_1"]}', token=token)
                 else:
                     print('Товар уже был отправлен покупателю')
         else:
