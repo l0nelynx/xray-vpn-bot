@@ -115,14 +115,14 @@ async def create_subscription_for_order(content_id, days: int, template):
         vless_0 = buyer_nfo['links'][0]
         if len(buyer_nfo['links']) > 1:
             vless_1 = buyer_nfo['links'][1]
-            return {"sub": subscription_link,
+            result = {"sub": subscription_link,
                 "vless_0": vless_0,
                 "vless_1": vless_1}
         else:
-            return {"sub": subscription_link,
+            result = {"sub": subscription_link,
                 "vless_0": vless_0,
-                "vless_1": None}
-
+                "vless_1": " "}
+        return result
     else:
         print('Пользователь уже существует')
         return user_info['subscription_url']
