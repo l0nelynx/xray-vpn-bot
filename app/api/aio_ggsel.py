@@ -168,14 +168,20 @@ async def check_new_orders(session, top: int = 3, token: str = None):
                 print('Order delivery status:', order_id_check['delivery_status'])
                 if order_id_check['delivery_status'] == 0:
                     goods = await create_subscription_for_order(order_info['content']['content_id'], days, template)
+                    sub = goods["sub"]
+                    print(sub)
+                    vless_0 = goods["vless_0"]
+                    vless_1 = goods["vless_1"]
+                    print(vless_0)
+                    print(vless_1)
                     await send_message(session, id_i=order_info['content']['content_id'],
-                                       message=f'Спасибо за покупку!\nВаша V2Ray ссылка для подписки : {goods["sub"]}'
+                                       message=f'Спасибо за покупку!\nВаша V2Ray ссылка для подписки : {sub}'
                                                f'Vless ключ будет ниже, но рекомендуем использовать подписку, т.к. она позволяет:\n'
                                                f'- упростить процесс подключения на любом устройстве - достаточно просто открыть ее в браузере\n'
                                                f'- автоматически обновлять конфигурации, когда мы обновляем их для лучшей работы сервиса\n'
                                                f'- отображать срок истечения подписки\n'
                                                f'- следить за потреблением трафика\n'
-                                               f'ключ: {goods["vless_0"]} \n{goods["vless_1"]}', token=token)
+                                               f'ключ: {vless_0} \n{vless_1}', token=token)
                 else:
                     print('Товар уже был отправлен покупателю')
         else:
