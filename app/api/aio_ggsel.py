@@ -112,6 +112,8 @@ async def create_subscription_for_order(content_id, days: int, template):
                                     f"<b>Link: </b><code>{buyer_nfo['subscription_url']}</code>",
                                parse_mode="HTML")
         subscription_link = buyer_nfo['subscription_url']
+        print(buyer_nfo['links'][0])
+        print(len(buyer_nfo['links']))
         vless_0 = buyer_nfo['links'][0]
         if len(buyer_nfo['links']) > 1:
             vless_1 = buyer_nfo['links'][1]
