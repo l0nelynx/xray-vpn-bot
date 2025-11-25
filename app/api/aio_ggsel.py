@@ -59,12 +59,14 @@ async def send_message(session, id_i: int, message: str, token: str):
             if status == 200:
                 success_counter = secrets.get('ggsel_request_retries')+1
                 await send_alert(f"Товар успешно отправлен\nСодержимое ответа:[{status}]{data.decode('utf-8')}\n<b><a href='https://seller.ggsel.net/messages?chatId={id_i}'>Чат</a></b>")
-                await rq.update_delivery_status(int(f"99{id_i}"), 1)
+                # await rq.update_delivery_status(int(f"99{id_i}"), 1)
+                return 200
             else:
                 print(data.decode("utf-8"))
                 await send_alert(f"Ошибка отправки товара:\n[{status}]:{data.decode('utf-8')}\nПопытка: {success_counter}/{secrets.get('ggsel_request_retries')}\nПовтор через {secrets.get('ggsel_retry_timeout')} секунд")
                 success_counter +=1
                 await asyncio.sleep(secrets.get('ggsel_retry_timeout'))
+                return 400
 
 async def return_last_sales(session, top: int = 3, token: str = None):
     headers = {
@@ -140,6 +142,44 @@ async def create_subscription_for_order(content_id, days: int, template):
                 "vless_1": " "}
         return result
 
+
+async def order_register_routine(order_info, days, template, session, token):
+    await send_alert('Найден новый оплаченный заказ, регистрация заказа')
+    await rq.create_transaction(user_tg_id=int(f"99{order_info['content']['content_id']}"),
+                                user_transaction=f"{uuid.uuid4()}",
+                                username=f"99{order_info['content']['content_id']}",
+                                days=days)
+    goods = await create_subscription_for_order(order_info['content']['content_id'], days, template)
+    await asyncio.sleep(secrets.get('ggsel_retry_timeout'))
+    await send_alert('Подписка сформирована')
+    delivery_status = await send_message(session, id_i=order_info['content']['content_id'],
+                                         message=f'Спасибо за покупку!\n Ваша V2Ray ссылка для подписки : {goods["sub"]} \n'
+                                                 f'Рекомендуем использовать именно подписку, т.к. она позволяет:\n'
+                                                 f'- упростить процесс подключения на любом устройстве - достаточно просто открыть ее в браузере\n'
+                                                 f'- автоматически обновлять конфигурации, когда мы обновляем их для лучшей работы сервиса\n'
+                                                 f'- отображать срок истечения подписки\n'
+                                                 f'- следить за потреблением трафика\n', token=token)
+    if delivery_status == 200:
+        await rq.update_delivery_status(int(f"99{order_info['content']['content_id']}"), 1)
+
+
+async def order_already_registered_routine(order_id_check, order_info, days, template, session, token):
+    if order_id_check['delivery_status'] == 0:
+        goods = await create_subscription_for_order(order_info['content']['content_id'], days, template)
+        delivery_status = await send_message(session, id_i=order_info['content']['content_id'],
+                                             message=f'Спасибо за покупку!\n Ваша V2Ray ссылка для подписки : {goods["sub"]} \n'
+                                                     f'Рекомендуем использовать именно подписку, т.к. она позволяет:\n'
+                                                     f'- упростить процесс подключения на любом устройстве - достаточно просто открыть ее в браузере\n'
+                                                     f'- автоматически обновлять конфигурации, когда мы обновляем их для лучшей работы сервиса\n'
+                                                     f'- отображать срок истечения подписки\n'
+                                                     f'- следить за потреблением трафика\n', token=token)
+        if delivery_status == 200:
+            await rq.update_delivery_status(int(f"99{order_info['content']['content_id']}"), 1)
+        await send_message(session, id_i=order_info['content']['content_id'],
+                           message=f'VLESS ключ: {goods["vless_0"]} \n{goods["vless_1"]}', token=token)
+    else:
+        print('Товар уже был отправлен покупателю')
+
 async def check_new_orders(session, top: int = 3, token: str = None):
     last_sales = await return_last_sales(session, top=top, token=token)
     for sale in last_sales['sales']:
@@ -153,58 +193,23 @@ async def check_new_orders(session, top: int = 3, token: str = None):
             print(f"Оплаченный заказ #{order_info['content']['content_id']}\ninv_id: {sale['invoice_id']}\noption id: {order_info['content']['options'][0]['user_data_id']}")
             # await send_alert(f"Оплаченный заказ #{order_info['content']['content_id']}\ninv_id: {sale['invoice_id']}\noption id: {order_info['content']['options'][0]['user_data_id']}")
             order_id_check = await rq.get_full_transaction_info_by_id(int(f"99{order_info['content']['content_id']}"))
-            if order_info['content']['options'][0]['name'] == 'Тариф':
-                merchant_id = order_info['content']['options'][0]['id']
-                tariff_id = order_info['content']['options'][0]['user_data_id']
-                print(f"Length: {len(order_info['content']['options'])}")
-                # if len(order_info['content']['options']) > 1:
-                location_param_id = order_info['content']['options'][1]['id']
-                location_id = order_info['content']['options'][1]['user_data_id']
-                # location = get_variant_info(JSON_PATH, location_param_id, location_id, 'template_name')
-                # else:
-                # location = 'pro_template'
-            else:
-                merchant_id = order_info['content']['options'][1]['id']
-                tariff_id = order_info['content']['options'][1]['user_data_id']
-                print(f"Length: {len(order_info['content']['options'])}")
-                location_param_id = order_info['content']['options'][0]['id']
-                location_id = order_info['content']['options'][0]['user_data_id']
+            index_tax = int(not order_info['content']['options'][0]['name'] == 'Тариф')
+            merchant_id = order_info['content']['options'][index_tax]['id']
+            tariff_id = order_info['content']['options'][index_tax]['user_data_id']
+            print(f"Length: {len(order_info['content']['options'])}")
+            location_param_id = order_info['content']['options'][index_tax^1]['id']
+            location_id = order_info['content']['options'][index_tax^1]['user_data_id']
             location = get_variant_info(JSON_PATH, location_param_id, location_id, 'template_name')
             days = get_variant_info(JSON_PATH, merchant_id, tariff_id, 'days')
             template = getattr(templates, location)
             print(f'Выбран шаблон: {template}')
             if order_id_check == 404:
-                await send_alert('Найден новый оплаченный заказ, регистрация заказа')
-                await rq.create_transaction(user_tg_id=int(f"99{order_info['content']['content_id']}"),
-                                                    # user_transaction=f"{order_info['content']['cart_uid']}",
-                                                    user_transaction=f"{uuid.uuid4()}",
-                                                    username=f"99{order_info['content']['content_id']}",
-                                                    days=days)
-                goods = await create_subscription_for_order(order_info['content']['content_id'],days, template)
-                await send_alert('Подписка сформирована')
-                await send_message(session, id_i=order_info['content']['content_id'],message=f'Спасибо за покупку!\nВаша ключ-ссылка: {goods["sub"]}', token=token)
-                await send_alert('Сообщение с товаром отправлено покупателю')
+                print('Новый заказ')
+                await order_register_routine(order_info, days, template, session, token)
             else:
                 print('Заказ уже зарегистрирован в базе')
                 print('Order delivery status:', order_id_check['delivery_status'])
-                if order_id_check['delivery_status'] == 0:
-                    goods = await create_subscription_for_order(order_info['content']['content_id'], days, template)
-                    sub = goods["sub"]
-                    print(sub)
-                    vless_0 = goods["vless_0"]
-                    vless_1 = goods["vless_1"]
-                    print(vless_0)
-                    print(vless_1)
-                    await send_message(session, id_i=order_info['content']['content_id'],
-                                       message=f'Спасибо за покупку!\n Ваша V2Ray ссылка для подписки : {sub} \n'
-                                               f'Рекомендуем использовать именно подписку, т.к. она позволяет:\n'
-                                               f'- упростить процесс подключения на любом устройстве - достаточно просто открыть ее в браузере\n'
-                                               f'- автоматически обновлять конфигурации, когда мы обновляем их для лучшей работы сервиса\n'
-                                               f'- отображать срок истечения подписки\n'
-                                               f'- следить за потреблением трафика\n'
-                                               f'VLESS ключ: {vless_0} \n{vless_1}', token=token)
-                else:
-                    print('Товар уже был отправлен покупателю')
+                await order_already_registered_routine(order_id_check, order_info, days, template, session, token)
         else:
             print(f"Заказ оплачен либо отменен: {sale['invoice_id']}")
             await rq.set_user(int(f"99{order_info['content']['content_id']}"))
