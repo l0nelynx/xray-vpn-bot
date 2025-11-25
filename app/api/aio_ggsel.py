@@ -143,6 +143,19 @@ async def create_subscription_for_order(content_id, days: int, template):
         return result
 
 
+async def get_order_params(order_info):
+    index_tax = int(not order_info['content']['options'][0]['name'] == 'Тариф')
+    merchant_id = order_info['content']['options'][index_tax]['id']
+    tariff_id = order_info['content']['options'][index_tax]['user_data_id']
+    print(f"Length: {len(order_info['content']['options'])}")
+    location_param_id = order_info['content']['options'][index_tax ^ 1]['id']
+    location_id = order_info['content']['options'][index_tax ^ 1]['user_data_id']
+    location = get_variant_info(JSON_PATH, location_param_id, location_id, 'template_name')
+    days = get_variant_info(JSON_PATH, merchant_id, tariff_id, 'days')
+    template = getattr(templates, location)
+    print(f'Выбран шаблон: {template}')
+    return {"days": days, "template": template}
+
 async def order_register_routine(order_info, days, template, session, token):
     await send_alert('Найден новый оплаченный заказ, регистрация заказа')
     await rq.create_transaction(user_tg_id=int(f"99{order_info['content']['content_id']}"),
@@ -183,38 +196,26 @@ async def order_already_registered_routine(order_id_check, order_info, days, tem
 async def check_new_orders(session, top: int = 3, token: str = None):
     last_sales = await return_last_sales(session, top=top, token=token)
     for sale in last_sales['sales']:
-        # order_id_check = await rq.get_full_transaction_info_by_id(int(f"99{sale['invoice_id']}"))
-        # print(int(f"99{sale['invoice_id']}"))
-        # print(order_id_check)
-        # if order_id_check == 404:
         order_info = await get_order_info(session, sale['invoice_id'], token=token)
         if order_info['content']['invoice_state'] >= 3 <= 4:
             await rq.set_user(int(f"99{order_info['content']['content_id']}"))
-            print(f"Оплаченный заказ #{order_info['content']['content_id']}\ninv_id: {sale['invoice_id']}\noption id: {order_info['content']['options'][0]['user_data_id']}")
-            # await send_alert(f"Оплаченный заказ #{order_info['content']['content_id']}\ninv_id: {sale['invoice_id']}\noption id: {order_info['content']['options'][0]['user_data_id']}")
+            print(f"Оплаченный заказ #{order_info['content']['content_id']}\ninv_id: "
+                  f"{sale['invoice_id']}\noption id: {order_info['content']['options'][0]['user_data_id']}")
             order_id_check = await rq.get_full_transaction_info_by_id(int(f"99{order_info['content']['content_id']}"))
-            index_tax = int(not order_info['content']['options'][0]['name'] == 'Тариф')
-            merchant_id = order_info['content']['options'][index_tax]['id']
-            tariff_id = order_info['content']['options'][index_tax]['user_data_id']
-            print(f"Length: {len(order_info['content']['options'])}")
-            location_param_id = order_info['content']['options'][index_tax^1]['id']
-            location_id = order_info['content']['options'][index_tax^1]['user_data_id']
-            location = get_variant_info(JSON_PATH, location_param_id, location_id, 'template_name')
-            days = get_variant_info(JSON_PATH, merchant_id, tariff_id, 'days')
-            template = getattr(templates, location)
-            print(f'Выбран шаблон: {template}')
+            order_params = await get_order_params(order_info)
             if order_id_check == 404:
                 print('Новый заказ')
-                await order_register_routine(order_info, days, template, session, token)
+                await order_register_routine(order_info, order_params["days"],
+                                             order_params["template"], session, token)
             else:
                 print('Заказ уже зарегистрирован в базе')
                 print('Order delivery status:', order_id_check['delivery_status'])
-                await order_already_registered_routine(order_id_check, order_info, days, template, session, token)
+                await order_already_registered_routine(order_id_check, order_info, order_params["days"],
+                                                       order_params["template"], session, token)
         else:
             print(f"Заказ оплачен либо отменен: {sale['invoice_id']}")
             await rq.set_user(int(f"99{order_info['content']['content_id']}"))
-        # else:
-        #     print('Заказ уже зарегистрирован в базе')
+
 
 async def order_delivery_loop():
     async with aiohttp.ClientSession(base_url="https://seller.ggsel.net") as session:
