@@ -116,7 +116,7 @@ async def payment_async_logic(payment_data):
                     limit=0,
                     res_strat="no_reset",
                     expire_days=days,
-                    template=templates.vless_germany
+                    template=templates.vless_premium
                 )
                 await rq.set_user(int(payment_data["inv"]))
                 await rq.create_transaction(user_tg_id=int(payment_data["inv"]),
@@ -182,7 +182,7 @@ async def payment_async_logic_new(payment_data):
                     limit=0,
                     res_strat="no_reset",
                     expire_days=days,
-                    template=templates.vless_germany
+                    template=templates.vless_premium
                 )
                 await rq.set_user(int(payment_data["inv"]))
                 await rq.create_transaction(user_tg_id=int(payment_data["inv"]),
