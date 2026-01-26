@@ -84,7 +84,7 @@ async def invoice_handler(callback: CallbackQuery, callback_data: kb.PaymentCall
     elif method == 'crypto':
         invoice = await cp.create_invoice(amount, "USDT", payload = f"{days}")
         await callback.message.edit_text(f"pay: {invoice.bot_invoice_url}")
-        invoice.poll(message=callback.message)
+        invoice.poll(message=callback)
         logging.info("Запускаю инвойс")
         await state.clear()
         await state.set_state(PaymentState.PrePayment)
@@ -106,10 +106,10 @@ async def invoice_handler(callback: CallbackQuery, callback_data: kb.PaymentCall
 
 
 @cp.invoice_paid()
-async def payment_handler(invoice: Invoice, message: Message):
-    await message.answer(f"Заказ #{invoice.invoice_id} успешно оплачен")
+async def payment_handler(invoice: Invoice, message: CallbackQuery):
+    await message.message.answer(f"Заказ #{invoice.invoice_id} успешно оплачен")
     days = int(invoice.payload)
-    await success_payment_handler(message, tariff_days=int(days))
+    await success_payment_handler(message.message, message, tariff_days=int(days))
 
 
 @router.pre_checkout_query()
@@ -124,6 +124,6 @@ async def success_stars_payment_handler(message: Message, state: FSMContext):
     states_data = await state.get_data()
     print(states_data)
     days = states_data.get("PaymentDays")
-    await success_payment_handler(message, tariff_days=int(days))
+    await success_payment_handler(message, message, tariff_days=int(days))
     await state.clear()
     await state.set_state(PaymentState.PrePayment)

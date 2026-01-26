@@ -106,19 +106,19 @@ async def startup_user_dialog(message):
                 await main_menu(message, menu_type="new")
 
 
-async def success_payment_handler(message: Message, tariff_days):
+async def success_payment_handler(message: Message, callback: Message, tariff_days):
     # await message.answer(text="🥳Оплата прошла успешно!🤗")
     await bot.send_message(chat_id=secrets.get('admin_id'),
                            text=f"Транзакция ID - TG_STARS\n"
-                                f"Пользователь - @{message.from_user.username}\n"
-                                f"UserId - {message.from_user.id}\n"
+                                f"Пользователь - @{callback.from_user.username}\n"
+                                f"UserId - {callback.from_user.id}\n"
                                 f"Количество дней - {tariff_days}\n")
-    user_info = await get_user_info(message.from_user.username)
+    user_info = await get_user_info(callback.from_user.username)
     if user_info == 404:
         # print(user_info)
         print("Пользователь не найден - создание нового согласно тарифу")
-        buyer_nfo = await add_new_user_info(message.from_user.username,
-                                            message.from_user.id,
+        buyer_nfo = await add_new_user_info(callback.from_user.username,
+                                            callback.from_user.id,
                                             limit=0,
                                             res_strat="no_reset",
                                             expire_days=tariff_days,
@@ -140,7 +140,7 @@ async def success_payment_handler(message: Message, tariff_days):
         else:
             expire_day = await get_user_days(user_info)
         if status == "active" and limit is None:
-            buyer_nfo = await set_user_info(message.from_user.username,
+            buyer_nfo = await set_user_info(callback.from_user.username,
                                             limit=0,
                                             res_strat='no_reset',
                                             expire_days=(expire_day + tariff_days),
@@ -154,7 +154,7 @@ async def success_payment_handler(message: Message, tariff_days):
                                  reply_markup=kb.connect(sub_link))
 
         else:
-            buyer_nfo = await set_user_info(message.from_user.username,
+            buyer_nfo = await set_user_info(callback.from_user.username,
                                             limit=0,
                                             res_strat="no_reset",
                                             expire_days=tariff_days,
