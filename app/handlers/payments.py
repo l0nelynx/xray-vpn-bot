@@ -105,25 +105,11 @@ async def invoice_handler(callback: CallbackQuery, callback_data: kb.PaymentCall
     await state.set_state(PaymentState.PaymentInvoice)
 
 
-# @cp.invoice_polling()
-# async def handle_crypto_payment(invoice, message, state: FSMContext):
-#     await state.set_state(PaymentState.PostPayment)
-#     await message.answer(f"invoice #{invoice.invoice_id} has been paid")
-#     states_data = await state.get_data()
-#     days = states_data.get("PaymentDays")
-#     await success_payment_handler(message, tariff_days=int(days))
-#     await state.clear()
-#     await state.set_state(PaymentState.PrePayment)
-
 @cp.invoice_paid()
 async def payment_handler(invoice: Invoice, message: Message):
-    # await state.set_state(PaymentState.PostPayment)
-    await message.answer(f"invoice #{invoice.invoice_id} has been paid")
-    # states_data = await state.get_data()
+    await message.answer(f"Заказ #{invoice.invoice_id} успешно оплачен")
     days = int(invoice.payload)
     await success_payment_handler(message, tariff_days=int(days))
-    # await state.clear()
-    # await state.set_state(PaymentState.PrePayment)
 
 
 @router.pre_checkout_query()

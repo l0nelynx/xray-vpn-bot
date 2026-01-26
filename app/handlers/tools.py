@@ -107,7 +107,7 @@ async def startup_user_dialog(message):
 
 
 async def success_payment_handler(message: Message, tariff_days):
-    await message.answer(text="🥳Оплата прошла успешно!🤗")
+    # await message.answer(text="🥳Оплата прошла успешно!🤗")
     await bot.send_message(chat_id=secrets.get('admin_id'),
                            text=f"Транзакция ID - TG_STARS\n"
                                 f"Пользователь - @{message.from_user.username}\n"
