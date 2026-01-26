@@ -5,6 +5,7 @@ import app.database.requests as rq
 
 from aiogram.types import Message, CallbackQuery
 
+from app.settings import bot, secrets
 import app.keyboards as kb
 import app.marzban.marzban as mz
 import app.locale.lang_ru as ru
@@ -107,6 +108,11 @@ async def startup_user_dialog(message):
 
 async def success_payment_handler(message: Message, tariff_days):
     await message.answer(text="🥳Оплата прошла успешно!🤗")
+    await bot.send_message(chat_id=secrets.get('admin_id'),
+                           text=f"Транзакция ID - TG_STARS\n"
+                                f"Пользователь - @{message.from_user.username}\n"
+                                f"UserId - {message.from_user.id}\n"
+                                f"Количество дней - {tariff_days}\n")
     user_info = await get_user_info(message.from_user.username)
     if user_info == 404:
         # print(user_info)
@@ -116,7 +122,7 @@ async def success_payment_handler(message: Message, tariff_days):
                                             limit=0,
                                             res_strat="no_reset",
                                             expire_days=tariff_days,
-                                           template=templates.pro_template)
+                                           template=templates.vless_france)
         expire_day = await get_user_days(buyer_nfo)
         sub_link = buyer_nfo["subscription_url"]
         await message.answer(text=f"❤️Cпасибо за покупку!\n\n"
@@ -138,7 +144,7 @@ async def success_payment_handler(message: Message, tariff_days):
                                             limit=0,
                                             res_strat='no_reset',
                                             expire_days=(expire_day + tariff_days),
-                                           template=templates.pro_template)
+                                           template=templates.vless_france)
             expire_day = expire_day + tariff_days
             await message.answer(text=f"❤️Cпасибо за покупку!\n\n"
                                       f"<b>Подписка успешно продлена еще на месяц</b>\n"
@@ -152,7 +158,7 @@ async def success_payment_handler(message: Message, tariff_days):
                                             limit=0,
                                             res_strat="no_reset",
                                             expire_days=tariff_days,
-                                           template=templates.pro_template)
+                                           template=templates.vless_france)
             expire_day = await get_user_days(buyer_nfo)
             sub_link = buyer_nfo["subscription_url"]
             await message.answer(text=f"❤️Cпасибо за покупку!\n\n"

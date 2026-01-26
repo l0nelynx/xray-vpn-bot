@@ -1,6 +1,7 @@
 import app.database.requests as rq
 import app.handlers.tools as tools
 import app.keyboards as kb
+import app.marzban.templates as templates
 import app.locale.lang_ru as ru
 from app.settings import bot, secrets
 
@@ -12,7 +13,10 @@ async def payment_process_background(order_id: str):
     tariff_days = userdata["days_ordered"]  # Take from db here
     if userdata['status'] == 'created':
         await bot.send_message(chat_id=secrets.get('admin_id'),
-                               text=f"Транзакция ID - {order_id}")
+                               text=f"Транзакция ID - {order_id}\n"
+                                    f"Пользователь - @{usrname}\n"
+                                    f"UserId - {usrid}\n"
+                                    f"Количество дней - {tariff_days}\n")
         await rq.update_order_status(order_id, 'confirmed')
         print(f'UserId - {userdata["user_tg_id"]}')
         await bot.send_message(chat_id=usrid, text='Успешная покупка!')
@@ -25,7 +29,8 @@ async def payment_process_background(order_id: str):
                                                       usrid,
                                                       limit=0,
                                                       res_strat="no_reset",
-                                                      expire_days=tariff_days)
+                                                      expire_days=tariff_days,
+                                                      template=templates.vless_france)
             expire_day = await tools.get_user_days(buyer_nfo)
             sub_link = buyer_nfo["subscription_url"]
             await bot.send_message(chat_id=usrid, text=f"❤️Cпасибо за покупку!\n\n"
@@ -47,7 +52,8 @@ async def payment_process_background(order_id: str):
                 buyer_nfo = await tools.set_user_info(name=usrname,
                                                       limit=0,
                                                       res_strat='no_reset',
-                                                      expire_days=(expire_day + tariff_days))
+                                                      expire_days=(expire_day + tariff_days),
+                                                      template=templates.vless_france)
                 expire_day = expire_day + tariff_days
                 await bot.send_message(chat_id=usrid, text=f"❤️Cпасибо за покупку!\n\n"
                                                            f"<b>Подписка успешно продлена еще на месяц</b>\n"
@@ -60,7 +66,8 @@ async def payment_process_background(order_id: str):
                 buyer_nfo = await tools.set_user_info(name=usrname,
                                                       limit=0,
                                                       res_strat="no_reset",
-                                                      expire_days=tariff_days)
+                                                      expire_days=tariff_days,
+                                                      template=templates.vless_france)
                 expire_day = await tools.get_user_days(buyer_nfo)
                 sub_link = buyer_nfo["subscription_url"]
                 await bot.send_message(chat_id=usrid, text=f"❤️Cпасибо за покупку!\n\n"
