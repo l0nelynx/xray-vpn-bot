@@ -7,6 +7,8 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import LabeledPrice, PreCheckoutQuery
 from aiogram.types import Message, CallbackQuery
 
+from aiosend.types import Invoice
+
 import app.keyboards as kb
 from app.api.a_pay import create_sbp_link as apays_create_sbp_link
 from app.api.crystal_pay import crystal_create_link
@@ -103,6 +105,16 @@ async def invoice_handler(callback: CallbackQuery, callback_data: kb.PaymentCall
 
 @cp.invoice_polling()
 async def handle_crypto_payment(invoice, message, state: FSMContext):
+    await state.set_state(PaymentState.PostPayment)
+    await message.answer(f"invoice #{invoice.invoice_id} has been paid")
+    states_data = await state.get_data()
+    days = states_data.get("PaymentDays")
+    await success_payment_handler(message, tariff_days=int(days))
+    await state.clear()
+    await state.set_state(PaymentState.PrePayment)
+
+@cp.invoice_paid()
+async def payment_handler(invoice: Invoice, message: Message, state: FSMContext):
     await state.set_state(PaymentState.PostPayment)
     await message.answer(f"invoice #{invoice.invoice_id} has been paid")
     states_data = await state.get_data()
