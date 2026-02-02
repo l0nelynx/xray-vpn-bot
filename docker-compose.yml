@@ -20,7 +20,7 @@ services:
     container_name: cheezy-sup-bot
     build:
       context: .
-      dockerfile: Dockerfile.sup
+      dockerfile: Dockerfile_support
     volumes:
       - ./config.yml:/usr/src/app/config.yml
     restart: unless-stopped
