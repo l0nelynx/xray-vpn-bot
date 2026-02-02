@@ -1,9 +1,9 @@
 services:
   cheezy-vpn-bot:
-    image: spicycheeze/xray-vpn-bot-cheezy:vpn
-#    build:
-#      context: .
-#      dockerfile: Dockerfile_old
+    container_name: cheezy-vpn-bot
+    build:
+      context: .
+      dockerfile: Dockerfile
     volumes:
       - type: bind
         source: ./db/db.sqlite3
@@ -17,10 +17,10 @@ services:
     tty: true
     stdin_open: true
   cheezy-sup-bot:
-    image: spicycheeze/xray-vpn-bot-cheezy:support
-#    build:
-#      context: .
-#      dockerfile: Dockerfile_support_old
+    container_name: cheezy-sup-bot
+    build:
+      context: .
+      dockerfile: Dockerfile_support
     volumes:
       - ./config.yml:/usr/src/app/config.yml
     restart: unless-stopped
