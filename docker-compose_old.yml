@@ -3,7 +3,7 @@ services:
     container_name: spicycheeze/xray-vpn-bot-cheezy-vpn-bot:latest
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile_old
     volumes:
       - type: bind
         source: ./db/db.sqlite3
@@ -20,7 +20,7 @@ services:
     container_name: spicycheeze/xray-vpn-bot-cheezy-sup-bot:latest
     build:
       context: .
-      dockerfile: Dockerfile_support
+      dockerfile: Dockerfile_support_old
     volumes:
       - ./config.yml:/usr/src/app/config.yml
     restart: unless-stopped
