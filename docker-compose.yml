@@ -1,6 +1,6 @@
 services:
   cheezy-vpn-bot:
-    container_name: spicycheeze/xray-vpn-bot-cheezy-vpn-bot:latest
+    container_name: spicycheeze/xray-vpn-bot-cheezy-vpn-bot
     build:
       context: .
       dockerfile: Dockerfile_old
@@ -17,7 +17,7 @@ services:
     tty: true
     stdin_open: true
   cheezy-sup-bot:
-    container_name: spicycheeze/xray-vpn-bot-cheezy-sup-bot:latest
+    container_name: spicycheeze/xray-vpn-bot-cheezy-sup-bot
     build:
       context: .
       dockerfile: Dockerfile_support_old
