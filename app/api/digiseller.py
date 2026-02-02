@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import uuid
+from pathlib import Path
 import app.handlers.tools as tools
 import app.marzban.templates as templates
 from pydantic import BaseModel
@@ -16,8 +17,12 @@ from app.settings import secrets
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-JSON_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'dig_data.json')
+file_path="dig_data.json"
 
+config_path = Path(__file__).parent.parent.parent / file_path
+
+# JSON_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'dig_data.json')
+JSON_PATH = config_path
 
 class DigisellerResponse(BaseModel):
     id: str
@@ -47,8 +52,9 @@ def generate_signature(id_value, inv_value, password, model: str = "md5"):
 
 def get_variant_info(json_file_path, merchant_id, variant_id, field=None):
     try:
-        with open(json_file_path, 'r', encoding='utf-8') as file:
-            data = json.load(file)
+        with open(json_file_path, 'r') as stream:
+        # with open(json_file_path, 'r', encoding='utf-8') as file:
+            data = json.load(stream)
 
         variant_id_str = str(variant_id)
         variant_info = data['var_ids'][f'{merchant_id}']['variants'].get(variant_id_str)

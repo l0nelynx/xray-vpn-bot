@@ -1,6 +1,6 @@
 services:
   cheezy-vpn-bot:
-    container_name: cheezy-vpn-bot
+    container_name: xray-vpn-bot-cheezy:vpn
     build:
       context: .
       dockerfile: Dockerfile
@@ -17,7 +17,7 @@ services:
     tty: true
     stdin_open: true
   cheezy-sup-bot:
-    container_name: cheezy-sup-bot
+    container_name: xray-vpn-bot-cheezy:support
     build:
       context: .
       dockerfile: Dockerfile_support
