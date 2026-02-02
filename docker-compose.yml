@@ -7,10 +7,10 @@ services:
     volumes:
       - type: bind
         source: ./db/db.sqlite3
-        target: /usr/src/app/db.sqlite3
-      - /var/lib/marzban/certs/:/usr/src/app/uvicorn/ssl
+        target: /usr/src/app/dist/db.sqlite3
+      - /var/lib/marzban/certs/:/usr/src/app/dist/uvicorn/ssl
       - ./config.yml:/usr/src/app/dist/config.yml
-      - ./dig_data.json:/usr/src/app/dig_data.json
+      - ./dig_data.json:/usr/src/app/dist/dig_data.json
     ports:
       - "5000:5000"
     restart: unless-stopped
