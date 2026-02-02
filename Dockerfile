@@ -3,15 +3,21 @@ FROM python:3.13-slim AS builder
 WORKDIR /usr/src/build
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc g++ python3-dev patchelf \
-    && rm -rf /var/lib/apt/lists/* \
+    gcc \
+    g++ \
+    python3-dev \
+    patchelf \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
+
 RUN pip install --no-cache-dir -r requirements.txt nuitka
+
 COPY ./app ./app
 COPY ./uvicorn ./uvicorn
 COPY ./main.py ./main.py
 COPY ./support.py ./support.py
+
 RUN python -m nuitka \
     --standalone \
     --include-package=uvicorn \
