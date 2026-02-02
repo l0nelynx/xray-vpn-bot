@@ -9,7 +9,7 @@ services:
         source: ./db/db.sqlite3
         target: /usr/src/app/db.sqlite3
       - /var/lib/marzban/certs/:/usr/src/app/uvicorn/ssl
-      - ./config.yml:/usr/src/app/config.yml
+      - ./config.yml:/usr/src/app/dist/config.yml
       - ./dig_data.json:/usr/src/app/dig_data.json
     ports:
       - "5000:5000"
@@ -22,7 +22,7 @@ services:
 #      context: .
 #      dockerfile: Dockerfile_support_old
     volumes:
-      - ./config.yml:/usr/src/app/config.yml
+      - ./config.yml:/usr/src/app/dist/config.yml
     restart: unless-stopped
 #  cheezy-ggsel:
 #    container_name: cheezy-ggsel
