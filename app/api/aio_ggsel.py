@@ -218,7 +218,7 @@ async def check_new_orders(session, top: int = 3, token: str = None):
 
 
 async def order_delivery_loop():
-    async with aiohttp.ClientSession(base_url="https://seller.ggsel.net") as session:
+    async with aiohttp.ClientSession(base_url=secrets.get('ggsel_base_url')) as session:
         while True:
             error_counter = 0
             try:
