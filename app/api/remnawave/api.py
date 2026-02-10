@@ -37,7 +37,7 @@ async def get_user_from_username(username: str):
     return {"expire": days_left, "subscription_url": response.subscription_url}
 
 
-async def create_user(username: str, days: int = 3600, limit_gb: int = 0, descr: str = ""):
+async def create_user(username: str, days: int = 3600, limit_gb: int = 0, descr: str = "", email: str = "JohnDoe@"):
     remnawave = RemnawaveSDK(base_url=secrets.get('remnawave_url'), token=secrets.get('remnawave_token'))
     # async with CreateUserRequestDto as new_user:
     new_user = CreateUserRequestDto(
@@ -55,7 +55,7 @@ async def create_user(username: str, days: int = 3600, limit_gb: int = 0, descr:
         description=descr,
         # tag="premium",
         # telegram_id=123456789,
-        # email="user@example.com",
+        email=email,
         # hwidDeviceLimit=3,
         active_internal_squads=["f27c4ae3-82f8-44cb-9054-8c49d9ca9cc0"]  # default_squad_id
     )
