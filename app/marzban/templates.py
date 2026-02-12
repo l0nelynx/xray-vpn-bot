@@ -94,7 +94,8 @@ vless_premium = {
     },
     "inbounds": {
         "vless": [
-            "ALL+VLESS+TCP+REALITY+9990"
+            "ALL+VLESS+TCP+REALITY+9990",
+            "ALL+VLESS+XHTTP+REALITY+9994"
         ]
     },
     "expire": 0,

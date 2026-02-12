@@ -80,13 +80,13 @@ async def payment_process_background(order_id: str):
         await send_alert(order_id, usrname, usrid, tariff_days)
         await rq.update_order_status(order_id, 'confirmed')
         user_info = await tools.get_user_info(usrname)
-        delivery_status = await create_subscription_for_order(user_info, usrname, usrid, tariff_days, templates.vless_france)
+        delivery_status = await create_subscription_for_order(user_info, usrname, usrid, tariff_days, templates.vless_premium)
         if delivery_status != 200:
             unsuccess_counter = 0
             while unsuccess_counter <= 3:
                 print('Ошибка при доставке товара, попытка повторить доставку')
                 delivery_status = await create_subscription_for_order(user_info, usrname, usrid, tariff_days,
-                                                                      templates.vless_france)
+                                                                      templates.vless_premium)
                 if delivery_status == 200:
                     print('Доставка прошла успешно')
                     unsuccess_counter = 5
