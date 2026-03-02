@@ -1,99 +1,132 @@
+"""
+Optimized button factory module for aiogram keyboards.
+Uses factory patterns to avoid repetitive button definitions.
+"""
+from typing import Callable
 from aiogram.types import InlineKeyboardButton, WebAppInfo
 
-paystars_button = InlineKeyboardButton(
-    text="🔒Telegram Stars⭐️",
-    callback_data='Stars_Plans')
 
-paycryptobot_button = InlineKeyboardButton(
-    text="🔒CryptoBot⭐️",
-    callback_data='Crypto_Plans')
+class ButtonFactory:
+    """Factory for creating consistent button types"""
 
-paysbp_button = InlineKeyboardButton(
-    text="🔒СБП⭐️",
-    callback_data='SBP_Plans')
+    @staticmethod
+    def callback_button(text: str, callback_data: str) -> InlineKeyboardButton:
+        """Create a callback button"""
+        return InlineKeyboardButton(text=text, callback_data=callback_data)
 
-apays_button = InlineKeyboardButton(
-    text="🔒Банковская карта/перевод⭐️",
-    callback_data='SBP_Apay')
+    @staticmethod
+    def url_button(text: str, url: str) -> InlineKeyboardButton:
+        """Create a URL button"""
+        return InlineKeyboardButton(text=text, url=url)
 
-crystal_button = InlineKeyboardButton(
-    text="🔒Криптовалюта⭐️",
-    callback_data='Crystal_plans')
+    @staticmethod
+    def web_app_button(text: str, web_app_url: str) -> InlineKeyboardButton:
+        """Create a WebApp button"""
+        return InlineKeyboardButton(text=text, web_app=WebAppInfo(url=web_app_url))
 
-to_pay_method_back = InlineKeyboardButton(
-    text="Назад",
-    callback_data='Premium')
-
-premium_button = InlineKeyboardButton(
-    text="🔒Приобрести CheezeVPN Premium⭐️",
-    callback_data='Premium')
-
-extend_button = InlineKeyboardButton(
-    text="🔒Продлить подписку ️",
-    callback_data='Extend_Month')
-
-status_button = InlineKeyboardButton(
-    text="Информация о подписке",
-    callback_data='Sub_Info')
-
-howto_button = InlineKeyboardButton(
-    text="Инструкция по установке",
-    callback_data='Others')
-
-free_button = InlineKeyboardButton(
-    text="Бесплатная версия",
-    callback_data='Free')
-
-android_button = InlineKeyboardButton(
-    text="Android/IOS - Happ",
-    callback_data='Android_Help')
-
-windows_button = InlineKeyboardButton(
-    text="Windows/Linux - Throne",
-    callback_data='Windows_Help')
-
-ios_button = InlineKeyboardButton(
-    text="IOS"
-)
-
-win_button = InlineKeyboardButton(
-    text="Windows"
-)
-
-linux_button = InlineKeyboardButton(
-    text="Linux"
-)
-
-to_main_button = InlineKeyboardButton(text='На главную', callback_data='Main')
-
-agreement_button = InlineKeyboardButton(
-    text="Пользовательское соглашение",
-    callback_data='Agreement')
-
-privacy_button = InlineKeyboardButton(
-    text="Политика конфиденциальности",
-    callback_data='Privacy')
-
-subcheck_button = InlineKeyboardButton(
-    text="Я подписался!",
-    callback_data='sub_check')
-
-subcheck_free_button = InlineKeyboardButton(
-    text="Я подписался!",
-    callback_data='subcheck_free')
+    @staticmethod
+    def pay_button(text: str = "Оплатить") -> InlineKeyboardButton:
+        """Create a payment button"""
+        return InlineKeyboardButton(text=text, pay=True)
 
 
-def to_web_info_button(link, text: str):
-    return [InlineKeyboardButton(text=text,
-                                 web_app=WebAppInfo(url=link)
-                                 )]
+class ButtonDefinitions:
+    """Centralized button definitions using factory patterns"""
+
+    # Payment Method Buttons
+    PAYMENT_METHODS = {
+        'stars': ('🔒Telegram Stars⭐️', 'Stars_Plans'),
+        'crypto': ('🔒CryptoBot⭐️', 'Crypto_Plans'),
+        'sbp': ('🔒СБП⭐️', 'SBP_Plans'),
+        'apay': ('🔒Банковская карта/перевод⭐️', 'SBP_Apay'),
+        'crystal': ('🔒Криптовалюта⭐️', 'Crystal_plans'),
+    }
+
+    # Main Menu Buttons
+    MAIN_MENU = {
+        'premium': ('🔒Приобрести CheezeVPN Premium⭐️', 'Premium'),
+        'extend': ('🔒Продлить подписку', 'Extend_Month'),
+        'status': ('Информация о подписке', 'Sub_Info'),
+        'howto': ('Инструкция по установке', 'Others'),
+        'free': ('Бесплатная версия', 'Free'),
+    }
+
+    # Help/Setup Buttons
+    HELP = {
+        'android': ('Android/IOS - Happ', 'Android_Help'),
+        'windows': ('Windows/Linux - Throne', 'Windows_Help'),
+    }
+
+    # Legal Buttons
+    LEGAL = {
+        'agreement': ('Пользовательское соглашение', 'Agreement'),
+        'privacy': ('Политика конфиденциальности', 'Privacy'),
+    }
+
+    # Navigation Buttons
+    NAVIGATION = {
+        'back': ('Назад', 'Premium'),
+        'to_main': ('На главную', 'Main'),
+        'cancel': ('Отменить рассылку', 'cancel_broadcast'),
+    }
+
+    # Subscription Buttons
+    SUBSCRIPTION = {
+        'check': ('Я подписался!', 'sub_check'),
+        'check_free': ('Я подписался!', 'subcheck_free'),
+    }
+
+    @classmethod
+    def get_button(cls, category: str, name: str) -> InlineKeyboardButton:
+        """
+        Get a button by category and name
+
+        Args:
+            category: Button category (e.g., 'PAYMENT_METHODS', 'MAIN_MENU')
+            name: Button name within category
+
+        Returns:
+            InlineKeyboardButton
+        """
+        button_dict = getattr(cls, category)
+        text, callback_data = button_dict[name]
+        return ButtonFactory.callback_button(text, callback_data)
+
+    @classmethod
+    def get_url_button(cls, text: str, url: str) -> InlineKeyboardButton:
+        """Get a URL button"""
+        return ButtonFactory.url_button(text, url)
+
+    @classmethod
+    def get_web_app_button(cls, text: str, url: str) -> InlineKeyboardButton:
+        """Get a WebApp button"""
+        return ButtonFactory.web_app_button(text, url)
 
 
-def to_url_button(link, text: str):
-    return [InlineKeyboardButton(text=text,
-                                 url=link
-                                 )]
+# Legacy compatibility - create buttons on demand instead of at module load
+def get_button(category: str, name: str) -> InlineKeyboardButton:
+    """Compatibility function for backward compatibility"""
+    return ButtonDefinitions.get_button(category, name)
 
 
-cancel_broadcast_button = InlineKeyboardButton(text="Отменить рассылку",
-                                               callback_data="cancel_broadcast")
+# For direct access (backward compatible with old code)
+paystars_button = ButtonFactory.callback_button('🔒Telegram Stars⭐️', 'Stars_Plans')
+paycryptobot_button = ButtonFactory.callback_button('🔒CryptoBot⭐️', 'Crypto_Plans')
+paysbp_button = ButtonFactory.callback_button('🔒СБП⭐️', 'SBP_Plans')
+apays_button = ButtonFactory.callback_button('🔒Банковская карта/перевод⭐️', 'SBP_Apay')
+crystal_button = ButtonFactory.callback_button('🔒Криптовалюта⭐️', 'Crystal_plans')
+to_pay_method_back = ButtonFactory.callback_button('Назад', 'Premium')
+premium_button = ButtonFactory.callback_button('🔒Приобрести CheezeVPN Premium⭐️', 'Premium')
+extend_button = ButtonFactory.callback_button('🔒Продлить подписку', 'Extend_Month')
+status_button = ButtonFactory.callback_button('Информация о подписке', 'Sub_Info')
+howto_button = ButtonFactory.callback_button('Инструкция по установке', 'Others')
+free_button = ButtonFactory.callback_button('Бесплатная версия', 'Free')
+android_button = ButtonFactory.callback_button('Android/IOS - Happ', 'Android_Help')
+windows_button = ButtonFactory.callback_button('Windows/Linux - Throne', 'Windows_Help')
+to_main_button = ButtonFactory.callback_button('На главную', 'Main')
+agreement_button = ButtonFactory.callback_button('Пользовательское соглашение', 'Agreement')
+privacy_button = ButtonFactory.callback_button('Политика конфиденциальности', 'Privacy')
+subcheck_button = ButtonFactory.callback_button('Я подписался!', 'sub_check')
+subcheck_free_button = ButtonFactory.callback_button('Я подписался!', 'subcheck_free')
+cancel_broadcast_button = ButtonFactory.callback_button('Отменить рассылку', 'cancel_broadcast')
+

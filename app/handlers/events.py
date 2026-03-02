@@ -34,13 +34,22 @@ async def stop_bot():
 
 
 async def main_menu(message, menu_type):
-    if menu_type == "pro":
-        await message(lang.start_pro + lang.start_agreement, reply_markup=kb.main_pro, parse_mode="HTML")
-    elif menu_type == "free":
-        await message(lang.start_free + lang.start_agreement, reply_markup=kb.main_free, parse_mode="HTML")
-    else:
-        await message(lang.start_base + lang.start_new + lang.start_agreement, reply_markup=kb.main_new,
-                      parse_mode="HTML")
+    keyboards_map = {
+        "pro": kb.main_pro,
+        "free": kb.main_free,
+        "new": kb.main_new,
+    }
+
+    texts_map = {
+        "pro": lang.start_pro + lang.start_agreement,
+        "free": lang.start_free + lang.start_agreement,
+        "new": lang.start_base + lang.start_new + lang.start_agreement,
+    }
+
+    text = texts_map.get(menu_type, texts_map["new"])
+    keyboard = keyboards_map.get(menu_type, keyboards_map["new"])
+
+    await message(text, reply_markup=keyboard, parse_mode="HTML")
 
 
 async def main_call(message, menu_type):

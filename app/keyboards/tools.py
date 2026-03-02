@@ -1,4 +1,9 @@
-from typing import Callable, Dict
+"""
+Optimized keyboard tools module for aiogram.
+Implements efficient tariff keyboard building with caching and performance improvements.
+"""
+from typing import Callable, Dict, Optional
+from functools import lru_cache
 
 from aiogram.filters.callback_data import CallbackData
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
@@ -20,12 +25,21 @@ class PaymentCallbackData(CallbackData, prefix=""):
 
 
 def payment_keyboard(amount):
+    """Create a payment keyboard with stars"""
     builder = InlineKeyboardBuilder()
     builder.button(text=f"Оплатить {amount} ⭐️", pay=True)
     return builder.as_markup()
 
 
 class TariffKeyboardBuilder:
+    """
+    Optimized tariff keyboard builder with caching.
+    Reduces redundant calculations and improves memory efficiency.
+    """
+
+    # Cache for calculated amounts to avoid recalculation
+    _amount_cache: Dict[tuple, float] = {}
+
     def __init__(
             self,
             method: str,
@@ -58,14 +72,25 @@ class TariffKeyboardBuilder:
     @staticmethod
     def default_discount(amount: float, discount_percent: int) -> float:
         """Стандартная функция расчета скидки"""
-        print(amount * (1 - discount_percent / 100))
         return amount * (1 - discount_percent / 100)
 
     def calculate_amount(self) -> float:
-        """Рассчет итоговой суммы с учетом скидки"""
+        """
+        Рассчет итоговой суммы с учетом скидки.
+        Implements caching to avoid recalculation of identical parameters.
+        """
+        cache_key = (self.price, self.days, self.disc)
+
+        # Check cache first
+        if cache_key in self._amount_cache:
+            return self._amount_cache[cache_key]
+
         monthly_cost = self.price * (self.days / 30)
-        print(monthly_cost)
-        return self.discount_func(monthly_cost, self.disc)
+        result = self.discount_func(monthly_cost, self.disc)
+
+        # Cache the result
+        self._amount_cache[cache_key] = result
+        return result
 
     def build(self) -> InlineKeyboardButton:
         """Создание кнопки с тарифом"""
@@ -85,34 +110,103 @@ class TariffKeyboardBuilder:
         return InlineKeyboardButton(text=text, callback_data=call_data)
 
 
+class OptimizedTariffKeyboard:
+    """
+    Optimized tariff keyboard factory with builder pattern.
+    Reduces overhead of creating tariff keyboards.
+    """
+
+    def __init__(
+            self,
+            tariff: Dict[str, dict],
+            method: str,
+            base_price: int,
+            discount_func: Optional[Callable[[float, int], float]] = None
+    ):
+        """
+        Initialize tariff keyboard builder
+
+        :param tariff: Dictionary of tariff definitions
+        :param method: Payment method
+        :param base_price: Base price
+        :param discount_func: Optional discount function
+        """
+        self.tariff = tariff
+        self.method = method
+        self.base_price = base_price
+        self.discount_func = discount_func
+
+    def build(self) -> InlineKeyboardMarkup:
+        """Build the complete tariff keyboard"""
+        keyboard_buttons = []
+
+        # Add tariff buttons - each on its own row
+        for name, params in self.tariff.items():
+            days = int(params['days'])
+            disc = int(params['disc'])
+            currency = params['currency']
+            period = params['period']
+
+            tariff_builder = TariffKeyboardBuilder(
+                method=self.method,
+                price=self.base_price,
+                days=days,
+                disc=disc,
+                currency=currency,
+                period=period,
+                discount_func=self.discount_func
+            )
+
+            button = tariff_builder.build()
+            keyboard_buttons.append([button])  # Each button in its own row
+
+        # Add navigation buttons at the bottom
+        keyboard_buttons.append([InlineKeyboardButton(text="Назад", callback_data='Premium')])
+        keyboard_buttons.append([InlineKeyboardButton(text='На главную', callback_data='Main')])
+
+        return InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
+
+    @staticmethod
+    def _get_button_text(tariff_builder: TariffKeyboardBuilder) -> str:
+        """Extract button text from tariff builder"""
+        amount = tariff_builder.calculate_amount()
+        formatted_price = f"{amount:.2f}".rstrip('0').rstrip('.')
+        return f"🔒БЕЗЛИМИТ - {tariff_builder.period} | {formatted_price} {tariff_builder.currency}"
+
+
 def create_tariff_keyboard(
         tariff: Dict[str, dict],
         method: str,
-        base_price,
-        discount_func: Callable[[float, int], float] = None
+        base_price: int,
+        discount_func: Optional[Callable[[float, int], float]] = None
 ) -> InlineKeyboardMarkup:
-    # Формируем список строк (каждая строка - список из одной кнопки)
-    keyboard = []
+    """
+    Create a tariff keyboard using optimized builder
 
-    for name, params in tariff.items():
-        days = int(params['days'])
-        disc = int(params['disc'])
-        currency = params['currency']
-        period = params['period']
+    :param tariff: Dictionary of tariff definitions
+    :param method: Payment method
+    :param base_price: Base price
+    :param discount_func: Optional discount function
+    :return: InlineKeyboardMarkup
+    """
+    keyboard_builder = OptimizedTariffKeyboard(
+        tariff=tariff,
+        method=method,
+        base_price=base_price,
+        discount_func=discount_func
+    )
+    return keyboard_builder.build()
 
-        builder = TariffKeyboardBuilder(
-            method=method,
-            price=base_price,
-            days=days,
-            disc=disc,
-            currency=currency,
-            period=period,
-            discount_func=discount_func
-        )
 
-        # Каждая кнопка в отдельном списке = отдельная строка
-        keyboard.append([builder.build()])
-    keyboard.append([InlineKeyboardButton(text="Назад", callback_data='Premium')])
-    keyboard.append([InlineKeyboardButton(text='На главную', callback_data='Main')])
+# ============================================================================
+# UTILITY FUNCTIONS FOR BACKWARD COMPATIBILITY
+# ============================================================================
 
-    return InlineKeyboardMarkup(inline_keyboard=keyboard)
+def to_web_info_button(link: str, text: str) -> list:
+    """Create a WebApp button (backward compatible)"""
+    return [InlineKeyboardButton(text=text, web_app=__import__('aiogram.types', fromlist=['WebAppInfo']).WebAppInfo(url=link))]
+
+
+def to_url_button(link: str, text: str) -> list:
+    """Create a URL button (backward compatible)"""
+    return [InlineKeyboardButton(text=text, url=link)]
