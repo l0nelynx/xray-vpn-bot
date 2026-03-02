@@ -223,7 +223,7 @@ async def order_delivery_loop():
             error_counter = 0
             try:
                 token = await get_token(session)
-                # await check_new_orders(session, top=secrets.get('ggsel_top_value'), token=token)
+                await check_new_orders(session, top=secrets.get('ggsel_top_value'), token=token)
                 # error_counter = 0
             except Exception as e:
                 error_counter += 1
