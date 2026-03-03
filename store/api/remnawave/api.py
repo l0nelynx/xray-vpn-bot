@@ -3,7 +3,7 @@ import asyncio
 import uuid
 import datetime
 
-from app.settings import secrets
+from store.settings import secrets
 from remnawave.enums import TrafficLimitStrategy, UserStatus
 from remnawave import RemnawaveSDK  # Updated import for new package
 from remnawave.models import (  # Updated import path
