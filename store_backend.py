@@ -53,9 +53,15 @@ async def payment_webhook(request: Request, response: Response):
             }
         )
 
-async def main():
-    asyncio.create_task(run_webserver())
+async def on_startup():
+    """Действия при запуске бота"""
+    asyncio.create_task(run_webserver())  # Запуск Uvicorn в фоне
     asyncio.create_task(aio_gg.order_delivery_loop())
+
+async def main():
+    await on_startup()
+    #asyncio.create_task(run_webserver())
+    #asyncio.create_task(aio_gg.order_delivery_loop())
 
 if __name__ == "__main__":
     asyncio.run(main())
