@@ -2,7 +2,7 @@ import json
 import uuid
 import aiohttp
 
-from app.settings import secrets
+from store.settings import secrets
 
 
 class MarzbanAsync:
