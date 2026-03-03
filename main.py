@@ -104,7 +104,7 @@ async def on_startup(dispatcher, **kwargs):
     """Действия при запуске бота"""
     asyncio.create_task(run_webserver())  # Запуск Uvicorn в фоне
     # asyncio.create_task(gg.order_delivery_loop())
-    asyncio.create_task(aio_gg.order_delivery_loop())
+    #asyncio.create_task(aio_gg.order_delivery_loop())
 
 
 async def main():
