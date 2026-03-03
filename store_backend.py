@@ -60,8 +60,12 @@ async def on_startup():
 
 async def main():
     # await on_startup()
-    await run_webserver()
-    await aio_gg.order_delivery_loop()
+    #await run_webserver()
+    #await aio_gg.order_delivery_loop()
+    await asyncio.gather(
+        run_webserver(),
+        aio_gg.order_delivery_loop(),
+    )
     #asyncio.create_task(run_webserver())
     #asyncio.create_task(aio_gg.order_delivery_loop())
 
