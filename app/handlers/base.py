@@ -11,7 +11,6 @@ from app.handlers.tools import startup_user_dialog, free_sub_handler, subscripti
 
 from app.settings import secrets
 from app.settings import bot
-from app.api.aio_ggsel import send_message, get_token
 from app.api.remnawave.api import create_user, get_user_from_username, update_user
 
 router = Router()
@@ -33,11 +32,6 @@ async def cmd_start(message: Message):
     await rq.set_user(message.from_user.id)
     await startup_user_dialog(message)
 
-@router.message(Command("ggtest"), F.from_user.id == secrets.get('admin_id'))  # Start command handler
-async def cmd_start_test(message: Message):
-    async with aiohttp.ClientSession(base_url="https://seller.ggsel.net") as session:
-        token = await get_token(session)
-        await send_message(session,2323232, 'Test', token)
 
 @router.callback_query(F.data == 'Agreement')  # Start command handler
 async def user_agreement(callback: CallbackQuery):

@@ -3,7 +3,7 @@ services:
     image: spicycheeze/xray-vpn-bot-cheezy:vpn
 #    build:
 #      context: .
-#      dockerfile: Dockerfile_old
+#      dockerfile: Dockerfile
     volumes:
       - type: bind
         source: ./db/db.sqlite3
@@ -20,24 +20,7 @@ services:
     image: spicycheeze/xray-vpn-bot-cheezy:support
 #    build:
 #      context: .
-#      dockerfile: Dockerfile_support_old
+#      dockerfile: Dockerfile_support
     volumes:
       - ./config.yml:/usr/src/app/dist/config.yml
     restart: unless-stopped
-#  cheezy-ggsel:
-#    container_name: cheezy-ggsel
-#    build:
-#      context: .
-#      dockerfile: ggsel.Dockerfile
-#    volumes:
-#      - type: bind
-#        source: ./db/db.sqlite3
-#        target: /usr/src/app/db.sqlite3
-#      - /var/lib/marzban/certs/:/usr/src/app/uvicorn/ssl
-#      - ./config.yml:/usr/src/app/config.yml
-#      - ./dig_data.json:/usr/src/app/dig_data.json
-##    ports:
-##      - "5000:5000"
-#    restart: unless-stopped
-#    tty: true
-#    stdin_open: true

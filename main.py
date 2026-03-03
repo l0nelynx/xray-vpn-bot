@@ -2,16 +2,10 @@ import logging
 
 import asyncio
 
-import app.api.ggsel as gg
-import app.api.aio_ggsel as aio_gg
-
 from aiogram import Dispatcher
 from fastapi import Request, BackgroundTasks, Response, HTTPException
 from app.api.a_pay import payment_webhook_handler as apays_webhook_handler
 from app.api.crystal_pay import payment_webhook_handler as crystal_webhook_handler
-# from app.api.digiseller import payment_webhook_handler as digiseller_webhook_handler
-from app.api.digiseller import payment_async_logic, payment_async_logic_ggsell
-from app.api.ggsel import send_message
 from app.handlers.base import router as router_base
 from app.handlers.events import start_bot, stop_bot
 from app.handlers.payments import router as router_payments
@@ -26,6 +20,12 @@ dp.startup.register(start_bot)
 dp.shutdown.register(stop_bot)
 
 
+@app_uvi.get("/health")
+async def health_check():
+    """Health check endpoint для docker healthcheck"""
+    return {"status": "healthy", "message": "Bot is running"}
+
+
 @app_uvi.post("/apays_webhook")
 async def payment_webhook(request: Request, background_tasks: BackgroundTasks):
     await apays_webhook_handler(request, background_tasks)
@@ -36,75 +36,9 @@ async def payment_webhook(request: Request, background_tasks: BackgroundTasks):
     await crystal_webhook_handler(request, background_tasks)
 
 
-# @app_uvi.post("/digiseller_webhook")
-# async def payment_webhook(request: Request, response: Response):
-#     try:
-#         payment_data = await request.json()
-#         link = await payment_async_logic(payment_data)
-#         content = {
-#                 "id": f"{payment_data['id']}",
-#                 "inv": f"{payment_data['inv']}",
-#                 "goods": f"{link}",
-#                 "error": ""
-#         }
-#         response.status_code = 200
-#         return content
-#     except Exception as e:
-#         logging.error(f"Ошибка обработки платежа: {e}")
-#         raise HTTPException(
-#             status_code=500,
-#             detail={
-#                 "id": "",
-#                 "inv": "0",
-#                 "goods": "",
-#                 "error": "Internal server error"
-#             }
-#         )
-#
-#
-# @app_uvi.post("/ggsel_webhook")
-# async def payment_webhook(request: Request, response: Response):
-#     try:
-#         payment_data = await request.json()
-#         print(payment_data)
-#         status = await payment_async_logic_ggsell(payment_data)
-#         return status
-#     except Exception as e:
-#         logging.error(f"Ошибка обработки платежа: {e}")
-#         raise HTTPException(
-#             status_code=500,
-#             detail={
-#                 "id": "",
-#                 "inv": "0",
-#                 "goods": "",
-#                 "error": "Internal server error"
-#             }
-#         )
-#
-# @app_uvi.post("/ggsel_webhook_new")
-# async def payment_webhook(request: Request, response: Response):
-#     try:
-#         payment_data = await request.json()
-#         print(payment_data)
-#         status = await payment_async_logic_ggsell(payment_data)
-#         return status
-#     except Exception as e:
-#         logging.error(f"Ошибка обработки платежа: {e}")
-#         raise HTTPException(
-#             status_code=500,
-#             detail={
-#                 "id": "",
-#                 "inv": "0",
-#                 "goods": "",
-#                 "error": "Internal server error"
-#             }
-#         )
-
 async def on_startup(dispatcher, **kwargs):
     """Действия при запуске бота"""
-    asyncio.create_task(run_webserver())  # Запуск Uvicorn в фоне
-    # asyncio.create_task(gg.order_delivery_loop())
-    #asyncio.create_task(aio_gg.order_delivery_loop())
+    asyncio.create_task(run_webserver())
 
 
 async def main():

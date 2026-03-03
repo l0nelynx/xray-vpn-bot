@@ -1,41 +1,15 @@
-FROM python:3.13-slim AS builder
+FROM python:3.13-alpine
 
-WORKDIR /usr/src/build
+WORKDIR /usr/src/app
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    g++ \
-    python3-dev \
-    patchelf \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY requirements.txt .
-
-RUN pip install --no-cache-dir -r requirements.txt nuitka
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+RUN touch ./db.sqlite3
+RUN apk add --no-cache bash curl
 
 COPY ./app ./app
 COPY ./uvicorn ./uvicorn
 COPY ./main.py ./main.py
 COPY ./support.py ./support.py
 
-RUN python -m nuitka \
-    --standalone \
-    --include-package=uvicorn \
-    --include-package=fastapi \
-    --output-dir=dist \
-    main.py
-
-FROM ubuntu:24.04
-
-WORKDIR /usr/src/app
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-
-# Копируем результат компиляции (всю папку .dist)
-COPY --from=builder /usr/src/build/dist/main.dist ./dist
-RUN touch ./db.sqlite3
-
-# Указываем путь к исполняемому файлу
-CMD ["./dist/main.bin"]
+CMD ["/bin/sh", "-c", "python main.py"]
