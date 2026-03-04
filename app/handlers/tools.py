@@ -12,8 +12,8 @@ import app.keyboards as kb
 import app.locale.lang_ru as ru
 import app.marzban.templates as templates
 from app.handlers.events import main_menu
+from app.handlers.subscription_service import deliver_subscription, SubscriptionType
 from aiogram import Bot
-# from aiogram.types import ChatMemberUnion
 from aiogram.enums.chat_member_status import ChatMemberStatus
 
 
@@ -112,114 +112,44 @@ async def startup_user_dialog(message):
                 await main_menu(message, menu_type="new")
 
 
-async def success_payment_handler(message: Message, callback: Message, tariff_days):
-    # await message.answer(text="🥳Оплата прошла успешно!🤗")
-    await bot.send_message(chat_id=secrets.get('admin_id'),
-                           text=f"Транзакция ID - TG_STARS\n"
-                                f"Пользователь - @{callback.from_user.username}\n"
-                                f"UserId - {callback.from_user.id}\n"
-                                f"Количество дней - {tariff_days}\n")
-    user_info = await get_user_info(callback.from_user.username)
-    if user_info == 404:
-        # print(user_info)
-        print("Пользователь не найден - создание нового согласно тарифу")
-        buyer_nfo = await add_new_user_info(callback.from_user.username,
-                                            callback.from_user.id,
-                                            limit=0,
-                                            res_strat="no_reset",
-                                            expire_days=tariff_days,
-                                           template=templates.vless_france)
-        expire_day = await get_user_days(buyer_nfo)
-        sub_link = buyer_nfo["subscription_url"]
-        await message.answer(text=f"❤️Cпасибо за покупку!\n\n"
-                                  f"<b>Подписка оформлена</b>\n"
-                                  f"Подписка будет действовать дней: {expire_day}\n"
-                                  f"Ваша ссылка для подключения:\n"
-                                  f"<code>{sub_link}</code>", parse_mode="HTML", reply_markup=kb.connect(sub_link))
-    else:
-        print("User found setting up new user info")
-        sub_link = user_info["subscription_url"]
-        status = user_info["status"]
-        limit = user_info["data_limit"]
-        if user_info["expire"] is None:
-            expire_day = "Unlimited"
-        else:
-            expire_day = await get_user_days(user_info)
-        if status == "active" and limit is None:
-            buyer_nfo = await set_user_info(callback.from_user.username,
-                                            limit=0,
-                                            res_strat='no_reset',
-                                            expire_days=(expire_day + tariff_days),
-                                           template=templates.vless_france)
-            expire_day = expire_day + tariff_days
-            await message.answer(text=f"❤️Cпасибо за покупку!\n\n"
-                                      f"<b>Подписка успешно продлена еще на месяц</b>\n"
-                                      f"Осталось дней: {expire_day}\n"
-                                      f"Ваша ссылка для подключения:\n"
-                                      f"<code>{sub_link}</code>", parse_mode="HTML",
-                                 reply_markup=kb.connect(sub_link))
-
-        else:
-            buyer_nfo = await set_user_info(callback.from_user.username,
-                                            limit=0,
-                                            res_strat="no_reset",
-                                            expire_days=tariff_days,
-                                           template=templates.vless_france)
-            expire_day = await get_user_days(buyer_nfo)
-            sub_link = buyer_nfo["subscription_url"]
-            await message.answer(text=f"❤️Cпасибо за покупку!\n\n"
-                                      f"<b>Подписка обновлена</b>\n"
-                                      f"Осталось дней: {expire_day}\n"
-                                      f"Ваша ссылка для подключения:\n"
-                                      f"<code>{sub_link}</code>", parse_mode="HTML",
-                                 reply_markup=kb.connect(sub_link))
+async def success_payment_handler(message: Message, callback: Message, tariff_days: int):
+    """
+    Unified handler for successful payment from any payment method (Stars, Crypto, etc.)
+    Uses the subscription service for consistent message formatting and logic.
+    """
+    await deliver_subscription(
+        message=message,
+        username=callback.from_user.username,
+        user_id=callback.from_user.id,
+        days=tariff_days,
+        subscription_type=SubscriptionType.PAID,
+        payment_method="TG_STARS",
+        data_limit_gb=None,  # Unlimited for paid subscription
+        reset_strategy="no_reset",
+    )
 
 
-async def free_sub_handler(callback, free_days, free_limit, override=False):
-    user_info = await get_user_info(callback.from_user.username)
-    # user_info = await get_user_info(message)
-    if user_info == 404:
-        print("User not found - making a new one")
-        buyer_nfo = await add_new_user_info(callback.from_user.username,
-                                            callback.from_user.id,
-                                            free_limit * 1024 * 1024 * 1024,
-                                            'month',
-                                            free_days)
-        print(buyer_nfo)
-        expire_day = await get_user_days(buyer_nfo)
-        sub_link = buyer_nfo["subscription_url"]
-        await callback.message.edit_text(text=f"<b>Подписка оформлена</b>\n"
-                                              f"Подписка будет действовать дней: {expire_day}\n"
-                                              f"Ваша ссылка для подключения:\n"
-                                              f"<code>{sub_link}</code>", parse_mode="HTML",
-                                         reply_markup=kb.connect(sub_link))
-    else:
-        print("User found setting up new user info")
-        sub_link = user_info["subscription_url"]
-        # status = user_info["status"]
-        # limit = user_info["data_limit"]
-        if user_info["expire"] is None:
-            expire_day = "Unlimited"
-            new_expire_day = "Unlimited"
-        else:
-            expire_day = await get_user_days(user_info)
-        new_expire_day = free_days
-        if user_info["expire"] == 0 or override or user_info["status"] != 'active':
-            buyer_nfo = await set_user_info(callback.from_user.username,
-                                            free_limit * 1024 * 1024 * 1024,
-                                            'month',
-                                            free_days)
-            await callback.message.edit_text(text=f"<b>Подписка успешно обновлена</b>\n"
-                                               f"Осталось дней: {new_expire_day}\n"
-                                               f"Ваша ссылка для подключения:\n"
-                                               f"<code>{sub_link}</code>", parse_mode="HTML",
-                                          reply_markup=kb.connect(sub_link))
-        else:
-            await callback.message.edit_text(text=f"<b>Бесплатная подписка уже активна</b>\n"
-                                               f"Осталось дней: {expire_day}\n"
-                                               f"Ваша ссылка для подключения:\n"
-                                               f"<code>{sub_link}</code>", parse_mode="HTML",
-                                          reply_markup=kb.connect(sub_link))
+async def free_sub_handler(callback: CallbackQuery, free_days: int, free_limit: int, override: bool = False):
+    """
+    Unified handler for free subscription delivery.
+    Uses the subscription service for consistent message formatting and logic.
+
+    Args:
+        callback: Callback query object
+        free_days: Number of days for free subscription
+        free_limit: Data limit in GB for free subscription
+        override: Force override existing subscription
+    """
+    await deliver_subscription(
+        message=callback,
+        username=callback.from_user.username,
+        user_id=callback.from_user.id,
+        days=free_days,
+        subscription_type=SubscriptionType.FREE,
+        payment_method="FREE",
+        data_limit_gb=free_limit,
+        reset_strategy="month",
+    )
 
 
 async def subscription_info(callback: CallbackQuery):

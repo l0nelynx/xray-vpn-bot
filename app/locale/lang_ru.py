@@ -216,3 +216,64 @@ privacy_policy = f"""
 
 Контакты: {secrets.get('support_bot_id')}
 """
+
+# Сообщения об ошибках и статусе
+subscription_messages = {
+    'payment_success_thanks': "❤️ Спасибо за покупку!",
+    'payment_success_new': "✅ <b>Подписка оформлена</b>",
+    'payment_success_extended': "✅ <b>Подписка успешно продлена еще на месяц</b>",
+    'payment_success_updated': "✅ <b>Подписка обновлена</b>",
+    'free_success_new': "<b>Подписка оформлена</b>",
+    'free_success_updated': "<b>Подписка успешно обновлена</b>",
+    'free_already_active': "<b>Бесплатная подписка уже активна</b>",
+    'subscription_link': "Ваша ссылка для подключения:",
+    'days_remaining': "Осталось дней: {days}",
+    'days_will_last': "Подписка будет действовать дней: {days}",
+    'user_not_found': "Пользователь не найден - создание нового согласно тарифу",
+    'user_found_updating': "User found setting up new user info",
+}
+
+# Форматированные сообщения для выдачи подписки
+subscription_response_templates = {
+    'new_paid': """❤️ Спасибо за покупку!
+
+<b>Подписка оформлена</b>
+Подписка будет действовать дней: {days}
+Ваша ссылка для подключения:
+<code>{link}</code>""",
+
+    'extended_paid': """❤️ Спасибо за покупку!
+
+<b>Подписка успешно продлена еще на месяц</b>
+Осталось дней: {days}
+Ваша ссылка для подключения:
+<code>{link}</code>""",
+
+    'updated_paid': """❤️ Спасибо за покупку!
+
+<b>Подписка обновлена</b>
+Осталось дней: {days}
+Ваша ссылка для подключения:
+<code>{link}</code>""",
+
+    'new_free': """<b>Подписка оформлена</b>
+Подписка будет действовать дней: {days}
+Ваша ссылка для подключения:
+<code>{link}</code>""",
+
+    'updated_free': """<b>Подписка успешно обновлена</b>
+Осталось дней: {days}
+Ваша ссылка для подключения:
+<code>{link}</code>""",
+
+    'already_active_free': """<b>Бесплатная подписка уже активна</b>
+Осталось дней: {days}
+Ваша ссылка для подключения:
+<code>{link}</code>""",
+}
+
+# Сообщение для администратора о транзакции
+admin_transaction_message = """Транзакция ID - {payment_method}
+Пользователь - @{username}
+UserId - {user_id}
+Количество дней - {days}"""

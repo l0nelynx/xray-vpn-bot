@@ -13,11 +13,20 @@ import app.keyboards as kb
 from app.api.a_pay import create_sbp_link as apays_create_sbp_link
 from app.api.crystal_pay import crystal_create_link
 from app.handlers.tools import success_payment_handler
+from app.handlers.subscription_service import deliver_subscription, SubscriptionType
 from app.locale.lang_ru import text_pay_method, text_extend_pay_method
 from app.settings import bot, cp
 
 
 router = Router()
+
+# Маппинг методов оплаты на названия для логирования
+PAYMENT_METHOD_NAMES = {
+    'stars': 'TG_STARS',
+    'crypto': 'CRYPTOPAY',
+    'SBP_APAY': 'SBP_APAY',
+    'CRYSTAL': 'CRYSTAL_PAY'
+}
 
 
 class PaymentState(StatesGroup):  # FSM States init
@@ -80,12 +89,12 @@ async def invoice_handler(callback: CallbackQuery, callback_data: kb.PaymentCall
             currency="XTR",
             reply_markup=kb.payment_keyboard(int(round(amount))),
         )
-        logging.info("Запускаю инвойс")
+        logging.info("Запускаю инвойс для TG Stars")
     elif method == 'crypto':
         invoice = await cp.create_invoice(amount, "USDT", payload = f"{days}")
         await callback.message.edit_text(f"pay: {invoice.bot_invoice_url}")
         invoice.poll(message=callback)
-        logging.info("Запускаю инвойс")
+        logging.info("Запускаю инвойс для Crypto")
         await state.clear()
         await state.set_state(PaymentState.PrePayment)
     # elif method == 'SBP':
@@ -96,12 +105,15 @@ async def invoice_handler(callback: CallbackQuery, callback_data: kb.PaymentCall
         amount = int(round(amount * 100))
         link = await apays_create_sbp_link(callback=callback, amount=amount, days=days)
         await callback.message.edit_text(f"Ссылка для оплаты: {link}", reply_markup=kb.to_main)
+        logging.info("Запускаю ссылку оплаты для SBP APAY")
     elif method == 'CRYSTAL':
         link = await crystal_create_link(callback, amount, 'RUB', days)
         await callback.message.edit_text(f"Ссылка для оплаты: {link}", reply_markup=kb.to_main)
+        logging.info("Запускаю ссылку оплаты для Crystal Pay")
     else:
         print('WRONG METHOD FROM KEYBOARD!')
-    await state.update_data(PaymentDays=days)
+
+    await state.update_data(PaymentDays=days, PaymentMethod=method)
     await state.set_state(PaymentState.PaymentInvoice)
 
 
@@ -109,7 +121,16 @@ async def invoice_handler(callback: CallbackQuery, callback_data: kb.PaymentCall
 async def payment_handler(invoice: Invoice, message: CallbackQuery):
     await message.message.answer(f"Заказ #{invoice.invoice_id} успешно оплачен")
     days = int(invoice.payload)
-    await success_payment_handler(message.message, message, tariff_days=int(days))
+    await deliver_subscription(
+        message=message.message,
+        username=message.from_user.username,
+        user_id=message.from_user.id,
+        days=days,
+        subscription_type=SubscriptionType.PAID,
+        payment_method=PAYMENT_METHOD_NAMES['crypto'],
+        data_limit_gb=None,
+        reset_strategy="no_reset"
+    )
 
 
 @router.pre_checkout_query()
@@ -124,6 +145,17 @@ async def success_stars_payment_handler(message: Message, state: FSMContext):
     states_data = await state.get_data()
     print(states_data)
     days = states_data.get("PaymentDays")
-    await success_payment_handler(message, message, tariff_days=int(days))
+
+    await deliver_subscription(
+        message=message,
+        username=message.from_user.username,
+        user_id=message.from_user.id,
+        days=int(days),
+        subscription_type=SubscriptionType.PAID,
+        payment_method=PAYMENT_METHOD_NAMES['stars'],
+        data_limit_gb=None,
+        reset_strategy="no_reset"
+    )
+
     await state.clear()
     await state.set_state(PaymentState.PrePayment)
