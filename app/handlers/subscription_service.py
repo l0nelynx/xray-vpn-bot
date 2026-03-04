@@ -55,7 +55,7 @@ async def get_subscription_scenario(
 
 
 async def deliver_subscription(
-    message: Union[Message, CallbackQuery],
+    message: Union[Message, CallbackQuery, None],
     username: str,
     user_id: int,
     days: int,
@@ -67,6 +67,19 @@ async def deliver_subscription(
     """
     Unified function to deliver subscription to user.
     Handles both paid and free subscriptions with proper message templates.
+
+    Args:
+        message: Message, CallbackQuery object, or None for background tasks
+        username: Telegram username
+        user_id: Telegram user ID
+        days: Number of days for subscription
+        subscription_type: Type of subscription (FREE or PAID)
+        payment_method: Payment method for admin notification
+        data_limit_gb: Data limit in GB (None for unlimited)
+        reset_strategy: Traffic reset strategy
+
+    Returns:
+        dict: Result of subscription delivery with status and details
     """
     try:
         # Lazy import to avoid circular dependency
@@ -110,7 +123,7 @@ async def deliver_subscription(
 
 
 async def _handle_new_user(
-    message: Union[Message, CallbackQuery],
+    message: Union[Message, CallbackQuery, None],
     username: str,
     user_id: int,
     days: int,
@@ -139,13 +152,13 @@ async def _handle_new_user(
         days=expire_day, link=sub_link
     )
 
-    await _send_response(message, response_text, sub_link)
+    await _send_response(message, response_text, sub_link, user_id)
 
     return {"days": expire_day, "link": sub_link}
 
 
 async def _handle_extend_subscription(
-    message: Union[Message, CallbackQuery],
+    message: Union[Message, CallbackQuery, None],
     username: str,
     user_id: int,
     days: int,
@@ -178,13 +191,13 @@ async def _handle_extend_subscription(
         days=final_expire_day, link=sub_link
     )
 
-    await _send_response(message, response_text, sub_link)
+    await _send_response(message, response_text, sub_link, user_id)
 
     return {"days": final_expire_day, "link": sub_link}
 
 
 async def _handle_update_subscription(
-    message: Union[Message, CallbackQuery],
+    message: Union[Message, CallbackQuery, None],
     username: str,
     user_id: int,
     days: int,
@@ -214,13 +227,13 @@ async def _handle_update_subscription(
         days=expire_day, link=sub_link
     )
 
-    await _send_response(message, response_text, sub_link)
+    await _send_response(message, response_text, sub_link, user_id)
 
     return {"days": expire_day, "link": sub_link}
 
 
 async def _handle_already_active(
-    message: Union[Message, CallbackQuery], username: str, subscription_type: SubscriptionType
+    message: Union[Message, CallbackQuery, None], username: str, subscription_type: SubscriptionType
 ) -> dict:
     """Handle case when free subscription is already active"""
     # Lazy import to avoid circular dependency
@@ -234,21 +247,41 @@ async def _handle_already_active(
         days=expire_day, link=sub_link
     )
 
-    await _send_response(message, response_text, sub_link)
+    # Get user_id from message or use a placeholder for background tasks
+    user_id = None
+    if isinstance(message, Message):
+        user_id = message.from_user.id
+    elif isinstance(message, CallbackQuery):
+        user_id = message.from_user.id
+
+    await _send_response(message, response_text, sub_link, user_id)
 
     return {"days": expire_day, "link": sub_link, "already_active": True}
 
 
 async def _send_response(
-    message: Union[Message, CallbackQuery], text: str, sub_link: str
+    message: Union[Message, CallbackQuery, None], text: str, sub_link: str, user_id: Optional[int] = None
 ) -> None:
     """Send response message to user with subscription details"""
     keyboard = kb.connect(sub_link)
 
     if isinstance(message, Message):
+        # Прямой ответ на сообщение пользователя
         await message.answer(text=text, parse_mode="HTML", reply_markup=keyboard)
-    else:
+    elif isinstance(message, CallbackQuery):
+        # Редактирование сообщения из callback query
         await message.message.edit_text(text=text, parse_mode="HTML", reply_markup=keyboard)
+    elif message is None and user_id is not None:
+        # Отправка сообщения напрямую при background task (например, от вебхука)
+        await bot.send_message(
+            chat_id=user_id,
+            text=text,
+            parse_mode="HTML",
+            reply_markup=keyboard
+        )
+    else:
+        # Если нет способа отправить сообщение, логируем ошибку
+        logging.warning(f"Cannot send subscription message: message={message}, user_id={user_id}")
 
 
 async def log_transaction_to_admin(
