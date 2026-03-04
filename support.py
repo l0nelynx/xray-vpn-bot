@@ -54,6 +54,20 @@ class SupportStates(StatesGroup):
 
 
 # ======================
+# ФИЛЬТРЫ
+# ======================
+
+def is_not_admin(message: Message) -> bool:
+    """Проверяет что сообщение не от администратора"""
+    return message.from_user.id != ADMIN_ID
+
+
+def is_admin(message: Message) -> bool:
+    """Проверяет что сообщение от администратора"""
+    return message.from_user.id == ADMIN_ID
+
+
+# ======================
 # ОБРАБОТЧИКИ ДЛЯ ПОЛЬЗОВАТЕЛЕЙ
 # ======================
 
@@ -64,7 +78,7 @@ async def cmd_start(message: Message):
                          "Напишите ваш вопрос или отправьте изображение, и мы ответим в ближайшее время.")
 
 
-@dp.message(F.text)
+@dp.message(F.text, F.func(is_not_admin))
 async def handle_user_text_message(message: Message):
     """Обработчик текстовых сообщений от пользователей (без привязки к состоянию)"""
     user_id = message.from_user.id
@@ -102,7 +116,7 @@ async def handle_user_text_message(message: Message):
     await message.answer("✅ Ваше сообщение отправлено! Ожидайте ответа от поддержки.")
 
 
-@dp.message(F.photo)
+@dp.message(F.photo, F.func(is_not_admin))
 async def handle_user_photo_message(message: Message):
     """Обработчик фото от пользователей"""
     user_id = message.from_user.id
@@ -144,7 +158,7 @@ async def handle_user_photo_message(message: Message):
     await message.answer("✅ Ваше фото отправлено! Ожидайте ответа от поддержки.")
 
 
-@dp.message(F.document)
+@dp.message(F.document, F.func(is_not_admin))
 async def handle_user_document_message(message: Message):
     """Обработчик документов от пользователей"""
     user_id = message.from_user.id
@@ -187,7 +201,7 @@ async def handle_user_document_message(message: Message):
     await message.answer("✅ Ваш документ отправлен! Ожидайте ответа от поддержки.")
 
 
-@dp.message(F.video)
+@dp.message(F.video, F.func(is_not_admin))
 async def handle_user_video_message(message: Message):
     """Обработчик видео от пользователей"""
     user_id = message.from_user.id
