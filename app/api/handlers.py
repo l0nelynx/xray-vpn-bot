@@ -9,12 +9,25 @@ import asyncio
 import logging
 
 
-async def send_alert(order_id: str, usrname: str, usrid: int, tariff_days: int):
-    await bot.send_message(chat_id=secrets.get('admin_id'),
-                           text=f"Транзакция ID - {order_id}\n"
-                                f"Пользователь - @{usrname}\n"
-                                f"UserId - {usrid}\n"
-                                f"Количество дней - {tariff_days}\n")
+async def send_alert(order_id: str, usrname: str, usrid: int, tariff_days: int, disable_notification: bool = False):
+    """
+    Отправляет уведомление администратору о транзакции.
+
+    Args:
+        order_id: ID заказа
+        usrname: Имя пользователя
+        usrid: ID пользователя в Telegram
+        tariff_days: Количество дней тарифа
+        disable_notification: Отключить звук уведомления (для FREE транзакций)
+    """
+    await bot.send_message(
+        chat_id=secrets.get('admin_id'),
+        text=f"Транзакция ID - {order_id}\n"
+             f"Пользователь - @{usrname}\n"
+             f"UserId - {usrid}\n"
+             f"Количество дней - {tariff_days}\n",
+        disable_notification=disable_notification
+    )
 
 
 async def payment_process_background(order_id: str):
@@ -34,12 +47,16 @@ async def payment_process_background(order_id: str):
         usrname = userdata.get("username") or userdata.get("user_username") or f"user_{usrid}"
         tariff_days = userdata.get("days_ordered")
 
+        # Определяем тип транзакции (FREE или PAID)
+        is_free_transaction = userdata.get("is_free") or userdata.get("type") == "free" or userdata.get("payment_type") == "free"
+
         if not usrid or not tariff_days:
             logging.error(f"Missing required data in transaction: user_id={usrid}, days={tariff_days}")
             return
 
         if userdata.get('status') == 'created':
-            await send_alert(order_id, usrname, usrid, tariff_days)
+            # Отправляем уведомление с disable_notification=True для FREE транзакций
+            await send_alert(order_id, usrname, usrid, tariff_days, disable_notification=is_free_transaction)
             await rq.update_order_status(order_id, 'confirmed')
 
             # Используем новую унифицированную систему доставки подписок
