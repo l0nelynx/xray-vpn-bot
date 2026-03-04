@@ -28,6 +28,9 @@ services:
       context: .
       dockerfile: Dockerfile_support
     volumes:
+      - type: bind
+        source: ./db/db.sqlite3
+        target: /usr/src/app/db/db.sqlite3
       - ./config.yml:/usr/src/app/config.yml
     restart: unless-stopped
     healthcheck:
