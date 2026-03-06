@@ -2,12 +2,14 @@ from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery
 import aiohttp
+import logging
 import app.database.requests as rq
 import app.keyboards as kb
 import app.locale.lang_ru as ru
 from app.handlers.broadcast import admin_broadcast
 from app.handlers.events import userlist
-from app.handlers.tools import startup_user_dialog, free_sub_handler, subscription_info, check_tg_subscription
+from app.handlers.tools import startup_user_dialog, free_sub_handler, subscription_info, check_tg_subscription, \
+    get_user_days
 
 from app.settings import secrets
 from app.settings import bot
@@ -141,4 +143,151 @@ async def sub_check(callback: CallbackQuery):
     print(secrets.get("admin_id"))
     print(sub_status)
     if sub_status:
-        await free_sub_handler(callback, secrets.get('free_days'), secrets.get('free_traffic')+10, True)
+        await free_sub_handler(callback, secrets.get('free_days'), secrets.get('free_traffic'), True)
+
+
+@router.callback_query(F.data == 'Migrate_RemnaWave')
+async def migrate_to_remnawave_confirm(callback: CallbackQuery):
+    """Показываем подтвержение миграции"""
+    from app.locale.lang_ru import marzban_user_with_upgrade_option
+
+    await callback.message.edit_text(
+        text=marzban_user_with_upgrade_option,
+        parse_mode='HTML',
+        reply_markup=kb.get_migration_confirm()
+    )
+
+
+@router.callback_query(F.data == 'confirm_migrate')
+async def process_migration(callback: CallbackQuery):
+    """Обрабатывает миграцию пользователя из Marzban в RemnaWave"""
+    from app.locale.lang_ru import migration_in_progress, migration_success, migration_error
+    from app.handlers.tools import detect_user_api_provider, get_user_info, add_new_user_info
+    import app.database.requests as rq
+
+    username = callback.from_user.username
+    user_id = callback.from_user.id
+
+    try:
+        # Показываем статус "в процессе"
+        await callback.message.edit_text(
+            text=migration_in_progress,
+            parse_mode='HTML'
+        )
+
+        # Определяем API провайдер
+        api_provider = await detect_user_api_provider(user_id, username)
+
+        # Если пользователь уже на RemnaWave, отправляем ошибку
+        if api_provider == "remnawave":
+            await callback.message.edit_text(
+                text="❌ <b>Вы уже зарегистрированы в Beta!</b>",
+                parse_mode='HTML',
+                reply_markup=kb.get_to_main()
+            )
+            return
+
+        # Получаем текущую информацию пользователя из Marzban
+        user_info = await get_user_info(username, api="marzban")
+
+        if user_info == 404:
+            await callback.message.edit_text(
+                text=migration_error.format(support_bot=secrets.get('support_bot_id')),
+                parse_mode='HTML',
+                reply_markup=kb.get_to_main()
+            )
+            return
+
+        # Определяем параметры подписки
+        # expire_days = user_info.get("expire", 30)
+        expire_days = await get_user_days(user_info)
+        print(f"DAYS_{expire_days}")
+        data_limit = user_info.get("data_limit", 0)
+
+        # Определяем тип подписки (Pro или Free)
+        is_pro = user_info.get("status") == "active" and data_limit is None
+
+        # Выбираем squad_id в зависимости от типа подписки
+        if is_pro:
+            squad_id = secrets.get("rw_pro_id")
+            description = "Migrated from Marzban (Pro)"
+        else:
+            squad_id = secrets.get("rw_free_id")
+            description = "Migrated from Marzban (Free)"
+            # Для Free подписки устанавливаем лимит 50GB если он был 0
+        if data_limit == 0 or data_limit is None:
+                data_limit = 0
+        print(f"LIMIT_{data_limit}")
+
+        # Создаем пользователя в RemnaWave
+        new_user_info = await add_new_user_info(
+            name=username,
+            userid=user_id,
+            limit=data_limit,
+            res_strat="month",
+            expire_days=expire_days,
+            api="remnawave",
+            email=f"{username}@marzban.ru",
+            description=description,
+            squad_id=squad_id
+        )
+
+        if not new_user_info:
+            await callback.message.edit_text(
+                text=migration_error.format(support_bot=secrets.get('support_bot_id')),
+                parse_mode='HTML',
+                reply_markup=kb.get_to_main()
+            )
+            return
+
+        # Обновляем информацию в БД
+        print(f"{user_id}_USERID")
+        # await rq.update_user_api_info(
+        #     tg_id=user_id,
+        #     username=username,
+        #     vless_uuid=new_user_info.get("uuid"),
+        #     api_provider="remnawave"
+        # )
+        await rq.update_user_api_info(tg_id=int(user_id),
+                                      username=username,
+                                      vless_uuid=new_user_info.get("uuid"),
+                                      api_provider="remnawave")
+
+
+        # Отправляем сообщение об успешной миграции
+        success_text = migration_success.format(
+            link=new_user_info.get("subscription_url"),
+            days=expire_days,
+            limit=data_limit if data_limit > 0 else "Без лимита"
+        )
+
+        await callback.message.edit_text(
+            text=success_text,
+            parse_mode='HTML',
+            reply_markup=kb.connect(new_user_info.get("subscription_url"))
+        )
+
+        # Отправляем уведомление администратору
+        admin_message = f"""✅ <b>Миграция пользователя успешна</b>
+
+👤 Пользователь: @{username}
+🆔 User ID: {user_id}
+🔄 Источник: Marzban
+📍 Назначение: RemnaWave
+⏱️ Дней подписки: {expire_days}
+💾 Лимит трафика: {data_limit if data_limit > 0 else 'Без лимита'} GB
+🏷️ Тип: {'Pro' if is_pro else 'Free'}"""
+
+        await bot.send_message(
+            chat_id=secrets.get('admin_id'),
+            text=admin_message,
+            parse_mode='HTML'
+        )
+
+    except Exception as e:
+        logging.error(f"Error during migration for {username}: {e}")
+        await callback.message.edit_text(
+            text=migration_error.format(support_bot=secrets.get('support_bot_id')),
+            parse_mode='HTML',
+            reply_markup=kb.get_to_main()
+        )

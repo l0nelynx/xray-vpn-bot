@@ -31,13 +31,23 @@ async def run_webserver():
 # Загрузка конфигурации при импорте модуля
 try:
     secrets = load_config()
+    print(f"✓ Config loaded successfully. Token: {secrets.get('token')[:10] if secrets.get('token') else 'NOT FOUND'}...")
 except Exception as e:
-    print(f"⚠️ Error loading secrets: {e}")
+    print(f"❌ Error loading secrets: {e}")
+    import traceback
+    traceback.print_exc()
     secrets = {}  # Fallback to empty dict
 
+# Убедитесь, что токен существует перед созданием бота
+if not secrets.get('token'):
+    raise ValueError("❌ CRITICAL: 'token' is not set in config.yml!")
+
+if not secrets.get('ggsel_bot_token'):
+    print("⚠️ Warning: 'ggsel_bot_token' is not set in config.yml")
+
+if not secrets.get('crypto_bot_token'):
+    print("⚠️ Warning: 'crypto_bot_token' is not set in config.yml")
 
 bot = Bot(token=secrets.get('token'))
-ggsel_bot = Bot(token=secrets.get('ggsel_bot_token'))
-cp = CryptoPay(secrets.get('crypto_bot_token'))
-
-
+# ggsel_bot = Bot(token=secrets.get('ggsel_bot_token')) if secrets.get('ggsel_bot_token') else None
+cp = CryptoPay(secrets.get('crypto_bot_token')) if secrets.get('crypto_bot_token') else None

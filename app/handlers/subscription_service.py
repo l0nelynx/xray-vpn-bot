@@ -27,16 +27,24 @@ class SubscriptionScenario(Enum):
     EXTEND = "extend"
     UPDATE = "update"
     ALREADY_ACTIVE = "already_active"
+    MIGRATION = "migration"
 
 
 async def get_subscription_scenario(
+    user_id: int,
     user_info: dict,
+    username: str,
     subscription_type: SubscriptionType,
     current_days: Optional[int] = None,
 ) -> SubscriptionScenario:
     """Определяет сценарий выдачи подписки"""
     if user_info == 404:
+        # api_provider = await detect_user_api_provider(user_id, username)
+        # if api_provider == "marzban":
+            # user_info = await get_user_info(username, "marzban")
+        #else:
         return SubscriptionScenario.NEW_USER
+
 
     status = user_info.get("status")
     limit = user_info.get("data_limit")
@@ -83,15 +91,56 @@ async def deliver_subscription(
     """
     try:
         # Lazy import to avoid circular dependency
-        from app.handlers.tools import get_user_info
+        from app.handlers.tools import get_user_info, detect_user_api_provider, get_user_days, add_new_user_info
+        import app.database.requests as rq
 
+        # Проверяем, нужна ли миграция из Marzban
+        api_provider = await detect_user_api_provider(user_id, username)
+
+        if api_provider == "marzban":
+            # Автоматическая миграция Marzban -> RemnaWave
+            marzban_info = await get_user_info(username, api="marzban")
+            if marzban_info != 404:
+                expire_days = await get_user_days(marzban_info)
+                marzban_data_limit = marzban_info.get("data_limit", 0)
+                is_pro = marzban_info.get("status") == "active" and marzban_data_limit is None
+
+                migration_squad_id = secrets.get("rw_pro_id") if is_pro else secrets.get("rw_free_id")
+                migration_limit = 0 if (marzban_data_limit == 0 or marzban_data_limit is None) else marzban_data_limit
+
+                new_user_info = await add_new_user_info(
+                    name=username,
+                    userid=user_id,
+                    limit=migration_limit,
+                    expire_days=expire_days,
+                    api="remnawave",
+                    email=f"{username}@marzban.ru",
+                    description=f"Auto-migrated from Marzban ({'Pro' if is_pro else 'Free'})",
+                    squad_id=migration_squad_id
+                )
+
+                if new_user_info:
+                    logging.info(f"Auto-migrated {username} from Marzban to RemnaWave")
+                    await bot.send_message(
+                        chat_id=secrets.get('admin_id'),
+                        text=f"🔄 <b>Авто-миграция при покупке</b>\n"
+                             f"👤 @{username}\n"
+                             f"🆔 {user_id}\n"
+                             f"⏱️ Дней: {expire_days}\n"
+                             f"🏷️ {'Pro' if is_pro else 'Free'}",
+                        parse_mode='HTML'
+                    )
+                else:
+                    logging.error(f"Auto-migration failed for {username}")
+
+        # Стандартная логика — get_user_info теперь найдёт пользователя в RemnaWave
         user_info = await get_user_info(username)
 
         scenario = await get_subscription_scenario(
-            user_info, subscription_type, days
+            user_id, user_info, username, subscription_type, days
         )
 
-        data_limit = data_limit_gb * 1024 * 1024 * 1024 if data_limit_gb else 0
+        data_limit = data_limit_gb if data_limit_gb else 0
 
         await log_transaction_to_admin(
             username=username,
@@ -134,14 +183,23 @@ async def _handle_new_user(
     """Handle new user subscription creation"""
     # Lazy import to avoid circular dependency
     from app.handlers.tools import add_new_user_info, get_user_days
-
+    if subscription_type == SubscriptionType.FREE:
+        squad_id = secrets.get("rw_free_id")
+    else:
+        squad_id = secrets.get("rw_pro_id")
+    print("Days:", days)
+    print("Data Limit (GB):", data_limit)
     buyer_info = await add_new_user_info(
         name=username,
         userid=user_id,
         limit=data_limit,
-        res_strat=reset_strategy,
+        #res_strat=reset_strategy,
         expire_days=days,
         template=templates.vless_france,
+        email=f"{username}@marzban.ru",
+        description="Telegram subscription",
+        squad_id=squad_id,
+        api="remnawave"
     )
 
     expire_day = await get_user_days(buyer_info)
@@ -180,6 +238,7 @@ async def _handle_extend_subscription(
         res_strat="no_reset",
         expire_days=new_expire_days,
         template=templates.vless_france,
+        api="remnawave"
     )
 
     final_expire_day = await get_user_days(buyer_info)
@@ -215,6 +274,7 @@ async def _handle_update_subscription(
         res_strat=reset_strategy,
         expire_days=days,
         template=templates.vless_france,
+        api="remnawave"
     )
 
     expire_day = await get_user_days(buyer_info)

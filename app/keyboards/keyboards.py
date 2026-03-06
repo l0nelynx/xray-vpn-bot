@@ -272,6 +272,60 @@ def get_connect(link: str) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
+def get_main_marzban_pro() -> InlineKeyboardMarkup:
+    """Lazy-loaded main menu for Marzban premium users with migration option"""
+    key = 'main_marzban_pro'
+    cached = KeyboardCache.get(key)
+    if cached:
+        return cached
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔒Продлить подписку", callback_data='Extend_Month')],
+        [InlineKeyboardButton(text="🚀 Миграция на Beta", callback_data='Migrate_RemnaWave')],
+        [InlineKeyboardButton(text="Инструкция по установке", callback_data='Others')],
+        [InlineKeyboardButton(text="Информация о подписке", callback_data='Sub_Info')],
+        [InlineKeyboardButton(text="Пользовательское соглашение", callback_data='Agreement')],
+        [InlineKeyboardButton(text="Политика конфиденциальности", callback_data='Privacy')],
+    ])
+    KeyboardCache.set(key, keyboard)
+    return keyboard
+
+
+def get_main_marzban_free() -> InlineKeyboardMarkup:
+    """Lazy-loaded main menu for Marzban free users with migration option"""
+    key = 'main_marzban_free'
+    cached = KeyboardCache.get(key)
+    if cached:
+        return cached
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔒Приобрести CheezeVPN Premium⭐️", callback_data='Premium')],
+        [InlineKeyboardButton(text="🚀 Миграция на Beta", callback_data='Migrate_RemnaWave')],
+        [InlineKeyboardButton(text="Инструкция по установке", callback_data='Others')],
+        [InlineKeyboardButton(text="Информация о подписке", callback_data='Sub_Info')],
+        [InlineKeyboardButton(text="Пользовательское соглашение", callback_data='Agreement')],
+        [InlineKeyboardButton(text="Политика конфиденциальности", callback_data='Privacy')],
+    ])
+    KeyboardCache.set(key, keyboard)
+    return keyboard
+
+
+def get_migration_confirm() -> InlineKeyboardMarkup:
+    """Lazy-loaded migration confirmation keyboard"""
+    key = 'migration_confirm'
+    cached = KeyboardCache.get(key)
+    if cached:
+        return cached
+
+    builder = InlineKeyboardBuilder()
+    builder.button(text="✅ Подтвердить миграцию", callback_data='confirm_migrate')
+    builder.row()
+    builder.button(text="❌ Отмена", callback_data='Main')
+    keyboard = builder.as_markup()
+    KeyboardCache.set(key, keyboard)
+    return keyboard
+
+
 # ============================================================================
 # TARIFF KEYBOARDS WITH CACHING
 # ============================================================================
@@ -341,6 +395,9 @@ def __getattr__(name: str):
         'main_new': get_main_new,
         'main_pro': get_main_pro,
         'main_free': get_main_free,
+        'main_marzban_pro': get_main_marzban_pro,
+        'main_marzban_free': get_main_marzban_free,
+        'migration_confirm': get_migration_confirm,
         'others': get_others,
         'pay_methods': get_pay_methods,
         'starspay_tariffs': get_starspay_tariffs,
