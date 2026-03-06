@@ -106,7 +106,8 @@ async def deliver_subscription(
                 is_pro = marzban_info.get("status") == "active" and marzban_data_limit is None
 
                 migration_squad_id = secrets.get("rw_pro_id") if is_pro else secrets.get("rw_free_id")
-                migration_limit = 0 if (marzban_data_limit == 0 or marzban_data_limit is None) else marzban_data_limit
+                # Marzban возвращает data_limit в байтах, а RemnaWave принимает в GB
+                migration_limit = 0 if (marzban_data_limit == 0 or marzban_data_limit is None) else marzban_data_limit // (1024 * 1024 * 1024)
 
                 new_user_info = await add_new_user_info(
                     name=username,

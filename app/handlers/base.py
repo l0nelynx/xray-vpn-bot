@@ -215,8 +215,11 @@ async def process_migration(callback: CallbackQuery):
             squad_id = secrets.get("rw_free_id")
             description = "Migrated from Marzban (Free)"
             # Для Free подписки устанавливаем лимит 50GB если он был 0
+        # Marzban возвращает data_limit в байтах, а RemnaWave принимает в GB
         if data_limit == 0 or data_limit is None:
                 data_limit = 0
+        else:
+                data_limit = data_limit // (1024 * 1024 * 1024)
         print(f"LIMIT_{data_limit}")
 
         # Создаем пользователя в RemnaWave
