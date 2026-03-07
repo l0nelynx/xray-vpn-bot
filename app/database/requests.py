@@ -1,4 +1,4 @@
-from sqlalchemy import select, update, func, delete
+from sqlalchemy import select, update, func, delete, exists
 
 from app.database.models import User, Transaction
 from app.database.models import async_session
@@ -344,14 +344,19 @@ async def get_users_paginated(page: int, per_page: int = 10):
         total = await session.scalar(select(func.count()).select_from(User))
         total = total or 0
 
+        has_tx = exists(
+            select(Transaction.user_id).where(Transaction.user_id == User.id)
+        ).correlate(User).label("is_paid")
+
         result = await session.execute(
-            select(User)
+            select(User, has_tx)
             .order_by(User.id)
             .offset(page * per_page)
             .limit(per_page)
         )
-        users = result.scalars().all()
-        return users, total
+        rows = result.all()
+        # Возвращаем список кортежей (user, is_paid)
+        return [(row[0], row[1]) for row in rows], total
 
 
 async def get_user_full_info_by_tg_id(tg_id: int) -> dict | None:
@@ -440,3 +445,23 @@ async def delete_users_bulk(tg_ids: list[int]) -> int:
         )
         await session.commit()
         return len(user_ids)
+
+
+async def get_users_without_username() -> list[int]:
+    async with async_session() as session:
+        result = await session.execute(
+            select(User.tg_id).where(
+                (User.username == None) | (User.username == "")  # noqa: E711
+            )
+        )
+        return [row[0] for row in result.all()]
+
+
+async def update_username(tg_id: int, username: str) -> bool:
+    async with async_session() as session:
+        user = await session.scalar(select(User).where(User.tg_id == tg_id))
+        if not user:
+            return False
+        user.username = username
+        await session.commit()
+        return True
