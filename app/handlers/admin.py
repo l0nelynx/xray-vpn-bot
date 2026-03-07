@@ -32,6 +32,7 @@ class AdminState(StatesGroup):
     broadcast_text = State()
     channel_text = State()
     channel_attach_btn = State()
+    user_search = State()
 
 
 def is_admin(user_id: int) -> bool:
@@ -97,14 +98,31 @@ async def admin_back(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(text, parse_mode='HTML')
 
 
-# ==================== Пользователи (reply-кнопка) ====================
+# ==================== Пользователи — helpers ====================
 
-@router.message(F.text == BTN_USERS, F.from_user.id == secrets.get('admin_id'))
-async def admin_users_btn(message: Message):
-    total = await rq.get_users_count()
+# Формат callback: admin_users:{page}:{sort}:{search}
+# sort: id, alpha, paid, free
+# search: строка поиска (пустая = все)
+
+SORT_LABELS = {"id": "По ID", "alpha": "По алфавиту", "paid": "Платные", "free": "Бесплатные"}
+
+
+def _make_cb(page: int, sort: str, search: str) -> str:
+    return f"admin_users:{page}:{sort}:{search}"
+
+
+def _parse_cb(data: str):
+    parts = data.split(":", 3)
+    page = int(parts[1]) if len(parts) > 1 else 0
+    sort = parts[2] if len(parts) > 2 else "id"
+    search = parts[3] if len(parts) > 3 else ""
+    return page, sort, search
+
+
+async def _build_users_list(page: int, sort: str, search: str):
     per_page = 10
+    users, total = await rq.get_users_paginated(page, per_page, sort=sort, search=search)
     total_pages = max(1, math.ceil(total / per_page))
-    users, _ = await rq.get_users_paginated(0, per_page)
 
     buttons = []
     for user, is_paid in users:
@@ -118,18 +136,49 @@ async def admin_users_btn(message: Message):
             )
         ])
 
+    # Навигация
     nav_row = []
-    nav_row.append(InlineKeyboardButton(text=f"1/{total_pages}", callback_data="noop"))
-    if total_pages > 1:
-        nav_row.append(InlineKeyboardButton(text="Вперед ▶", callback_data="admin_users:1"))
+    if page > 0:
+        nav_row.append(InlineKeyboardButton(text="◀", callback_data=_make_cb(page - 1, sort, search)))
+    nav_row.append(InlineKeyboardButton(text=f"{page + 1}/{total_pages}", callback_data="noop"))
+    if page < total_pages - 1:
+        nav_row.append(InlineKeyboardButton(text="▶", callback_data=_make_cb(page + 1, sort, search)))
     buttons.append(nav_row)
 
-    kb = InlineKeyboardMarkup(inline_keyboard=buttons)
-    await message.answer(
-        f"<b>Пользователи</b> (стр. 1/{total_pages}, всего: {total})",
-        parse_mode='HTML',
-        reply_markup=kb
+    # Кнопки сортировки
+    sort_row = []
+    for key, label in SORT_LABELS.items():
+        marker = "• " if key == sort else ""
+        sort_row.append(InlineKeyboardButton(
+            text=f"{marker}{label}",
+            callback_data=_make_cb(0, key, search)
+        ))
+    buttons.append(sort_row[:2])
+    buttons.append(sort_row[2:])
+
+    # Кнопка поиска и сброса
+    search_row = [InlineKeyboardButton(text="Поиск", callback_data="admin_user_search")]
+    if search:
+        search_row.append(InlineKeyboardButton(text="Сбросить поиск", callback_data=_make_cb(0, sort, "")))
+    buttons.append(search_row)
+
+    search_hint = f"\nПоиск: <b>{search}</b>" if search else ""
+    sort_hint = SORT_LABELS.get(sort, "")
+    text = (
+        f"<b>Пользователи</b> (стр. {page + 1}/{total_pages}, всего: {total})\n"
+        f"Сортировка: {sort_hint}{search_hint}"
     )
+
+    kb = InlineKeyboardMarkup(inline_keyboard=buttons)
+    return text, kb
+
+
+# ==================== Пользователи (reply-кнопка) ====================
+
+@router.message(F.text == BTN_USERS, F.from_user.id == secrets.get('admin_id'))
+async def admin_users_btn(message: Message):
+    text, kb = await _build_users_list(0, "id", "")
+    await message.answer(text, parse_mode='HTML', reply_markup=kb)
 
 
 # ==================== Список пользователей (пагинация, inline) ====================
@@ -139,37 +188,33 @@ async def admin_users_list(callback: CallbackQuery):
     if not is_admin(callback.from_user.id):
         return
 
-    page = int(callback.data.split(":")[1])
-    per_page = 10
-    users, total = await rq.get_users_paginated(page, per_page)
-    total_pages = max(1, math.ceil(total / per_page))
+    page, sort, search = _parse_cb(callback.data)
+    text, kb = await _build_users_list(page, sort, search)
+    await callback.message.edit_text(text, parse_mode='HTML', reply_markup=kb)
 
-    buttons = []
-    for user, is_paid in users:
-        name = f"@{user.username}" if user.username else f"ID: {user.tg_id}"
-        status = "💲" if is_paid else "🟢"
-        banned = " [BAN]" if user.is_banned else ""
-        buttons.append([
-            InlineKeyboardButton(
-                text=f"{status} {name}{banned}",
-                callback_data=f"admin_user:{user.tg_id}"
-            )
-        ])
 
-    nav_row = []
-    if page > 0:
-        nav_row.append(InlineKeyboardButton(text="◀ Назад", callback_data=f"admin_users:{page - 1}"))
-    nav_row.append(InlineKeyboardButton(text=f"{page + 1}/{total_pages}", callback_data="noop"))
-    if page < total_pages - 1:
-        nav_row.append(InlineKeyboardButton(text="Вперед ▶", callback_data=f"admin_users:{page + 1}"))
-    buttons.append(nav_row)
+# ==================== Поиск пользователей ====================
 
-    kb = InlineKeyboardMarkup(inline_keyboard=buttons)
+@router.callback_query(F.data == "admin_user_search")
+async def admin_user_search_start(callback: CallbackQuery, state: FSMContext):
+    if not is_admin(callback.from_user.id):
+        return
+    await state.set_state(AdminState.user_search)
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Отмена", callback_data=_make_cb(0, "id", ""))]
+    ])
     await callback.message.edit_text(
-        f"<b>Пользователи</b> (стр. {page + 1}/{total_pages}, всего: {total})",
-        parse_mode='HTML',
-        reply_markup=kb
+        "Введите фрагмент username для поиска:",
+        reply_markup=kb,
     )
+
+
+@router.message(AdminState.user_search, F.from_user.id == secrets.get('admin_id'))
+async def admin_user_search_result(message: Message, state: FSMContext):
+    await state.set_state(AdminState.in_admin)
+    query = message.text.strip().lstrip("@")
+    text, kb = await _build_users_list(0, "id", query)
+    await message.answer(text, parse_mode='HTML', reply_markup=kb)
 
 
 # ==================== Карточка пользователя ====================
@@ -201,12 +246,16 @@ async def admin_user_card(callback: CallbackQuery):
     else:
         ban_btn = InlineKeyboardButton(text="Забанить", callback_data=f"admin_ban:{tg_id}")
 
-    kb = InlineKeyboardMarkup(inline_keyboard=[
+    rows = [
         [ban_btn],
         [InlineKeyboardButton(text="Удалить", callback_data=f"admin_delete:{tg_id}")],
         [InlineKeyboardButton(text="Отправить сообщение", callback_data=f"admin_msg:{tg_id}")],
-        [InlineKeyboardButton(text="Назад к списку", callback_data="admin_users:0")],
-    ])
+    ]
+    if info["api_provider"] != "remnawave":
+        rows.append([InlineKeyboardButton(text="Миграция в RemnaWave", callback_data=f"admin_migrate:{tg_id}")])
+    rows.append([InlineKeyboardButton(text="Назад к списку", callback_data="admin_users:0")])
+
+    kb = InlineKeyboardMarkup(inline_keyboard=rows)
 
     await callback.message.edit_text(text, parse_mode='HTML', reply_markup=kb)
 
@@ -267,12 +316,16 @@ async def _show_user_card(callback: CallbackQuery, tg_id: int):
     else:
         ban_btn = InlineKeyboardButton(text="Забанить", callback_data=f"admin_ban:{tg_id}")
 
-    kb = InlineKeyboardMarkup(inline_keyboard=[
+    rows = [
         [ban_btn],
         [InlineKeyboardButton(text="Удалить", callback_data=f"admin_delete:{tg_id}")],
         [InlineKeyboardButton(text="Отправить сообщение", callback_data=f"admin_msg:{tg_id}")],
-        [InlineKeyboardButton(text="Назад к списку", callback_data="admin_users:0")],
-    ])
+    ]
+    if info["api_provider"] != "remnawave":
+        rows.append([InlineKeyboardButton(text="Миграция в RemnaWave", callback_data=f"admin_migrate:{tg_id}")])
+    rows.append([InlineKeyboardButton(text="Назад к списку", callback_data="admin_users:0")])
+
+    kb = InlineKeyboardMarkup(inline_keyboard=rows)
 
     await callback.message.edit_text(text, parse_mode='HTML', reply_markup=kb)
 
@@ -332,6 +385,135 @@ async def admin_confirm_delete(callback: CallbackQuery):
             [InlineKeyboardButton(text="Назад к списку", callback_data="admin_users:0")]
         ])
     )
+
+
+# ==================== Миграция пользователя в RemnaWave ====================
+
+@router.callback_query(F.data.startswith("admin_migrate:"))
+async def admin_migrate_user(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        return
+
+    tg_id = int(callback.data.split(":")[1])
+    info = await rq.get_user_full_info_by_tg_id(tg_id)
+
+    if not info:
+        await callback.answer("Пользователь не найден", show_alert=True)
+        return
+
+    if info["api_provider"] == "remnawave":
+        await callback.answer("Пользователь уже на RemnaWave", show_alert=True)
+        return
+
+    username = info["username"]
+    if not username:
+        await callback.answer("У пользователя нет username, миграция невозможна", show_alert=True)
+        return
+
+    await callback.message.edit_text(
+        f"Миграция @{username} в RemnaWave...",
+        parse_mode='HTML',
+    )
+
+    from app.handlers.tools import detect_user_api_provider, get_user_info, add_new_user_info, get_user_days
+
+    try:
+        user_info = await get_user_info(username, api="marzban")
+
+        if user_info == 404:
+            await callback.message.edit_text(
+                f"Пользователь @{username} не найден в Marzban.",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="Назад к карточке", callback_data=f"admin_user:{tg_id}")]
+                ])
+            )
+            return
+
+        expire_days = await get_user_days(user_info)
+        data_limit = user_info.get("data_limit", 0)
+        is_pro = user_info.get("status") == "active" and data_limit is None
+
+        if is_pro:
+            squad_id = secrets.get("rw_pro_id")
+            description = "Migrated from Marzban (Pro) by admin"
+        else:
+            squad_id = secrets.get("rw_free_id")
+            description = "Migrated from Marzban (Free) by admin"
+
+        if data_limit == 0 or data_limit is None:
+            data_limit = 0
+        else:
+            data_limit = data_limit // (1024 * 1024 * 1024)
+
+        new_user_info = await add_new_user_info(
+            name=username,
+            userid=tg_id,
+            limit=data_limit,
+            res_strat="month",
+            expire_days=expire_days,
+            api="remnawave",
+            email=f"{username}@marzban.ru",
+            description=description,
+            squad_id=squad_id,
+        )
+
+        if not new_user_info:
+            await callback.message.edit_text(
+                f"Ошибка создания пользователя в RemnaWave.",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="Назад к карточке", callback_data=f"admin_user:{tg_id}")]
+                ])
+            )
+            return
+
+        # Обновляем БД
+        await rq.update_user_api_info(
+            tg_id=tg_id,
+            username=username,
+            vless_uuid=new_user_info.get("uuid"),
+            api_provider="remnawave",
+        )
+
+        subscription_url = new_user_info.get("subscription_url")
+
+        # Отправляем пользователю сообщение об обновлении подписки
+        try:
+            import app.keyboards as kb_module
+            await bot.send_message(
+                chat_id=tg_id,
+                text=(
+                    f"Ваша подписка была обновлена!\n\n"
+                    f"Больше стабильности, больше скорости, больше фичей 🚀\n\n"
+                    f"Ссылка для подключения: {subscription_url}"
+                ),
+                parse_mode='HTML',
+                reply_markup=kb_module.connect(subscription_url),
+            )
+        except Exception as e:
+            logging.error(f"Failed to notify user {tg_id} about migration: {e}")
+
+        # Уведомляем админа об успехе
+        await callback.message.edit_text(
+            f"<b>Миграция выполнена</b>\n\n"
+            f"Пользователь: @{username}\n"
+            f"Дней подписки: {expire_days}\n"
+            f"Лимит: {data_limit if data_limit > 0 else 'Без лимита'} GB\n"
+            f"Тип: {'Pro' if is_pro else 'Free'}",
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="Назад к карточке", callback_data=f"admin_user:{tg_id}")]
+            ])
+        )
+
+    except Exception as e:
+        logging.error(f"Admin migration error for {username}: {e}")
+        await callback.message.edit_text(
+            f"Ошибка миграции @{username}:\n<code>{e}</code>",
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="Назад к карточке", callback_data=f"admin_user:{tg_id}")]
+            ])
+        )
 
 
 # ==================== Отправка сообщения пользователю ====================

@@ -267,7 +267,7 @@ def get_connect(link: str) -> InlineKeyboardMarkup:
         InlineKeyboardMarkup with connect button
     """
     builder = InlineKeyboardBuilder()
-    builder.button(text="Подробнее", url=link)
+    builder.button(text="Открыть", url=link)
     builder.button(text="На главную", callback_data='Main')
     return builder.as_markup()
 

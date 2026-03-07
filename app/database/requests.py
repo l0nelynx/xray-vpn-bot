@@ -339,23 +339,47 @@ async def get_free_users_count() -> int:
     return total - paid
 
 
-async def get_users_paginated(page: int, per_page: int = 10):
+async def get_users_paginated(page: int, per_page: int = 10,
+                              sort: str = "id", search: str = ""):
     async with async_session() as session:
-        total = await session.scalar(select(func.count()).select_from(User))
-        total = total or 0
-
         has_tx = exists(
             select(Transaction.user_id).where(Transaction.user_id == User.id)
         ).correlate(User).label("is_paid")
 
+        base = select(User, has_tx)
+
+        # Фильтр по поиску
+        if search:
+            base = base.where(User.username.ilike(f"%{search}%"))
+
+        # Фильтр по платным/бесплатным
+        if sort == "paid":
+            base = base.where(
+                User.id.in_(
+                    select(Transaction.user_id).distinct()
+                )
+            )
+        elif sort == "free":
+            base = base.where(
+                ~User.id.in_(
+                    select(Transaction.user_id).distinct()
+                )
+            )
+
+        # Подсчёт после фильтрации
+        count_q = select(func.count()).select_from(base.subquery())
+        total = await session.scalar(count_q) or 0
+
+        # Сортировка
+        if sort == "alpha":
+            base = base.order_by(User.username.asc())
+        else:
+            base = base.order_by(User.id)
+
         result = await session.execute(
-            select(User, has_tx)
-            .order_by(User.id)
-            .offset(page * per_page)
-            .limit(per_page)
+            base.offset(page * per_page).limit(per_page)
         )
         rows = result.all()
-        # Возвращаем список кортежей (user, is_paid)
         return [(row[0], row[1]) for row in rows], total
 
 
