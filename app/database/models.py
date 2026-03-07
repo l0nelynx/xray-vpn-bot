@@ -1,4 +1,6 @@
-from sqlalchemy import BigInteger, String, ForeignKey, Index, Integer, Boolean
+import logging
+
+from sqlalchemy import BigInteger, String, ForeignKey, Index, Integer, Boolean, text, inspect
 from sqlalchemy.ext.asyncio import AsyncAttrs, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -70,6 +72,18 @@ class Transaction(Base):
 async def async_main():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+        # Миграция: добавляем is_banned если колонки ещё нет
+        def _check_and_migrate(sync_conn):
+            insp = inspect(sync_conn)
+            columns = [col['name'] for col in insp.get_columns('users')]
+            if 'is_banned' not in columns:
+                sync_conn.execute(text(
+                    "ALTER TABLE users ADD COLUMN is_banned BOOLEAN DEFAULT 0"
+                ))
+                logging.info("Migration: added is_banned column to users table")
+
+        await conn.run_sync(_check_and_migrate)
 
 
 
