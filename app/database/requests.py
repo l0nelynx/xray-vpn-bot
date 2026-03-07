@@ -1,4 +1,4 @@
-from sqlalchemy import select, update
+from sqlalchemy import select, update, func, delete
 
 from app.database.models import User, Transaction
 from app.database.models import async_session
@@ -307,3 +307,107 @@ async def update_delivery_status(tg_id: int, new_delivery_status: int):
             print(f"Updated delivery_status to {new_delivery_status} for user {tg_id}")
         else:
             print(f"User with tg_id {tg_id} not found")
+
+
+# ==================== Admin panel functions ====================
+
+async def get_users_count() -> int:
+    async with async_session() as session:
+        result = await session.scalar(select(func.count()).select_from(User))
+        return result or 0
+
+
+async def get_users_count_by_api() -> dict:
+    async with async_session() as session:
+        result = await session.execute(
+            select(User.api_provider, func.count()).group_by(User.api_provider)
+        )
+        return {row[0] or "unknown": row[1] for row in result.all()}
+
+
+async def get_paid_users_count() -> int:
+    async with async_session() as session:
+        result = await session.scalar(
+            select(func.count(func.distinct(Transaction.user_id))).select_from(Transaction)
+        )
+        return result or 0
+
+
+async def get_free_users_count() -> int:
+    total = await get_users_count()
+    paid = await get_paid_users_count()
+    return total - paid
+
+
+async def get_users_paginated(page: int, per_page: int = 10):
+    async with async_session() as session:
+        total = await session.scalar(select(func.count()).select_from(User))
+        total = total or 0
+
+        result = await session.execute(
+            select(User)
+            .order_by(User.id)
+            .offset(page * per_page)
+            .limit(per_page)
+        )
+        users = result.scalars().all()
+        return users, total
+
+
+async def get_user_full_info_by_tg_id(tg_id: int) -> dict | None:
+    async with async_session() as session:
+        user = await session.scalar(select(User).where(User.tg_id == tg_id))
+        if not user:
+            return None
+        return {
+            "id": user.id,
+            "tg_id": user.tg_id,
+            "username": user.username,
+            "vless_uuid": user.vless_uuid,
+            "api_provider": user.api_provider,
+            "is_banned": bool(user.is_banned),
+        }
+
+
+async def ban_user(tg_id: int) -> bool:
+    async with async_session() as session:
+        user = await session.scalar(select(User).where(User.tg_id == tg_id))
+        if not user:
+            return False
+        user.is_banned = True
+        await session.commit()
+        return True
+
+
+async def unban_user(tg_id: int) -> bool:
+    async with async_session() as session:
+        user = await session.scalar(select(User).where(User.tg_id == tg_id))
+        if not user:
+            return False
+        user.is_banned = False
+        await session.commit()
+        return True
+
+
+async def delete_user_from_db(tg_id: int) -> bool:
+    async with async_session() as session:
+        user = await session.scalar(select(User).where(User.tg_id == tg_id))
+        if not user:
+            return False
+        # Удаляем связанные транзакции
+        await session.execute(
+            delete(Transaction).where(Transaction.user_id == user.id)
+        )
+        await session.execute(
+            delete(User).where(User.id == user.id)
+        )
+        await session.commit()
+        return True
+
+
+async def is_user_banned(tg_id: int) -> bool:
+    async with async_session() as session:
+        user = await session.scalar(select(User).where(User.tg_id == tg_id))
+        if not user:
+            return False
+        return bool(user.is_banned)

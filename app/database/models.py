@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, String, ForeignKey, Index, Integer
+from sqlalchemy import BigInteger, String, ForeignKey, Index, Integer, Boolean
 from sqlalchemy.ext.asyncio import AsyncAttrs, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -26,6 +26,9 @@ class User(Base):
 
     # API провайдер, на котором зарегистрирован пользователь (marzban/remnawave)
     api_provider: Mapped[str] = mapped_column(String(50), default="marzban")
+
+    # Флаг бана пользователя
+    is_banned: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", nullable=True)
 
     # Добавляем отношение один-ко-многим с таблицей transactions
     transactions: Mapped[list["Transaction"]] = relationship(back_populates="user")

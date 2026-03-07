@@ -31,6 +31,9 @@ lang = eval(f"{secrets.get('language')}")
 
 @router.message(Command("start"))  # Start command handler
 async def cmd_start(message: Message):
+    if await rq.is_user_banned(message.from_user.id):
+        await message.answer("Ваш аккаунт заблокирован.")
+        return
     await rq.set_user(message.from_user.id)
     await startup_user_dialog(message)
 
