@@ -411,3 +411,32 @@ async def is_user_banned(tg_id: int) -> bool:
         if not user:
             return False
         return bool(user.is_banned)
+
+
+async def get_all_user_tg_ids() -> list[int]:
+    async with async_session() as session:
+        result = await session.execute(select(User.tg_id))
+        return [row[0] for row in result.all()]
+
+
+async def delete_users_bulk(tg_ids: list[int]) -> int:
+    if not tg_ids:
+        return 0
+    async with async_session() as session:
+        # Получаем внутренние id пользователей
+        result = await session.execute(
+            select(User.id).where(User.tg_id.in_(tg_ids))
+        )
+        user_ids = [row[0] for row in result.all()]
+        if not user_ids:
+            return 0
+        # Удаляем транзакции
+        await session.execute(
+            delete(Transaction).where(Transaction.user_id.in_(user_ids))
+        )
+        # Удаляем пользователей
+        await session.execute(
+            delete(User).where(User.id.in_(user_ids))
+        )
+        await session.commit()
+        return len(user_ids)

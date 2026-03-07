@@ -6,6 +6,7 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.exceptions import TelegramForbiddenError, TelegramBadRequest, TelegramNotFound
 
 import app.database.requests as rq
 from app.settings import secrets, bot
@@ -41,7 +42,8 @@ async def cmd_admin(message: Message):
     )
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Пользователи", callback_data="admin_users:0")]
+        [InlineKeyboardButton(text="Пользователи", callback_data="admin_users:0")],
+        [InlineKeyboardButton(text="Очистка БД", callback_data="admin_cleanup")],
     ])
 
     await message.answer(text, parse_mode='HTML', reply_markup=kb)
@@ -71,7 +73,8 @@ async def admin_back(callback: CallbackQuery, state: FSMContext):
     )
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Пользователи", callback_data="admin_users:0")]
+        [InlineKeyboardButton(text="Пользователи", callback_data="admin_users:0")],
+        [InlineKeyboardButton(text="Очистка БД", callback_data="admin_cleanup")],
     ])
 
     await callback.message.edit_text(text, parse_mode='HTML', reply_markup=kb)
@@ -337,6 +340,87 @@ async def admin_msg_send(message: Message, state: FSMContext):
                 [InlineKeyboardButton(text="Назад в админку", callback_data="admin_back")]
             ])
         )
+
+
+# ==================== Очистка БД от недействительных пользователей ====================
+
+@router.callback_query(F.data == "admin_cleanup")
+async def admin_cleanup_scan(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        return
+
+    await callback.message.edit_text(
+        "Сканирование пользователей...\nЭто может занять некоторое время.",
+        parse_mode='HTML'
+    )
+
+    tg_ids = await rq.get_all_user_tg_ids()
+    invalid_ids = []
+
+    for tg_id in tg_ids:
+        try:
+            await bot.get_chat(tg_id)
+        except (TelegramForbiddenError, TelegramBadRequest, TelegramNotFound):
+            invalid_ids.append(tg_id)
+        except Exception:
+            # Прочие ошибки API — не считаем пользователя недействительным
+            pass
+
+    if not invalid_ids:
+        await callback.message.edit_text(
+            "Недействительных пользователей не найдено.",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="Назад в админку", callback_data="admin_back")]
+            ])
+        )
+        return
+
+    # Сохраняем список в FSM чтобы не сканировать повторно
+    # Используем callback.message.message_id как ключ не нужен — передадим через state
+    from aiogram.fsm.context import FSMContext
+    # Получаем state через middleware — но в callback handler state не передаётся автоматически
+    # Вместо этого кодируем количество в callback_data, а список храним глобально
+    _cleanup_cache[callback.from_user.id] = invalid_ids
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="Да, удалить", callback_data="admin_confirm_cleanup"),
+            InlineKeyboardButton(text="Отмена", callback_data="admin_back"),
+        ]
+    ])
+
+    await callback.message.edit_text(
+        f"Найдено недействительных пользователей: <b>{len(invalid_ids)}</b>\n"
+        f"(заблокировали бота или удалили аккаунт)\n\n"
+        f"Удалить их из базы данных?",
+        parse_mode='HTML',
+        reply_markup=kb
+    )
+
+
+# Кэш для хранения списка id к удалению между scan и confirm
+_cleanup_cache: dict[int, list[int]] = {}
+
+
+@router.callback_query(F.data == "admin_confirm_cleanup")
+async def admin_confirm_cleanup(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        return
+
+    invalid_ids = _cleanup_cache.pop(callback.from_user.id, [])
+    if not invalid_ids:
+        await callback.answer("Список устарел, запустите сканирование заново.", show_alert=True)
+        return
+
+    deleted = await rq.delete_users_bulk(invalid_ids)
+
+    await callback.message.edit_text(
+        f"Удалено из базы данных: <b>{deleted}</b> пользователей.",
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="Назад в админку", callback_data="admin_back")]
+        ])
+    )
 
 
 # noop для кнопки-счётчика страниц
