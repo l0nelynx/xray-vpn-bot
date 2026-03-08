@@ -7,10 +7,17 @@ from typing import Dict
 import aiohttp
 from aiogram.types import CallbackQuery
 from fastapi import Request, BackgroundTasks
+from pydantic import BaseModel
 
 import app.database.requests as rq
 from app.api.handlers import payment_process_background
 from app.settings import secrets
+
+
+class CrystalWebhookData(BaseModel):
+    id: str
+    state: str
+    signature: str
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
@@ -306,25 +313,23 @@ async def crystal_create_link(callback: CallbackQuery, amount, currency: str, da
 
 async def payment_webhook_handler(request: Request, background_tasks: BackgroundTasks):
     try:
-        payment_data = await request.json()
-        # Получаем данные платежа
-        logging.info(f"Получен платежный вебхук: {payment_data}")
-        print('Webbhook получен')
-        print(request.headers)
-        if payment_data["state"] == "payed":
-            print(payment_data)
-            # Генерация хеша
-            hash_string = f"{payment_data['id']}:{secrets.get('crystal_salt')}"
+        raw_data = await request.json()
+        logging.info(f"Получен платежный вебхук: {raw_data}")
+        try:
+            payment_data = CrystalWebhookData(**raw_data)
+        except Exception as e:
+            logging.warning(f"Invalid webhook payload: {e}")
+            return {"status": "error", "message": "Invalid payload"}
+
+        if payment_data.state == "payed":
+            hash_string = f"{payment_data.id}:{secrets.get('crystal_salt')}"
             computed_hash = hashlib.sha1(hash_string.encode()).hexdigest()
-            # Безопасное сравнение подписи
-            if not hmac.compare_digest(computed_hash, payment_data['signature']):
-                print("Invalid signature!")
+            if not hmac.compare_digest(computed_hash, payment_data.signature):
+                logging.warning("Invalid signature!")
                 return {"status": "received", "message": "Payment status is not CONFIRMED"}
             else:
-                print("Signature is valid!")
-                print('Оплата подтверждена')
-                print(f'ID транзакции - {payment_data["id"]}')
-                background_tasks.add_task(payment_process_background, f"{payment_data['id']}")
+                logging.info(f'Оплата подтверждена, ID транзакции - {payment_data.id}')
+                background_tasks.add_task(payment_process_background, payment_data.id)
                 return {"status": "success"}
 
     except Exception as e:

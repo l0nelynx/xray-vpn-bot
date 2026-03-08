@@ -493,12 +493,15 @@ async def admin_migrate_user(callback: CallbackQuery):
             logging.error(f"Failed to notify user {tg_id} about migration: {e}")
 
         # Уведомляем админа об успехе
+        from app.locale.lang_ru import admin_migration_message
         await callback.message.edit_text(
-            f"<b>Миграция выполнена</b>\n\n"
-            f"Пользователь: @{username}\n"
-            f"Дней подписки: {expire_days}\n"
-            f"Лимит: {data_limit if data_limit > 0 else 'Без лимита'} GB\n"
-            f"Тип: {'Pro' if is_pro else 'Free'}",
+            admin_migration_message.format(
+                username=username,
+                user_id=tg_id,
+                expire_days=expire_days,
+                data_limit=data_limit if data_limit > 0 else 'Без лимита',
+                sub_type='Pro' if is_pro else 'Free'
+            ),
             parse_mode='HTML',
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text="Назад к карточке", callback_data=f"admin_user:{tg_id}")]

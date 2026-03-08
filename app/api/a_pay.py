@@ -1,4 +1,5 @@
 import hashlib
+import hmac
 import logging
 import uuid
 from typing import Optional
@@ -6,11 +7,18 @@ from typing import Optional
 import aiohttp
 from aiogram.types import CallbackQuery
 from fastapi import Request, BackgroundTasks
+from pydantic import BaseModel
 
 import app.database.requests as rq
 import app.locale.lang_ru as ru
 from app.api.handlers import payment_process_background
 from app.settings import secrets
+
+
+class APayWebhookData(BaseModel):
+    order_id: str
+    status: str
+    sign: str
 
 
 # Настройка логирования
@@ -111,18 +119,21 @@ async def create_sbp_link(callback: CallbackQuery, amount, days: int):
 
 async def payment_webhook_handler(request: Request, background_tasks: BackgroundTasks):
     try:
-        payment_data = await request.json()
-        # Получаем данные платежа
-        logging.info(f"Получен платежный вебхук: {payment_data}")
-        print('Webbhook получен')
-        print(request.headers)
-        if payment_data["status"] == "approved":
-            print(payment_data)
-            sign = hashlib.md5(f"{payment_data['order_id']}:{payment_data['status']}:{secrets.get('apay_secret')}".encode()).hexdigest()
-            if payment_data['sign'] == sign:
-                print('Оплата подтверждена')
-                print(f'ID транзакции - {payment_data["order_id"]}')
-                background_tasks.add_task(payment_process_background, payment_data['order_id'])
+        raw_data = await request.json()
+        logging.info(f"Получен платежный вебхук: {raw_data}")
+        try:
+            payment_data = APayWebhookData(**raw_data)
+        except Exception as e:
+            logging.warning(f"Invalid webhook payload: {e}")
+            return {"status": "error", "message": "Invalid payload"}
+
+        if payment_data.status == "approved":
+            expected_sign = hashlib.md5(
+                f"{payment_data.order_id}:{payment_data.status}:{secrets.get('apay_secret')}".encode()
+            ).hexdigest()
+            if hmac.compare_digest(payment_data.sign, expected_sign):
+                logging.info(f'Оплата подтверждена, ID транзакции - {payment_data.order_id}')
+                background_tasks.add_task(payment_process_background, payment_data.order_id)
                 return {"status": "success"}
             else:
                 return {"status": "received", "message": "Payment status is not CONFIRMED"}

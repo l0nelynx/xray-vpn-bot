@@ -35,6 +35,10 @@ class User(Base):
     # Добавляем отношение один-ко-многим с таблицей transactions
     transactions: Mapped[list["Transaction"]] = relationship(back_populates="user")
 
+    __table_args__ = (
+        Index('ix_user_username', 'username'),
+    )
+
 
 class Transaction(Base):
     __tablename__ = 'transactions'
@@ -82,6 +86,14 @@ async def async_main():
                     "ALTER TABLE users ADD COLUMN is_banned BOOLEAN DEFAULT 0"
                 ))
                 logging.info("Migration: added is_banned column to users table")
+
+            # Миграция: добавляем индекс на username если его ещё нет
+            indexes = [idx['name'] for idx in insp.get_indexes('users')]
+            if 'ix_user_username' not in indexes:
+                sync_conn.execute(text(
+                    "CREATE INDEX ix_user_username ON users (username)"
+                ))
+                logging.info("Migration: added ix_user_username index to users table")
 
         await conn.run_sync(_check_and_migrate)
 

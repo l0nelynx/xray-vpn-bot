@@ -11,7 +11,7 @@ from aiogram.types import Message, CallbackQuery
 
 import app.keyboards as kb
 import app.marzban.templates as templates
-from app.locale.lang_ru import subscription_response_templates, admin_transaction_message
+from app.locale.lang_ru import subscription_response_templates, admin_transaction_message, admin_migration_message
 from app.settings import bot, secrets
 
 
@@ -48,7 +48,9 @@ async def get_subscription_scenario(
 
     status = user_info.get("status")
     limit = user_info.get("data_limit")
-    is_pro = status == "active" and limit is None
+    # PRO = активная подписка без лимита трафика (платная)
+    # FREE = есть лимит трафика (data_limit не None и >= 0)
+    is_paid_subscription = status == "active" and limit is None
 
     if subscription_type == SubscriptionType.FREE:
         if user_info.get("expire") == 0 or status != "active":
@@ -56,7 +58,10 @@ async def get_subscription_scenario(
         else:
             return SubscriptionScenario.ALREADY_ACTIVE
     else:
-        if is_pro:
+        # При покупке платной подписки:
+        # - если текущая подписка платная (PRO) → складываем дни (EXTEND)
+        # - если текущая подписка бесплатная (FREE) → заменяем, не складывая дни (UPDATE)
+        if is_paid_subscription:
             return SubscriptionScenario.EXTEND
         else:
             return SubscriptionScenario.UPDATE
@@ -124,11 +129,13 @@ async def deliver_subscription(
                     logging.info(f"Auto-migrated {username} from Marzban to RemnaWave")
                     await bot.send_message(
                         chat_id=secrets.get('admin_id'),
-                        text=f"🔄 <b>Авто-миграция при покупке</b>\n"
-                             f"👤 @{username}\n"
-                             f"🆔 {user_id}\n"
-                             f"⏱️ Дней: {expire_days}\n"
-                             f"🏷️ {'Pro' if is_pro else 'Free'}",
+                        text=admin_migration_message.format(
+                            username=username,
+                            user_id=user_id,
+                            expire_days=expire_days,
+                            data_limit=migration_limit if migration_limit > 0 else 'Без лимита',
+                            sub_type='Pro' if is_pro else 'Free'
+                        ),
                         parse_mode='HTML'
                     )
                 else:
@@ -269,13 +276,17 @@ async def _handle_update_subscription(
     # Lazy import to avoid circular dependency
     from app.handlers.tools import set_user_info, get_user_days
 
+    # При переходе с FREE на PAID — ставим PRO squad, при FREE — FREE squad
+    squad_id = secrets.get("rw_pro_id") if subscription_type == SubscriptionType.PAID else secrets.get("rw_free_id")
+
     buyer_info = await set_user_info(
         name=username,
         limit=data_limit,
         res_strat=reset_strategy,
         expire_days=days,
         template=templates.vless_france,
-        api="remnawave"
+        api="remnawave",
+        squad_id=squad_id
     )
 
     expire_day = await get_user_days(buyer_info)

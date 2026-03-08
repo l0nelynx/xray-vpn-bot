@@ -14,14 +14,16 @@ services:
     ports:
       - "5000:5000"
     restart: unless-stopped
-    tty: true
-    stdin_open: true
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/health", "||", "exit", "1"]
-      interval: 30s
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 60s
       timeout: 10s
       retries: 3
-      start_period: 40s
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
   support-bot:
     container_name: cheezy-sup-bot
     build:
@@ -34,8 +36,12 @@ services:
       - ./config.yml:/usr/src/app/config.yml
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "ps", "aux", "|", "grep", "support.py", "|", "grep", "-v", "grep"]
-      interval: 30s
+      test: ["CMD-SHELL", "pgrep -f support.py"]
+      interval: 60s
       timeout: 10s
       retries: 3
-      start_period: 40s
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 128M

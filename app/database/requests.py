@@ -289,6 +289,31 @@ async def update_order_status(transaction_id: str, new_status: str) -> bool:
         return True
 
 
+async def claim_order_for_processing(transaction_id: str) -> bool:
+    """
+    Атомарно проверяет статус заказа и переводит его в 'confirmed'.
+    Возвращает True только если статус БЫЛ 'created' — гарантирует,
+    что только один обработчик получит право на доставку подписки.
+
+    Args:
+        transaction_id: Идентификатор транзакции
+
+    Returns:
+        bool: True если заказ успешно захвачен для обработки, False если уже обработан
+    """
+    async with async_session() as session:
+        result = await session.execute(
+            update(Transaction)
+            .where(
+                Transaction.transaction_id == transaction_id,
+                Transaction.order_status == "created"
+            )
+            .values(order_status="confirmed")
+        )
+        await session.commit()
+        return result.rowcount > 0
+
+
 async def update_delivery_status(tg_id: int, new_delivery_status: int):
     async with async_session() as session:
         # Находим пользователя по tg_id

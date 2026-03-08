@@ -7,6 +7,7 @@ from app.handlers.subscription_service import deliver_subscription, Subscription
 from app.settings import bot, secrets
 import asyncio
 import logging
+import time
 
 
 async def send_alert(order_id: str, usrname: str, usrid: int, tariff_days: int, disable_notification: bool = False):
@@ -22,10 +23,12 @@ async def send_alert(order_id: str, usrname: str, usrid: int, tariff_days: int, 
     """
     await bot.send_message(
         chat_id=secrets.get('admin_id'),
-        text=f"Транзакция ID - {order_id}\n"
-             f"Пользователь - @{usrname}\n"
-             f"UserId - {usrid}\n"
-             f"Количество дней - {tariff_days}\n",
+        text=ru.admin_transaction_message.format(
+            payment_method=order_id,
+            username=usrname,
+            user_id=usrid,
+            days=tariff_days
+        ),
         disable_notification=disable_notification
     )
 
@@ -55,9 +58,14 @@ async def payment_process_background(order_id: str):
             return
 
         if userdata.get('status') == 'created':
+            # Атомарно захватываем заказ: только один обработчик пройдёт дальше
+            claimed = await rq.claim_order_for_processing(order_id)
+            if not claimed:
+                logging.warning(f'Order {order_id} already claimed by another handler, skipping')
+                return
+
             # Отправляем уведомление с disable_notification=True для FREE транзакций
             await send_alert(order_id, usrname, usrid, tariff_days, disable_notification=is_free_transaction)
-            await rq.update_order_status(order_id, 'confirmed')
 
             # Используем новую унифицированную систему доставки подписок
             # message=None для фоновых задач, пользователь получит сообщение напрямую
@@ -75,9 +83,14 @@ async def payment_process_background(order_id: str):
             # Проверяем результат доставки
             if delivery_result["status"] != "success":
                 unsuccess_counter = 0
+                retry_start = time.monotonic()
                 while unsuccess_counter < 3:
                     logging.warning(f'Ошибка доставки для заказа {order_id}: {delivery_result["message"]}. Повторная попытка...')
-                    await asyncio.sleep(2)
+                    delay = 2 ** (unsuccess_counter + 1)  # 2s, 4s, 8s
+                    if time.monotonic() - retry_start + delay > 30:
+                        logging.error(f'Retry timeout exceeded for order {order_id}')
+                        break
+                    await asyncio.sleep(delay)
 
                     # Повторная попытка доставки
                     delivery_result = await deliver_subscription(

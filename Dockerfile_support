@@ -2,9 +2,9 @@ FROM python:3.13-alpine
 
 WORKDIR /usr/src/app
 
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
-RUN apk add --no-cache bash
+COPY requirements_support.txt ./
+RUN pip install --no-cache-dir -r requirements_support.txt
+RUN apk add --no-cache bash procps
 
 COPY ./config.yml ./config.yml
 COPY ./support.py ./support.py

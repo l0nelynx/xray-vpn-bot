@@ -87,43 +87,4 @@ def get_user_messages(user_id: int, limit: int = 10):
     results = cursor.fetchall()
     conn.close()
     return results
-"""
-Support Bot Configuration Module
-Isolated from main app, loads settings from config.yml
-"""
-from pathlib import Path
-import yaml
-
-
-def load_config(file_path="config.yml"):
-    """Load configuration from YAML file"""
-    config_path = Path(file_path)
-
-    if not config_path.exists():
-        raise FileNotFoundError(f"Config file not found: {config_path}")
-
-    with open(config_path, 'r') as stream:
-        try:
-            return yaml.safe_load(stream)
-        except yaml.YAMLError as exc:
-            raise ValueError(f"Error parsing YAML: {exc}")
-
-
-# Load configuration when module is imported
-try:
-    config = load_config()
-except Exception as e:
-    print(f"⚠️ Error loading config: {e}")
-    config = {}
-
-
-def get(key, default=None):
-    """Get config value by key"""
-    return config.get(key, default)
-
-
-# Common config values for support bot
-SUPPORT_TOKEN = get('support_token')
-ADMIN_ID = get('admin_id')
-DB_PATH = Path('db/db.sqlite3')
 

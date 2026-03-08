@@ -6,7 +6,6 @@ import logging
 import app.database.requests as rq
 import app.keyboards as kb
 import app.locale.lang_ru as ru
-from app.handlers.broadcast import admin_broadcast
 from app.handlers.events import userlist
 from app.handlers.tools import startup_user_dialog, free_sub_handler, subscription_info, check_tg_subscription, \
     get_user_days
@@ -105,35 +104,6 @@ async def get_subscription_info(callback: CallbackQuery):
     await subscription_info(callback)
 
 
-@router.message(Command("broadcast"), F.from_user.id == secrets.get('admin_id'))  #
-async def broadcast_make(message: Message):
-    await message.answer('Making a broadcast')
-    await admin_broadcast(message, test_flag='')
-
-
-@router.message(Command("broadcast_test"), F.from_user.id == secrets.get('admin_id'))  #
-async def broadcast_make(message: Message):
-    await message.answer('Making a test broadcast to this chat')
-    await admin_broadcast(message, test_flag='_test')
-
-
-@router.message(Command("broadcast_news"), F.from_user.id == secrets.get('admin_id'))  #
-async def broadcast_make(message: Message):
-    await message.answer('Making a broadcast to a new channel')
-    await admin_broadcast(message, test_flag='_news', post_id=secrets.get('news_id'))
-
-# broadcast activity flag
-broadcast_active = False
-
-
-@router.callback_query(F.data == 'cancel_broadcast')
-async def cancel_broadcast(callback_query: CallbackQuery):
-    global broadcast_active
-    broadcast_active = False
-    await callback_query.answer("Рассылка будет остановлена после отправки текущего пакета сообщений",
-                                reply_markup=kb.cancel_keyboard)
-
-
 @router.message(Command("subcheck"), F.from_user.id == secrets.get('admin_id'))  #
 async def broadcast_make(message: Message):
     await message.answer('Making a test of sub check handler', reply_markup=kb.subcheck)
@@ -164,7 +134,7 @@ async def migrate_to_remnawave_confirm(callback: CallbackQuery):
 @router.callback_query(F.data == 'confirm_migrate')
 async def process_migration(callback: CallbackQuery):
     """Обрабатывает миграцию пользователя из Marzban в RemnaWave"""
-    from app.locale.lang_ru import migration_in_progress, migration_success, migration_error
+    from app.locale.lang_ru import migration_in_progress, migration_success, migration_error, admin_migration_message
     from app.handlers.tools import detect_user_api_provider, get_user_info, add_new_user_info
     import app.database.requests as rq
 
@@ -274,15 +244,13 @@ async def process_migration(callback: CallbackQuery):
         )
 
         # Отправляем уведомление администратору
-        admin_message = f"""✅ <b>Миграция пользователя успешна</b>
-
-👤 Пользователь: @{username}
-🆔 User ID: {user_id}
-🔄 Источник: Marzban
-📍 Назначение: RemnaWave
-⏱️ Дней подписки: {expire_days}
-💾 Лимит трафика: {data_limit if data_limit > 0 else 'Без лимита'} GB
-🏷️ Тип: {'Pro' if is_pro else 'Free'}"""
+        admin_message = admin_migration_message.format(
+            username=username,
+            user_id=user_id,
+            expire_days=expire_days,
+            data_limit=data_limit if data_limit > 0 else 'Без лимита',
+            sub_type='Pro' if is_pro else 'Free'
+        )
 
         await bot.send_message(
             chat_id=secrets.get('admin_id'),

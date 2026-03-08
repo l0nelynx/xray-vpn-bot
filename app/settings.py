@@ -5,8 +5,12 @@ import yaml
 from aiogram import Bot
 from aiosend import CryptoPay
 from fastapi import FastAPI
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 app_uvi = FastAPI()
+limiter = Limiter(key_func=get_remote_address)
+app_uvi.state.limiter = limiter
 
 
 def load_config(file_path="config.yml"):

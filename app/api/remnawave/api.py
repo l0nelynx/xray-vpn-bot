@@ -52,7 +52,7 @@ async def get_user_from_username(username: str):
             "expire": expire_timestamp,  # UNIX timestamp, как в Marzban API и create_user
             "subscription_url": response.subscription_url,
             "status": "active" if response.status == UserStatus.ACTIVE else "inactive",
-            "data_limit": response.traffic_limit_bytes // (1024 * 1024 * 1024) if response.traffic_limit_bytes else None,
+            "data_limit": max(1, response.traffic_limit_bytes // (1024 * 1024 * 1024)) if response.traffic_limit_bytes else None,
             "traffic_used": response.used_traffic_bytes // (1024 * 1024 * 1024) if response.used_traffic_bytes else 0
         }
     except Exception as e:
