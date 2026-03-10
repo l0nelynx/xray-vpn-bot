@@ -74,10 +74,10 @@ async def get_user_from_email(email: str):
         remnawave = RemnawaveSDK(base_url=secrets.get('remnawave_url'), token=secrets.get('remnawave_token'))
         response = await remnawave.users.get_users_by_email(email)
 
-        if not response or len(response) == 0:
+        if not response or not response.root:
             return None
 
-        user: UserResponseDto = response[0]
+        user: UserResponseDto = response.root[0]
 
         # Преобразуем datetime в UNIX timestamp для совместимости с остальным кодом
         expire_timestamp = int(user.expire_at.timestamp())
