@@ -60,6 +60,41 @@ async def get_user_from_username(username: str):
         return None
 
 
+async def get_user_from_email(email: str):
+    """
+    Получает информацию о пользователе по email
+
+    Args:
+        email (str): Email пользователя
+
+    Returns:
+        dict: Словарь с информацией о пользователе или None
+    """
+    try:
+        remnawave = RemnawaveSDK(base_url=secrets.get('remnawave_url'), token=secrets.get('remnawave_token'))
+        response = await remnawave.users.get_users_by_email(email)
+
+        if not response or len(response) == 0:
+            return None
+
+        user: UserResponseDto = response[0]
+
+        # Преобразуем datetime в UNIX timestamp для совместимости с остальным кодом
+        expire_timestamp = int(user.expire_at.timestamp())
+
+        return {
+            "uuid": user.uuid,
+            "expire": expire_timestamp,
+            "subscription_url": user.subscription_url,
+            "status": "active" if user.status == UserStatus.ACTIVE else "inactive",
+            "data_limit": max(1, user.traffic_limit_bytes // (1024 * 1024 * 1024)) if user.traffic_limit_bytes else None,
+            "traffic_used": user.used_traffic_bytes // (1024 * 1024 * 1024) if user.used_traffic_bytes else 0
+        }
+    except Exception as e:
+        print(f"Error getting user by email {email} from RemnaWave: {e}")
+        return None
+
+
 async def create_user(
     username: str,
     days: int = 30,

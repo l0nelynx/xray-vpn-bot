@@ -420,6 +420,7 @@ async def get_user_full_info_by_tg_id(tg_id: int) -> dict | None:
             "vless_uuid": user.vless_uuid,
             "api_provider": user.api_provider,
             "is_banned": bool(user.is_banned),
+            "email": user.email,
         }
 
 
@@ -504,6 +505,22 @@ async def get_users_without_username() -> list[int]:
             )
         )
         return [row[0] for row in result.all()]
+
+
+async def update_user_email(tg_id: int, email: str) -> bool:
+    async with async_session() as session:
+        user = await session.scalar(select(User).where(User.tg_id == tg_id))
+        if not user:
+            return False
+        user.email = email
+        await session.commit()
+        return True
+
+
+async def get_user_email(tg_id: int) -> str | None:
+    async with async_session() as session:
+        user = await session.scalar(select(User).where(User.tg_id == tg_id))
+        return user.email if user else None
 
 
 async def update_username(tg_id: int, username: str) -> bool:

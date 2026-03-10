@@ -64,8 +64,15 @@ async def get_user_info(username, api: str = "remnawave"):
                 user_info = await marz.get_user(name=username)
             return user_info
         elif api == "remnawave":
-            # REMNAWAVE INTEGRATION
-            user_info = await rem.get_user_from_username(username)
+            # REMNAWAVE INTEGRATION — fallback на email если есть
+            user_info = None
+            db_user = await rq.get_full_username_info(username)
+            if db_user and db_user.get("tg_id"):
+                email = await rq.get_user_email(db_user["tg_id"])
+                if email:
+                    user_info = await rem.get_user_from_email(email)
+            if not user_info:
+                user_info = await rem.get_user_from_username(username)
             if user_info:
                 # Преобразуем expire в UNIX timestamp если это datetime объект
                 expire = user_info.get("expire")
@@ -288,8 +295,13 @@ async def detect_user_api_provider(tg_id: int,username: str) -> str:
         pass
 
     try:
-        # Проверяем RemnaWave
-        user_info = await rem.get_user_from_username(username)
+        # Проверяем RemnaWave — сначала по email, потом по username
+        user_info = None
+        email = await rq.get_user_email(tg_id)
+        if email:
+            user_info = await rem.get_user_from_email(email)
+        if not user_info:
+            user_info = await rem.get_user_from_username(username)
         if user_info:
             await rq.update_user_api_info(tg_id, username, api_provider="remnawave")
             return "remnawave"

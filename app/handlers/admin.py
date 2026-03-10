@@ -33,6 +33,7 @@ class AdminState(StatesGroup):
     channel_text = State()
     channel_attach_btn = State()
     user_search = State()
+    email_input = State()
 
 
 def is_admin(user_id: int) -> bool:
@@ -232,10 +233,12 @@ async def admin_user_card(callback: CallbackQuery):
         return
 
     banned_text = "Да" if info["is_banned"] else "Нет"
+    email_text = info.get("email") or "—"
     text = (
         f"<b>Карточка пользователя</b>\n\n"
         f"Username: @{info['username'] or '—'}\n"
         f"TG ID: <code>{info['tg_id']}</code>\n"
+        f"Email: {email_text}\n"
         f"API: {info['api_provider'] or '—'}\n"
         f"UUID: <code>{info['vless_uuid'] or '—'}</code>\n"
         f"Забанен: {banned_text}"
@@ -250,6 +253,7 @@ async def admin_user_card(callback: CallbackQuery):
         [ban_btn],
         [InlineKeyboardButton(text="Удалить", callback_data=f"admin_delete:{tg_id}")],
         [InlineKeyboardButton(text="Отправить сообщение", callback_data=f"admin_msg:{tg_id}")],
+        [InlineKeyboardButton(text="Регистрация email", callback_data=f"admin_email:{tg_id}")],
     ]
     if info["api_provider"] != "remnawave":
         rows.append([InlineKeyboardButton(text="Миграция в RemnaWave", callback_data=f"admin_migrate:{tg_id}")])
@@ -302,10 +306,12 @@ async def _show_user_card(callback: CallbackQuery, tg_id: int):
         return
 
     banned_text = "Да" if info["is_banned"] else "Нет"
+    email_text = info.get("email") or "—"
     text = (
         f"<b>Карточка пользователя</b>\n\n"
         f"Username: @{info['username'] or '—'}\n"
         f"TG ID: <code>{info['tg_id']}</code>\n"
+        f"Email: {email_text}\n"
         f"API: {info['api_provider'] or '—'}\n"
         f"UUID: <code>{info['vless_uuid'] or '—'}</code>\n"
         f"Забанен: {banned_text}"
@@ -320,6 +326,7 @@ async def _show_user_card(callback: CallbackQuery, tg_id: int):
         [ban_btn],
         [InlineKeyboardButton(text="Удалить", callback_data=f"admin_delete:{tg_id}")],
         [InlineKeyboardButton(text="Отправить сообщение", callback_data=f"admin_msg:{tg_id}")],
+        [InlineKeyboardButton(text="Регистрация email", callback_data=f"admin_email:{tg_id}")],
     ]
     if info["api_provider"] != "remnawave":
         rows.append([InlineKeyboardButton(text="Миграция в RemnaWave", callback_data=f"admin_migrate:{tg_id}")])
@@ -851,6 +858,78 @@ async def announce_cancel(callback: CallbackQuery, state: FSMContext):
         return
     await state.set_state(AdminState.in_admin)
     await callback.message.edit_text("Отменено.")
+
+
+# ==================== Регистрация email ====================
+
+@router.callback_query(F.data.startswith("admin_email:"))
+async def admin_email_start(callback: CallbackQuery, state: FSMContext):
+    if not is_admin(callback.from_user.id):
+        return
+
+    tg_id = int(callback.data.split(":")[1])
+    await state.set_state(AdminState.email_input)
+    await state.update_data(email_tg_id=tg_id)
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Отмена", callback_data=f"admin_user:{tg_id}")]
+    ])
+
+    await callback.message.edit_text(
+        f"Введите email для пользователя <code>{tg_id}</code>:",
+        parse_mode='HTML',
+        reply_markup=kb,
+    )
+
+
+@router.message(AdminState.email_input, F.from_user.id == secrets.get('admin_id'))
+async def admin_email_save(message: Message, state: FSMContext):
+    import re
+    data = await state.get_data()
+    tg_id = data.get("email_tg_id")
+    await state.set_state(AdminState.in_admin)
+
+    email = message.text.strip()
+
+    # Валидация email
+    if not re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email):
+        await message.answer(
+            f"Некорректный email: <code>{email}</code>\nПопробуйте снова через карточку пользователя.",
+            parse_mode='HTML',
+        )
+        return
+
+    result = await rq.update_user_email(tg_id, email)
+    if not result:
+        await message.answer("Пользователь не найден в БД.")
+        return
+
+    await message.answer(
+        f"Email <code>{email}</code> сохранён для пользователя <code>{tg_id}</code>.",
+        parse_mode='HTML',
+    )
+
+    # Пробуем найти пользователя по email в RemnaWave и обновить vless_uuid
+    info = await rq.get_user_full_info_by_tg_id(tg_id)
+    if info:
+        try:
+            from app.api.remnawave.api import get_user_from_email
+            rw_user = await get_user_from_email(email)
+            if rw_user and rw_user.get("uuid"):
+                await rq.update_user_api_info(
+                    tg_id=tg_id,
+                    username=info.get("username"),
+                    vless_uuid=rw_user["uuid"],
+                    api_provider="remnawave",
+                )
+                await message.answer(
+                    f"Пользователь найден в RemnaWave по email.\n"
+                    f"UUID: <code>{rw_user['uuid']}</code>\n"
+                    f"API провайдер обновлён на remnawave.",
+                    parse_mode='HTML',
+                )
+        except Exception as e:
+            logging.error(f"Error looking up user by email {email}: {e}")
 
 
 # noop для кнопки-счётчика страниц

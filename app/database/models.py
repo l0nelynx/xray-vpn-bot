@@ -29,6 +29,9 @@ class User(Base):
     # API провайдер, на котором зарегистрирован пользователь (marzban/remnawave)
     api_provider: Mapped[str] = mapped_column(String(50), default="marzban")
 
+    # Email пользователя (для поиска в RemnaWave)
+    email: Mapped[str] = mapped_column(String(100), nullable=True)
+
     # Флаг бана пользователя
     is_banned: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", nullable=True)
 
@@ -81,6 +84,12 @@ async def async_main():
         def _check_and_migrate(sync_conn):
             insp = inspect(sync_conn)
             columns = [col['name'] for col in insp.get_columns('users')]
+            if 'email' not in columns:
+                sync_conn.execute(text(
+                    "ALTER TABLE users ADD COLUMN email VARCHAR(100)"
+                ))
+                logging.info("Migration: added email column to users table")
+
             if 'is_banned' not in columns:
                 sync_conn.execute(text(
                     "ALTER TABLE users ADD COLUMN is_banned BOOLEAN DEFAULT 0"
