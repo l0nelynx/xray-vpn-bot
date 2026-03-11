@@ -51,7 +51,7 @@ async def get_user_from_username(username: str):
             "uuid": response.uuid,
             "expire": expire_timestamp,  # UNIX timestamp, как в Marzban API и create_user
             "subscription_url": response.subscription_url,
-            "status": "active" if response.status == UserStatus.ACTIVE else "inactive",
+            "status": response.status.value.lower(),  # "active", "disabled", "limited", "expired"
             "data_limit": max(1, response.traffic_limit_bytes // (1024 * 1024 * 1024)) if response.traffic_limit_bytes else None,
             "traffic_used": response.used_traffic_bytes // (1024 * 1024 * 1024) if response.used_traffic_bytes else 0
         }
@@ -86,7 +86,7 @@ async def get_user_from_email(email: str):
             "uuid": user.uuid,
             "expire": expire_timestamp,
             "subscription_url": user.subscription_url,
-            "status": "active" if user.status == UserStatus.ACTIVE else "inactive",
+            "status": user.status.value.lower(),  # "active", "disabled", "limited", "expired"
             "data_limit": max(1, user.traffic_limit_bytes // (1024 * 1024 * 1024)) if user.traffic_limit_bytes else None,
             "traffic_used": user.used_traffic_bytes // (1024 * 1024 * 1024) if user.used_traffic_bytes else 0
         }
@@ -198,7 +198,7 @@ async def update_user(
 
         update_data = {
             "uuid": uuid.UUID(user_uuid),
-            "status": UserStatus.ACTIVE if status != "inactive" else UserStatus.INACTIVE
+            "status": UserStatus.ACTIVE if status != "disabled" else UserStatus.DISABLED
         }
 
         if username:
@@ -225,11 +225,30 @@ async def update_user(
         return {
             "expire": expire_timestamp,  # UNIX timestamp, как в create_user и get_user_from_username
             "subscription_url": response.subscription_url,
-            "status": "active" if response.status == UserStatus.ACTIVE else "inactive"
+            "status": response.status.value.lower(),  # "active", "disabled", "limited", "expired"
         }
     except Exception as e:
         print(f"Error updating user {user_uuid} in RemnaWave: {e}")
         return None
+
+
+async def reset_user_traffic(user_uuid: str) -> bool:
+    """
+    Сбрасывает использованный трафик пользователя в RemnaWave
+
+    Args:
+        user_uuid (str): UUID пользователя
+
+    Returns:
+        bool: True если успешно, False если ошибка
+    """
+    try:
+        remnawave = RemnawaveSDK(base_url=secrets.get('remnawave_url'), token=secrets.get('remnawave_token'))
+        await remnawave.users.reset_user_traffic(user_uuid)
+        return True
+    except Exception as e:
+        print(f"Error resetting traffic for user {user_uuid} in RemnaWave: {e}")
+        return False
 
 
 async def delete_user(user_uuid: str) -> bool:

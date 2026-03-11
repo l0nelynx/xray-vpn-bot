@@ -1,6 +1,9 @@
 from sqlalchemy import select, update, func, delete, exists
-
-from app.database.models import User, Transaction
+from sqlalchemy.orm import aliased
+from sqlalchemy.sql.sqltypes import NULLTYPE
+import string
+import random
+from app.database.models import User, Transaction, Promo
 from app.database.models import async_session
 
 
@@ -531,3 +534,141 @@ async def update_username(tg_id: int, username: str) -> bool:
         user.username = username
         await session.commit()
         return True
+
+
+# ==================== Promo functions ====================
+
+def _promo_to_dict(promo: Promo) -> dict:
+    return {
+        "id": promo.id,
+        "tg_id": promo.tg_id,
+        "promo_code": promo.promo_code,
+        "used_promo": promo.used_promo,
+        "days_purchased": promo.days_purchased,
+        "days_rewarded": promo.days_rewarded,
+    }
+
+
+async def get_promo_by_tg_id(tg_id: int) -> dict | None:
+    async with async_session() as session:
+        promo = await session.scalar(select(Promo).where(Promo.tg_id == tg_id))
+        return _promo_to_dict(promo) if promo else None
+
+
+async def get_promo_by_code(promo_code: str) -> dict | None:
+    async with async_session() as session:
+        promo = await session.scalar(select(Promo).where(Promo.promo_code == promo_code))
+        return _promo_to_dict(promo) if promo else None
+
+
+async def create_promo(tg_id: int, promo_code: str) -> Promo:
+    async with async_session() as session:
+        promo = Promo(tg_id=tg_id, promo_code=promo_code)
+        session.add(promo)
+        await session.commit()
+        return promo
+
+
+async def use_promo(tg_id: int, promo_code: str) -> bool:
+    async with async_session() as session:
+        promo = await session.scalar(select(Promo).where(Promo.tg_id == tg_id))
+        if promo:
+            promo.used_promo = promo_code
+        else:
+            # User hasn't created their own promo yet — create a record to store used_promo
+            while True:
+                code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+                existing = await get_promo_by_code(code)
+                if not existing:
+                    break
+            promo = Promo(tg_id=tg_id, promo_code=code, used_promo=promo_code)
+            session.add(promo)
+        await session.commit()
+        return True
+
+
+async def add_referral_days(promo_code: str, days: int) -> dict | None:
+    async with async_session() as session:
+        promo = await session.scalar(select(Promo).where(Promo.promo_code == promo_code))
+        if not promo:
+            return None
+        promo.days_purchased += days
+        # Capture values before commit (commit expires all attributes)
+        tg_id = promo.tg_id
+        new_days_purchased = promo.days_purchased
+        days_rewarded = promo.days_rewarded
+        await session.commit()
+        return {
+            "tg_id": tg_id,
+            "days_purchased": new_days_purchased,
+            "days_rewarded": days_rewarded,
+        }
+
+
+async def update_promo_days_rewarded(tg_id: int, days_rewarded: int) -> bool:
+    async with async_session() as session:
+        promo = await session.scalar(select(Promo).where(Promo.tg_id == tg_id))
+        if not promo:
+            return False
+        promo.days_rewarded = days_rewarded
+        await session.commit()
+        return True
+
+
+async def can_use_promo(tg_id: int) -> bool:
+    async with async_session() as session:
+        promo = await session.scalar(select(Promo).where(Promo.tg_id == tg_id))
+        if not promo:
+            return True
+        if promo.used_promo is not None:
+            return False
+        return False
+
+
+async def get_promos_paginated(page: int, per_page: int = 10):
+    async with async_session() as session:
+        # Subquery: кол-во использований промокода
+        UsedPromo = aliased(Promo)
+        usage_sq = (
+            select(func.count())
+            .where(UsedPromo.used_promo == Promo.promo_code)
+            .correlate(Promo)
+            .scalar_subquery()
+            .label("usage_count")
+        )
+
+        base = (
+            select(Promo, User.username, usage_sq)
+            .outerjoin(User, Promo.tg_id == User.tg_id)
+        )
+
+        count_q = select(func.count()).select_from(Promo)
+        total = await session.scalar(count_q) or 0
+
+        result = await session.execute(
+            base.order_by(Promo.id).offset(page * per_page).limit(per_page)
+        )
+        rows = result.all()
+
+        promos = []
+        for promo, owner_username, usage_count in rows:
+            promos.append({
+                "promo_code": promo.promo_code,
+                "owner_username": owner_username,
+                "owner_tg_id": promo.tg_id,
+                "usage_count": usage_count or 0,
+                "days_purchased": promo.days_purchased,
+                "days_rewarded": promo.days_rewarded,
+            })
+
+        return promos, total
+
+
+async def get_promo_usage_users(promo_code: str) -> list[dict]:
+    async with async_session() as session:
+        result = await session.execute(
+            select(Promo.tg_id, User.username)
+            .outerjoin(User, Promo.tg_id == User.tg_id)
+            .where(Promo.used_promo == promo_code)
+        )
+        return [{"tg_id": row[0], "username": row[1]} for row in result.all()]

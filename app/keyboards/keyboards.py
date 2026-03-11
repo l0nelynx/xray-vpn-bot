@@ -65,6 +65,7 @@ def get_main_new() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="🔒Приобрести CheezeVPN Premium⭐️", callback_data='Premium')],
         [InlineKeyboardButton(text="Инструкция по установке", callback_data='Others')],
         [InlineKeyboardButton(text="Бесплатная версия", callback_data='Free')],
+        [InlineKeyboardButton(text="👥 Пригласить друзей", callback_data='Invite_Friends')],
         [InlineKeyboardButton(text="Пользовательское соглашение", callback_data='Agreement')],
         [InlineKeyboardButton(text="Политика конфиденциальности", callback_data='Privacy')],
     ])
@@ -83,6 +84,7 @@ def get_main_pro() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="🔒Продлить подписку", callback_data='Extend_Month')],
         [InlineKeyboardButton(text="Инструкция по установке", callback_data='Others')],
         [InlineKeyboardButton(text="Информация о подписке", callback_data='Sub_Info')],
+        [InlineKeyboardButton(text="👥 Пригласить друзей", callback_data='Invite_Friends')],
         [InlineKeyboardButton(text="Пользовательское соглашение", callback_data='Agreement')],
         [InlineKeyboardButton(text="Политика конфиденциальности", callback_data='Privacy')],
     ])
@@ -101,6 +103,7 @@ def get_main_free() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="🔒Приобрести CheezeVPN Premium⭐️", callback_data='Premium')],
         [InlineKeyboardButton(text="Инструкция по установке", callback_data='Others')],
         [InlineKeyboardButton(text="Информация о подписке", callback_data='Sub_Info')],
+        [InlineKeyboardButton(text="👥 Пригласить друзей", callback_data='Invite_Friends')],
         [InlineKeyboardButton(text="Пользовательское соглашение", callback_data='Agreement')],
         [InlineKeyboardButton(text="Политика конфиденциальности", callback_data='Privacy')],
     ])
@@ -142,6 +145,20 @@ def get_pay_methods() -> InlineKeyboardMarkup:
     ])
     KeyboardCache.set(key, keyboard)
     return keyboard
+
+
+def get_pay_methods_dynamic(show_promo: bool = False) -> InlineKeyboardMarkup:
+    """Dynamic payment methods menu with optional promo button"""
+    buttons = [
+        [InlineKeyboardButton(text="⭐ Telegram Stars", callback_data='Stars_Plans')],
+        [InlineKeyboardButton(text="💰 CryptoBot", callback_data='Crypto_Plans')],
+        [InlineKeyboardButton(text="🔷 Crystal Pay", callback_data='Crystal_plans')],
+        [InlineKeyboardButton(text="💳 Банковская карта", callback_data='SBP_Apay')],
+    ]
+    if show_promo:
+        buttons.append([InlineKeyboardButton(text="🎁 У меня есть промокод", callback_data='Enter_Promo')])
+    buttons.append([InlineKeyboardButton(text="◀️ Назад", callback_data='Main')])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 def get_pay_extend_month() -> InlineKeyboardMarkup:
@@ -284,6 +301,7 @@ def get_main_marzban_pro() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="🚀 Миграция на Beta", callback_data='Migrate_RemnaWave')],
         [InlineKeyboardButton(text="Инструкция по установке", callback_data='Others')],
         [InlineKeyboardButton(text="Информация о подписке", callback_data='Sub_Info')],
+        [InlineKeyboardButton(text="👥 Пригласить друзей", callback_data='Invite_Friends')],
         [InlineKeyboardButton(text="Пользовательское соглашение", callback_data='Agreement')],
         [InlineKeyboardButton(text="Политика конфиденциальности", callback_data='Privacy')],
     ])
@@ -303,11 +321,20 @@ def get_main_marzban_free() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="🚀 Миграция на Beta", callback_data='Migrate_RemnaWave')],
         [InlineKeyboardButton(text="Инструкция по установке", callback_data='Others')],
         [InlineKeyboardButton(text="Информация о подписке", callback_data='Sub_Info')],
+        [InlineKeyboardButton(text="👥 Пригласить друзей", callback_data='Invite_Friends')],
         [InlineKeyboardButton(text="Пользовательское соглашение", callback_data='Agreement')],
         [InlineKeyboardButton(text="Политика конфиденциальности", callback_data='Privacy')],
     ])
     KeyboardCache.set(key, keyboard)
     return keyboard
+
+
+def get_limited_menu() -> InlineKeyboardMarkup:
+    """Keyboard for users with exhausted free traffic (LIMITED status)"""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔒Приобрести Premium⭐️", callback_data='Premium')],
+        [InlineKeyboardButton(text="На главную", callback_data='Main')],
+    ])
 
 
 def get_migration_confirm() -> InlineKeyboardMarkup:
@@ -397,6 +424,7 @@ def __getattr__(name: str):
         'main_free': get_main_free,
         'main_marzban_pro': get_main_marzban_pro,
         'main_marzban_free': get_main_marzban_free,
+        'limited_menu': get_limited_menu,
         'migration_confirm': get_migration_confirm,
         'others': get_others,
         'pay_methods': get_pay_methods,

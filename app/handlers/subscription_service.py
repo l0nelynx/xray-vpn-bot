@@ -28,6 +28,7 @@ class SubscriptionScenario(Enum):
     UPDATE = "update"
     ALREADY_ACTIVE = "already_active"
     MIGRATION = "migration"
+    LIMITED = "limited"
 
 
 async def get_subscription_scenario(
@@ -53,6 +54,8 @@ async def get_subscription_scenario(
     is_paid_subscription = status == "active" and limit is None
 
     if subscription_type == SubscriptionType.FREE:
+        if status == "limited":
+            return SubscriptionScenario.LIMITED
         if user_info.get("expire") == 0 or status != "active":
             return SubscriptionScenario.UPDATE
         else:
@@ -169,8 +172,77 @@ async def deliver_subscription(
             result = await _handle_update_subscription(
                 message, username, user_id, days, data_limit, reset_strategy, subscription_type
             )
+        elif scenario == SubscriptionScenario.LIMITED:
+            result = await _handle_limited(message, username, subscription_type)
         elif scenario == SubscriptionScenario.ALREADY_ACTIVE:
             result = await _handle_already_active(message, username, subscription_type)
+
+        # Referral reward: check if buyer used a promo code
+        if subscription_type == SubscriptionType.PAID:
+            try:
+                buyer_promo = await rq.get_promo_by_tg_id(user_id)
+                if buyer_promo and buyer_promo['used_promo']:
+                    referral_data = await rq.add_referral_days(buyer_promo['used_promo'], days)
+                    if referral_data:
+                        promo_days_reward = secrets.get('promo_days_reward', 3)
+                        total_purchased = referral_data['days_purchased']
+                        already_rewarded = referral_data['days_rewarded']
+                        reward_days = (total_purchased // 30) * promo_days_reward - already_rewarded
+
+                        if reward_days > 0:
+                            owner_tg_id = referral_data['tg_id']
+                            # Get owner username to extend subscription
+                            owner_info = await rq.get_user_full_info_by_tg_id(owner_tg_id)
+                            if owner_info and owner_info.get('username'):
+                                from app.handlers.tools import get_user_info, set_user_info, get_user_days
+                                owner_user_info = await get_user_info(owner_info['username'])
+                                if owner_user_info != 404:
+                                    owner_status = owner_user_info.get("status")
+                                    owner_limit = owner_user_info.get("data_limit")
+                                    is_owner_pro = owner_status == "active" and owner_limit is None
+
+                                    if is_owner_pro:
+                                        # PRO — просто добавляем дни
+                                        owner_days = await get_user_days(owner_user_info)
+                                        new_days = (owner_days if isinstance(owner_days, int) else 0) + reward_days
+                                        await set_user_info(
+                                            name=owner_info['username'],
+                                            limit=0,
+                                            res_strat="no_reset",
+                                            expire_days=new_days,
+                                            template=templates.vless_france,
+                                            api="remnawave"
+                                        )
+                                    else:
+                                        # FREE — апгрейд до PRO на reward_days дней (без лимита трафика)
+                                        await set_user_info(
+                                            name=owner_info['username'],
+                                            limit=0,
+                                            res_strat="no_reset",
+                                            expire_days=reward_days,
+                                            template=templates.vless_france,
+                                            api="remnawave",
+                                            squad_id=secrets.get("rw_pro_id")
+                                        )
+
+                            await rq.update_promo_days_rewarded(owner_tg_id, already_rewarded + reward_days)
+
+                            # Notify promo owner
+                            from app.locale.lang_ru import promo_reward_notification
+                            try:
+                                await bot.send_message(
+                                    chat_id=owner_tg_id,
+                                    text=promo_reward_notification.format(
+                                        reward_days=reward_days,
+                                        total_days=total_purchased,
+                                        total_rewarded=already_rewarded + reward_days
+                                    ),
+                                    parse_mode='HTML'
+                                )
+                            except Exception as notify_err:
+                                logging.warning(f"Failed to notify promo owner {owner_tg_id}: {notify_err}")
+            except Exception as promo_err:
+                logging.error(f"Error processing referral reward: {promo_err}")
 
         return {"status": "success", "scenario": scenario.value, **result}
 
@@ -274,10 +346,22 @@ async def _handle_update_subscription(
 ) -> dict:
     """Handle subscription update (replacement)"""
     # Lazy import to avoid circular dependency
-    from app.handlers.tools import set_user_info, get_user_days
+    from app.handlers.tools import set_user_info, get_user_days, get_user_info
+    from app.api.remnawave.api import reset_user_traffic
+    import app.database.requests as rq_update
 
     # При переходе с FREE на PAID — ставим PRO squad, при FREE — FREE squad
     squad_id = secrets.get("rw_pro_id") if subscription_type == SubscriptionType.PAID else secrets.get("rw_free_id")
+
+    # Сброс трафика при выдаче FREE подписки (чтобы limited пользователь мог снова пользоваться)
+    if subscription_type == SubscriptionType.FREE and data_limit > 0:
+        try:
+            db_user = await rq_update.get_full_username_info(username)
+            if db_user and db_user.get("vless_uuid"):
+                await reset_user_traffic(db_user["vless_uuid"])
+                logging.info(f"Reset traffic for {username} before FREE subscription update")
+        except Exception as e:
+            logging.warning(f"Failed to reset traffic for {username}: {e}")
 
     buyer_info = await set_user_info(
         name=username,
@@ -302,6 +386,33 @@ async def _handle_update_subscription(
     await _send_response(message, response_text, sub_link, user_id)
 
     return {"days": expire_day, "link": sub_link}
+
+
+async def _handle_limited(
+    message: Union[Message, CallbackQuery, None],
+    username: str,
+    subscription_type: SubscriptionType,
+) -> dict:
+    """Handle case when free subscription traffic is exhausted (LIMITED status)"""
+    from app.handlers.tools import get_user_info, get_user_days
+    from app.locale.lang_ru import free_traffic_exhausted
+
+    user_info = await get_user_info(username)
+    expire_day = await get_user_days(user_info)
+
+    response_text = free_traffic_exhausted.format(days=expire_day)
+
+    keyboard = kb.get_limited_menu()
+
+    if isinstance(message, Message):
+        await message.answer(text=response_text, parse_mode="HTML", reply_markup=keyboard)
+    elif isinstance(message, CallbackQuery):
+        await message.message.edit_text(text=response_text, parse_mode="HTML", reply_markup=keyboard)
+    elif message is None:
+        user_id = None
+        logging.warning(f"Cannot send limited message: message={message}")
+
+    return {"days": expire_day, "limited": True}
 
 
 async def _handle_already_active(

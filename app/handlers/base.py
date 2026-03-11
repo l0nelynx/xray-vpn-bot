@@ -13,6 +13,8 @@ from app.handlers.tools import startup_user_dialog, free_sub_handler, subscripti
 from app.settings import secrets
 from app.settings import bot
 from app.api.remnawave.api import create_user, get_user_from_username, update_user
+import string
+import random
 
 router = Router()
 lang = eval(f"{secrets.get('language')}")
@@ -117,6 +119,37 @@ async def sub_check(callback: CallbackQuery):
     print(sub_status)
     if sub_status:
         await free_sub_handler(callback, secrets.get('free_days'), secrets.get('free_traffic'), True)
+
+
+@router.callback_query(F.data == 'Invite_Friends')
+async def invite_friends(callback: CallbackQuery):
+    from app.locale.lang_ru import promo_invite_text
+
+    tg_id = callback.from_user.id
+    promo = await rq.get_promo_by_tg_id(tg_id)
+
+    if not promo:
+        # Generate unique 8-char promo code
+        while True:
+            code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+            existing = await rq.get_promo_by_code(code)
+            if not existing:
+                break
+        await rq.create_promo(tg_id, code)
+        promo = await rq.get_promo_by_tg_id(tg_id)
+
+    promo_discount = secrets.get('promo_discount', 20)
+    promo_days_reward = secrets.get('promo_days_reward', 3)
+
+    text = promo_invite_text.format(
+        promo_code=promo['promo_code'],
+        discount=promo_discount,
+        reward_days=promo_days_reward,
+        days_purchased=promo['days_purchased'],
+        days_rewarded=promo['days_rewarded'],
+    )
+
+    await callback.message.edit_text(text=text, parse_mode='HTML', reply_markup=kb.to_main)
 
 
 @router.callback_query(F.data == 'Migrate_RemnaWave')

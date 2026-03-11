@@ -48,7 +48,8 @@ class TariffKeyboardBuilder:
             disc: int,
             currency: str,
             period: str,
-            discount_func: Callable[[float, int], float] = None
+            discount_func: Callable[[float, int], float] = None,
+            extra_discount: int = 0
     ):
         """
         Конструктор класса для создания кнопки тарифа
@@ -60,6 +61,7 @@ class TariffKeyboardBuilder:
         :param currency: Валюта (символ)
         :param period: Описание периода
         :param discount_func: Функция расчета скидки (по умолчанинию стандартная)
+        :param extra_discount: Дополнительная скидка промокода (%)
         """
         self.method = method
         self.price = price
@@ -67,6 +69,7 @@ class TariffKeyboardBuilder:
         self.disc = disc
         self.currency = currency
         self.period = period
+        self.extra_discount = extra_discount
         self.discount_func = discount_func or self.default_discount
 
     @staticmethod
@@ -79,7 +82,7 @@ class TariffKeyboardBuilder:
         Рассчет итоговой суммы с учетом скидки.
         Implements caching to avoid recalculation of identical parameters.
         """
-        cache_key = (self.price, self.days, self.disc)
+        cache_key = (self.price, self.days, self.disc, self.extra_discount)
 
         # Check cache first
         if cache_key in self._amount_cache:
@@ -87,6 +90,8 @@ class TariffKeyboardBuilder:
 
         monthly_cost = self.price * (self.days / 30)
         result = self.discount_func(monthly_cost, self.disc)
+        if self.extra_discount > 0:
+            result = result * (1 - self.extra_discount / 100)
 
         # Cache the result
         self._amount_cache[cache_key] = result
@@ -121,7 +126,8 @@ class OptimizedTariffKeyboard:
             tariff: Dict[str, dict],
             method: str,
             base_price: int,
-            discount_func: Optional[Callable[[float, int], float]] = None
+            discount_func: Optional[Callable[[float, int], float]] = None,
+            extra_discount: int = 0
     ):
         """
         Initialize tariff keyboard builder
@@ -130,11 +136,13 @@ class OptimizedTariffKeyboard:
         :param method: Payment method
         :param base_price: Base price
         :param discount_func: Optional discount function
+        :param extra_discount: Additional promo discount (%)
         """
         self.tariff = tariff
         self.method = method
         self.base_price = base_price
         self.discount_func = discount_func
+        self.extra_discount = extra_discount
 
     def build(self) -> InlineKeyboardMarkup:
         """Build the complete tariff keyboard"""
@@ -154,7 +162,8 @@ class OptimizedTariffKeyboard:
                 disc=disc,
                 currency=currency,
                 period=period,
-                discount_func=self.discount_func
+                discount_func=self.discount_func,
+                extra_discount=self.extra_discount
             )
 
             button = tariff_builder.build()
@@ -178,7 +187,8 @@ def create_tariff_keyboard(
         tariff: Dict[str, dict],
         method: str,
         base_price: int,
-        discount_func: Optional[Callable[[float, int], float]] = None
+        discount_func: Optional[Callable[[float, int], float]] = None,
+        extra_discount: int = 0
 ) -> InlineKeyboardMarkup:
     """
     Create a tariff keyboard using optimized builder
@@ -187,13 +197,15 @@ def create_tariff_keyboard(
     :param method: Payment method
     :param base_price: Base price
     :param discount_func: Optional discount function
+    :param extra_discount: Additional promo discount (%)
     :return: InlineKeyboardMarkup
     """
     keyboard_builder = OptimizedTariffKeyboard(
         tariff=tariff,
         method=method,
         base_price=base_price,
-        discount_func=discount_func
+        discount_func=discount_func,
+        extra_discount=extra_discount
     )
     return keyboard_builder.build()
 

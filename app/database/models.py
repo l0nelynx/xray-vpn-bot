@@ -43,6 +43,17 @@ class User(Base):
     )
 
 
+class Promo(Base):
+    __tablename__ = 'promos'
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tg_id: Mapped[int] = mapped_column(BigInteger, unique=True)
+    promo_code: Mapped[str] = mapped_column(String(20), unique=True)
+    used_promo: Mapped[str] = mapped_column(String(20), nullable=True)
+    days_purchased: Mapped[int] = mapped_column(Integer, default=0)
+    days_rewarded: Mapped[int] = mapped_column(Integer, default=0)
+
+
 class Transaction(Base):
     __tablename__ = 'transactions'
 
