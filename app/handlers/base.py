@@ -35,7 +35,7 @@ async def cmd_start(message: Message):
     if await rq.is_user_banned(message.from_user.id):
         await message.answer("Ваш аккаунт заблокирован.")
         return
-    await rq.set_user(message.from_user.id)
+    await rq.set_user(message.from_user.id, message.from_user.username)
     await startup_user_dialog(message)
 
 
