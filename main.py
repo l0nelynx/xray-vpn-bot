@@ -58,8 +58,11 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
+    from app.log_buffer import init_error_log_handler
+    from app.settings import secrets
+    init_error_log_handler(maxlen=secrets.get('admin_logs_length', 20))
+    asyncio.run(main())

@@ -24,6 +24,8 @@ BTN_FILL_USERNAMES = "Заполнить username"
 BTN_BACKUP = "Бекап БД"
 BTN_ANNOUNCE = "Объявления"
 BTN_PROMOS = "Промокоды"
+BTN_BAN = "Бан/Разбан"
+BTN_LOGS = "Логи ошибок"
 BTN_CLOSE = "Закрыть админку"
 
 
@@ -35,6 +37,7 @@ class AdminState(StatesGroup):
     channel_attach_btn = State()
     user_search = State()
     email_input = State()
+    ban_input = State()
 
 
 def is_admin(user_id: int) -> bool:
@@ -47,6 +50,7 @@ def admin_menu_kb() -> ReplyKeyboardMarkup:
             [KeyboardButton(text=BTN_USERS), KeyboardButton(text=BTN_CLEANUP)],
             [KeyboardButton(text=BTN_FILL_USERNAMES), KeyboardButton(text=BTN_BACKUP)],
             [KeyboardButton(text=BTN_PROMOS), KeyboardButton(text=BTN_ANNOUNCE)],
+            [KeyboardButton(text=BTN_BAN), KeyboardButton(text=BTN_LOGS)],
             [KeyboardButton(text=BTN_CLOSE)],
         ],
         resize_keyboard=True,
@@ -128,7 +132,7 @@ async def _build_users_list(page: int, sort: str, search: str):
 
     buttons = []
     for user, is_paid in users:
-        name = f"@{user.username}" if user.username else f"ID: {user.tg_id}"
+        name = f"@{user.username} ({user.tg_id})" if user.username else f"ID: {user.tg_id}"
         status = "💲" if is_paid else "🟢"
         banned = " [BAN]" if user.is_banned else ""
         buttons.append([
@@ -206,7 +210,7 @@ async def admin_user_search_start(callback: CallbackQuery, state: FSMContext):
         [InlineKeyboardButton(text="Отмена", callback_data=_make_cb(0, "id", ""))]
     ])
     await callback.message.edit_text(
-        "Введите фрагмент username для поиска:",
+        "Введите фрагмент username или Telegram ID для поиска:",
         reply_markup=kb,
     )
 
@@ -931,6 +935,113 @@ async def admin_email_save(message: Message, state: FSMContext):
                 )
         except Exception as e:
             logging.error(f"Error looking up user by email {email}: {e}")
+
+
+# ==================== Бан/Разбан по ID или username (reply-кнопка) ====================
+
+@router.message(F.text == BTN_BAN, F.from_user.id == secrets.get('admin_id'))
+async def admin_ban_input_start(message: Message, state: FSMContext):
+    await state.set_state(AdminState.ban_input)
+    await message.answer(
+        "Введите Telegram ID или @username пользователя для бана/разбана:",
+    )
+
+
+@router.message(AdminState.ban_input, F.from_user.id == secrets.get('admin_id'))
+async def admin_ban_input_process(message: Message, state: FSMContext):
+    await state.set_state(AdminState.in_admin)
+    text = message.text.strip().lstrip("@")
+
+    if text.isdigit():
+        tg_id = int(text)
+        await _toggle_ban_and_respond(message, tg_id)
+        return
+
+    # Поиск по username
+    users = await rq.get_all_users_by_username(text)
+
+    if not users:
+        await message.answer(f"Пользователь с username <b>{text}</b> не найден.", parse_mode='HTML')
+        return
+
+    if len(users) == 1:
+        await _toggle_ban_and_respond(message, users[0]["tg_id"])
+        return
+
+    # Несколько совпадений — disambiguation
+    buttons = []
+    for u in users:
+        banned = " [BAN]" if u["is_banned"] else ""
+        buttons.append([
+            InlineKeyboardButton(
+                text=f"@{u['username']} ({u['tg_id']}){banned}",
+                callback_data=f"admin_ban_pick:{u['tg_id']}"
+            )
+        ])
+    kb = InlineKeyboardMarkup(inline_keyboard=buttons)
+    await message.answer(
+        f"Найдено несколько пользователей с username <b>{text}</b>.\nВыберите:",
+        parse_mode='HTML',
+        reply_markup=kb,
+    )
+
+
+@router.callback_query(F.data.startswith("admin_ban_pick:"))
+async def admin_ban_pick(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        return
+    tg_id = int(callback.data.split(":")[1])
+    await _toggle_ban_and_respond(callback.message, tg_id)
+    await callback.answer()
+
+
+async def _toggle_ban_and_respond(message: Message, tg_id: int):
+    info = await rq.get_user_full_info_by_tg_id(tg_id)
+    if not info:
+        await message.answer(f"Пользователь с ID <code>{tg_id}</code> не найден.", parse_mode='HTML')
+        return
+
+    if info["is_banned"]:
+        await rq.unban_user(tg_id)
+        action = "разбанен"
+    else:
+        await rq.ban_user(tg_id)
+        action = "забанен"
+
+    name = f"@{info['username']}" if info.get("username") else str(tg_id)
+    await message.answer(
+        f"Пользователь {name} (<code>{tg_id}</code>) <b>{action}</b>.",
+        parse_mode='HTML',
+    )
+
+
+# ==================== Логи ошибок (reply-кнопка) ====================
+
+@router.message(F.text == BTN_LOGS, F.from_user.id == secrets.get('admin_id'))
+async def admin_error_logs(message: Message):
+    from app.log_buffer import error_log_handler
+
+    if not error_log_handler or not error_log_handler.get_entries():
+        await message.answer("Логи ошибок пусты.")
+        return
+
+    full_text = error_log_handler.format_entries_for_display()
+
+    if len(full_text) <= 4096:
+        await message.answer(full_text, parse_mode='HTML')
+        return
+
+    # Слишком длинный текст — отправляем по одной записи
+    for entry in error_log_handler.get_entries():
+        ts = entry.timestamp.strftime("%Y-%m-%d %H:%M:%S")
+        msg = entry.message[:500] if len(entry.message) > 500 else entry.message
+        text = f"<b>[{entry.level}]</b> {ts}\n<b>{entry.logger_name}</b>\n<code>{msg}</code>"
+        if entry.traceback:
+            tr = entry.traceback[:300] if len(entry.traceback) > 300 else entry.traceback
+            text += f"\n<pre>{tr}</pre>"
+        if len(text) > 4096:
+            text = text[:4093] + "..."
+        await message.answer(text, parse_mode='HTML')
 
 
 # ==================== Промокоды — helpers ====================

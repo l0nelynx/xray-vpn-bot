@@ -378,7 +378,12 @@ async def get_users_paginated(page: int, per_page: int = 10,
 
         # Фильтр по поиску
         if search:
-            base = base.where(User.username.ilike(f"%{search}%"))
+            if search.isdigit():
+                base = base.where(
+                    (User.username.ilike(f"%{search}%")) | (User.tg_id == int(search))
+                )
+            else:
+                base = base.where(User.username.ilike(f"%{search}%"))
 
         # Фильтр по платным/бесплатным
         if sort == "paid":
@@ -534,6 +539,18 @@ async def update_username(tg_id: int, username: str) -> bool:
         user.username = username
         await session.commit()
         return True
+
+
+async def get_all_users_by_username(username: str) -> list[dict]:
+    async with async_session() as session:
+        result = await session.execute(
+            select(User).where(func.lower(User.username) == username.lower())
+        )
+        users = result.scalars().all()
+        return [
+            {"tg_id": u.tg_id, "username": u.username, "is_banned": bool(u.is_banned)}
+            for u in users
+        ]
 
 
 # ==================== Promo functions ====================
