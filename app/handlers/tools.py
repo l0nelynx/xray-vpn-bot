@@ -86,10 +86,10 @@ async def get_user_info(username, api: str = "remnawave"):
 
                 # Нормализуем ответ для совместимости
                 return {
-                    "status": "active",
+                    "status": user_info.get("status", "active"),
                     "expire": expire,
                     "subscription_url": user_info.get("subscription_url"),
-                    "data_limit": None  # RemnaWave может иметь лимит, нужно добавить
+                    "data_limit": user_info.get("data_limit"),
                 }
             return 404
         else:
