@@ -66,8 +66,7 @@ def get_main_new() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="Инструкция по установке", callback_data='Others')],
         [InlineKeyboardButton(text="Бесплатная версия", callback_data='Free')],
         [InlineKeyboardButton(text="👥 Пригласить друзей", callback_data='Invite_Friends')],
-        [InlineKeyboardButton(text="Пользовательское соглашение", callback_data='Agreement')],
-        [InlineKeyboardButton(text="Политика конфиденциальности", callback_data='Privacy')],
+        [InlineKeyboardButton(text="⚙️ Настройки", callback_data='Settings')],
     ])
     KeyboardCache.set(key, keyboard)
     return keyboard
@@ -85,8 +84,7 @@ def get_main_pro() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="Инструкция по установке", callback_data='Others')],
         [InlineKeyboardButton(text="Информация о подписке", callback_data='Sub_Info')],
         [InlineKeyboardButton(text="👥 Пригласить друзей", callback_data='Invite_Friends')],
-        [InlineKeyboardButton(text="Пользовательское соглашение", callback_data='Agreement')],
-        [InlineKeyboardButton(text="Политика конфиденциальности", callback_data='Privacy')],
+        [InlineKeyboardButton(text="⚙️ Настройки", callback_data='Settings')],
     ])
     KeyboardCache.set(key, keyboard)
     return keyboard
@@ -104,8 +102,7 @@ def get_main_free() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="Инструкция по установке", callback_data='Others')],
         [InlineKeyboardButton(text="Информация о подписке", callback_data='Sub_Info')],
         [InlineKeyboardButton(text="👥 Пригласить друзей", callback_data='Invite_Friends')],
-        [InlineKeyboardButton(text="Пользовательское соглашение", callback_data='Agreement')],
-        [InlineKeyboardButton(text="Политика конфиденциальности", callback_data='Privacy')],
+        [InlineKeyboardButton(text="⚙️ Настройки", callback_data='Settings')],
     ])
     KeyboardCache.set(key, keyboard)
     return keyboard
@@ -302,8 +299,7 @@ def get_main_marzban_pro() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="Инструкция по установке", callback_data='Others')],
         [InlineKeyboardButton(text="Информация о подписке", callback_data='Sub_Info')],
         [InlineKeyboardButton(text="👥 Пригласить друзей", callback_data='Invite_Friends')],
-        [InlineKeyboardButton(text="Пользовательское соглашение", callback_data='Agreement')],
-        [InlineKeyboardButton(text="Политика конфиденциальности", callback_data='Privacy')],
+        [InlineKeyboardButton(text="⚙️ Настройки", callback_data='Settings')],
     ])
     KeyboardCache.set(key, keyboard)
     return keyboard
@@ -322,8 +318,7 @@ def get_main_marzban_free() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="Инструкция по установке", callback_data='Others')],
         [InlineKeyboardButton(text="Информация о подписке", callback_data='Sub_Info')],
         [InlineKeyboardButton(text="👥 Пригласить друзей", callback_data='Invite_Friends')],
-        [InlineKeyboardButton(text="Пользовательское соглашение", callback_data='Agreement')],
-        [InlineKeyboardButton(text="Политика конфиденциальности", callback_data='Privacy')],
+        [InlineKeyboardButton(text="⚙️ Настройки", callback_data='Settings')],
     ])
     KeyboardCache.set(key, keyboard)
     return keyboard

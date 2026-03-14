@@ -130,8 +130,8 @@ free_menu_notsub = (f"<b>Ты ещё не подписался на канал</
                     "Подпишись — и бесплатный доступ твой\n")
 
 start_agreement = (
-    "<b>Используя CheezyVPN, ты соглашаешься с Пользовательским соглашением "
-    "и Политикой конфиденциальности. Ознакомься с документами перед оплатой</b>\n")
+    "<i>Используя CheezyVPN, ты соглашаешься с Пользовательским соглашением "
+    "и Политикой конфиденциальности. Ознакомься с документами перед оплатой</i>\n")
 
 user_agreement = (f"""
 <b>🔒 ПОЛЬЗОВАТЕЛЬСКОЕ СОГЛАШЕНИЕ CheezyVPN</b>
@@ -381,3 +381,80 @@ promo_reward_notification = """<b>Реферальный бонус!</b>
 
 Всего куплено по промокоду: {total_days} дн.
 Всего бонусных дней: {total_rewarded}"""
+
+# ==================== Language Selection ====================
+
+lang_choose = "🌐 <b>Выберите язык / Choose language:</b>"
+lang_btn_ru = "🇷🇺 Русский"
+lang_btn_en = "🇬🇧 English"
+
+# ==================== Settings ====================
+
+btn_settings = "⚙️ Настройки"
+btn_language = "🌐 Язык"
+msg_settings = "<b>⚙️ Настройки</b>\n\nЗдесь можно изменить язык, ознакомиться с документами."
+msg_lang_current = "🌐 Текущий язык: <b>Русский</b>\n\nВыберите язык:"
+
+# ==================== Button Labels ====================
+
+btn_buy_premium = "🔒Приобрести CheezeVPN Premium⭐️"
+btn_extend_subscription = "🔒Продлить подписку"
+btn_install_instructions = "Инструкция по установке"
+btn_free_version = "Бесплатная версия"
+btn_invite_friends = "👥 Пригласить друзей"
+btn_user_agreement = "Пользовательское соглашение"
+btn_privacy_policy = "Политика конфиденциальности"
+btn_sub_info = "Информация о подписке"
+btn_to_main = "На главную"
+btn_back = "◀️ Назад"
+btn_open = "Открыть"
+btn_i_subscribed = "Я подписался!"
+btn_full_text = "Полный текст"
+btn_buy_subscription = "Приобрести подписку"
+btn_migrate_beta = "🚀 Миграция на Beta"
+btn_confirm_migration = "✅ Подтвердить миграцию"
+btn_cancel = "❌ Отмена"
+btn_buy_premium_short = "🔒Приобрести Premium⭐️"
+
+# Payment buttons
+btn_pay_stars = "⭐ Telegram Stars"
+btn_pay_crypto = "💰 CryptoBot"
+btn_pay_crystal = "🔷 Crystal Pay"
+btn_pay_card = "💳 Банковская карта"
+btn_pay_amount = "Оплатить {amount} ⭐️"
+btn_have_promo = "🎁 У меня есть промокод"
+
+# Platform buttons
+btn_platform_android = "Android/IOS - Happ"
+btn_platform_windows = "Windows/Linux - Throne"
+
+# Tariff labels
+tariff_unlimited = "🔒БЕЗЛИМИТ"
+
+# ==================== Misc Messages ====================
+
+msg_account_banned = "Ваш аккаунт заблокирован."
+msg_buying_premium = "Покупка Premium подписки"
+msg_extending_premium = "Продление Premium подписки"
+msg_choose_tariff = "Выберите тарифный план"
+msg_pay_in_stars = "Оплата подписки в ⭐"
+msg_invoice_title = "Оплата подписки на месяц"
+msg_invoice_description = "Покупка за {amount} ⭐️!"
+msg_order_paid = "Заказ #{invoice_id} успешно оплачен"
+msg_pay_link = "Ссылка для оплаты: {link}"
+msg_already_on_beta = "❌ <b>Вы уже зарегистрированы в Beta!</b>"
+
+# Subscription info
+msg_pro_active = "Pro подписка активна\nСсылка для подключения: {link}\nОсталось дней: {days}\n"
+msg_free_active = "Free подписка активна\nСсылка для подключения: {link}\nОсталось дней: {days}\n"
+
+# Subscription info block for main menu greeting
+sub_info_block = ("📊 <b>Твоя подписка:</b>\n"
+                  "🏷️ Тариф: <b>{plan}</b>\n"
+                  "⏳ Осталось дней: <b>{days}</b>\n"
+                  "📶 Лимит трафика: <b>{traffic}</b>\n")
+
+# Tariff periods
+period_1month = "1 Месяц"
+period_3months = "3 Месяца"
+period_1year = "Год"

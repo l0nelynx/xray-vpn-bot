@@ -14,7 +14,8 @@ from app.api.a_pay import create_sbp_link as apays_create_sbp_link
 from app.api.crystal_pay import crystal_create_link
 from app.handlers.tools import success_payment_handler
 from app.handlers.subscription_service import deliver_subscription, SubscriptionType
-from app.locale.lang_ru import text_pay_method, text_extend_pay_method
+from app.locale.utils import get_user_lang
+from app.keyboards.localized import get_pay_methods_localized, get_to_main_localized
 from app.keyboards.tools import create_tariff_keyboard
 from app.tariffs import tariffs_stars, tariffs_crypto, tariffs_sbp
 from app.keyboards.tools import price_stars, price_crypto, sbp_price
@@ -44,33 +45,34 @@ class PaymentState(StatesGroup):  # FSM States init
 
 @router.callback_query(F.data == 'Premium')
 async def premium(callback: CallbackQuery, state: FSMContext):
-    await callback.answer('Покупка Premium подписки')
+    lang = await get_user_lang(callback.from_user.id)
+    await callback.answer(lang.msg_buying_premium)
     show_promo = await rq.can_use_promo(callback.from_user.id)
-    await callback.message.edit_text(text=text_pay_method, parse_mode="HTML",
-                                     reply_markup=kb.get_pay_methods_dynamic(show_promo=show_promo))
+    await callback.message.edit_text(text=lang.text_pay_method, parse_mode="HTML",
+                                     reply_markup=get_pay_methods_localized(lang, show_promo=show_promo))
     await state.set_state(PaymentState.PaymentMethod)
 
 
 @router.callback_query(F.data == 'Extend_Month')
 async def premium_extend(callback: CallbackQuery, state: FSMContext):
-    await callback.answer('Продление Premium подписки')
+    lang = await get_user_lang(callback.from_user.id)
+    await callback.answer(lang.msg_extending_premium)
     show_promo = await rq.can_use_promo(callback.from_user.id)
-    await callback.message.edit_text(text=text_extend_pay_method, parse_mode="HTML",
-                                     reply_markup=kb.get_pay_methods_dynamic(show_promo=show_promo))
+    await callback.message.edit_text(text=lang.text_extend_pay_method, parse_mode="HTML",
+                                     reply_markup=get_pay_methods_localized(lang, show_promo=show_promo))
     await state.set_state(PaymentState.PaymentMethod)
 
 
 @router.callback_query(F.data == 'Enter_Promo', PaymentState.PaymentMethod)
 async def enter_promo(callback: CallbackQuery, state: FSMContext):
-    from app.locale.lang_ru import promo_enter_text
-    await callback.message.edit_text(text=promo_enter_text, parse_mode='HTML')
+    lang = await get_user_lang(callback.from_user.id)
+    await callback.message.edit_text(text=lang.promo_enter_text, parse_mode='HTML')
     await state.set_state(PaymentState.PromoInput)
 
 
 @router.message(PaymentState.PromoInput)
 async def process_promo_input(message: Message, state: FSMContext):
-    from app.locale.lang_ru import (promo_success_text, promo_invalid_text,
-                                     promo_own_code_text, promo_already_used_text)
+    lang = await get_user_lang(message.from_user.id)
 
     promo_code = message.text.strip().upper()
     tg_id = message.from_user.id
@@ -78,23 +80,23 @@ async def process_promo_input(message: Message, state: FSMContext):
     # Check if user can still use a promo
     can_use = await rq.can_use_promo(tg_id)
     if not can_use:
-        await message.answer(text=promo_already_used_text, parse_mode='HTML',
-                             reply_markup=kb.get_pay_methods_dynamic(show_promo=False))
+        await message.answer(text=lang.promo_already_used_text, parse_mode='HTML',
+                             reply_markup=get_pay_methods_localized(lang, show_promo=False))
         await state.set_state(PaymentState.PaymentMethod)
         return
 
     # Check if promo exists
     promo = await rq.get_promo_by_code(promo_code)
     if not promo:
-        await message.answer(text=promo_invalid_text, parse_mode='HTML',
-                             reply_markup=kb.get_pay_methods_dynamic(show_promo=True))
+        await message.answer(text=lang.promo_invalid_text, parse_mode='HTML',
+                             reply_markup=get_pay_methods_localized(lang, show_promo=True))
         await state.set_state(PaymentState.PaymentMethod)
         return
 
     # Check if user tries to use their own promo
     if promo['tg_id'] == tg_id:
-        await message.answer(text=promo_own_code_text, parse_mode='HTML',
-                             reply_markup=kb.get_pay_methods_dynamic(show_promo=True))
+        await message.answer(text=lang.promo_own_code_text, parse_mode='HTML',
+                             reply_markup=get_pay_methods_localized(lang, show_promo=True))
         await state.set_state(PaymentState.PaymentMethod)
         return
 
@@ -104,9 +106,9 @@ async def process_promo_input(message: Message, state: FSMContext):
     await state.update_data(PromoDiscount=promo_discount, PromoCode=promo_code)
 
     await message.answer(
-        text=promo_success_text.format(discount=promo_discount),
+        text=lang.promo_success_text.format(discount=promo_discount),
         parse_mode='HTML',
-        reply_markup=kb.get_pay_methods_dynamic(show_promo=False)
+        reply_markup=get_pay_methods_localized(lang, show_promo=False)
     )
     await state.set_state(PaymentState.PaymentMethod)
 
@@ -128,7 +130,8 @@ async def stars_plan(callback: CallbackQuery, state: FSMContext):
     builder = keyboards.get(callback.data)
     if builder:
         keyboard = builder()
-        await callback.message.edit_text('Выберите тарифный план', reply_markup=keyboard)
+        lang = await get_user_lang(callback.from_user.id)
+        await callback.message.edit_text(lang.msg_choose_tariff, reply_markup=keyboard)
         print(f"{callback.data.split('_')[0]} has been chosen")
         await state.set_state(PaymentState.PaymentTariff)
     else:
@@ -140,13 +143,14 @@ async def invoice_handler(callback: CallbackQuery, callback_data: kb.PaymentCall
     method = callback_data.method
     amount = callback_data.amount
     days = callback_data.days
+    lang = await get_user_lang(callback.from_user.id)
     if method == 'stars':
-        await callback.answer('Оплата подписки в ⭐')
+        await callback.answer(lang.msg_pay_in_stars)
         prices = [LabeledPrice(label="XTR", amount=int(round(amount)))]
         await bot.send_invoice(
             callback.from_user.id,
-            title="Оплата подписки на месяц",
-            description=f"Покупка за {int(round(amount))} ⭐️!",
+            title=lang.msg_invoice_title,
+            description=lang.msg_invoice_description.format(amount=int(round(amount))),
             prices=prices,
             provider_token="",
             payload="channel_support",
@@ -168,11 +172,11 @@ async def invoice_handler(callback: CallbackQuery, callback_data: kb.PaymentCall
     elif method == 'SBP_APAY':
         amount = int(round(amount * 100))
         link = await apays_create_sbp_link(callback=callback, amount=amount, days=days)
-        await callback.message.edit_text(f"Ссылка для оплаты: {link}", reply_markup=kb.to_main)
+        await callback.message.edit_text(lang.msg_pay_link.format(link=link), reply_markup=get_to_main_localized(lang))
         logging.info("Запускаю ссылку оплаты для SBP APAY")
     elif method == 'CRYSTAL':
         link = await crystal_create_link(callback, amount, 'RUB', days)
-        await callback.message.edit_text(f"Ссылка для оплаты: {link}", reply_markup=kb.to_main)
+        await callback.message.edit_text(lang.msg_pay_link.format(link=link), reply_markup=get_to_main_localized(lang))
         logging.info("Запускаю ссылку оплаты для Crystal Pay")
     else:
         print('WRONG METHOD FROM KEYBOARD!')
@@ -183,7 +187,8 @@ async def invoice_handler(callback: CallbackQuery, callback_data: kb.PaymentCall
 
 @cp.invoice_paid()
 async def payment_handler(invoice: Invoice, message: CallbackQuery):
-    await message.message.answer(f"Заказ #{invoice.invoice_id} успешно оплачен")
+    lang_user = await get_user_lang(message.from_user.id)
+    await message.message.answer(lang_user.msg_order_paid.format(invoice_id=invoice.invoice_id))
     days = int(invoice.payload)
     await deliver_subscription(
         message=message.message,

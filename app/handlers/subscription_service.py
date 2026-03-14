@@ -11,7 +11,8 @@ from aiogram.types import Message, CallbackQuery
 
 import app.keyboards as kb
 import app.marzban.templates as templates
-from app.locale.lang_ru import subscription_response_templates, admin_transaction_message, admin_migration_message
+from app.locale.lang_ru import admin_transaction_message, admin_migration_message
+from app.locale.utils import get_user_lang
 from app.settings import bot, secrets
 
 
@@ -102,6 +103,9 @@ async def deliver_subscription(
         from app.handlers.tools import get_user_info, detect_user_api_provider, get_user_days, add_new_user_info
         import app.database.requests as rq
 
+        # Get user's language for localized messages
+        lang = await get_user_lang(user_id)
+
         # Проверяем, нужна ли миграция из Marzban
         api_provider = await detect_user_api_provider(user_id, username)
 
@@ -162,20 +166,20 @@ async def deliver_subscription(
 
         if scenario == SubscriptionScenario.NEW_USER:
             result = await _handle_new_user(
-                message, username, user_id, days, data_limit, reset_strategy, subscription_type
+                message, username, user_id, days, data_limit, reset_strategy, subscription_type, lang
             )
         elif scenario == SubscriptionScenario.EXTEND:
             result = await _handle_extend_subscription(
-                message, username, user_id, days, subscription_type
+                message, username, user_id, days, subscription_type, lang
             )
         elif scenario == SubscriptionScenario.UPDATE:
             result = await _handle_update_subscription(
-                message, username, user_id, days, data_limit, reset_strategy, subscription_type
+                message, username, user_id, days, data_limit, reset_strategy, subscription_type, lang
             )
         elif scenario == SubscriptionScenario.LIMITED:
-            result = await _handle_limited(message, username, subscription_type)
+            result = await _handle_limited(message, username, subscription_type, lang)
         elif scenario == SubscriptionScenario.ALREADY_ACTIVE:
-            result = await _handle_already_active(message, username, subscription_type)
+            result = await _handle_already_active(message, username, subscription_type, lang)
 
         # Referral reward: check if buyer used a promo code
         if subscription_type == SubscriptionType.PAID:
@@ -227,12 +231,12 @@ async def deliver_subscription(
 
                             await rq.update_promo_days_rewarded(owner_tg_id, already_rewarded + reward_days)
 
-                            # Notify promo owner
-                            from app.locale.lang_ru import promo_reward_notification
+                            # Notify promo owner (in their language)
                             try:
+                                owner_lang = await get_user_lang(owner_tg_id)
                                 await bot.send_message(
                                     chat_id=owner_tg_id,
-                                    text=promo_reward_notification.format(
+                                    text=owner_lang.promo_reward_notification.format(
                                         reward_days=reward_days,
                                         total_days=total_purchased,
                                         total_rewarded=already_rewarded + reward_days
@@ -259,6 +263,7 @@ async def _handle_new_user(
     data_limit: int,
     reset_strategy: str,
     subscription_type: SubscriptionType,
+    lang=None,
 ) -> dict:
     """Handle new user subscription creation"""
     # Lazy import to avoid circular dependency
@@ -285,12 +290,14 @@ async def _handle_new_user(
     expire_day = await get_user_days(buyer_info)
     sub_link = buyer_info["subscription_url"]
 
+    if lang is None:
+        lang = await get_user_lang(user_id)
     template_key = "new_paid" if subscription_type == SubscriptionType.PAID else "new_free"
-    response_text = subscription_response_templates[template_key].format(
+    response_text = lang.subscription_response_templates[template_key].format(
         days=expire_day, link=sub_link
     )
 
-    await _send_response(message, response_text, sub_link, user_id)
+    await _send_response(message, response_text, sub_link, user_id, lang)
 
     return {"days": expire_day, "link": sub_link}
 
@@ -301,6 +308,7 @@ async def _handle_extend_subscription(
     user_id: int,
     days: int,
     subscription_type: SubscriptionType,
+    lang=None,
 ) -> dict:
     """Handle existing subscription extension"""
     # Lazy import to avoid circular dependency
@@ -323,14 +331,16 @@ async def _handle_extend_subscription(
 
     final_expire_day = await get_user_days(buyer_info)
 
+    if lang is None:
+        lang = await get_user_lang(user_id)
     template_key = (
         "extended_paid" if subscription_type == SubscriptionType.PAID else "updated_free"
     )
-    response_text = subscription_response_templates[template_key].format(
+    response_text = lang.subscription_response_templates[template_key].format(
         days=final_expire_day, link=sub_link
     )
 
-    await _send_response(message, response_text, sub_link, user_id)
+    await _send_response(message, response_text, sub_link, user_id, lang)
 
     return {"days": final_expire_day, "link": sub_link}
 
@@ -343,6 +353,7 @@ async def _handle_update_subscription(
     data_limit: int,
     reset_strategy: str,
     subscription_type: SubscriptionType,
+    lang=None,
 ) -> dict:
     """Handle subscription update (replacement)"""
     # Lazy import to avoid circular dependency
@@ -376,14 +387,16 @@ async def _handle_update_subscription(
     expire_day = await get_user_days(buyer_info)
     sub_link = buyer_info["subscription_url"]
 
+    if lang is None:
+        lang = await get_user_lang(user_id)
     template_key = (
         "updated_paid" if subscription_type == SubscriptionType.PAID else "updated_free"
     )
-    response_text = subscription_response_templates[template_key].format(
+    response_text = lang.subscription_response_templates[template_key].format(
         days=expire_day, link=sub_link
     )
 
-    await _send_response(message, response_text, sub_link, user_id)
+    await _send_response(message, response_text, sub_link, user_id, lang)
 
     return {"days": expire_day, "link": sub_link}
 
@@ -392,17 +405,21 @@ async def _handle_limited(
     message: Union[Message, CallbackQuery, None],
     username: str,
     subscription_type: SubscriptionType,
+    lang=None,
 ) -> dict:
     """Handle case when free subscription traffic is exhausted (LIMITED status)"""
     from app.handlers.tools import get_user_info, get_user_days
-    from app.locale.lang_ru import free_traffic_exhausted
+    from app.keyboards.localized import get_limited_menu_localized
 
     user_info = await get_user_info(username)
     expire_day = await get_user_days(user_info)
 
-    response_text = free_traffic_exhausted.format(days=expire_day)
+    if lang is None:
+        from app.locale import lang_ru
+        lang = lang_ru
+    response_text = lang.free_traffic_exhausted.format(days=expire_day)
 
-    keyboard = kb.get_limited_menu()
+    keyboard = get_limited_menu_localized(lang)
 
     if isinstance(message, Message):
         await message.answer(text=response_text, parse_mode="HTML", reply_markup=keyboard)
@@ -416,7 +433,7 @@ async def _handle_limited(
 
 
 async def _handle_already_active(
-    message: Union[Message, CallbackQuery, None], username: str, subscription_type: SubscriptionType
+    message: Union[Message, CallbackQuery, None], username: str, subscription_type: SubscriptionType, lang=None
 ) -> dict:
     """Handle case when free subscription is already active"""
     # Lazy import to avoid circular dependency
@@ -426,27 +443,37 @@ async def _handle_already_active(
     sub_link = user_info["subscription_url"]
     expire_day = await get_user_days(user_info)
 
-    response_text = subscription_response_templates["already_active_free"].format(
-        days=expire_day, link=sub_link
-    )
-
-    # Get user_id from message or use a placeholder for background tasks
     user_id = None
     if isinstance(message, Message):
         user_id = message.from_user.id
     elif isinstance(message, CallbackQuery):
         user_id = message.from_user.id
 
-    await _send_response(message, response_text, sub_link, user_id)
+    if lang is None:
+        if user_id:
+            lang = await get_user_lang(user_id)
+        else:
+            from app.locale import lang_ru
+            lang = lang_ru
+
+    response_text = lang.subscription_response_templates["already_active_free"].format(
+        days=expire_day, link=sub_link
+    )
+
+    await _send_response(message, response_text, sub_link, user_id, lang)
 
     return {"days": expire_day, "link": sub_link, "already_active": True}
 
 
 async def _send_response(
-    message: Union[Message, CallbackQuery, None], text: str, sub_link: str, user_id: Optional[int] = None
+    message: Union[Message, CallbackQuery, None], text: str, sub_link: str, user_id: Optional[int] = None, lang=None
 ) -> None:
     """Send response message to user with subscription details"""
-    keyboard = kb.connect(sub_link)
+    from app.keyboards.localized import get_connect_localized
+    if lang is None:
+        from app.locale import lang_ru
+        lang = lang_ru
+    keyboard = get_connect_localized(lang, sub_link)
 
     if isinstance(message, Message):
         # Прямой ответ на сообщение пользователя

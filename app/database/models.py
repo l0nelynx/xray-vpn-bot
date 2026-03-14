@@ -35,6 +35,9 @@ class User(Base):
     # Флаг бана пользователя
     is_banned: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", nullable=True)
 
+    # Язык интерфейса пользователя (ru/en), None = не выбран
+    language: Mapped[str] = mapped_column(String(5), default=None, nullable=True)
+
     # Добавляем отношение один-ко-многим с таблицей transactions
     transactions: Mapped[list["Transaction"]] = relationship(back_populates="user")
 
@@ -106,6 +109,12 @@ async def async_main():
                     "ALTER TABLE users ADD COLUMN is_banned BOOLEAN DEFAULT 0"
                 ))
                 logging.info("Migration: added is_banned column to users table")
+
+            if 'language' not in columns:
+                sync_conn.execute(text(
+                    "ALTER TABLE users ADD COLUMN language VARCHAR(5) DEFAULT 'ru'"
+                ))
+                logging.info("Migration: added language column to users table")
 
             # Миграция: добавляем индекс на username если его ещё нет
             indexes = [idx['name'] for idx in insp.get_indexes('users')]

@@ -1,19 +1,19 @@
 import app.database.requests as rq
 import app.keyboards as kb
-import app.locale.lang_ru as ru
+from app.keyboards.localized import (
+    get_main_new_localized, get_main_pro_localized, get_main_free_localized,
+)
+from app.locale.utils import get_user_lang
 from app.database.models import async_main
 from app.settings import bot, secrets
 from app.views import start_bot_msg, stop_bot_msg
 from io import BytesIO
 from aiogram.types import BufferedInputFile
 
-lang = eval(f"{secrets.get('language')}")
-crypto = secrets.get('crypto')
-
 
 async def start_bot():
     await bot.send_message(secrets.get('admin_id'), start_bot_msg())
-    await async_main()  # Создание таблиц БД при запуске
+    await async_main()
 
 
 async def userlist():
@@ -33,24 +33,50 @@ async def stop_bot():
     await bot.send_message(secrets.get('admin_id'), stop_bot_msg())
 
 
-async def main_menu(message, menu_type):
+async def main_menu(message_func, menu_type, user_id: int = None, days=None, data_limit=None):
+    """
+    Display main menu with localized text and keyboards.
+    
+    Args:
+        message_func: The function to send/edit message (message.answer or callback.message.edit_text)
+        menu_type: Type of menu (pro, free, new)
+        user_id: Telegram user ID for language lookup
+        days: Remaining subscription days (for pro/free)
+        data_limit: Traffic limit in bytes (None or 0 = unlimited)
+    """
+    if user_id:
+        lang = await get_user_lang(user_id)
+    else:
+        from app.locale import lang_ru
+        lang = lang_ru
+
     keyboards_map = {
-        "pro": kb.main_pro,
-        "free": kb.main_free,
-        "new": kb.main_new,
+        "pro": get_main_pro_localized(lang),
+        "free": get_main_free_localized(lang),
+        "new": get_main_new_localized(lang),
     }
 
+    # Build subscription info block for pro/free users
+    sub_info_text = ""
+    if menu_type in ("pro", "free") and days is not None:
+        if data_limit is None or data_limit == 0:
+            traffic = "∞"
+        else:
+            traffic = f"{data_limit // (1024 * 1024 * 1024)} GB"
+        plan = "PRO" if menu_type == "pro" else "FREE"
+        sub_info_text = lang.sub_info_block.format(days=days, traffic=traffic, plan=plan) + "\n"
+
     texts_map = {
-        "pro": lang.start_pro + lang.start_agreement,
-        "free": lang.start_free + lang.start_agreement,
+        "pro": lang.start_pro + sub_info_text + lang.start_agreement,
+        "free": lang.start_free + sub_info_text + lang.start_agreement,
         "new": lang.start_base + lang.start_new + lang.start_agreement,
     }
 
     text = texts_map.get(menu_type, texts_map["new"])
     keyboard = keyboards_map.get(menu_type, keyboards_map["new"])
 
-    await message(text, reply_markup=keyboard, parse_mode="HTML")
+    await message_func(text, reply_markup=keyboard, parse_mode="HTML")
 
 
-async def main_call(message, menu_type):
-    await main_menu(message, menu_type)
+async def main_call(message_func, menu_type, user_id: int = None, days=None, data_limit=None):
+    await main_menu(message_func, menu_type, user_id, days, data_limit)

@@ -156,6 +156,26 @@ async def get_full_username_info(username: str) -> dict:
         }
 
 
+async def set_user_language(tg_id: int, language: str) -> bool:
+    """Устанавливает язык интерфейса пользователя"""
+    async with async_session() as session:
+        user = await session.scalar(select(User).where(User.tg_id == tg_id))
+        if not user:
+            return False
+        user.language = language
+        await session.commit()
+        return True
+
+
+async def get_user_language(tg_id: int) -> str | None:
+    """Получает язык интерфейса пользователя (None если не выбран)"""
+    async with async_session() as session:
+        user = await session.scalar(select(User).where(User.tg_id == tg_id))
+        if not user:
+            return None
+        return user.language
+
+
 # Пример создания новой транзакции
 async def create_transaction(user_tg_id: int, user_transaction: str, username: str, days: int, uuid: str = 'None'):
     async with async_session() as session:

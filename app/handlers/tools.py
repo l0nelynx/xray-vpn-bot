@@ -10,10 +10,14 @@ from aiogram.types import Message, CallbackQuery
 from app.settings import bot, secrets
 import app.keyboards as kb
 
-import app.locale.lang_ru as ru
 import app.marzban.templates as templates
 from app.handlers.events import main_menu
 from app.handlers.subscription_service import deliver_subscription, SubscriptionType
+from app.locale.utils import get_user_lang
+from app.keyboards.localized import (
+    get_main_marzban_pro_localized, get_main_marzban_free_localized,
+    get_connect_localized,
+)
 from aiogram import Bot
 from aiogram.enums.chat_member_status import ChatMemberStatus
 
@@ -316,6 +320,8 @@ async def startup_user_dialog(message):
     username = message.from_user.username
     user_id = message.from_user.id
 
+    lang = await get_user_lang(user_id)
+
     # Определяем API провайдер пользователя
     api_provider = await detect_user_api_provider(user_id, username)
 
@@ -329,39 +335,42 @@ async def startup_user_dialog(message):
 
     if user_info == 404:
         print("User not found - starting main menu for newby")
-        await main_menu(message_func, menu_type="new")
+        await main_menu(message_func, menu_type="new", user_id=user_id)
     else:
         print("User has been found - decide whats next")
         status = user_info.get("status")
         data_limit = user_info.get("data_limit")
+        expire = user_info.get("expire")
         is_pro = status == "active" and data_limit is None
 
         # Если пользователь на Marzban, показываем специальное меню с опцией миграции
         if api_provider == "marzban":
             if is_pro:
                 print("User has an active Pro subscription on Marzban")
-                # Показываем текст с предложением миграции и клавиатуру для Marzban Pro
-                from app.locale.lang_ru import marzban_user_with_upgrade_option, start_agreement
-                text = marzban_user_with_upgrade_option + start_agreement
-                await message_func(text, reply_markup=kb.get_main_marzban_pro(), parse_mode="HTML")
+                text = lang.marzban_user_with_upgrade_option + lang.start_agreement
+                await message_func(text, reply_markup=get_main_marzban_pro_localized(lang), parse_mode="HTML")
             else:
                 print("User has an active Free subscription on Marzban")
-                # Показываем текст с предложением миграции и клавиатуру для Marzban Free
-                from app.locale.lang_ru import marzban_user_with_upgrade_option, start_free, start_agreement
-                text = marzban_user_with_upgrade_option + start_free + start_agreement
-                await message_func(text, reply_markup=kb.get_main_marzban_free(), parse_mode="HTML")
+                text = lang.marzban_user_with_upgrade_option + lang.start_free + lang.start_agreement
+                await message_func(text, reply_markup=get_main_marzban_free_localized(lang), parse_mode="HTML")
         else:
+            # Получаем оставшиеся дни для отображения в меню
+            expire_days = await get_user_days(user_info)
+            raw_data_limit = user_info.get("data_limit")
+
             # Для RemnaWave пользователей используем стандартное меню
             if is_pro:
                 print("User has an active Pro subscription on RemnaWave")
-                await main_menu(message_func, menu_type="pro")
+                await main_menu(message_func, menu_type="pro", user_id=user_id,
+                                days=expire_days, data_limit=raw_data_limit)
             else:
                 if status == "active":
                     print("User has an active Free subscription on RemnaWave")
-                    await main_menu(message_func, menu_type="free")
+                    await main_menu(message_func, menu_type="free", user_id=user_id,
+                                    days=expire_days, data_limit=raw_data_limit)
                 else:
                     print("User has no active subscription on RemnaWave")
-                    await main_menu(message_func, menu_type="new")
+                    await main_menu(message_func, menu_type="new", user_id=user_id)
 
 
 async def success_payment_handler(message: Message, callback: Message, tariff_days: int):
@@ -407,6 +416,7 @@ async def free_sub_handler(callback: CallbackQuery, free_days: int, free_limit: 
 async def subscription_info(callback: CallbackQuery):
     username = callback.from_user.username
     usrid = callback.from_user.id
+    lang = await get_user_lang(usrid)
     # Определяем API провайдер пользователя
     api_provider = await detect_user_api_provider(usrid, username)
 
@@ -421,13 +431,13 @@ async def subscription_info(callback: CallbackQuery):
     else:
         expire_day = await get_user_days(user_info)
     if status == "active" and limit is None:
-        await callback.message.edit_text(f"Pro подписка активна\n"
-                                         f"Ссылка для подключения: {sub_link}\n"
-                                         f"Осталось дней: {expire_day}\n", reply_markup=kb.connect(sub_link))
+        await callback.message.edit_text(
+            lang.msg_pro_active.format(link=sub_link, days=expire_day),
+            reply_markup=get_connect_localized(lang, sub_link))
     else:
-        await callback.message.edit_text("Free подписка активна\n"
-                                         f"Ссылка для подключения: {sub_link}\n"
-                                         f"Осталось дней: {expire_day}\n", reply_markup=kb.connect(sub_link))
+        await callback.message.edit_text(
+            lang.msg_free_active.format(link=sub_link, days=expire_day),
+            reply_markup=get_connect_localized(lang, sub_link))
 
 
 async def check_tg_subscription(bot: Bot, chat_id: int, user_id: int) -> bool:
