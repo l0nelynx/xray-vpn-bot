@@ -433,6 +433,7 @@ tariff_unlimited = "🔒UNLIMITED"
 # ==================== Misc Messages ====================
 
 msg_account_banned = "Your account is blocked."
+msg_username_required = " 🤡 To get the free version, you need to set a username in your Telegram settings."
 msg_buying_premium = "Buying Premium subscription"
 msg_extending_premium = "Extending Premium subscription"
 msg_choose_tariff = "Choose a tariff plan"

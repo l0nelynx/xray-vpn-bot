@@ -434,6 +434,7 @@ tariff_unlimited = "🔒БЕЗЛИМИТ"
 # ==================== Misc Messages ====================
 
 msg_account_banned = "Ваш аккаунт заблокирован."
+msg_username_required = " 🤡 Для получения бесплатной версии необходимо установить имя пользователя (username) в настройках Telegram."
 msg_buying_premium = "Покупка Premium подписки"
 msg_extending_premium = "Продление Premium подписки"
 msg_choose_tariff = "Выберите тарифный план"

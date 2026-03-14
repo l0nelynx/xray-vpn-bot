@@ -147,6 +147,18 @@ async def free_version_menu(callback: CallbackQuery):
 @router.callback_query(F.data == 'subcheck_free')
 async def free_buy(callback: CallbackQuery):
     lang = await get_user_lang(callback.from_user.id)
+
+    if await rq.is_user_banned(callback.from_user.id):
+        await callback.message.edit_text(text=lang.msg_account_banned, parse_mode='HTML',
+                                         reply_markup=get_to_main_localized(lang))
+        return
+
+    username = callback.from_user.username
+    if not username or username == "None":
+        await callback.message.edit_text(text=lang.msg_username_required, parse_mode='HTML',
+                                         reply_markup=get_to_main_localized(lang))
+        return
+
     sub_status = await check_tg_subscription(bot=bot, chat_id=secrets.get('news_id'), user_id=callback.from_user.id)
     if sub_status:
         await free_sub_handler(callback, secrets.get('free_days'), secrets.get('free_traffic'))
