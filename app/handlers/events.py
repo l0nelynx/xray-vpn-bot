@@ -62,7 +62,10 @@ async def main_menu(message_func, menu_type, user_id: int = None, days=None, dat
         if data_limit is None or data_limit == 0:
             traffic = "∞"
         else:
-            traffic = f"{data_limit // (1024 * 1024 * 1024)} GB"
+            if data_limit > (1024 * 1024 * 1024):
+                traffic = f"{data_limit // (1024 * 1024 * 1024)} GB"
+            else:
+                traffic = f"{data_limit} GB"
         plan = "PRO" if menu_type == "pro" else "FREE"
         sub_info_text = lang.sub_info_block.format(days=days, traffic=traffic, plan=plan) + "\n"
 
