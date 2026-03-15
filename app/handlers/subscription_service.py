@@ -268,10 +268,10 @@ async def _handle_new_user(
     from app.handlers.tools import add_new_user_info, get_user_days
     if subscription_type == SubscriptionType.FREE:
         squad_id = secrets.get("rw_free_id")
-        external_squad_id = secrets.get("rw_ext_pro_id")
+        external_squad_id = secrets.get("rw_ext_free_id")
     else:
         squad_id = secrets.get("rw_pro_id")
-        external_squad_id = secrets.get("rw_ext_free_id")
+        external_squad_id = secrets.get("rw_ext_pro_id")
     print("Days:", days)
     print("Data Limit (GB):", data_limit)
     buyer_info = await add_new_user_info(
