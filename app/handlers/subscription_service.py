@@ -114,6 +114,7 @@ async def deliver_subscription(
                 is_pro = marzban_info.get("status") == "active" and marzban_data_limit is None
 
                 migration_squad_id = secrets.get("rw_pro_id") if is_pro else secrets.get("rw_free_id")
+                external_squad_migration_id = secrets.get("rw_ext_pro_id") if is_pro else secrets.get("rw_ext_free_id")
                 # Marzban возвращает data_limit в байтах, а RemnaWave принимает в GB
                 migration_limit = 0 if (marzban_data_limit == 0 or marzban_data_limit is None) else marzban_data_limit // (1024 * 1024 * 1024)
 
@@ -125,7 +126,8 @@ async def deliver_subscription(
                     api="remnawave",
                     email=f"{username}@marzban.ru",
                     description=f"Auto-migrated from Marzban ({'Pro' if is_pro else 'Free'})",
-                    squad_id=migration_squad_id
+                    squad_id=migration_squad_id,
+                    external_squad_id=external_squad_migration_id
                 )
 
                 if new_user_info:
@@ -266,8 +268,10 @@ async def _handle_new_user(
     from app.handlers.tools import add_new_user_info, get_user_days
     if subscription_type == SubscriptionType.FREE:
         squad_id = secrets.get("rw_free_id")
+        external_squad_id = secrets.get("rw_ext_pro_id")
     else:
         squad_id = secrets.get("rw_pro_id")
+        external_squad_id = secrets.get("rw_ext_free_id")
     print("Days:", days)
     print("Data Limit (GB):", data_limit)
     buyer_info = await add_new_user_info(
@@ -280,6 +284,7 @@ async def _handle_new_user(
         email=f"{username}@marzban.ru",
         description="Telegram subscription",
         squad_id=squad_id,
+        external_squad_id=external_squad_id,
         api="remnawave"
     )
 

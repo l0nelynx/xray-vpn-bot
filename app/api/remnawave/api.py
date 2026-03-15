@@ -99,6 +99,7 @@ async def create_user(
     telegram_id: int = None,
     tag: str = None,
     squad_id: str = None,
+    external_squad_id: str = None,
 ) -> dict | None:
     """Создает нового пользователя в RemnaWave."""
     try:
@@ -119,6 +120,7 @@ async def create_user(
             email=email,
             active_internal_squads=[squad_id] if squad_id else [f"{secrets.get('rw_free_id')}"],
             telegram_id=telegram_id,
+            external_squad_uuid=external_squad_id,
         )
 
         if tag:
@@ -149,6 +151,7 @@ async def update_user(
     tag: str = None,
     status: str = None,
     squad_id: str = None,
+    external_squad_id: str = None,
 ) -> dict | None:
     """Обновляет информацию пользователя в RemnaWave."""
     try:
@@ -173,6 +176,8 @@ async def update_user(
             update_data["tag"] = tag
         if squad_id:
             update_data["active_internal_squads"] = [squad_id]
+        if external_squad_id:
+            update_data["external_squad_uuid"] = [external_squad_id]
 
         user = UpdateUserRequestDto(**update_data)
         response: UserResponseDto = await sdk.users.update_user(user)

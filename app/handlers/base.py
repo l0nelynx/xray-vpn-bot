@@ -269,9 +269,11 @@ async def process_migration(callback: CallbackQuery):
 
         if is_pro:
             squad_id = secrets.get("rw_pro_id")
+            external_squad_id = secrets.get("rw_ext_pro_id")
             description = "Migrated from Marzban (Pro)"
         else:
             squad_id = secrets.get("rw_free_id")
+            external_squad_id = secrets.get("rw_ext_free_id")
             description = "Migrated from Marzban (Free)"
 
         if data_limit == 0 or data_limit is None:
@@ -289,7 +291,8 @@ async def process_migration(callback: CallbackQuery):
             api="remnawave",
             email=f"{username}@marzban.ru",
             description=description,
-            squad_id=squad_id
+            squad_id=squad_id,
+            external_squad_id=external_squad_id,
         )
 
         if not new_user_info:

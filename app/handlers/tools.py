@@ -156,7 +156,8 @@ async def add_new_user_info(
     api: str = "remnawave",
     email: str = None,
     description: str = "created by backend v2",
-    squad_id: str = secrets.get('rw_free_id')
+    squad_id: str = secrets.get('rw_free_id'),
+    external_squad_id: str = None
 ):
     """
     Добавляет нового пользователя в указанный API провайдер
@@ -172,6 +173,7 @@ async def add_new_user_info(
         email (str): Email пользователя (для RemnaWave)
         description (str): Описание пользователя
         squad_id (str): ID группы пользователей в RemnaWave
+        external_squad_id (str): ID внешней группы для отображения в RemnaWave (опционально)
 
     Returns:
         dict: Информация о созданном пользователе
@@ -216,7 +218,8 @@ async def add_new_user_info(
                 descr=description,
                 email=email,
                 squad_id=squad_id,
-                telegram_id=userid
+                telegram_id=userid,
+                external_squad_id=external_squad_id
             )
 
             if buyer_nfo and buyer_nfo.get("uuid"):
@@ -247,7 +250,8 @@ async def set_user_info(
     template: dict = templates.vless_template,
     api: str = "remnawave",
     description: str = "updated by backend v2",
-    squad_id: str = secrets.get('rw_free_id')
+    squad_id: str = secrets.get('rw_free_id'),
+    external_squad_id: str = None
 ):
     """
     Обновляет информацию существующего пользователя
@@ -260,6 +264,8 @@ async def set_user_info(
         template (dict): Шаблон конфигурации (для Marzban)
         api (str): API провайдер (marzban или remnawave)
         description (str): Описание пользователя
+        squad_id (str): ID внутреннего squad пользователей в RemnaWave
+        external_squad_id (str): ID внешнего squad для отображения в RemnaWave (опционально)
 
     Returns:
         dict: Обновленная информация о пользователе
@@ -302,7 +308,8 @@ async def set_user_info(
                 limit_gb=limit,
                 username=name,
                 descr=description,
-                squad_id=squad_id
+                squad_id=squad_id,
+                external_squad_id=external_squad_id
             )
             return buyer_nfo
         else:
