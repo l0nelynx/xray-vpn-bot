@@ -1,6 +1,6 @@
 services:
   seller-bot:
-    container_name: cheezy-vpn-bot
+    container_name: seller-bot
     build:
       context: .
       dockerfile: Dockerfile
@@ -11,8 +11,10 @@ services:
       - /var/lib/marzban/certs/:/usr/src/app/uvicorn/ssl
       - ./config.yml:/usr/src/app/config.yml
       - ./dig_data.json:/usr/src/app/dig_data.json
-    ports:
-      - "5000:5000"
+    networks:
+      - bot-network
+#    ports:
+#      - "5000:5000"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
@@ -25,7 +27,7 @@ services:
         limits:
           memory: 256M
   support-bot:
-    container_name: cheezy-sup-bot
+    container_name: support-bot
     build:
       context: .
       dockerfile: Dockerfile_support
@@ -35,6 +37,8 @@ services:
         target: /usr/src/app/db/db.sqlite3
       - ./config.yml:/usr/src/app/config.yml
     restart: unless-stopped
+    networks:
+      - bot-network
     healthcheck:
       test: ["CMD-SHELL", "pgrep -f support.py"]
       interval: 60s
@@ -45,3 +49,8 @@ services:
       resources:
         limits:
           memory: 128M
+networks:
+  bot-network:
+    name: bot-network
+    driver: bridge
+    external: false
