@@ -474,7 +474,7 @@ async def admin_migrate_user(callback: CallbackQuery):
 
         if not new_user_info:
             await callback.message.edit_text(
-                f"Ошибка создания пользователя в RemnaWave.",
+                f"Ошибка создания пользователя в Beta.",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                     [InlineKeyboardButton(text="Назад к карточке", callback_data=f"admin_user:{tg_id}")]
                 ])
