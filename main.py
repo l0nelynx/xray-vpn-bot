@@ -32,13 +32,13 @@ async def health_check():
     return {"status": "healthy", "message": "Bot is running"}
 
 
-@app_uvi.post("/apays_webhook")
+@app_uvi.post("/bot/apays_webhook")
 @limiter.limit("30/minute")
 async def payment_webhook_apays(request: Request, background_tasks: BackgroundTasks):
     await apays_webhook_handler(request, background_tasks)
 
 
-@app_uvi.post("/crystal_webhook")
+@app_uvi.post("/bot/crystal_webhook")
 @limiter.limit("30/minute")
 async def payment_webhook_crystal(request: Request, background_tasks: BackgroundTasks):
     await crystal_webhook_handler(request, background_tasks)
