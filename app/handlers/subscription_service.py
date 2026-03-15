@@ -41,10 +41,6 @@ async def get_subscription_scenario(
 ) -> SubscriptionScenario:
     """Определяет сценарий выдачи подписки"""
     if user_info == 404:
-        # api_provider = await detect_user_api_provider(user_id, username)
-        # if api_provider == "marzban":
-            # user_info = await get_user_info(username, "marzban")
-        #else:
         return SubscriptionScenario.NEW_USER
 
 
@@ -170,16 +166,16 @@ async def deliver_subscription(
             )
         elif scenario == SubscriptionScenario.EXTEND:
             result = await _handle_extend_subscription(
-                message, username, user_id, days, subscription_type, lang
+                message, username, user_id, days, subscription_type, lang, user_info=user_info
             )
         elif scenario == SubscriptionScenario.UPDATE:
             result = await _handle_update_subscription(
                 message, username, user_id, days, data_limit, reset_strategy, subscription_type, lang
             )
         elif scenario == SubscriptionScenario.LIMITED:
-            result = await _handle_limited(message, username, subscription_type, lang)
+            result = await _handle_limited(message, username, subscription_type, lang, user_info=user_info)
         elif scenario == SubscriptionScenario.ALREADY_ACTIVE:
-            result = await _handle_already_active(message, username, subscription_type, lang)
+            result = await _handle_already_active(message, username, subscription_type, lang, user_info=user_info)
 
         # Referral reward: check if buyer used a promo code
         if subscription_type == SubscriptionType.PAID:
@@ -309,12 +305,14 @@ async def _handle_extend_subscription(
     days: int,
     subscription_type: SubscriptionType,
     lang=None,
+    user_info: dict = None,
 ) -> dict:
     """Handle existing subscription extension"""
     # Lazy import to avoid circular dependency
     from app.handlers.tools import get_user_info, get_user_days, set_user_info
 
-    user_info = await get_user_info(username)
+    if user_info is None:
+        user_info = await get_user_info(username)
     sub_link = user_info["subscription_url"]
     expire_day = await get_user_days(user_info)
 
@@ -406,12 +404,14 @@ async def _handle_limited(
     username: str,
     subscription_type: SubscriptionType,
     lang=None,
+    user_info: dict = None,
 ) -> dict:
     """Handle case when free subscription traffic is exhausted (LIMITED status)"""
     from app.handlers.tools import get_user_info, get_user_days
     from app.keyboards.localized import get_limited_menu_localized
 
-    user_info = await get_user_info(username)
+    if user_info is None:
+        user_info = await get_user_info(username)
     expire_day = await get_user_days(user_info)
 
     if lang is None:
@@ -433,13 +433,15 @@ async def _handle_limited(
 
 
 async def _handle_already_active(
-    message: Union[Message, CallbackQuery, None], username: str, subscription_type: SubscriptionType, lang=None
+    message: Union[Message, CallbackQuery, None], username: str, subscription_type: SubscriptionType,
+    lang=None, user_info: dict = None,
 ) -> dict:
     """Handle case when free subscription is already active"""
     # Lazy import to avoid circular dependency
     from app.handlers.tools import get_user_info, get_user_days
 
-    user_info = await get_user_info(username)
+    if user_info is None:
+        user_info = await get_user_info(username)
     sub_link = user_info["subscription_url"]
     expire_day = await get_user_days(user_info)
 

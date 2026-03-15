@@ -80,11 +80,9 @@ class TariffKeyboardBuilder:
     def calculate_amount(self) -> float:
         """
         Рассчет итоговой суммы с учетом скидки.
-        Implements caching to avoid recalculation of identical parameters.
         """
-        cache_key = (self.price, self.days, self.disc, self.extra_discount)
+        cache_key = (self.price, self.days, self.disc, self.extra_discount, id(self.discount_func))
 
-        # Check cache first
         if cache_key in self._amount_cache:
             return self._amount_cache[cache_key]
 
@@ -93,7 +91,6 @@ class TariffKeyboardBuilder:
         if self.extra_discount > 0:
             result = result * (1 - self.extra_discount / 100)
 
-        # Cache the result
         self._amount_cache[cache_key] = result
         return result
 
@@ -175,14 +172,6 @@ class OptimizedTariffKeyboard:
 
         return InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
 
-    @staticmethod
-    def _get_button_text(tariff_builder: TariffKeyboardBuilder) -> str:
-        """Extract button text from tariff builder"""
-        amount = tariff_builder.calculate_amount()
-        formatted_price = f"{amount:.2f}".rstrip('0').rstrip('.')
-        return f"🔒БЕЗЛИМИТ - {tariff_builder.period} | {formatted_price} {tariff_builder.currency}"
-
-
 def create_tariff_keyboard(
         tariff: Dict[str, dict],
         method: str,
@@ -208,17 +197,3 @@ def create_tariff_keyboard(
         extra_discount=extra_discount
     )
     return keyboard_builder.build()
-
-
-# ============================================================================
-# UTILITY FUNCTIONS FOR BACKWARD COMPATIBILITY
-# ============================================================================
-
-def to_web_info_button(link: str, text: str) -> list:
-    """Create a WebApp button (backward compatible)"""
-    return [InlineKeyboardButton(text=text, web_app=__import__('aiogram.types', fromlist=['WebAppInfo']).WebAppInfo(url=link))]
-
-
-def to_url_button(link: str, text: str) -> list:
-    """Create a URL button (backward compatible)"""
-    return [InlineKeyboardButton(text=text, url=link)]

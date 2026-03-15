@@ -1,6 +1,5 @@
 from sqlalchemy import select, update, func, delete, exists
 from sqlalchemy.orm import aliased
-from sqlalchemy.sql.sqltypes import NULLTYPE
 import string
 import random
 from app.database.models import User, Transaction, Promo
@@ -174,6 +173,41 @@ async def get_user_language(tg_id: int) -> str | None:
         if not user:
             return None
         return user.language
+
+
+async def get_user_full_context(tg_id: int) -> dict | None:
+    """
+    Получает все данные пользователя одним запросом к БД:
+    user info + email + api_provider + language + promo.
+    Заменяет цепочку get_full_username_info + get_user_email + get_user_api_provider + get_user_language.
+    """
+    async with async_session() as session:
+        result = await session.execute(
+            select(User, Promo)
+            .outerjoin(Promo, Promo.tg_id == User.tg_id)
+            .where(User.tg_id == tg_id)
+        )
+        row = result.first()
+        if not row:
+            return None
+
+        user, promo = row
+        return {
+            "id": user.id,
+            "tg_id": user.tg_id,
+            "username": user.username,
+            "vless_uuid": user.vless_uuid,
+            "api_provider": user.api_provider,
+            "email": user.email,
+            "is_banned": bool(user.is_banned),
+            "language": user.language,
+            "promo": {
+                "promo_code": promo.promo_code,
+                "used_promo": promo.used_promo,
+                "days_purchased": promo.days_purchased,
+                "days_rewarded": promo.days_rewarded,
+            } if promo else None,
+        }
 
 
 # Пример создания новой транзакции
@@ -385,9 +419,13 @@ async def get_paid_users_count() -> int:
 
 
 async def get_free_users_count() -> int:
-    total = await get_users_count()
-    paid = await get_paid_users_count()
-    return total - paid
+    async with async_session() as session:
+        result = await session.scalar(
+            select(func.count()).select_from(User).where(
+                ~User.id.in_(select(func.distinct(Transaction.user_id)))
+            )
+        )
+        return result or 0
 
 
 async def get_users_paginated(page: int, per_page: int = 10,
@@ -656,13 +694,13 @@ async def update_promo_days_rewarded(tg_id: int, days_rewarded: int) -> bool:
 
 
 async def can_use_promo(tg_id: int) -> bool:
+    """Возвращает True если пользователь ещё НЕ использовал чужой промокод."""
     async with async_session() as session:
         promo = await session.scalar(select(Promo).where(Promo.tg_id == tg_id))
         if not promo:
             return True
-        if promo.used_promo is not None:
-            return False
-        return False
+        # Если used_promo заполнен — промокод уже был активирован
+        return promo.used_promo is None
 
 
 async def get_promos_paginated(page: int, per_page: int = 10):

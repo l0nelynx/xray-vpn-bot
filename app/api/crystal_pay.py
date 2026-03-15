@@ -37,6 +37,15 @@ class PayoffSubtractFrom:
 class CrystalUtils:
     """Дополнительный класс, содержащий в себе дополнительные функции для работы SDK"""
 
+    # Shared session — created once, reused across all API calls
+    _session: aiohttp.ClientSession | None = None
+
+    @classmethod
+    def _get_session(cls) -> aiohttp.ClientSession:
+        if cls._session is None or cls._session.closed:
+            cls._session = aiohttp.ClientSession()
+        return cls._session
+
     @staticmethod
     def concatParams(concatList: Dict, kwargs: Dict) -> Dict:
         """Соединяет необязательные параметры с обязательными"""
@@ -44,34 +53,30 @@ class CrystalUtils:
         temp.update(kwargs)
         return temp
 
-    @staticmethod
-    async def requestsApi(method: str, function: str, params: Dict) -> Dict:
-        """Асинхронная отправка запроса на API"""
+    @classmethod
+    async def requestsApi(cls, method: str, function: str, params: Dict) -> Dict:
+        """Асинхронная отправка запроса на API (переиспользует HTTP-сессию)"""
         url = f"https://api.crystalpay.io/v2/{method}/{function}/"
+        session = cls._get_session()
 
-        async with aiohttp.ClientSession() as session:
-            try:
-                async with session.post(
-                        url,
-                        json=params,
-                        headers={'Content-Type': 'application/json'}
-                ) as response:
-                    response_data = await response.json()
-                    print('POST')
-                    print(params)
-                    if response_data.get("error"):
-                        raise Exception(response_data.get('errors', 'Unknown error'))
+        try:
+            async with session.post(
+                    url,
+                    json=params,
+                    headers={'Content-Type': 'application/json'}
+            ) as response:
+                response_data = await response.json()
+                if response_data.get("error"):
+                    raise Exception(response_data.get('errors', 'Unknown error'))
 
-                    # Убираем из JSON ответа сообщения об ошибках
-                    response_data.pop("error", None)
-                    response_data.pop("errors", None)
+                response_data.pop("error", None)
+                response_data.pop("errors", None)
+                return response_data
 
-                    return response_data
-
-            except aiohttp.ClientError as e:
-                raise Exception(f"HTTP error: {e}")
-            except json.JSONDecodeError as e:
-                raise Exception(f"JSON decode error: {e}")
+        except aiohttp.ClientError as e:
+            raise Exception(f"HTTP error: {e}")
+        except json.JSONDecodeError as e:
+            raise Exception(f"JSON decode error: {e}")
 
 
 class CrystalPAY:

@@ -1,7 +1,6 @@
 from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery
-import aiohttp
 import logging
 import app.database.requests as rq
 import app.keyboards as kb
@@ -16,9 +15,7 @@ from app.handlers.events import userlist
 from app.handlers.tools import startup_user_dialog, free_sub_handler, subscription_info, check_tg_subscription, \
     get_user_days
 
-from app.settings import secrets
-from app.settings import bot
-from app.api.remnawave.api import create_user, get_user_from_username, update_user
+from app.settings import secrets, bot
 import string
 import random
 
@@ -60,8 +57,10 @@ async def cmd_lang(message: Message):
 
 @router.callback_query(F.data.in_({'set_lang_ru', 'set_lang_en'}))
 async def set_language(callback: CallbackQuery):
+    from app.locale.utils import invalidate_lang_cache
     lang_code = callback.data.replace('set_lang_', '')
     await rq.set_user_language(callback.from_user.id, lang_code)
+    invalidate_lang_cache(callback.from_user.id)
     await callback.answer("✅")
     await startup_user_dialog(callback)
 

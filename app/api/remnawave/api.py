@@ -1,97 +1,92 @@
-import os
-import asyncio
+import logging
 import uuid
 import datetime
 
 from app.settings import secrets
 from remnawave.enums import TrafficLimitStrategy, UserStatus
-from remnawave import RemnawaveSDK  # Updated import for new package
-from remnawave.models import (  # Updated import path
+from remnawave import RemnawaveSDK
+from remnawave.models import (
     UsersResponseDto,
     UserResponseDto,
     CreateUserRequestDto,
     UpdateUserRequestDto,
-    GetAllConfigProfilesResponseDto,
-    CreateInternalSquadRequestDto
 )
 
+logger = logging.getLogger(__name__)
+
+# ============================================================================
+# Singleton SDK instance — reuses HTTP connection pool across all calls
+# ============================================================================
+
+_sdk: RemnawaveSDK | None = None
+
+
+def _get_sdk() -> RemnawaveSDK:
+    global _sdk
+    if _sdk is None:
+        _sdk = RemnawaveSDK(
+            base_url=secrets.get('remnawave_url'),
+            token=secrets.get('remnawave_token'),
+        )
+    return _sdk
+
+
+# ============================================================================
+# Helper: normalize UserResponseDto → dict
+# ============================================================================
+
+def _normalize_user(user: UserResponseDto) -> dict:
+    """Convert SDK response to a normalized dict compatible with the rest of the codebase."""
+    expire_timestamp = int(user.expire_at.timestamp()) if user.expire_at else None
+    return {
+        "uuid": user.uuid,
+        "expire": expire_timestamp,
+        "subscription_url": user.subscription_url,
+        "status": user.status.value.lower(),
+        "data_limit": (
+            max(1, user.traffic_limit_bytes // (1024 * 1024 * 1024))
+            if user.traffic_limit_bytes else None
+        ),
+        "traffic_used": (
+            user.used_traffic_bytes // (1024 * 1024 * 1024)
+            if user.used_traffic_bytes else 0
+        ),
+    }
+
+
+# ============================================================================
+# Public API
+# ============================================================================
 
 async def get_all_users():
     """Получает список всех пользователей из RemnaWave"""
-    remnawave = RemnawaveSDK(base_url=secrets.get('remnawave_url'), token=secrets.get('remnawave_token'))
-    # Fetch all users
-    response: UsersResponseDto = await remnawave.users.get_all_users_v2()
-    total_users: int = response.total
-    users: list[UserResponseDto] = response.users
-    print("Total users: ", total_users)
-    print("List of users: ", users)
+    sdk = _get_sdk()
+    response: UsersResponseDto = await sdk.users.get_all_users_v2()
+    logger.info("Total users: %s", response.total)
+    return response
 
 
-async def get_user_from_username(username: str):
-    """
-    Получает информацию о пользователе по username
-
-    Args:
-        username (str): Имя пользователя
-
-    Returns:
-        dict: Словарь с информацией о пользователе или None
-    """
+async def get_user_from_username(username: str) -> dict | None:
     try:
-        remnawave = RemnawaveSDK(base_url=secrets.get('remnawave_url'), token=secrets.get('remnawave_token'))
-        response: UserResponseDto = await remnawave.users.get_user_by_username(username)
-
+        sdk = _get_sdk()
+        response: UserResponseDto = await sdk.users.get_user_by_username(username)
         if not response:
             return None
-
-        # Преобразуем datetime в UNIX timestamp для совместимости с остальным кодом
-        expire_timestamp = int(response.expire_at.timestamp())
-
-        return {
-            "uuid": response.uuid,
-            "expire": expire_timestamp,  # UNIX timestamp, как в Marzban API и create_user
-            "subscription_url": response.subscription_url,
-            "status": response.status.value.lower(),  # "active", "disabled", "limited", "expired"
-            "data_limit": max(1, response.traffic_limit_bytes // (1024 * 1024 * 1024)) if response.traffic_limit_bytes else None,
-            "traffic_used": response.used_traffic_bytes // (1024 * 1024 * 1024) if response.used_traffic_bytes else 0
-        }
+        return _normalize_user(response)
     except Exception as e:
-        print(f"Error getting user {username} from RemnaWave: {e}")
+        logger.error("Error getting user %s from RemnaWave: %s", username, e)
         return None
 
 
-async def get_user_from_email(email: str):
-    """
-    Получает информацию о пользователе по email
-
-    Args:
-        email (str): Email пользователя
-
-    Returns:
-        dict: Словарь с информацией о пользователе или None
-    """
+async def get_user_from_email(email: str) -> dict | None:
     try:
-        remnawave = RemnawaveSDK(base_url=secrets.get('remnawave_url'), token=secrets.get('remnawave_token'))
-        response = await remnawave.users.get_users_by_email(email)
-
+        sdk = _get_sdk()
+        response = await sdk.users.get_users_by_email(email)
         if not response or not response.root:
             return None
-
-        user: UserResponseDto = response.root[0]
-
-        # Преобразуем datetime в UNIX timestamp для совместимости с остальным кодом
-        expire_timestamp = int(user.expire_at.timestamp())
-
-        return {
-            "uuid": user.uuid,
-            "expire": expire_timestamp,
-            "subscription_url": user.subscription_url,
-            "status": user.status.value.lower(),  # "active", "disabled", "limited", "expired"
-            "data_limit": max(1, user.traffic_limit_bytes // (1024 * 1024 * 1024)) if user.traffic_limit_bytes else None,
-            "traffic_used": user.used_traffic_bytes // (1024 * 1024 * 1024) if user.used_traffic_bytes else 0
-        }
+        return _normalize_user(response.root[0])
     except Exception as e:
-        print(f"Error getting user by email {email} from RemnaWave: {e}")
+        logger.error("Error getting user by email %s from RemnaWave: %s", email, e)
         return None
 
 
@@ -103,26 +98,11 @@ async def create_user(
     email: str = None,
     telegram_id: int = None,
     tag: str = None,
-    squad_id: str = None
-):
-    """
-    Создает нового пользователя в RemnaWave с расширенными параметрами
-
-    Args:
-        username (str): Имя пользователя
-        days (int): Количество дней действия подписки (по умолчанию 30)
-        limit_gb (int): Лимит трафика в GB (0 = без лимита)
-        descr (str): Описание пользователя
-        email (str): Email пользователя
-        telegram_id (int): Telegram ID пользователя
-        tag (str): Тег для категоризации пользователей
-        squad_id (str): ID группы пользователей (по умолчанию default squad)
-
-    Returns:
-        dict: Словарь с информацией о созданном пользователе
-    """
+    squad_id: str = None,
+) -> dict | None:
+    """Создает нового пользователя в RemnaWave."""
     try:
-        remnawave = RemnawaveSDK(base_url=secrets.get('remnawave_url'), token=secrets.get('remnawave_token'))
+        sdk = _get_sdk()
 
         if email is None:
             email = f"{username}@bot.local"
@@ -141,26 +121,21 @@ async def create_user(
             telegram_id=telegram_id,
         )
 
-        # Добавляем опциональные параметры если они предоставлены
-        if telegram_id:
-            new_user.telegram_id = telegram_id
         if tag:
             new_user.tag = tag
 
-        response: UserResponseDto = await remnawave.users.create_user(new_user)
+        response: UserResponseDto = await sdk.users.create_user(new_user)
 
-        # Преобразуем datetime в UNIX timestamp для совместимости с остальным кодом
         expire_timestamp = int(response.expire_at.timestamp())
-
         return {
             "uuid": response.uuid,
-            "expire": expire_timestamp,  # UNIX timestamp, как в Marzban API
+            "expire": expire_timestamp,
             "subscription_url": response.subscription_url,
             "status": "active",
-            "email": response.email
+            "email": response.email,
         }
     except Exception as e:
-        print(f"Error creating user {username} in RemnaWave: {e}")
+        logger.error("Error creating user %s in RemnaWave: %s", username, e)
         return None
 
 
@@ -173,32 +148,15 @@ async def update_user(
     email: str = None,
     tag: str = None,
     status: str = None,
-    squad_id: str = None
-):
-    """
-    Обновляет информацию пользователя в RemnaWave с расширенными параметрами
-
-    Args:
-        squad_id: Squad ID для группировки пользователей
-        telegramId: Telegram ID для связи с пользователем
-        user_uuid (str): UUID пользователя
-        username (str): Имя пользователя
-        days (int): Количество дней действия подписки
-        limit_gb (int): Лимит трафика в GB
-        descr (str): Описание пользователя
-        email (str): Email пользователя
-        tag (str): Тег для категоризации
-        status (str): Статус пользователя (active/inactive)
-
-    Returns:
-        dict: Словарь с обновленной информацией о пользователе
-    """
+    squad_id: str = None,
+) -> dict | None:
+    """Обновляет информацию пользователя в RemnaWave."""
     try:
-        remnawave = RemnawaveSDK(base_url=secrets.get('remnawave_url'), token=secrets.get('remnawave_token'))
+        sdk = _get_sdk()
 
         update_data = {
             "uuid": uuid.UUID(user_uuid),
-            "status": UserStatus.ACTIVE if status != "disabled" else UserStatus.DISABLED
+            "status": UserStatus.ACTIVE if status != "disabled" else UserStatus.DISABLED,
         }
 
         if username:
@@ -217,72 +175,47 @@ async def update_user(
             update_data["active_internal_squads"] = [squad_id]
 
         user = UpdateUserRequestDto(**update_data)
-        response: UserResponseDto = await remnawave.users.update_user(user)
+        response: UserResponseDto = await sdk.users.update_user(user)
 
-        # Преобразуем datetime в UNIX timestamp для совместимости с остальным кодом
         expire_timestamp = int(response.expire_at.timestamp())
-
         return {
-            "expire": expire_timestamp,  # UNIX timestamp, как в create_user и get_user_from_username
+            "expire": expire_timestamp,
             "subscription_url": response.subscription_url,
-            "status": response.status.value.lower(),  # "active", "disabled", "limited", "expired"
+            "status": response.status.value.lower(),
         }
     except Exception as e:
-        print(f"Error updating user {user_uuid} in RemnaWave: {e}")
+        logger.error("Error updating user %s in RemnaWave: %s", user_uuid, e)
         return None
 
 
 async def reset_user_traffic(user_uuid: str) -> bool:
-    """
-    Сбрасывает использованный трафик пользователя в RemnaWave
-
-    Args:
-        user_uuid (str): UUID пользователя
-
-    Returns:
-        bool: True если успешно, False если ошибка
-    """
+    """Сбрасывает использованный трафик пользователя."""
     try:
-        remnawave = RemnawaveSDK(base_url=secrets.get('remnawave_url'), token=secrets.get('remnawave_token'))
-        await remnawave.users.reset_user_traffic(user_uuid)
+        sdk = _get_sdk()
+        await sdk.users.reset_user_traffic(user_uuid)
         return True
     except Exception as e:
-        print(f"Error resetting traffic for user {user_uuid} in RemnaWave: {e}")
+        logger.error("Error resetting traffic for user %s: %s", user_uuid, e)
         return False
 
 
 async def delete_user(user_uuid: str) -> bool:
-    """
-    Удаляет пользователя из RemnaWave
-
-    Args:
-        user_uuid (str): UUID пользователя
-
-    Returns:
-        bool: True если успешно, False если ошибка
-    """
+    """Удаляет пользователя из RemnaWave."""
     try:
-        remnawave = RemnawaveSDK(base_url=secrets.get('remnawave_url'), token=secrets.get('remnawave_token'))
-        await remnawave.users.delete_user(user_uuid)
+        sdk = _get_sdk()
+        await sdk.users.delete_user(user_uuid)
         return True
     except Exception as e:
-        print(f"Error deleting user {user_uuid} from RemnaWave: {e}")
+        logger.error("Error deleting user %s from RemnaWave: %s", user_uuid, e)
         return False
 
-async def get_user_subscription_link(user_uuid: str) -> str:
-    """
-    Получает ссылку на подписку для пользователя
 
-    Args:
-        user_uuid (str): UUID пользователя
-
-    Returns:
-        str: Ссылка на подписку или None
-    """
+async def get_user_subscription_link(user_uuid: str) -> str | None:
+    """Получает ссылку на подписку для пользователя."""
     try:
-        remnawave = RemnawaveSDK(base_url=secrets.get('remnawave_url'), token=secrets.get('remnawave_token'))
-        response: UserResponseDto = await remnawave.users.get_user_by_uuid(user_uuid)
+        sdk = _get_sdk()
+        response: UserResponseDto = await sdk.users.get_user_by_uuid(user_uuid)
         return response.subscription_url if response else None
     except Exception as e:
-        print(f"Error getting subscription link for user {user_uuid} from RemnaWave: {e}")
+        logger.error("Error getting subscription link for user %s: %s", user_uuid, e)
         return None

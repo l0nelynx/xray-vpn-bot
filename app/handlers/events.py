@@ -6,13 +6,12 @@ from app.keyboards.localized import (
 from app.locale.utils import get_user_lang
 from app.database.models import async_main
 from app.settings import bot, secrets
-from app.views import start_bot_msg, stop_bot_msg
 from io import BytesIO
 from aiogram.types import BufferedInputFile
 
 
 async def start_bot():
-    await bot.send_message(secrets.get('admin_id'), start_bot_msg())
+    await bot.send_message(secrets.get('admin_id'), 'Бот запущен')
     await async_main()
 
 
@@ -30,10 +29,10 @@ async def userlist():
 
 
 async def stop_bot():
-    await bot.send_message(secrets.get('admin_id'), stop_bot_msg())
+    await bot.send_message(secrets.get('admin_id'), 'Бот остановлен')
 
 
-async def main_menu(message_func, menu_type, user_id: int = None, days=None, data_limit=None):
+async def main_menu(message_func, menu_type, user_id: int = None, days=None, data_limit=None, link=None):
     """
     Display main menu with localized text and keyboards.
     
@@ -43,6 +42,7 @@ async def main_menu(message_func, menu_type, user_id: int = None, days=None, dat
         user_id: Telegram user ID for language lookup
         days: Remaining subscription days (for pro/free)
         data_limit: Traffic limit in bytes (None or 0 = unlimited)
+        link: Susbcription link (optional, can be used in the future for dynamic content)
     """
     if user_id:
         lang = await get_user_lang(user_id)
@@ -67,7 +67,7 @@ async def main_menu(message_func, menu_type, user_id: int = None, days=None, dat
             else:
                 traffic = f"{data_limit} GB"
         plan = "PRO" if menu_type == "pro" else "FREE"
-        sub_info_text = lang.sub_info_block.format(days=days, traffic=traffic, plan=plan) + "\n"
+        sub_info_text = lang.sub_info_block.format(days=days, traffic=traffic, plan=plan, link=link) + "\n"
 
     texts_map = {
         "pro": lang.start_pro + sub_info_text + lang.start_agreement,

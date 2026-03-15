@@ -53,5 +53,4 @@ if not secrets.get('crypto_bot_token'):
     print("⚠️ Warning: 'crypto_bot_token' is not set in config.yml")
 
 bot = Bot(token=secrets.get('token'))
-# ggsel_bot = Bot(token=secrets.get('ggsel_bot_token')) if secrets.get('ggsel_bot_token') else None
 cp = CryptoPay(secrets.get('crypto_bot_token')) if secrets.get('crypto_bot_token') else None

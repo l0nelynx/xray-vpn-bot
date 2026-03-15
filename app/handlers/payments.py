@@ -165,10 +165,6 @@ async def invoice_handler(callback: CallbackQuery, callback_data: kb.PaymentCall
         logging.info("Запускаю инвойс для Crypto")
         await state.clear()
         await state.set_state(PaymentState.PrePayment)
-    # elif method == 'SBP':
-    #     amount = int(round(amount))
-    #     link = await create_sbp_link(callback=callback, amount=amount, days=days)
-    #     await callback.message.edit_text(f"Ссылка для оплаты: {link}", reply_markup=kb.to_main)
     elif method == 'SBP_APAY':
         amount = int(round(amount * 100))
         link = await apays_create_sbp_link(callback=callback, amount=amount, days=days)

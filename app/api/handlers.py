@@ -1,13 +1,11 @@
-import app.database.requests as rq
-import app.handlers.tools as tools
-import app.keyboards as kb
-import app.marzban.templates as templates
-import app.locale.lang_ru as ru
-from app.handlers.subscription_service import deliver_subscription, SubscriptionType
-from app.settings import bot, secrets
 import asyncio
 import logging
 import time
+
+import app.database.requests as rq
+import app.locale.lang_ru as ru
+from app.handlers.subscription_service import deliver_subscription, SubscriptionType
+from app.settings import bot, secrets
 
 
 async def send_alert(order_id: str, usrname: str, usrid: int, tariff_days: int, disable_notification: bool = False):
