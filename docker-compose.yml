@@ -12,7 +12,7 @@ services:
       - ./config.yml:/usr/src/app/config.yml
       - ./dig_data.json:/usr/src/app/dig_data.json
     networks:
-      - bot-network
+      - backend-network
 #    ports:
 #      - "5000:5000"
     restart: unless-stopped
@@ -38,7 +38,7 @@ services:
       - ./config.yml:/usr/src/app/config.yml
     restart: unless-stopped
     networks:
-      - bot-network
+      - backend-network
     healthcheck:
       test: ["CMD-SHELL", "pgrep -f support.py"]
       interval: 60s
@@ -50,7 +50,7 @@ services:
         limits:
           memory: 128M
 networks:
-  bot-network:
-    name: bot-network
+  backend-network:
+    name: backend-network
     driver: bridge
-    external: false
+    external: true
