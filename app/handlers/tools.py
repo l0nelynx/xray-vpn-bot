@@ -405,16 +405,22 @@ async def startup_user_dialog(message):
             expire_days = await get_user_days(user_info)
             raw_data_limit = user_info.get("data_limit")
 
+            # Получаем uuid для подсчёта устройств
+            db_user = await rq.get_full_username_info(username)
+            user_uuid = db_user.get("vless_uuid") if db_user else None
+
             # Для RemnaWave пользователей используем стандартное меню
             if is_pro:
                 logger.debug("User has an active Pro subscription on RemnaWave")
                 await main_menu(message_func, menu_type="pro", user_id=user_id,
-                                days=expire_days, data_limit=raw_data_limit, link=user_info.get("subscription_url"))
+                                days=expire_days, data_limit=raw_data_limit,
+                                link=user_info.get("subscription_url"), user_uuid=user_uuid)
             else:
                 if status == "active":
                     logger.debug("User has an active Free subscription on RemnaWave")
                     await main_menu(message_func, menu_type="free", user_id=user_id,
-                                    days=expire_days, data_limit=raw_data_limit, link=user_info.get("subscription_url"))
+                                    days=expire_days, data_limit=raw_data_limit,
+                                    link=user_info.get("subscription_url"), user_uuid=user_uuid)
                 else:
                     logger.debug("User has no active subscription on RemnaWave")
                     await main_menu(message_func, menu_type="new", user_id=user_id)

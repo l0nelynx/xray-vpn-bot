@@ -447,6 +447,7 @@ sub_info_block = ("📊 <b>Твоя подписка:</b>\n"
                   "🏷️ Тариф: <b>{plan}</b>\n"
                   "⏳ Осталось дней: <b>{days}</b>\n"
                   "📶 Лимит трафика: <b>{traffic}</b>\n"
+                  "📱 Устройств: <b>{devices}</b>\n"
                   "🔗 Ссылка: <code>{link}</code>\n")
 
 # Tariff periods

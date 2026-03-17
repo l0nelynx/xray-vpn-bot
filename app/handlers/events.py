@@ -1,5 +1,8 @@
+import logging
+
 import app.database.requests as rq
 import app.keyboards as kb
+import app.api.remnawave.api as rem
 from app.keyboards.localized import (
     get_main_new_localized, get_main_pro_localized, get_main_free_localized,
 )
@@ -8,6 +11,8 @@ from app.database.models import async_main
 from app.settings import bot, secrets
 from io import BytesIO
 from aiogram.types import BufferedInputFile
+
+logger = logging.getLogger(__name__)
 
 
 async def start_bot():
@@ -32,17 +37,18 @@ async def stop_bot():
     await bot.send_message(secrets.get('admin_id'), 'Бот остановлен')
 
 
-async def main_menu(message_func, menu_type, user_id: int = None, days=None, data_limit=None, link=None):
+async def main_menu(message_func, menu_type, user_id: int = None, days=None, data_limit=None, link=None, user_uuid: str = None):
     """
     Display main menu with localized text and keyboards.
-    
+
     Args:
         message_func: The function to send/edit message (message.answer or callback.message.edit_text)
         menu_type: Type of menu (pro, free, new)
         user_id: Telegram user ID for language lookup
         days: Remaining subscription days (for pro/free)
         data_limit: Traffic limit in bytes (None or 0 = unlimited)
-        link: Susbcription link (optional, can be used in the future for dynamic content)
+        link: Subscription link
+        user_uuid: RemnaWave user UUID for device count lookup
     """
     if user_id:
         lang = await get_user_lang(user_id)
@@ -67,7 +73,20 @@ async def main_menu(message_func, menu_type, user_id: int = None, days=None, dat
             else:
                 traffic = f"{data_limit} GB"
         plan = "PRO" if menu_type == "pro" else "FREE"
-        sub_info_text = lang.sub_info_block.format(days=days, traffic=traffic, plan=plan, link=link) + "\n"
+
+        # Получаем количество устройств
+        devices_count = 0
+        if user_uuid:
+            try:
+                hwid_response = await rem.get_user_hwid_devices(user_uuid)
+                if hwid_response:
+                    devices_count = hwid_response.total
+            except Exception as e:
+                logger.warning("Failed to get device count for uuid %s: %s", user_uuid, e)
+
+        sub_info_text = lang.sub_info_block.format(
+            days=days, traffic=traffic, plan=plan, link=link, devices=devices_count
+        ) + "\n"
 
     texts_map = {
         "pro": lang.start_pro + sub_info_text + lang.start_agreement,

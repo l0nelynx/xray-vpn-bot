@@ -452,7 +452,8 @@ msg_free_active = "Free subscription active\nConnection link: {link}\nDays remai
 sub_info_block = ("📊 <b>Your subscription:</b>\n"
                   "🏷️ Plan: <b>{plan}</b>\n"
                   "⏳ Days remaining: <b>{days}</b>\n"
-                  "📶 Traffic limit: <b>{traffic}</b>\n")
+                  "📶 Traffic limit: <b>{traffic}</b>\n"
+                  "📱 Devices: <b>{devices}</b>\n")
 
 # Tariff periods
 period_1month = "1 Month"
