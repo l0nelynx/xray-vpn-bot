@@ -315,13 +315,18 @@ async def _handle_extend_subscription(
     """Handle existing subscription extension"""
     # Lazy import to avoid circular dependency
     from app.handlers.tools import get_user_info, get_user_days, set_user_info
-
     if user_info is None:
         user_info = await get_user_info(username)
     sub_link = user_info["subscription_url"]
     expire_day = await get_user_days(user_info)
-
-    new_expire_days = expire_day + days if isinstance(expire_day, int) else days
+    if subscription_type == SubscriptionType.FREE:
+        squad_id = secrets.get("rw_free_id")
+        external_squad_id = secrets.get("rw_ext_free_id")
+        new_expire_days = days
+    else:
+        squad_id = secrets.get("rw_pro_id")
+        external_squad_id = secrets.get("rw_ext_pro_id")
+        new_expire_days = expire_day + days if isinstance(expire_day, int) else days
 
     buyer_info = await set_user_info(
         name=username,
@@ -329,7 +334,9 @@ async def _handle_extend_subscription(
         res_strat="no_reset",
         expire_days=new_expire_days,
         template=templates.vless_france,
-        api="remnawave"
+        api="remnawave",
+        squad_id=squad_id,
+        external_squad_id=external_squad_id
     )
 
     final_expire_day = await get_user_days(buyer_info)
@@ -366,7 +373,7 @@ async def _handle_update_subscription(
 
     # При переходе с FREE на PAID — ставим PRO squad, при FREE — FREE squad
     squad_id = secrets.get("rw_pro_id") if subscription_type == SubscriptionType.PAID else secrets.get("rw_free_id")
-
+    external_squad_id = secrets.get("rw_ext_pro_id") if subscription_type == SubscriptionType.PAID else secrets.get("rw_ext_free_id")
     # Сброс трафика при выдаче FREE подписки (чтобы limited пользователь мог снова пользоваться)
     if subscription_type == SubscriptionType.FREE and data_limit > 0:
         try:
@@ -384,7 +391,8 @@ async def _handle_update_subscription(
         expire_days=days,
         template=templates.vless_france,
         api="remnawave",
-        squad_id=squad_id
+        squad_id=squad_id,
+        external_squad_id=external_squad_id
     )
 
     expire_day = await get_user_days(buyer_info)
