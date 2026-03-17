@@ -10,6 +10,7 @@ from app.api.a_pay import payment_webhook_handler as apays_webhook_handler
 from app.api.crystal_pay import payment_webhook_handler as crystal_webhook_handler
 from app.handlers.admin import router as router_admin
 from app.handlers.base import router as router_base
+from app.handlers.devices import router as router_devices
 from app.handlers.events import start_bot, stop_bot
 from app.handlers.payments import router as router_payments
 from app.settings import bot, cp, run_webserver, app_uvi, limiter
@@ -21,6 +22,7 @@ app_uvi.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 dp = Dispatcher()
 dp.include_router(router_admin)
 dp.include_router(router_base)
+dp.include_router(router_devices)
 dp.include_router(router_payments)
 dp.startup.register(start_bot)
 dp.shutdown.register(stop_bot)

@@ -458,3 +458,22 @@ sub_info_block = ("📊 <b>Your subscription:</b>\n"
 period_1month = "1 Month"
 period_3months = "3 Months"
 period_1year = "Year"
+
+# ==================== HWID Devices ====================
+
+btn_devices = "📱 My devices"
+msg_devices_title = "<b>📱 Connected devices ({total}):</b>\n\nSelect a device for details:"
+msg_devices_empty = "<b>📱 Connected devices</b>\n\nYou have no connected devices yet."
+msg_devices_error = "<b>Failed to get device list.</b>\n\nPlease try again later."
+msg_devices_no_subscription = "<b>You don't have an active subscription.</b>"
+msg_device_info = ("<b>📱 Device #{num}</b>\n\n"
+                   "🔧 Model: <b>{model}</b>\n"
+                   "💻 Platform: <b>{platform}</b>\n"
+                   "🖥 OS: <b>{os_version}</b>\n"
+                   "🌐 User-Agent: <code>{user_agent}</code>\n"
+                   "📅 Added: <b>{created_at}</b>\n"
+                   "🔄 Updated: <b>{updated_at}</b>")
+msg_device_deleted = "✅ Device successfully deleted."
+msg_device_delete_error = "❌ Failed to delete device."
+btn_delete_device = "🗑 Delete device"
+btn_back_to_devices = "◀️ Back to devices"

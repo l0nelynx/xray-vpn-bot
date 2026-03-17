@@ -453,3 +453,22 @@ sub_info_block = ("📊 <b>Твоя подписка:</b>\n"
 period_1month = f"1 Месяц"
 period_3months = f"3 Месяца"
 period_1year = f"Год"
+
+# ==================== HWID Devices ====================
+
+btn_devices = "📱 Мои устройства"
+msg_devices_title = "<b>📱 Подключённые устройства ({total}):</b>\n\nВыберите устройство для подробной информации:"
+msg_devices_empty = "<b>📱 Подключённые устройства</b>\n\nУ вас пока нет подключённых устройств."
+msg_devices_error = "<b>Не удалось получить список устройств.</b>\n\nПопробуйте позже."
+msg_devices_no_subscription = "<b>У вас нет активной подписки.</b>"
+msg_device_info = ("<b>📱 Устройство #{num}</b>\n\n"
+                   "🔧 Модель: <b>{model}</b>\n"
+                   "💻 Платформа: <b>{platform}</b>\n"
+                   "🖥 OS: <b>{os_version}</b>\n"
+                   "🌐 User-Agent: <code>{user_agent}</code>\n"
+                   "📅 Добавлено: <b>{created_at}</b>\n"
+                   "🔄 Обновлено: <b>{updated_at}</b>")
+msg_device_deleted = "✅ Устройство успешно удалено."
+msg_device_delete_error = "❌ Не удалось удалить устройство."
+btn_delete_device = "🗑 Удалить устройство"
+btn_back_to_devices = "◀️ К списку устройств"

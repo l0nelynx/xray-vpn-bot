@@ -30,6 +30,7 @@ def get_main_pro_localized(lang) -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text=lang.btn_extend_subscription, callback_data='Extend_Month')],
         [InlineKeyboardButton(text=lang.btn_install_instructions, callback_data='Others')],
         [InlineKeyboardButton(text=lang.btn_sub_info, callback_data='Sub_Info')],
+        [InlineKeyboardButton(text=lang.btn_devices, callback_data='Devices')],
         [InlineKeyboardButton(text=lang.btn_invite_friends, callback_data='Invite_Friends')],
         [InlineKeyboardButton(text=lang.btn_settings, callback_data='Settings')],
     ])
@@ -40,6 +41,7 @@ def get_main_free_localized(lang) -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text=lang.btn_buy_premium, callback_data='Premium')],
         [InlineKeyboardButton(text=lang.btn_install_instructions, callback_data='Others')],
         [InlineKeyboardButton(text=lang.btn_sub_info, callback_data='Sub_Info')],
+        [InlineKeyboardButton(text=lang.btn_devices, callback_data='Devices')],
         [InlineKeyboardButton(text=lang.btn_invite_friends, callback_data='Invite_Friends')],
         [InlineKeyboardButton(text=lang.btn_settings, callback_data='Settings')],
     ])

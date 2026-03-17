@@ -10,6 +10,9 @@ from remnawave.models import (
     UserResponseDto,
     CreateUserRequestDto,
     UpdateUserRequestDto,
+    GetUserHwidDevicesResponseDto,
+    DeleteUserHwidDeviceResponseDto,
+    DeleteUserHwidDeviceRequestDto,
 )
 
 logger = logging.getLogger(__name__)
@@ -223,4 +226,27 @@ async def get_user_subscription_link(user_uuid: str) -> str | None:
         return response.subscription_url if response else None
     except Exception as e:
         logger.error("Error getting subscription link for user %s: %s", user_uuid, e)
+        return None
+
+
+async def get_user_hwid_devices(user_uuid: str) -> GetUserHwidDevicesResponseDto | None:
+    """Получает список HWID-устройств пользователя."""
+    try:
+        sdk = _get_sdk()
+        response: GetUserHwidDevicesResponseDto = await sdk.hwid.get_hwid_user(user_uuid)
+        return response
+    except Exception as e:
+        logger.error("Error getting HWID devices for user %s: %s", user_uuid, e)
+        return None
+
+
+async def delete_user_hwid_device(user_uuid: str, hwid: str) -> DeleteUserHwidDeviceResponseDto | None:
+    """Удаляет определённое HWID-устройство пользователя."""
+    try:
+        sdk = _get_sdk()
+        request = DeleteUserHwidDeviceRequestDto(user_uuid=user_uuid, hwid=hwid)
+        response: DeleteUserHwidDeviceResponseDto = await sdk.hwid.delete_hwid_to_user(request)
+        return response
+    except Exception as e:
+        logger.error("Error deleting HWID device %s for user %s: %s", hwid, user_uuid, e)
         return None
