@@ -277,10 +277,12 @@ Connection link:
 }
 
 # Admin transaction message (kept in Russian as admin messages are excluded)
-admin_transaction_message = """Транзакция ID - {payment_method}
-Пользователь - @{username}
-UserId - {user_id}
-Количество дней - {days}"""
+admin_transaction_message = """Транзакция ID: {transaction_id}
+Способ оплаты: {payment_method}
+Сумма: {amount}
+Пользователь: @{username}
+UserId: {user_id}
+Количество дней: {days}"""
 
 # Marzban migration messages
 marzban_user_with_upgrade_option = """<b>We've updated our infrastructure!</b>

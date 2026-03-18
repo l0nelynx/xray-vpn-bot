@@ -307,7 +307,9 @@ async def crystal_create_link(callback: CallbackQuery, amount, currency: str, da
             await rq.create_transaction(user_tg_id=callback.from_user.id,
                                         user_transaction=invoice["id"],
                                         username=callback.from_user.username,
-                                        days=days)
+                                        days=days,
+                                        payment_method='CRYSTAL_PAY',
+                                        amount=float(amount))
             return invoice["url"]
         else:
             return 'CrystalPay api error'

@@ -75,6 +75,15 @@ class Transaction(Base):
     # Количество дней в заказе
     delivery_status: Mapped[int] = mapped_column(Integer)
 
+    # Способ оплаты
+    payment_method: Mapped[str] = mapped_column(String(50), nullable=True)
+
+    # Сумма платежа
+    amount: Mapped[float] = mapped_column(nullable=True)
+
+    # Дата создания транзакции (ISO формат)
+    created_at: Mapped[str] = mapped_column(String(30), nullable=True)
+
     # Количество дней в заказе
     days_ordered: Mapped[int] = mapped_column(BigInteger)
 
@@ -115,6 +124,25 @@ async def async_main():
                     "ALTER TABLE users ADD COLUMN language VARCHAR(5) DEFAULT 'ru'"
                 ))
                 logging.info("Migration: added language column to users table")
+
+            # Миграция: добавляем новые колонки в transactions если таблица существует
+            if 'transactions' in insp.get_table_names():
+                tx_columns = [col['name'] for col in insp.get_columns('transactions')]
+                if 'payment_method' not in tx_columns:
+                    sync_conn.execute(text(
+                        "ALTER TABLE transactions ADD COLUMN payment_method VARCHAR(50)"
+                    ))
+                    logging.info("Migration: added payment_method column to transactions table")
+                if 'amount' not in tx_columns:
+                    sync_conn.execute(text(
+                        "ALTER TABLE transactions ADD COLUMN amount FLOAT"
+                    ))
+                    logging.info("Migration: added amount column to transactions table")
+                if 'created_at' not in tx_columns:
+                    sync_conn.execute(text(
+                        "ALTER TABLE transactions ADD COLUMN created_at VARCHAR(30)"
+                    ))
+                    logging.info("Migration: added created_at column to transactions table")
 
             # Миграция: добавляем индекс на username если его ещё нет
             indexes = [idx['name'] for idx in insp.get_indexes('users')]

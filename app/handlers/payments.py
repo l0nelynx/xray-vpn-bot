@@ -1,4 +1,5 @@
 import logging
+import uuid
 
 from aiogram import F, Router
 
@@ -186,6 +187,17 @@ async def payment_handler(invoice: Invoice, message: CallbackQuery):
     lang_user = await get_user_lang(message.from_user.id)
     await message.message.answer(lang_user.msg_order_paid.format(invoice_id=invoice.invoice_id))
     days = int(invoice.payload)
+    transaction_id = str(uuid.uuid4())
+    amount = getattr(invoice, 'amount', 0)
+    await rq.create_transaction(
+        user_tg_id=message.from_user.id,
+        user_transaction=transaction_id,
+        username=message.from_user.username,
+        days=days,
+        payment_method='CRYPTOPAY',
+        amount=float(amount),
+    )
+    await rq.claim_order_for_processing(transaction_id)
     await deliver_subscription(
         message=message.message,
         username=message.from_user.username,
@@ -194,7 +206,9 @@ async def payment_handler(invoice: Invoice, message: CallbackQuery):
         subscription_type=SubscriptionType.PAID,
         payment_method=PAYMENT_METHOD_NAMES['crypto'],
         data_limit_gb=None,
-        reset_strategy="no_reset"
+        reset_strategy="no_reset",
+        transaction_id=transaction_id,
+        amount=float(amount),
     )
 
 
@@ -210,6 +224,17 @@ async def success_stars_payment_handler(message: Message, state: FSMContext):
     states_data = await state.get_data()
     print(states_data)
     days = states_data.get("PaymentDays")
+    transaction_id = str(uuid.uuid4())
+    amount = message.successful_payment.total_amount
+    await rq.create_transaction(
+        user_tg_id=message.from_user.id,
+        user_transaction=transaction_id,
+        username=message.from_user.username,
+        days=int(days),
+        payment_method='TG_STARS',
+        amount=float(amount),
+    )
+    await rq.claim_order_for_processing(transaction_id)
 
     await deliver_subscription(
         message=message,
@@ -219,7 +244,9 @@ async def success_stars_payment_handler(message: Message, state: FSMContext):
         subscription_type=SubscriptionType.PAID,
         payment_method=PAYMENT_METHOD_NAMES['stars'],
         data_limit_gb=None,
-        reset_strategy="no_reset"
+        reset_strategy="no_reset",
+        transaction_id=transaction_id,
+        amount=float(amount),
     )
 
     await state.clear()

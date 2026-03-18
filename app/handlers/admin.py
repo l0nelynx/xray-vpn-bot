@@ -225,17 +225,11 @@ async def admin_user_search_result(message: Message, state: FSMContext):
 
 # ==================== Карточка пользователя ====================
 
-@router.callback_query(F.data.startswith("admin_user:"))
-async def admin_user_card(callback: CallbackQuery):
-    if not is_admin(callback.from_user.id):
-        return
-
-    tg_id = int(callback.data.split(":")[1])
+async def _build_user_card(tg_id: int) -> tuple[str, InlineKeyboardMarkup] | None:
+    """Формирует текст карточки пользователя и клавиатуру."""
     info = await rq.get_user_full_info_by_tg_id(tg_id)
-
     if not info:
-        await callback.answer("Пользователь не найден", show_alert=True)
-        return
+        return None
 
     banned_text = "Да" if info["is_banned"] else "Нет"
     email_text = info.get("email") or "—"
@@ -248,6 +242,34 @@ async def admin_user_card(callback: CallbackQuery):
         f"UUID: <code>{info['vless_uuid'] or '—'}</code>\n"
         f"Забанен: {banned_text}"
     )
+
+    # Блок транзакций
+    transactions = await rq.get_user_transactions_detailed(tg_id)
+    if transactions:
+        text += "\n\n<b>Транзакции:</b>\n"
+        status_icons = {
+            ("confirmed", 1): "✅",
+            ("confirmed", 0): "📦",
+            ("pending", None): "⏳",
+            ("pending", 0): "⏳",
+            ("pending", 1): "⏳",
+            ("created", None): "🔄",
+            ("created", 0): "🔄",
+        }
+        for tx in transactions[:5]:
+            icon = status_icons.get(
+                (tx["order_status"], tx["delivery_status"]),
+                "❓"
+            )
+            created = (tx["created_at"] or "—")[:16]
+            method = tx["payment_method"] or "—"
+            amount = tx["amount"] if tx["amount"] is not None else "—"
+            days_tx = tx["days_ordered"] or "—"
+            text += f"{icon} {created} | {method} | {amount} | {days_tx}д\n"
+        if len(transactions) > 5:
+            text += f"... и ещё {len(transactions) - 5}\n"
+    else:
+        text += "\n\n<b>Транзакции:</b> нет"
 
     if info["is_banned"]:
         ban_btn = InlineKeyboardButton(text="Разбанить", callback_data=f"admin_unban:{tg_id}")
@@ -264,8 +286,22 @@ async def admin_user_card(callback: CallbackQuery):
         rows.append([InlineKeyboardButton(text="Миграция в RemnaWave", callback_data=f"admin_migrate:{tg_id}")])
     rows.append([InlineKeyboardButton(text="Назад к списку", callback_data="admin_users:0")])
 
-    kb = InlineKeyboardMarkup(inline_keyboard=rows)
+    return text, InlineKeyboardMarkup(inline_keyboard=rows)
 
+
+@router.callback_query(F.data.startswith("admin_user:"))
+async def admin_user_card(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        return
+
+    tg_id = int(callback.data.split(":")[1])
+    result = await _build_user_card(tg_id)
+
+    if not result:
+        await callback.answer("Пользователь не найден", show_alert=True)
+        return
+
+    text, kb = result
     await callback.message.edit_text(text, parse_mode='HTML', reply_markup=kb)
 
 
@@ -306,39 +342,10 @@ async def admin_unban(callback: CallbackQuery):
 
 
 async def _show_user_card(callback: CallbackQuery, tg_id: int):
-    info = await rq.get_user_full_info_by_tg_id(tg_id)
-    if not info:
+    result = await _build_user_card(tg_id)
+    if not result:
         return
-
-    banned_text = "Да" if info["is_banned"] else "Нет"
-    email_text = info.get("email") or "—"
-    text = (
-        f"<b>Карточка пользователя</b>\n\n"
-        f"Username: @{info['username'] or '—'}\n"
-        f"TG ID: <code>{info['tg_id']}</code>\n"
-        f"Email: {email_text}\n"
-        f"API: {info['api_provider'] or '—'}\n"
-        f"UUID: <code>{info['vless_uuid'] or '—'}</code>\n"
-        f"Забанен: {banned_text}"
-    )
-
-    if info["is_banned"]:
-        ban_btn = InlineKeyboardButton(text="Разбанить", callback_data=f"admin_unban:{tg_id}")
-    else:
-        ban_btn = InlineKeyboardButton(text="Забанить", callback_data=f"admin_ban:{tg_id}")
-
-    rows = [
-        [ban_btn],
-        [InlineKeyboardButton(text="Удалить", callback_data=f"admin_delete:{tg_id}")],
-        [InlineKeyboardButton(text="Отправить сообщение", callback_data=f"admin_msg:{tg_id}")],
-        [InlineKeyboardButton(text="Регистрация email", callback_data=f"admin_email:{tg_id}")],
-    ]
-    if info["api_provider"] != "remnawave":
-        rows.append([InlineKeyboardButton(text="Миграция в RemnaWave", callback_data=f"admin_migrate:{tg_id}")])
-    rows.append([InlineKeyboardButton(text="Назад к списку", callback_data="admin_users:0")])
-
-    kb = InlineKeyboardMarkup(inline_keyboard=rows)
-
+    text, kb = result
     await callback.message.edit_text(text, parse_mode='HTML', reply_markup=kb)
 
 

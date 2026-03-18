@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta
+
 from sqlalchemy import select, update, func, delete, exists
 from sqlalchemy.orm import aliased
 import string
@@ -211,7 +213,8 @@ async def get_user_full_context(tg_id: int) -> dict | None:
 
 
 # Пример создания новой транзакции
-async def create_transaction(user_tg_id: int, user_transaction: str, username: str, days: int, uuid: str = 'None'):
+async def create_transaction(user_tg_id: int, user_transaction: str, username: str, days: int,
+                             uuid: str = 'None', payment_method: str = None, amount: float = None):
     async with async_session() as session:
         # Находим пользователя по tg_id
         user = await session.scalar(
@@ -222,12 +225,15 @@ async def create_transaction(user_tg_id: int, user_transaction: str, username: s
             # Создаем новую транзакцию
             new_transaction = Transaction(
                 transaction_id=user_transaction,
-                vless_uuid = uuid,
+                vless_uuid=uuid,
                 username=username,
                 order_status='created',
                 delivery_status=0,
                 days_ordered=days,
-                user_id=user.id  # Используем id пользователя из таблицы users
+                user_id=user.id,
+                payment_method=payment_method,
+                amount=amount,
+                created_at=datetime.now().isoformat(timespec='seconds'),
             )
 
             session.add(new_transaction)
@@ -278,8 +284,10 @@ async def get_full_transaction_info(transaction_id: str):
                 "status": transaction.order_status,
                 "user_tg_id": user.tg_id,
                 "user_db_id": user.id,
-                "days_ordered": transaction.days_ordered
-                # Добавьте другие поля по необходимости
+                "days_ordered": transaction.days_ordered,
+                "payment_method": transaction.payment_method,
+                "amount": transaction.amount,
+                "created_at": transaction.created_at,
             }
         else:
             return None
@@ -315,8 +323,10 @@ async def get_full_transaction_info_by_id(user_id: int):
                 "delivery_status": transaction.delivery_status,
                 "user_tg_id": user.tg_id,
                 "user_db_id": user.id,
-                "days_ordered": transaction.days_ordered
-                # Добавьте другие поля по необходимости
+                "days_ordered": transaction.days_ordered,
+                "payment_method": transaction.payment_method,
+                "amount": transaction.amount,
+                "created_at": transaction.created_at,
             }
         else:
             return 404
@@ -374,24 +384,55 @@ async def claim_order_for_processing(transaction_id: str) -> bool:
         return result.rowcount > 0
 
 
-async def update_delivery_status(tg_id: int, new_delivery_status: int):
+async def update_delivery_status(transaction_id: str, new_delivery_status: int) -> bool:
     async with async_session() as session:
-        # Находим пользователя по tg_id
-        user = await session.scalar(
-            select(User).where(User.tg_id == tg_id)
+        result = await session.execute(
+            update(Transaction)
+            .where(Transaction.transaction_id == transaction_id)
+            .values(delivery_status=new_delivery_status)
         )
+        await session.commit()
+        return result.rowcount > 0
 
-        if user:
-            # Обновляем все транзакции пользователя
-            await session.execute(
-                update(Transaction)
-                .where(Transaction.user_id == user.id)
-                .values(delivery_status=new_delivery_status)
+
+async def cleanup_stale_transactions(hours: int = 24) -> int:
+    """Удаляет транзакции со статусом 'created', у которых created_at старше hours часов."""
+    cutoff = (datetime.now() - timedelta(hours=hours)).isoformat(timespec='seconds')
+    async with async_session() as session:
+        result = await session.execute(
+            delete(Transaction).where(
+                Transaction.order_status == 'created',
+                Transaction.created_at != None,  # noqa: E711
+                Transaction.created_at < cutoff,
             )
-            await session.commit()
-            print(f"Updated delivery_status to {new_delivery_status} for user {tg_id}")
-        else:
-            print(f"User with tg_id {tg_id} not found")
+        )
+        await session.commit()
+        return result.rowcount
+
+
+async def get_user_transactions_detailed(tg_id: int) -> list[dict]:
+    """Получает детальную информацию о транзакциях пользователя."""
+    async with async_session() as session:
+        query = (
+            select(Transaction)
+            .join(User, User.id == Transaction.user_id)
+            .where(User.tg_id == tg_id)
+            .order_by(Transaction.created_at.desc())
+        )
+        result = await session.execute(query)
+        transactions = result.scalars().all()
+        return [
+            {
+                "transaction_id": t.transaction_id,
+                "payment_method": t.payment_method,
+                "amount": t.amount,
+                "created_at": t.created_at,
+                "order_status": t.order_status,
+                "delivery_status": t.delivery_status,
+                "days_ordered": t.days_ordered,
+            }
+            for t in transactions
+        ]
 
 
 # ==================== Admin panel functions ====================

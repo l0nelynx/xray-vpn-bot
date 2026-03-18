@@ -76,6 +76,8 @@ async def deliver_subscription(
     payment_method: str = "TG_STARS",
     data_limit_gb: Optional[int] = None,
     reset_strategy: str = "no_reset",
+    transaction_id: Optional[str] = None,
+    amount: Optional[float] = None,
 ) -> dict:
     """
     Unified function to deliver subscription to user.
@@ -160,6 +162,8 @@ async def deliver_subscription(
             user_id=user_id,
             days=days,
             payment_method=payment_method,
+            transaction_id=transaction_id,
+            amount=amount,
         )
 
         if scenario == SubscriptionScenario.NEW_USER:
@@ -245,6 +249,10 @@ async def deliver_subscription(
                                 logging.warning(f"Failed to notify promo owner {owner_tg_id}: {notify_err}")
             except Exception as promo_err:
                 logging.error(f"Error processing referral reward: {promo_err}")
+
+        # Обновляем delivery_status после успешной доставки
+        if transaction_id:
+            await rq.update_delivery_status(transaction_id, 1)
 
         return {"status": "success", "scenario": scenario.value, **result}
 
@@ -510,11 +518,17 @@ async def _send_response(
 
 
 async def log_transaction_to_admin(
-    username: str, user_id: int, days: int, payment_method: str = "TG_STARS"
+    username: str, user_id: int, days: int, payment_method: str = "TG_STARS",
+    transaction_id: str = None, amount: float = None,
 ) -> None:
     """Log transaction details to admin"""
     admin_message = admin_transaction_message.format(
-        payment_method=payment_method, username=username, user_id=user_id, days=days
+        transaction_id=transaction_id or "—",
+        payment_method=payment_method,
+        amount=amount if amount is not None else "—",
+        username=username,
+        user_id=user_id,
+        days=days,
     )
 
     await bot.send_message(chat_id=secrets.get("admin_id"), text=admin_message)

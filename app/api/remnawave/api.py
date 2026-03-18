@@ -180,7 +180,7 @@ async def update_user(
         if squad_id:
             update_data["active_internal_squads"] = [squad_id]
         if external_squad_id:
-            update_data["external_squad_uuid"] = [external_squad_id]
+            update_data["external_squad_uuid"] = external_squad_id
 
         user = UpdateUserRequestDto(**update_data)
         response: UserResponseDto = await sdk.users.update_user(user)

@@ -271,10 +271,12 @@ subscription_response_templates = {
 }
 
 # Сообщение для администратора о транзакции
-admin_transaction_message = """Транзакция ID - {payment_method}
-Пользователь - @{username}
-UserId - {user_id}
-Количество дней - {days}"""
+admin_transaction_message = """Транзакция ID: {transaction_id}
+Способ оплаты: {payment_method}
+Сумма: {amount}
+Пользователь: @{username}
+UserId: {user_id}
+Количество дней: {days}"""
 
 # Сообщения для миграции подписки из Marzban в RemnaWave
 marzban_user_with_upgrade_option = """<b>Мы обновили инфраструктуру!</b>

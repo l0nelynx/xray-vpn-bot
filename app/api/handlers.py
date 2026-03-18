@@ -8,7 +8,9 @@ from app.handlers.subscription_service import deliver_subscription, Subscription
 from app.settings import bot, secrets
 
 
-async def send_alert(order_id: str, usrname: str, usrid: int, tariff_days: int, disable_notification: bool = False):
+async def send_alert(order_id: str, usrname: str, usrid: int, tariff_days: int,
+                     disable_notification: bool = False, payment_method: str = None,
+                     amount: float = None, transaction_id: str = None):
     """
     Отправляет уведомление администратору о транзакции.
 
@@ -18,11 +20,16 @@ async def send_alert(order_id: str, usrname: str, usrid: int, tariff_days: int, 
         usrid: ID пользователя в Telegram
         tariff_days: Количество дней тарифа
         disable_notification: Отключить звук уведомления (для FREE транзакций)
+        payment_method: Способ оплаты
+        amount: Сумма платежа
+        transaction_id: ID транзакции
     """
     await bot.send_message(
         chat_id=secrets.get('admin_id'),
         text=ru.admin_transaction_message.format(
-            payment_method=order_id,
+            transaction_id=transaction_id or order_id,
+            payment_method=payment_method or order_id,
+            amount=amount if amount is not None else "—",
             username=usrname,
             user_id=usrid,
             days=tariff_days
@@ -62,8 +69,17 @@ async def payment_process_background(order_id: str):
                 logging.warning(f'Order {order_id} already claimed by another handler, skipping')
                 return
 
+            payment_method_name = userdata.get("payment_method") or order_id
+            tx_amount = userdata.get("amount")
+
             # Отправляем уведомление с disable_notification=True для FREE транзакций
-            await send_alert(order_id, usrname, usrid, tariff_days, disable_notification=is_free_transaction)
+            await send_alert(
+                order_id, usrname, usrid, tariff_days,
+                disable_notification=is_free_transaction,
+                payment_method=payment_method_name,
+                amount=tx_amount,
+                transaction_id=order_id,
+            )
 
             # Используем новую унифицированную систему доставки подписок
             # message=None для фоновых задач, пользователь получит сообщение напрямую
@@ -73,9 +89,11 @@ async def payment_process_background(order_id: str):
                 user_id=usrid,
                 days=tariff_days,
                 subscription_type=SubscriptionType.PAID,
-                payment_method=order_id,
+                payment_method=payment_method_name,
                 data_limit_gb=None,
-                reset_strategy="no_reset"
+                reset_strategy="no_reset",
+                transaction_id=order_id,
+                amount=tx_amount,
             )
 
             # Проверяем результат доставки
@@ -97,9 +115,11 @@ async def payment_process_background(order_id: str):
                         user_id=usrid,
                         days=tariff_days,
                         subscription_type=SubscriptionType.PAID,
-                        payment_method=order_id,
+                        payment_method=payment_method_name,
                         data_limit_gb=None,
-                        reset_strategy="no_reset"
+                        reset_strategy="no_reset",
+                        transaction_id=order_id,
+                        amount=tx_amount,
                     )
 
                     if delivery_result["status"] == "success":
@@ -110,6 +130,8 @@ async def payment_process_background(order_id: str):
                         logging.warning(f'Попытка доставки #{unsuccess_counter} не удалась: {delivery_result["message"]}')
 
                 if delivery_result["status"] != "success":
+                    # Оплачено, но не доставлено — ставим pending
+                    await rq.update_order_status(order_id, 'pending')
                     # Уведомляем администратора об ошибке
                     error_msg = f"""❌ Ошибка доставки подписки для заказа {order_id}
 Пользователь: @{usrname} ({usrid})

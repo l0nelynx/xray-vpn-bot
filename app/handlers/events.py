@@ -18,6 +18,9 @@ logger = logging.getLogger(__name__)
 async def start_bot():
     await bot.send_message(secrets.get('admin_id'), 'Бот запущен')
     await async_main()
+    cleaned = await rq.cleanup_stale_transactions(hours=24)
+    if cleaned:
+        logger.info(f"Cleaned {cleaned} stale 'created' transactions")
 
 
 async def userlist():

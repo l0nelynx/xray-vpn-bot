@@ -107,14 +107,18 @@ async def create_sbp_link(callback: CallbackQuery, amount, days: int):
             await rq.create_transaction(user_tg_id=callback.from_user.id,
                                         user_transaction=user_transaction,
                                         username=callback.from_user.username,
-                                        days=days)
+                                        days=days,
+                                        payment_method='SBP_APAY',
+                                        amount=float(amount) / 100)
             return link
         # Testing only
         user_transaction = f"{transaction_id}"
         await rq.create_transaction(user_tg_id=callback.from_user.id,
                                     user_transaction=user_transaction,
                                     username=callback.from_user.username,
-                                    days=days)
+                                    days=days,
+                                    payment_method='SBP_APAY',
+                                    amount=float(amount) / 100)
 
 
 async def payment_webhook_handler(request: Request, background_tasks: BackgroundTasks):
