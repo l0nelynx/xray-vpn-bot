@@ -67,6 +67,11 @@ uvicorn_ssl_cert: "./uvicorn/ssl/fullchain.pem"  # Path to SSL certificate
 webhook_host: "https://example.com:5000/payment_webhook"  # Main payment webhook URL
 crystal_webhook_host: "https://example.com:5000"  # Crystal Pay webhook host
 
+# ===== DASHBOARD =====
+dashboard_login: admin                              # Dashboard admin login
+dashboard_password: your-secure-password            # Dashboard admin password
+dashboard_secret: change-me-to-random-string        # JWT secret key for dashboard
+
 # ===== NOTES =====
 # 1. Replace all placeholder values with your actual credentials
 # 2. URLs must include protocol (https:// or http://)
