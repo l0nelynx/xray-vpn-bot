@@ -6,7 +6,7 @@ from datetime import datetime
 from aiogram import F, Router
 from aiogram.types import Message, FSInputFile
 
-from app.settings import secrets, bot
+from app.settings import secrets
 from .router import BTN_BACKUP
 
 backup_router = Router()
@@ -43,8 +43,7 @@ async def admin_backup(message: Message):
 
         zip_size_mb = os.path.getsize(zip_path) / (1024 * 1024)
 
-        await bot.send_document(
-            chat_id=message.from_user.id,
+        await message.answer_document(
             document=FSInputFile(zip_path, filename=f"backup_{timestamp}.zip"),
             caption=(
                 f"Бекап БД\n"
