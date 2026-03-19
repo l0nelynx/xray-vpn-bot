@@ -153,7 +153,7 @@ async def invoice_handler(callback: CallbackQuery, callback_data: kb.PaymentCall
             description=lang.msg_invoice_description.format(amount=int(round(amount))),
             prices=prices,
             provider_token="",
-            payload="channel_support",
+            payload=f"{days}",
             currency="XTR",
             reply_markup=kb.payment_keyboard(int(round(amount))),
         )
@@ -222,7 +222,15 @@ async def success_stars_payment_handler(message: Message, state: FSMContext):
     await state.set_state(PaymentState.PostPayment)
     states_data = await state.get_data()
     print(states_data)
-    days = states_data.get("PaymentDays")
+    days = message.successful_payment.invoice_payload
+    if not days or not days.isdigit():
+        days = states_data.get("PaymentDays")
+    if not days:
+        logging.error(f"PaymentDays is None for user {message.from_user.id}, cannot process payment")
+        await message.answer("Ошибка: не удалось определить тариф. Обратитесь в поддержку.")
+        await state.clear()
+        await state.set_state(PaymentState.PrePayment)
+        return
     transaction_id = str(uuid.uuid4())
     amount = message.successful_payment.total_amount
     await rq.create_transaction(
