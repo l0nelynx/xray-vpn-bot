@@ -13,7 +13,9 @@ import app.keyboards as kb
 import app.marzban.templates as templates
 from app.locale.lang_ru import admin_transaction_message, admin_migration_message
 from app.locale.utils import get_user_lang
-from app.settings import bot, secrets
+from app.settings import bot, admin_bot, secrets
+
+_notify = admin_bot or bot
 
 
 class SubscriptionType(Enum):
@@ -134,7 +136,7 @@ async def deliver_subscription(
 
                 if new_user_info:
                     logging.info(f"Auto-migrated {username} from Marzban to RemnaWave")
-                    await bot.send_message(
+                    await _notify.send_message(
                         chat_id=secrets.get('admin_id'),
                         text=admin_migration_message.format(
                             username=username,
@@ -531,4 +533,4 @@ async def log_transaction_to_admin(
         days=days,
     )
 
-    await bot.send_message(chat_id=secrets.get("admin_id"), text=admin_message)
+    await _notify.send_message(chat_id=secrets.get("admin_id"), text=admin_message)

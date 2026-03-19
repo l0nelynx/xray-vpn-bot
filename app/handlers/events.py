@@ -8,15 +8,17 @@ from app.keyboards.localized import (
 )
 from app.locale.utils import get_user_lang
 from app.database.models import async_main
-from app.settings import bot, secrets
+from app.settings import bot, admin_bot, secrets
 from io import BytesIO
 from aiogram.types import BufferedInputFile
 
 logger = logging.getLogger(__name__)
 
+_notify = admin_bot or bot
+
 
 async def start_bot():
-    await bot.send_message(secrets.get('admin_id'), 'Бот запущен')
+    await _notify.send_message(secrets.get('admin_id'), 'Бот запущен')
     await async_main()
     cleaned = await rq.cleanup_stale_transactions(hours=24)
     if cleaned:
@@ -32,12 +34,12 @@ async def userlist():
         i = i + 1
     file_bytes = usrids.encode('utf-8')
     file = BufferedInputFile(file_bytes, filename='users.txt')
-    await bot.send_document(chat_id=secrets.get('admin_id'), document=file,
-                            caption='Here is your userlist')
+    await _notify.send_document(chat_id=secrets.get('admin_id'), document=file,
+                               caption='Here is your userlist')
 
 
 async def stop_bot():
-    await bot.send_message(secrets.get('admin_id'), 'Бот остановлен')
+    await _notify.send_message(secrets.get('admin_id'), 'Бот остановлен')
 
 
 async def main_menu(message_func, menu_type, user_id: int = None, days=None, data_limit=None, link=None, user_uuid: str = None):

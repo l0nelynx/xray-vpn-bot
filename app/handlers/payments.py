@@ -17,9 +17,8 @@ from app.handlers.tools import success_payment_handler
 from app.handlers.subscription_service import deliver_subscription, SubscriptionType
 from app.locale.utils import get_user_lang
 from app.keyboards.localized import get_pay_methods_localized, get_to_main_localized
-from app.keyboards.tools import create_tariff_keyboard
-from app.tariffs import tariffs_stars, tariffs_crypto, tariffs_sbp
-from app.keyboards.tools import price_stars, price_crypto, sbp_price
+from app.keyboards.tools import create_tariff_keyboard, get_price_stars, get_price_crypto, get_sbp_price
+from app.tariffs import get_tariffs_stars, get_tariffs_crypto, get_tariffs_sbp
 from app.settings import bot, cp, secrets
 import app.database.requests as rq
 
@@ -121,11 +120,11 @@ async def stars_plan(callback: CallbackQuery, state: FSMContext):
 
     # Build tariff keyboards dynamically with promo discount
     keyboards = {
-        'Stars_Plans': lambda: create_tariff_keyboard(tariff=tariffs_stars, method='stars', base_price=price_stars, extra_discount=promo_discount),
-        'Crypto_Plans': lambda: create_tariff_keyboard(tariff=tariffs_crypto, method='crypto', base_price=price_crypto, extra_discount=promo_discount),
-        'SBP_Plans': lambda: create_tariff_keyboard(tariff=tariffs_sbp, method='SBP', base_price=sbp_price, extra_discount=promo_discount),
-        'SBP_Apay': lambda: create_tariff_keyboard(tariff=tariffs_sbp, method='SBP_APAY', base_price=sbp_price, extra_discount=promo_discount),
-        'Crystal_plans': lambda: create_tariff_keyboard(tariff=tariffs_sbp, method='CRYSTAL', base_price=sbp_price, extra_discount=promo_discount),
+        'Stars_Plans': lambda: create_tariff_keyboard(tariff=get_tariffs_stars(), method='stars', base_price=get_price_stars(), extra_discount=promo_discount),
+        'Crypto_Plans': lambda: create_tariff_keyboard(tariff=get_tariffs_crypto(), method='crypto', base_price=get_price_crypto(), extra_discount=promo_discount),
+        'SBP_Plans': lambda: create_tariff_keyboard(tariff=get_tariffs_sbp(), method='SBP', base_price=get_sbp_price(), extra_discount=promo_discount),
+        'SBP_Apay': lambda: create_tariff_keyboard(tariff=get_tariffs_sbp(), method='SBP_APAY', base_price=get_sbp_price(), extra_discount=promo_discount),
+        'Crystal_plans': lambda: create_tariff_keyboard(tariff=get_tariffs_sbp(), method='CRYSTAL', base_price=get_sbp_price(), extra_discount=promo_discount),
     }
 
     builder = keyboards.get(callback.data)

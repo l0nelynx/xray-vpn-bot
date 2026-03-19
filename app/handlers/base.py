@@ -15,7 +15,7 @@ from app.handlers.events import userlist
 from app.handlers.tools import startup_user_dialog, free_sub_handler, subscription_info, check_tg_subscription, \
     get_user_days
 
-from app.settings import secrets, bot
+from app.settings import secrets, bot, admin_bot
 import string
 import random
 
@@ -331,7 +331,8 @@ async def process_migration(callback: CallbackQuery):
             sub_type='Pro' if is_pro else 'Free'
         )
 
-        await bot.send_message(
+        _notify = admin_bot or bot
+        await _notify.send_message(
             chat_id=secrets.get('admin_id'),
             text=admin_message,
             parse_mode='HTML'

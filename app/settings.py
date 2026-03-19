@@ -1,3 +1,4 @@
+import copy
 from pathlib import Path
 
 import uvicorn
@@ -42,6 +43,9 @@ except Exception as e:
     traceback.print_exc()
     secrets = {}  # Fallback to empty dict
 
+# Сохраняем оригинальные значения config.yml (для config_manager)
+_original_config = copy.deepcopy(secrets)
+
 # Убедитесь, что токен существует перед созданием бота
 if not secrets.get('token'):
     raise ValueError("❌ CRITICAL: 'token' is not set in config.yml!")
@@ -54,3 +58,11 @@ if not secrets.get('crypto_bot_token'):
 
 bot = Bot(token=secrets.get('token'))
 cp = CryptoPay(secrets.get('crypto_bot_token')) if secrets.get('crypto_bot_token') else None
+
+# Admin bot (отдельный бот для админ-панели)
+if secrets.get('admin_bot_token'):
+    admin_bot = Bot(token=secrets.get('admin_bot_token'))
+    print(f"✓ Admin bot initialized. Token: {secrets.get('admin_bot_token')[:10]}...")
+else:
+    admin_bot = None
+    print("⚠️ Warning: 'admin_bot_token' is not set in config.yml, admin bot disabled")

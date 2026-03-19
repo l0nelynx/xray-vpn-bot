@@ -7,7 +7,8 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from app.keyboards.tools import *
-from app.tariffs import *
+from app.tariffs import get_tariffs_stars, get_tariffs_crypto, get_tariffs_sbp
+from app.keyboards.tools import get_price_stars, get_price_crypto, get_sbp_price
 from app.settings import secrets
 
 
@@ -24,30 +25,23 @@ def get_connect(link: str) -> InlineKeyboardMarkup:
 
 
 # ============================================================================
-# TARIFF KEYBOARDS WITH CACHING
+# TARIFF KEYBOARDS (динамические — читают secrets при каждом вызове)
 # ============================================================================
 
-from functools import lru_cache
-
-@lru_cache(maxsize=5)
 def get_starspay_tariffs() -> InlineKeyboardMarkup:
-    return create_tariff_keyboard(tariff=tariffs_stars, method='stars', base_price=price_stars)
+    return create_tariff_keyboard(tariff=get_tariffs_stars(), method='stars', base_price=get_price_stars())
 
-@lru_cache(maxsize=5)
 def get_cryptospay_tariffs() -> InlineKeyboardMarkup:
-    return create_tariff_keyboard(tariff=tariffs_crypto, method='crypto', base_price=price_crypto)
+    return create_tariff_keyboard(tariff=get_tariffs_crypto(), method='crypto', base_price=get_price_crypto())
 
-@lru_cache(maxsize=5)
 def get_sbp_tariffs() -> InlineKeyboardMarkup:
-    return create_tariff_keyboard(tariff=tariffs_sbp, method='SBP', base_price=sbp_price)
+    return create_tariff_keyboard(tariff=get_tariffs_sbp(), method='SBP', base_price=get_sbp_price())
 
-@lru_cache(maxsize=5)
 def get_sbp_apay_tariffs() -> InlineKeyboardMarkup:
-    return create_tariff_keyboard(tariff=tariffs_sbp, method='SBP_APAY', base_price=sbp_price)
+    return create_tariff_keyboard(tariff=get_tariffs_sbp(), method='SBP_APAY', base_price=get_sbp_price())
 
-@lru_cache(maxsize=5)
 def get_crystal_tariffs() -> InlineKeyboardMarkup:
-    return create_tariff_keyboard(tariff=tariffs_sbp, method='CRYSTAL', base_price=sbp_price)
+    return create_tariff_keyboard(tariff=get_tariffs_sbp(), method='CRYSTAL', base_price=get_sbp_price())
 
 
 # ============================================================================

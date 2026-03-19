@@ -5,7 +5,9 @@ import time
 import app.database.requests as rq
 import app.locale.lang_ru as ru
 from app.handlers.subscription_service import deliver_subscription, SubscriptionType
-from app.settings import bot, secrets
+from app.settings import bot, admin_bot, secrets
+
+_notify = admin_bot or bot
 
 
 async def send_alert(order_id: str, usrname: str, usrid: int, tariff_days: int,
@@ -24,7 +26,7 @@ async def send_alert(order_id: str, usrname: str, usrid: int, tariff_days: int,
         amount: Сумма платежа
         transaction_id: ID транзакции
     """
-    await bot.send_message(
+    await _notify.send_message(
         chat_id=secrets.get('admin_id'),
         text=ru.admin_transaction_message.format(
             transaction_id=transaction_id or order_id,
@@ -140,7 +142,7 @@ async def payment_process_background(order_id: str):
 
 Требуется ручное вмешательство администратора!"""
 
-                    await bot.send_message(
+                    await _notify.send_message(
                         chat_id=secrets.get('admin_id'),
                         text=error_msg
                     )
@@ -153,7 +155,7 @@ async def payment_process_background(order_id: str):
     except Exception as e:
         logging.error(f"Error in payment_process_background for order {order_id}: {e}", exc_info=True)
         # Уведомляем администратора об исключении
-        await bot.send_message(
+        await _notify.send_message(
             chat_id=secrets.get('admin_id'),
             text=f"❌ Критическая ошибка при обработке платежа {order_id}:\n{str(e)}"
         )

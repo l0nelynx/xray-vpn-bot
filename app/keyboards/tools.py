@@ -3,7 +3,6 @@ Optimized keyboard tools module for aiogram.
 Implements efficient tariff keyboard building with caching and performance improvements.
 """
 from typing import Callable, Dict, Optional
-from functools import lru_cache
 
 from aiogram.filters.callback_data import CallbackData
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
@@ -11,10 +10,21 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from app.settings import secrets
 
-price_stars = secrets.get('stars_price')
-price_crypto = secrets.get('crypto_price')
-price_discount = secrets.get('discount')
-sbp_price = secrets.get('sbp_price')
+
+def get_price_stars():
+    return secrets.get('stars_price')
+
+
+def get_price_crypto():
+    return secrets.get('crypto_price')
+
+
+def get_price_discount():
+    return secrets.get('discount')
+
+
+def get_sbp_price():
+    return secrets.get('sbp_price')
 
 
 class PaymentCallbackData(CallbackData, prefix=""):
@@ -36,9 +46,6 @@ class TariffKeyboardBuilder:
     Optimized tariff keyboard builder with caching.
     Reduces redundant calculations and improves memory efficiency.
     """
-
-    # Cache for calculated amounts to avoid recalculation
-    _amount_cache: Dict[tuple, float] = {}
 
     def __init__(
             self,
@@ -81,17 +88,10 @@ class TariffKeyboardBuilder:
         """
         Рассчет итоговой суммы с учетом скидки.
         """
-        cache_key = (self.price, self.days, self.disc, self.extra_discount, id(self.discount_func))
-
-        if cache_key in self._amount_cache:
-            return self._amount_cache[cache_key]
-
         monthly_cost = self.price * (self.days / 30)
         result = self.discount_func(monthly_cost, self.disc)
         if self.extra_discount > 0:
             result = result * (1 - self.extra_discount / 100)
-
-        self._amount_cache[cache_key] = result
         return result
 
     def build(self) -> InlineKeyboardButton:
@@ -148,7 +148,7 @@ class OptimizedTariffKeyboard:
         # Add tariff buttons - each on its own row
         for name, params in self.tariff.items():
             days = int(params['days'])
-            disc = int(params['disc'])
+            disc = int(params.get('disc', 0) or 0)
             currency = params['currency']
             period = params['period']
 
