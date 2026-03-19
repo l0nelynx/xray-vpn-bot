@@ -2,7 +2,11 @@ import logging
 
 import asyncio
 
-from aiogram import Dispatcher
+from typing import Any, Awaitable, Callable
+
+from aiogram import BaseMiddleware, Dispatcher
+from aiogram.exceptions import TelegramBadRequest
+from aiogram.types import CallbackQuery, ErrorEvent
 from fastapi import Request, BackgroundTasks, Response, HTTPException
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -17,13 +21,39 @@ from app.settings import bot, admin_bot, cp, run_webserver, app_uvi, limiter
 
 app_uvi.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+class UsernameRequiredMiddleware(BaseMiddleware):
+    async def __call__(
+        self,
+        handler: Callable[[CallbackQuery, dict[str, Any]], Awaitable[Any]],
+        event: CallbackQuery,
+        data: dict[str, Any],
+    ) -> Any:
+        if not event.from_user.username:
+            await event.answer(
+                "Для использования бота установите username в настройках Telegram.",
+                show_alert=True,
+            )
+            return
+        return await handler(event, data)
+
+
 # Инициализация основного бота
 dp = Dispatcher()
+dp.callback_query.middleware(UsernameRequiredMiddleware())
 dp.include_router(router_base)
 dp.include_router(router_devices)
 dp.include_router(router_payments)
 dp.startup.register(start_bot)
 dp.shutdown.register(stop_bot)
+
+
+@dp.errors()
+async def error_handler(event: ErrorEvent):
+    if isinstance(event.exception, TelegramBadRequest) and "message is not modified" in str(event.exception):
+        logging.debug("Suppressed 'message is not modified' error")
+        return True
+    raise event.exception
+
 
 # Инициализация admin бота
 admin_dp = Dispatcher()
