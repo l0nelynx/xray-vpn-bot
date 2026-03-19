@@ -226,7 +226,7 @@ async def create_transaction(user_tg_id: int, user_transaction: str, username: s
             new_transaction = Transaction(
                 transaction_id=user_transaction,
                 vless_uuid=uuid,
-                username=username,
+                username=username or f"id_{user_tg_id}",
                 order_status='created',
                 delivery_status=0,
                 days_ordered=days,

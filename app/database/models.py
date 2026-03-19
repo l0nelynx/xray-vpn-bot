@@ -67,7 +67,7 @@ class Transaction(Base):
     vless_uuid: Mapped[str] = mapped_column(String(100))
 
     # Имя пользователя
-    username: Mapped[str] = mapped_column(String(50))
+    username: Mapped[str] = mapped_column(String(50), nullable=True)
 
     # Статус заказа
     order_status: Mapped[str] = mapped_column(String(50))
