@@ -1,4 +1,4 @@
-const API_BASE = "/api";
+const API_BASE = "/bot/dashboard/api";
 
 function getToken(): string | null {
   return localStorage.getItem("token");
@@ -36,7 +36,7 @@ async function request<T>(
 
   if (res.status === 401) {
     clearToken();
-    window.location.href = "/login";
+    window.location.href = "/bot/dashboard/login";
     throw new Error("Unauthorized");
   }
 
