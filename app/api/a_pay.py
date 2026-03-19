@@ -89,6 +89,10 @@ class PaymentProcessor:
 
 
 async def create_sbp_link(callback: CallbackQuery, amount, days: int):
+    if await rq.is_user_banned(callback.from_user.id):
+        await callback.answer("Ваш аккаунт заблокирован.", show_alert=True)
+        return None
+
     transaction_id = uuid.uuid4()
     if await rq.get_full_transaction_info(f"{transaction_id}"):  # For safety
         transaction_id = uuid.uuid4()

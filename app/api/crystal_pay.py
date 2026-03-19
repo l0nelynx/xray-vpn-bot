@@ -278,6 +278,10 @@ class CrystalPAY:
 
 # Пример использования
 async def crystal_create_link(callback: CallbackQuery, amount, currency: str, days: int):
+    if await rq.is_user_banned(callback.from_user.id):
+        await callback.answer("Ваш аккаунт заблокирован.", show_alert=True)
+        return None
+
     # Инициализация
     crystal = CrystalPAY(secrets.get('crystal_login'), secrets.get('crystal_secret'), secrets.get('crystal_salt'))
 
