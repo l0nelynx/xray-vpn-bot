@@ -372,16 +372,24 @@ async def claim_order_for_processing(transaction_id: str) -> bool:
         bool: True если заказ успешно захвачен для обработки, False если уже обработан
     """
     async with async_session() as session:
-        result = await session.execute(
-            update(Transaction)
-            .where(
+        transaction = await session.scalar(
+            select(Transaction).where(
                 Transaction.transaction_id == transaction_id,
                 Transaction.order_status == "created"
             )
-            .values(order_status="confirmed")
         )
+        if not transaction:
+            return False
+
+        expire_date = None
+        if transaction.created_at and transaction.days_ordered:
+            created = datetime.fromisoformat(transaction.created_at)
+            expire_date = (created + timedelta(days=transaction.days_ordered)).isoformat(timespec='seconds')
+
+        transaction.order_status = "confirmed"
+        transaction.expire_date = expire_date
         await session.commit()
-        return result.rowcount > 0
+        return True
 
 
 async def update_delivery_status(transaction_id: str, new_delivery_status: int) -> bool:
@@ -396,14 +404,13 @@ async def update_delivery_status(transaction_id: str, new_delivery_status: int) 
 
 
 async def cleanup_stale_transactions(hours: int = 24) -> int:
-    """Удаляет транзакции со статусом 'created', у которых created_at старше hours часов."""
+    """Удаляет транзакции со статусом 'created', у которых created_at старше hours часов или отсутствует."""
     cutoff = (datetime.now() - timedelta(hours=hours)).isoformat(timespec='seconds')
     async with async_session() as session:
         result = await session.execute(
             delete(Transaction).where(
                 Transaction.order_status == 'created',
-                Transaction.created_at != None,  # noqa: E711
-                Transaction.created_at < cutoff,
+                (Transaction.created_at == None) | (Transaction.created_at < cutoff),  # noqa: E711
             )
         )
         await session.commit()
@@ -430,6 +437,7 @@ async def get_user_transactions_detailed(tg_id: int) -> list[dict]:
                 "order_status": t.order_status,
                 "delivery_status": t.delivery_status,
                 "days_ordered": t.days_ordered,
+                "expire_date": t.expire_date,
             }
             for t in transactions
         ]
@@ -452,18 +460,27 @@ async def get_users_count_by_api() -> dict:
 
 
 async def get_paid_users_count() -> int:
+    now_iso = datetime.now().isoformat(timespec='seconds')
     async with async_session() as session:
         result = await session.scalar(
-            select(func.count(func.distinct(Transaction.user_id))).select_from(Transaction)
+            select(func.count(func.distinct(Transaction.user_id))).select_from(Transaction).where(
+                Transaction.order_status.in_(["confirmed", "delivered"]),
+                Transaction.expire_date > now_iso,
+            )
         )
         return result or 0
 
 
 async def get_free_users_count() -> int:
+    now_iso = datetime.now().isoformat(timespec='seconds')
+    active_paid_sq = select(func.distinct(Transaction.user_id)).where(
+        Transaction.order_status.in_(["confirmed", "delivered"]),
+        Transaction.expire_date > now_iso,
+    )
     async with async_session() as session:
         result = await session.scalar(
             select(func.count()).select_from(User).where(
-                ~User.id.in_(select(func.distinct(Transaction.user_id)))
+                ~User.id.in_(active_paid_sq)
             )
         )
         return result or 0
@@ -471,9 +488,14 @@ async def get_free_users_count() -> int:
 
 async def get_users_paginated(page: int, per_page: int = 10,
                               sort: str = "id", search: str = ""):
+    now_iso = datetime.now().isoformat(timespec='seconds')
     async with async_session() as session:
         has_tx = exists(
-            select(Transaction.user_id).where(Transaction.user_id == User.id)
+            select(Transaction.user_id).where(
+                Transaction.user_id == User.id,
+                Transaction.order_status.in_(["confirmed", "delivered"]),
+                Transaction.expire_date > now_iso,
+            )
         ).correlate(User).label("is_paid")
 
         base = select(User, has_tx)
@@ -488,18 +510,14 @@ async def get_users_paginated(page: int, per_page: int = 10,
                 base = base.where(User.username.ilike(f"%{search}%"))
 
         # Фильтр по платным/бесплатным
+        active_paid_sq = select(Transaction.user_id).where(
+            Transaction.order_status.in_(["confirmed", "delivered"]),
+            Transaction.expire_date > now_iso,
+        ).distinct()
         if sort == "paid":
-            base = base.where(
-                User.id.in_(
-                    select(Transaction.user_id).distinct()
-                )
-            )
+            base = base.where(User.id.in_(active_paid_sq))
         elif sort == "free":
-            base = base.where(
-                ~User.id.in_(
-                    select(Transaction.user_id).distinct()
-                )
-            )
+            base = base.where(~User.id.in_(active_paid_sq))
 
         # Подсчёт после фильтрации
         count_q = select(func.count()).select_from(base.subquery())

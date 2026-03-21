@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select, func
 
@@ -10,10 +12,14 @@ router = APIRouter(prefix="/api/stats", tags=["stats"])
 
 @router.get("/overview")
 async def overview(_: str = Depends(get_current_user)):
+    now_iso = datetime.now().isoformat(timespec='seconds')
     async with async_session() as session:
         total_users = await session.scalar(select(func.count()).select_from(User)) or 0
         paid_users = await session.scalar(
-            select(func.count(func.distinct(Transaction.user_id))).select_from(Transaction)
+            select(func.count(func.distinct(Transaction.user_id))).select_from(Transaction).where(
+                Transaction.order_status.in_(["confirmed", "delivered"]),
+                Transaction.expire_date > now_iso,
+            )
         ) or 0
         free_users = total_users - paid_users
         revenue = await session.scalar(

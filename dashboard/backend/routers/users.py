@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, func, delete, exists
 
@@ -10,10 +12,14 @@ router = APIRouter(prefix="/api/users", tags=["users"])
 
 @router.get("/count")
 async def users_count(_: str = Depends(get_current_user)):
+    now_iso = datetime.now().isoformat(timespec='seconds')
     async with async_session() as session:
         total = await session.scalar(select(func.count()).select_from(User)) or 0
         paid = await session.scalar(
-            select(func.count(func.distinct(Transaction.user_id))).select_from(Transaction)
+            select(func.count(func.distinct(Transaction.user_id))).select_from(Transaction).where(
+                Transaction.order_status.in_(["confirmed", "delivered"]),
+                Transaction.expire_date > now_iso,
+            )
         ) or 0
         free = total - paid
         banned = await session.scalar(
@@ -31,9 +37,14 @@ async def list_users(
     filter: str = Query("all"),
     _: str = Depends(get_current_user),
 ):
+    now_iso = datetime.now().isoformat(timespec='seconds')
     async with async_session() as session:
         has_tx = exists(
-            select(Transaction.user_id).where(Transaction.user_id == User.id)
+            select(Transaction.user_id).where(
+                Transaction.user_id == User.id,
+                Transaction.order_status.in_(["confirmed", "delivered"]),
+                Transaction.expire_date > now_iso,
+            )
         ).correlate(User).label("is_paid")
 
         base = select(User, has_tx)
@@ -46,10 +57,14 @@ async def list_users(
             else:
                 base = base.where(User.username.ilike(f"%{search}%"))
 
+        active_paid_sq = select(Transaction.user_id).where(
+            Transaction.order_status.in_(["confirmed", "delivered"]),
+            Transaction.expire_date > now_iso,
+        ).distinct()
         if filter == "paid":
-            base = base.where(User.id.in_(select(Transaction.user_id).distinct()))
+            base = base.where(User.id.in_(active_paid_sq))
         elif filter == "free":
-            base = base.where(~User.id.in_(select(Transaction.user_id).distinct()))
+            base = base.where(~User.id.in_(active_paid_sq))
         elif filter == "banned":
             base = base.where(User.is_banned == True)
 
@@ -132,6 +147,7 @@ async def get_user_transactions(tg_id: int, _: str = Depends(get_current_user)):
                 "order_status": t.order_status,
                 "delivery_status": t.delivery_status,
                 "days_ordered": t.days_ordered,
+                "expire_date": t.expire_date,
             }
             for t in transactions
         ]

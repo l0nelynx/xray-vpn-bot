@@ -46,6 +46,7 @@ class Transaction(Base):
     amount: Mapped[float] = mapped_column(nullable=True)
     created_at: Mapped[str] = mapped_column(String(30), nullable=True)
     days_ordered: Mapped[int] = mapped_column(BigInteger)
+    expire_date: Mapped[str] = mapped_column(String(30), nullable=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
 
     user: Mapped["User"] = relationship(back_populates="transactions")

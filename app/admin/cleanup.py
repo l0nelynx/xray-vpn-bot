@@ -7,7 +7,7 @@ from aiogram.exceptions import TelegramForbiddenError, TelegramBadRequest, Teleg
 
 import app.database.requests as rq
 from app.settings import secrets, bot
-from .router import is_admin, BTN_CLEANUP, BTN_FILL_USERNAMES
+from .router import is_admin, BTN_CLEANUP, BTN_FILL_USERNAMES, BTN_CLEANUP_TX
 
 cleanup_router = Router()
 
@@ -69,6 +69,37 @@ async def admin_confirm_cleanup(callback: CallbackQuery):
 
     await callback.message.edit_text(
         f"Удалено из базы данных: <b>{deleted}</b> пользователей.",
+        parse_mode='HTML',
+    )
+
+
+# ==================== Очистка транзакций (reply-кнопка) ====================
+
+@cleanup_router.message(F.text == BTN_CLEANUP_TX, F.from_user.id == secrets.get('admin_id'))
+async def admin_cleanup_tx_prompt(message: Message):
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="Да, удалить", callback_data="admin_confirm_cleanup_tx"),
+            InlineKeyboardButton(text="Отмена", callback_data="admin_back"),
+        ]
+    ])
+    await message.answer(
+        "Удалить все транзакции со статусом <b>created</b>, "
+        "созданные более <b>7 дней</b> назад?",
+        parse_mode='HTML',
+        reply_markup=kb,
+    )
+
+
+@cleanup_router.callback_query(F.data == "admin_confirm_cleanup_tx")
+async def admin_confirm_cleanup_tx(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        return
+
+    deleted = await rq.cleanup_stale_transactions(hours=168)
+
+    await callback.message.edit_text(
+        f"Удалено устаревших транзакций: <b>{deleted}</b>",
         parse_mode='HTML',
     )
 

@@ -31,6 +31,7 @@ async def recent_transactions(
                 "order_status": t.order_status,
                 "days_ordered": t.days_ordered,
                 "created_at": t.created_at,
+                "expire_date": t.expire_date,
             }
             for t, tg_id, _ in rows
         ]
@@ -59,6 +60,7 @@ async def get_transaction(transaction_id: str, _: str = Depends(get_current_user
             "amount": t.amount,
             "created_at": t.created_at,
             "days_ordered": t.days_ordered,
+            "expire_date": t.expire_date,
         }
 
 
@@ -107,6 +109,7 @@ async def list_transactions(
                 "delivery_status": t.delivery_status,
                 "days_ordered": t.days_ordered,
                 "created_at": t.created_at,
+                "expire_date": t.expire_date,
             }
             for t, tg_id in rows
         ]

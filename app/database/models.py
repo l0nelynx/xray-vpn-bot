@@ -87,6 +87,9 @@ class Transaction(Base):
     # Количество дней в заказе
     days_ordered: Mapped[int] = mapped_column(BigInteger)
 
+    # Дата истечения подписки (ISO формат, рассчитывается при подтверждении)
+    expire_date: Mapped[str] = mapped_column(String(30), nullable=True)
+
     # Внешний ключ к таблице users
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
 
@@ -143,6 +146,21 @@ async def async_main():
                         "ALTER TABLE transactions ADD COLUMN created_at VARCHAR(30)"
                     ))
                     logging.info("Migration: added created_at column to transactions table")
+                if 'expire_date' not in tx_columns:
+                    sync_conn.execute(text(
+                        "ALTER TABLE transactions ADD COLUMN expire_date VARCHAR(30)"
+                    ))
+                    logging.info("Migration: added expire_date column to transactions table")
+                    # Бэкфилл: рассчитываем expire_date для существующих confirmed/delivered транзакций
+                    sync_conn.execute(text(
+                        "UPDATE transactions "
+                        "SET expire_date = replace(datetime(created_at, '+' || days_ordered || ' days'), ' ', 'T') "
+                        "WHERE expire_date IS NULL "
+                        "AND order_status IN ('confirmed', 'delivered') "
+                        "AND created_at IS NOT NULL "
+                        "AND days_ordered IS NOT NULL"
+                    ))
+                    logging.info("Migration: backfilled expire_date for existing confirmed/delivered transactions")
 
             # Миграция: добавляем индекс на username если его ещё нет
             indexes = [idx['name'] for idx in insp.get_indexes('users')]

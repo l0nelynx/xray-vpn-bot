@@ -21,6 +21,7 @@ BTN_BACKUP = "Бекап БД"
 BTN_ANNOUNCE = "Объявления"
 BTN_PROMOS = "Промокоды"
 BTN_BAN = "Бан/Разбан"
+BTN_CLEANUP_TX = "Очистка транзакций"
 BTN_LOGS = "Логи ошибок"
 BTN_CONFIG = "Конфигурация"
 BTN_CLOSE = "Закрыть админку"
@@ -48,7 +49,8 @@ def admin_menu_kb() -> ReplyKeyboardMarkup:
             [KeyboardButton(text=BTN_USERS), KeyboardButton(text=BTN_CLEANUP)],
             [KeyboardButton(text=BTN_FILL_USERNAMES), KeyboardButton(text=BTN_BACKUP)],
             [KeyboardButton(text=BTN_PROMOS), KeyboardButton(text=BTN_ANNOUNCE)],
-            [KeyboardButton(text=BTN_BAN), KeyboardButton(text=BTN_LOGS)],
+            [KeyboardButton(text=BTN_CLEANUP_TX), KeyboardButton(text=BTN_BAN)],
+            [KeyboardButton(text=BTN_LOGS)],
             [KeyboardButton(text=BTN_CONFIG), KeyboardButton(text=BTN_CLOSE)],
         ],
         resize_keyboard=True,

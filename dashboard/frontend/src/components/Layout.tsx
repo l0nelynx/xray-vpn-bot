@@ -33,61 +33,84 @@ export default function Layout() {
   };
 
   return (
-    <AntLayout style={{ minHeight: "100vh" }}>
+    <AntLayout style={{ minHeight: "100vh", background: "#0a0a0f" }}>
       <Sider
         collapsible
         collapsed={collapsed}
         onCollapse={setCollapsed}
         trigger={null}
-        style={{ borderRight: `1px solid ${token.colorBorderSecondary}` }}
+        width={240}
+        collapsedWidth={64}
+        style={{
+          background: "#0f0f18",
+          borderRight: "1px solid rgba(255,255,255,0.04)",
+          overflow: "auto",
+          height: "100vh",
+          position: "sticky",
+          top: 0,
+          left: 0,
+        }}
       >
         <div
           style={{
-            height: 48,
+            height: 56,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            borderBottom: `1px solid ${token.colorBorderSecondary}`,
             fontWeight: 700,
-            fontSize: collapsed ? 14 : 16,
+            fontSize: collapsed ? 14 : 18,
             color: token.colorPrimary,
+            letterSpacing: collapsed ? 0 : 2,
+            borderBottom: "1px solid rgba(255,255,255,0.04)",
           }}
         >
-          {collapsed ? "VPN" : "XRAY VPN"}
+          {collapsed ? "VP" : "XRAY VPN"}
         </div>
         <Menu
           mode="inline"
           selectedKeys={[location.pathname]}
           items={menuItems}
           onClick={({ key }) => navigate(key)}
-          style={{ borderRight: 0 }}
+          style={{
+            borderRight: 0,
+            background: "transparent",
+            padding: "8px 4px",
+          }}
         />
       </Sider>
-      <AntLayout>
+      <AntLayout style={{ background: "#0a0a0f" }}>
         <Header
           style={{
             padding: "0 24px",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            background: token.colorBgContainer,
-            borderBottom: `1px solid ${token.colorBorderSecondary}`,
+            background: "rgba(15,15,24,0.8)",
+            backdropFilter: "blur(12px)",
+            borderBottom: "1px solid rgba(255,255,255,0.04)",
+            height: 56,
+            lineHeight: "56px",
+            position: "sticky",
+            top: 0,
+            zIndex: 10,
           }}
         >
           <Button
             type="text"
             icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
             onClick={() => setCollapsed(!collapsed)}
+            style={{ color: "rgba(255,255,255,0.6)" }}
           />
           <Button
             type="text"
             icon={<LogoutOutlined />}
             onClick={handleLogout}
+            style={{ color: "rgba(255,255,255,0.5)" }}
           >
             Logout
           </Button>
         </Header>
-        <Content style={{ margin: 24 }}>
+        <Content style={{ margin: 24, minHeight: "calc(100vh - 56px - 48px)" }}>
           <Outlet />
         </Content>
       </AntLayout>

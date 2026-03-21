@@ -1,10 +1,9 @@
 import { useEffect, useState } from "react";
-import { Row, Col, Card, Table, Tag } from "antd";
+import { Row, Col, Card, Table, Tag, Typography } from "antd";
 import {
   UserOutlined,
   DollarOutlined,
   TeamOutlined,
-  ShoppingCartOutlined,
 } from "@ant-design/icons";
 import StatsCard from "../components/StatsCard";
 import RevenueChart from "../components/RevenueChart";
@@ -41,7 +40,7 @@ export default function DashboardPage() {
     { title: "ID", dataIndex: "transaction_id", key: "id", width: 140, ellipsis: true },
     { title: "User", dataIndex: "username", key: "user", width: 100 },
     { title: "Method", dataIndex: "payment_method", key: "method", width: 100 },
-    { title: "Amount", dataIndex: "amount", key: "amount", width: 80, render: (v: number | null) => v ?? "—" },
+    { title: "Amount", dataIndex: "amount", key: "amount", width: 80, render: (v: number | null) => v ?? "\u2014" },
     {
       title: "Status",
       dataIndex: "order_status",
@@ -54,6 +53,10 @@ export default function DashboardPage() {
 
   return (
     <div>
+      <Typography.Title level={4} style={{ marginBottom: 20, color: "rgba(255,255,255,0.88)" }}>
+        Dashboard
+      </Typography.Title>
+
       <Row gutter={[16, 16]}>
         <Col xs={24} sm={12} lg={6}>
           <StatsCard
@@ -61,6 +64,7 @@ export default function DashboardPage() {
             value={stats?.total_users ?? 0}
             prefix={<TeamOutlined />}
             loading={loading}
+            color="#4f8cff"
           />
         </Col>
         <Col xs={24} sm={12} lg={6}>
@@ -69,6 +73,7 @@ export default function DashboardPage() {
             value={stats?.paid_users ?? 0}
             prefix={<UserOutlined />}
             loading={loading}
+            color="#36cfc9"
           />
         </Col>
         <Col xs={24} sm={12} lg={6}>
@@ -77,6 +82,7 @@ export default function DashboardPage() {
             value={stats?.free_users ?? 0}
             prefix={<UserOutlined />}
             loading={loading}
+            color="#ffc53d"
           />
         </Col>
         <Col xs={24} sm={12} lg={6}>
@@ -85,6 +91,7 @@ export default function DashboardPage() {
             value={stats?.revenue ?? 0}
             prefix={<DollarOutlined />}
             loading={loading}
+            color="#b37feb"
           />
         </Col>
       </Row>
@@ -103,7 +110,9 @@ export default function DashboardPage() {
           <UserGrowthChart />
         </Col>
         <Col xs={24} lg={12}>
-          <Card title="Recent Transactions">
+          <Card
+            title={<span style={{ color: "rgba(255,255,255,0.85)" }}>Recent Transactions</span>}
+          >
             <Table
               rowKey="transaction_id"
               columns={recentColumns}

@@ -158,7 +158,7 @@ export default function UsersTable() {
               <Descriptions.Item label="Transactions">{selectedUser.transactions_count}</Descriptions.Item>
             </Descriptions>
 
-            <h4 style={{ marginTop: 24 }}>Transactions</h4>
+            <h4 style={{ marginTop: 24, color: "rgba(255,255,255,0.85)" }}>Transactions</h4>
             <List
               size="small"
               dataSource={userTx}

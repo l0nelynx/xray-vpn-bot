@@ -4,6 +4,8 @@ import { Pie } from "@ant-design/charts";
 import { api } from "../api/client";
 import type { PaymentMethodStat } from "../api/types";
 
+const COLORS = ["#4f8cff", "#36cfc9", "#ff7a45", "#ffc53d", "#b37feb", "#ff85c0"];
+
 export default function PaymentMethodPieChart() {
   const [data, setData] = useState<PaymentMethodStat[]>([]);
   const [loading, setLoading] = useState(true);
@@ -15,17 +17,36 @@ export default function PaymentMethodPieChart() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <Card><Spin /></Card>;
+  if (loading)
+    return (
+      <Card style={{ minHeight: 380 }}>
+        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: 300 }}>
+          <Spin />
+        </div>
+      </Card>
+    );
 
   return (
-    <Card title="Payment Methods">
+    <Card
+      title={<span style={{ color: "rgba(255,255,255,0.85)" }}>Payment Methods</span>}
+    >
       <Pie
         data={data}
         angleField="count"
         colorField="method"
         height={300}
         innerRadius={0.6}
-        label={{ text: "method", position: "outside" }}
+        color={COLORS}
+        label={{
+          text: "method",
+          position: "outside",
+          style: { fill: "rgba(255,255,255,0.7)", fontSize: 12 },
+        }}
+        legend={{
+          color: {
+            itemLabelFill: "rgba(255,255,255,0.7)",
+          },
+        }}
         tooltip={{ title: "method", items: [{ channel: "y" }] }}
       />
     </Card>
