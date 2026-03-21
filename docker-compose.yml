@@ -26,7 +26,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 350M
   support-bot:
     container_name: support-bot
     build:
