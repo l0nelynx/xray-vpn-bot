@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Card, Spin } from "antd";
 import { Column } from "@ant-design/charts";
 import { api } from "../api/client";
@@ -20,6 +20,17 @@ export default function RevenueChart({ period = "month" }: Props) {
       .finally(() => setLoading(false));
   }, [period]);
 
+  // Replace zero values with a small visual minimum so stems are always visible
+  const chartData = useMemo(() => {
+    const maxVal = Math.max(...data.map((d) => d.revenue), 1);
+    const minVisible = maxVal * 0.015; // 1.5% of max
+    return data.map((d) => ({
+      ...d,
+      _realRevenue: d.revenue,
+      revenue: d.revenue === 0 ? minVisible : d.revenue,
+    }));
+  }, [data]);
+
   if (loading)
     return (
       <Card style={{ minHeight: 380 }}>
@@ -34,14 +45,17 @@ export default function RevenueChart({ period = "month" }: Props) {
       title={<span style={{ color: "rgba(255,255,255,0.85)" }}>Revenue</span>}
     >
       <Column
-        data={data}
+        data={chartData}
         xField="date"
         yField="revenue"
         height={300}
         style={{
           radiusTopLeft: 4,
           radiusTopRight: 4,
-          fill: "#4f8cff",
+          fill: (d: Record<string, unknown>) =>
+            (d as { _realRevenue: number })._realRevenue === 0
+              ? "rgba(79,140,255,0.25)"
+              : "#4f8cff",
           maxWidth: 32,
         }}
         axis={{
@@ -64,7 +78,10 @@ export default function RevenueChart({ period = "month" }: Props) {
         }}
         tooltip={{
           channel: "y",
-          valueFormatter: (v: number) => `${v}`,
+          valueFormatter: (_v: number, datum: Record<string, unknown>) => {
+            const real = (datum as { _realRevenue?: number })?._realRevenue;
+            return `${real ?? _v}`;
+          },
         }}
       />
     </Card>

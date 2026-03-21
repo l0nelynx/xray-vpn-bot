@@ -33,6 +33,41 @@ def _period_range(period: str):
         return None, None
 
 
+def _fill_daily_gaps(data: dict[str, float], date_from: str | None, date_to: str | None, default=0.0) -> list[tuple[str, float]]:
+    """Fill missing dates with default value. Returns sorted list of (date, value)."""
+    if not date_from or not date_to:
+        # No range — just return sorted existing data
+        return sorted(data.items())
+
+    start = datetime.fromisoformat(date_from[:10])
+    end = datetime.fromisoformat(date_to[:10])
+    result = []
+    d = start
+    while d <= end:
+        key = d.strftime("%Y-%m-%d")
+        result.append((key, data.get(key, default)))
+        d += timedelta(days=1)
+    return result
+
+
+def _fill_weekly_gaps(data: dict[str, float], date_from: str | None, date_to: str | None, default=0.0) -> list[tuple[str, float]]:
+    """Fill missing weeks (Monday-based) with default value."""
+    if not date_from or not date_to:
+        return sorted(data.items())
+
+    start = datetime.fromisoformat(date_from[:10])
+    end = datetime.fromisoformat(date_to[:10])
+    # Align start to Monday
+    start = start - timedelta(days=start.weekday())
+    result = []
+    d = start
+    while d <= end:
+        key = d.strftime("%Y-%m-%d")
+        result.append((key, data.get(key, default)))
+        d += timedelta(days=7)
+    return result
+
+
 @router.get("/overview")
 async def overview(_: str = Depends(get_current_user)):
     now_iso = datetime.now().isoformat(timespec='seconds')
@@ -107,20 +142,21 @@ async def revenue(
 
     if period == "6month":
         # Aggregate daily data into weekly buckets (Monday-based)
-        from collections import OrderedDict
-        weekly: OrderedDict[str, float] = OrderedDict()
+        weekly: dict[str, float] = {}
         for row in rows:
             try:
                 d = datetime.fromisoformat(row.date)
-                # Monday of that week
                 monday = d - timedelta(days=d.weekday())
                 week_label = monday.strftime("%Y-%m-%d")
                 weekly[week_label] = weekly.get(week_label, 0) + float(row.total or 0)
             except (ValueError, TypeError):
                 continue
-        return [{"date": k, "revenue": v} for k, v in weekly.items()]
+        filled = _fill_weekly_gaps(weekly, date_from, date_to)
+        return [{"date": k, "revenue": v} for k, v in filled]
 
-    return [{"date": row.date, "revenue": float(row.total or 0)} for row in rows]
+    daily = {row.date: float(row.total or 0) for row in rows}
+    filled = _fill_daily_gaps(daily, date_from, date_to)
+    return [{"date": k, "revenue": v} for k, v in filled]
 
 
 @router.get("/user-growth")
@@ -162,8 +198,7 @@ async def user_growth(
         rows = result.all()
 
     if period == "6month":
-        from collections import OrderedDict
-        weekly: OrderedDict[str, int] = OrderedDict()
+        weekly: dict[str, float] = {}
         for row in rows:
             try:
                 d = datetime.fromisoformat(row.date)
@@ -172,9 +207,12 @@ async def user_growth(
                 weekly[week_label] = weekly.get(week_label, 0) + row.count
             except (ValueError, TypeError):
                 continue
-        return [{"date": k, "count": v} for k, v in weekly.items()]
+        filled = _fill_weekly_gaps(weekly, date_from, date_to, default=0)
+        return [{"date": k, "count": int(v)} for k, v in filled]
 
-    return [{"date": row.date, "count": row.count} for row in rows]
+    daily = {row.date: row.count for row in rows}
+    filled = _fill_daily_gaps(daily, date_from, date_to, default=0)
+    return [{"date": k, "count": int(v)} for k, v in filled]
 
 
 @router.get("/payment-methods")
