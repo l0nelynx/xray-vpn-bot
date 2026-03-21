@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
-import { Layout as AntLayout, Menu, Button, theme } from "antd";
+import { Layout as AntLayout, Menu, Button, Drawer, theme } from "antd";
 import {
   DashboardOutlined,
   UserOutlined,
@@ -9,8 +9,11 @@ import {
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  MenuOutlined,
+  CloseOutlined,
 } from "@ant-design/icons";
 import { clearToken } from "../api/client";
+import useIsMobile from "../hooks/useIsMobile";
 
 const { Sider, Header, Content } = AntLayout;
 
@@ -23,65 +26,118 @@ const menuItems = [
 
 export default function Layout() {
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const { token } = theme.useToken();
+  const isMobile = useIsMobile();
 
   const handleLogout = () => {
     clearToken();
     navigate("/login");
   };
 
-  return (
-    <AntLayout style={{ minHeight: "100vh", background: "#0a0a0f" }}>
-      <Sider
-        collapsible
-        collapsed={collapsed}
-        onCollapse={setCollapsed}
-        trigger={null}
-        width={240}
-        collapsedWidth={64}
+  const handleMenuClick = (key: string) => {
+    navigate(key);
+    if (isMobile) setMobileMenuOpen(false);
+  };
+
+  const sidebarContent = (
+    <>
+      <div
         style={{
-          background: "#0f0f18",
-          borderRight: "1px solid rgba(255,255,255,0.04)",
-          overflow: "auto",
-          height: "100vh",
-          position: "sticky",
-          top: 0,
-          left: 0,
+          height: 56,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontWeight: 700,
+          fontSize: isMobile ? 18 : collapsed ? 14 : 18,
+          color: token.colorPrimary,
+          letterSpacing: isMobile ? 2 : collapsed ? 0 : 2,
+          borderBottom: "1px solid rgba(255,255,255,0.04)",
         }}
       >
-        <div
+        {!isMobile && collapsed ? "VP" : "XRAY VPN"}
+      </div>
+      <Menu
+        mode="inline"
+        selectedKeys={[location.pathname]}
+        items={menuItems}
+        onClick={({ key }) => handleMenuClick(key)}
+        style={{
+          borderRight: 0,
+          background: "transparent",
+          padding: "8px 4px",
+        }}
+      />
+      {isMobile && (
+        <div style={{ padding: "16px", marginTop: "auto" }}>
+          <Button
+            type="text"
+            icon={<LogoutOutlined />}
+            onClick={handleLogout}
+            block
+            style={{ color: "rgba(255,255,255,0.5)", textAlign: "left" }}
+          >
+            Logout
+          </Button>
+        </div>
+      )}
+    </>
+  );
+
+  return (
+    <AntLayout style={{ minHeight: "100vh", background: "#0a0a0f" }}>
+      {/* Desktop sidebar */}
+      {!isMobile && (
+        <Sider
+          collapsible
+          collapsed={collapsed}
+          onCollapse={setCollapsed}
+          trigger={null}
+          width={240}
+          collapsedWidth={64}
           style={{
-            height: 56,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontWeight: 700,
-            fontSize: collapsed ? 14 : 18,
-            color: token.colorPrimary,
-            letterSpacing: collapsed ? 0 : 2,
-            borderBottom: "1px solid rgba(255,255,255,0.04)",
+            background: "#0f0f18",
+            borderRight: "1px solid rgba(255,255,255,0.04)",
+            overflow: "auto",
+            height: "100vh",
+            position: "sticky",
+            top: 0,
+            left: 0,
           }}
         >
-          {collapsed ? "VP" : "XRAY VPN"}
-        </div>
-        <Menu
-          mode="inline"
-          selectedKeys={[location.pathname]}
-          items={menuItems}
-          onClick={({ key }) => navigate(key)}
-          style={{
-            borderRight: 0,
-            background: "transparent",
-            padding: "8px 4px",
+          {sidebarContent}
+        </Sider>
+      )}
+
+      {/* Mobile drawer menu */}
+      {isMobile && (
+        <Drawer
+          placement="left"
+          open={mobileMenuOpen}
+          onClose={() => setMobileMenuOpen(false)}
+          width={260}
+          closeIcon={<CloseOutlined style={{ color: "rgba(255,255,255,0.6)" }} />}
+          styles={{
+            header: { display: "none" },
+            body: {
+              padding: 0,
+              background: "#0f0f18",
+              display: "flex",
+              flexDirection: "column",
+            },
           }}
-        />
-      </Sider>
+          rootStyle={{ zIndex: 1001 }}
+        >
+          {sidebarContent}
+        </Drawer>
+      )}
+
       <AntLayout style={{ background: "#0a0a0f" }}>
         <Header
           style={{
-            padding: "0 24px",
+            padding: isMobile ? "0 12px" : "0 24px",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
@@ -95,22 +151,52 @@ export default function Layout() {
             zIndex: 10,
           }}
         >
-          <Button
-            type="text"
-            icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-            onClick={() => setCollapsed(!collapsed)}
-            style={{ color: "rgba(255,255,255,0.6)" }}
-          />
-          <Button
-            type="text"
-            icon={<LogoutOutlined />}
-            onClick={handleLogout}
-            style={{ color: "rgba(255,255,255,0.5)" }}
-          >
-            Logout
-          </Button>
+          {isMobile ? (
+            <Button
+              type="text"
+              icon={<MenuOutlined />}
+              onClick={() => setMobileMenuOpen(true)}
+              style={{ color: "rgba(255,255,255,0.6)" }}
+            />
+          ) : (
+            <Button
+              type="text"
+              icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+              onClick={() => setCollapsed(!collapsed)}
+              style={{ color: "rgba(255,255,255,0.6)" }}
+            />
+          )}
+          {isMobile ? (
+            <span
+              style={{
+                fontWeight: 700,
+                fontSize: 16,
+                color: token.colorPrimary,
+                letterSpacing: 1,
+              }}
+            >
+              XRAY VPN
+            </span>
+          ) : null}
+          {!isMobile ? (
+            <Button
+              type="text"
+              icon={<LogoutOutlined />}
+              onClick={handleLogout}
+              style={{ color: "rgba(255,255,255,0.5)" }}
+            >
+              Logout
+            </Button>
+          ) : (
+            <div style={{ width: 32 }} /> // Spacer for centering title
+          )}
         </Header>
-        <Content style={{ margin: 24, minHeight: "calc(100vh - 56px - 48px)" }}>
+        <Content
+          style={{
+            margin: isMobile ? 12 : 24,
+            minHeight: "calc(100vh - 56px - 48px)",
+          }}
+        >
           <Outlet />
         </Content>
       </AntLayout>

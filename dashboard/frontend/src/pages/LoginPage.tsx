@@ -28,18 +28,20 @@ export default function LoginPage() {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
+        padding: 16,
         background: "linear-gradient(135deg, #0a0a0f 0%, #0f0f1e 50%, #0a0a0f 100%)",
       }}
     >
       <Card
         style={{
-          width: 400,
+          width: "100%",
+          maxWidth: 400,
           background: "#13131d",
           border: "1px solid rgba(255,255,255,0.06)",
           borderTop: "2px solid #4f8cff",
         }}
         styles={{
-          body: { padding: "40px 32px 32px" },
+          body: { padding: "32px 24px 24px" },
         }}
       >
         <div style={{ textAlign: "center", marginBottom: 32 }}>

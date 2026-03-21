@@ -1,8 +1,9 @@
-import { Table, Space, Select, DatePicker, Tag } from "antd";
+import { Table, Space, Select, DatePicker, Tag, Card, Button } from "antd";
 import { useState, useEffect, useCallback } from "react";
 import dayjs from "dayjs";
 import { api } from "../api/client";
 import type { TransactionItem, PaginatedResponse } from "../api/types";
+import useIsMobile from "../hooks/useIsMobile";
 
 const { RangePicker } = DatePicker;
 
@@ -23,6 +24,7 @@ export default function TransactionsTable() {
   const [paymentMethod, setPaymentMethod] = useState("");
   const [dateRange, setDateRange] = useState<[string, string]>(["", ""]);
   const [loading, setLoading] = useState(false);
+  const isMobile = useIsMobile();
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -75,16 +77,57 @@ export default function TransactionsTable() {
     },
   ];
 
+  const renderMobileCard = (tx: TransactionItem) => (
+    <Card
+      key={tx.transaction_id}
+      size="small"
+      style={{ marginBottom: 8 }}
+      styles={{ body: { padding: "12px" } }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+        <Tag color={statusColor[tx.order_status] || "default"} style={{ margin: 0 }}>
+          {tx.order_status}
+        </Tag>
+        <span style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.88)" }}>
+          {tx.amount != null ? tx.amount : "—"}
+        </span>
+      </div>
+      <div style={{ fontSize: 12, color: "rgba(255,255,255,0.55)", marginBottom: 2 }}>
+        {tx.username || "—"} · {tx.payment_method || "—"}
+      </div>
+      <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginBottom: 2 }}>
+        {tx.days_ordered}d · {tx.created_at || "—"}
+      </div>
+      {tx.expire_date && (
+        <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)" }}>
+          Expires: {tx.expire_date}
+        </div>
+      )}
+      <div
+        style={{
+          fontSize: 10,
+          color: "rgba(255,255,255,0.25)",
+          marginTop: 4,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {tx.transaction_id}
+      </div>
+    </Card>
+  );
+
   return (
     <>
-      <Space style={{ marginBottom: 16 }} wrap>
+      <div style={{ marginBottom: 16, display: "flex", flexWrap: "wrap", gap: 8 }}>
         <Select
           value={status}
           onChange={(v) => {
             setStatus(v);
             setPage(1);
           }}
-          style={{ width: 140 }}
+          style={{ width: isMobile ? "calc(50% - 4px)" : 140 }}
           allowClear
           placeholder="Status"
           options={[
@@ -101,7 +144,7 @@ export default function TransactionsTable() {
             setPaymentMethod(v);
             setPage(1);
           }}
-          style={{ width: 160 }}
+          style={{ width: isMobile ? "calc(50% - 4px)" : 160 }}
           allowClear
           placeholder="Payment method"
           options={[
@@ -115,6 +158,7 @@ export default function TransactionsTable() {
           ]}
         />
         <RangePicker
+          style={{ width: isMobile ? "100%" : undefined }}
           onChange={(dates) => {
             if (dates && dates[0] && dates[1]) {
               setDateRange([
@@ -127,24 +171,45 @@ export default function TransactionsTable() {
             setPage(1);
           }}
         />
-      </Space>
+      </div>
 
-      <Table
-        rowKey="transaction_id"
-        columns={columns}
-        dataSource={data}
-        loading={loading}
-        pagination={{
-          current: page,
-          pageSize: perPage,
-          total,
-          onChange: setPage,
-          showSizeChanger: false,
-          showTotal: (t) => `Total: ${t}`,
-        }}
-        size="small"
-        scroll={{ x: 1060 }}
-      />
+      {isMobile ? (
+        <>
+          {loading ? (
+            <div style={{ textAlign: "center", padding: 40, color: "rgba(255,255,255,0.4)" }}>Loading...</div>
+          ) : (
+            data.map(renderMobileCard)
+          )}
+          <div style={{ textAlign: "center", padding: "12px 0", color: "rgba(255,255,255,0.45)", fontSize: 12 }}>
+            Page {page} · Total: {total}
+          </div>
+          <div style={{ display: "flex", justifyContent: "center", gap: 8 }}>
+            <Button size="small" disabled={page <= 1} onClick={() => setPage(page - 1)}>
+              Prev
+            </Button>
+            <Button size="small" disabled={page * perPage >= total} onClick={() => setPage(page + 1)}>
+              Next
+            </Button>
+          </div>
+        </>
+      ) : (
+        <Table
+          rowKey="transaction_id"
+          columns={columns}
+          dataSource={data}
+          loading={loading}
+          pagination={{
+            current: page,
+            pageSize: perPage,
+            total,
+            onChange: setPage,
+            showSizeChanger: false,
+            showTotal: (t) => `Total: ${t}`,
+          }}
+          size="small"
+          scroll={{ x: 1060 }}
+        />
+      )}
     </>
   );
 }

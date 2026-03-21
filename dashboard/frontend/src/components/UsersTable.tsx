@@ -1,8 +1,9 @@
-import { Table, Tag, Button, Space, Popconfirm, Input, Select, Drawer, Descriptions, List } from "antd";
+import { Table, Tag, Button, Space, Popconfirm, Input, Select, Drawer, Descriptions, List, Card } from "antd";
 import { SearchOutlined, StopOutlined, CheckOutlined, DeleteOutlined, EyeOutlined } from "@ant-design/icons";
 import { useState, useEffect, useCallback } from "react";
 import { api } from "../api/client";
 import type { UserItem, UserDetail, PaginatedResponse, TransactionItem } from "../api/types";
+import useIsMobile from "../hooks/useIsMobile";
 
 export default function UsersTable() {
   const [data, setData] = useState<UserItem[]>([]);
@@ -15,6 +16,7 @@ export default function UsersTable() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserDetail | null>(null);
   const [userTx, setUserTx] = useState<TransactionItem[]>([]);
+  const isMobile = useIsMobile();
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
@@ -92,9 +94,44 @@ export default function UsersTable() {
     },
   ];
 
+  const renderMobileCard = (user: UserItem) => (
+    <Card
+      key={user.id}
+      size="small"
+      style={{ marginBottom: 8 }}
+      styles={{ body: { padding: "12px" } }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: 600, color: "rgba(255,255,255,0.88)", marginBottom: 4 }}>
+            {user.username || "—"}
+          </div>
+          <div style={{ fontSize: 12, color: "rgba(255,255,255,0.45)", marginBottom: 6 }}>
+            TG: {user.tg_id} · {user.api_provider}
+          </div>
+          <Space size={4}>
+            {user.is_banned && <Tag color="red" style={{ margin: 0 }}>Banned</Tag>}
+            {user.is_paid ? <Tag color="green" style={{ margin: 0 }}>Paid</Tag> : <Tag style={{ margin: 0 }}>Free</Tag>}
+          </Space>
+        </div>
+        <Space size="small">
+          <Button size="small" icon={<EyeOutlined />} onClick={() => openDrawer(user.tg_id)} />
+          {user.is_banned ? (
+            <Button size="small" icon={<CheckOutlined />} onClick={() => handleUnban(user.tg_id)} />
+          ) : (
+            <Button size="small" danger icon={<StopOutlined />} onClick={() => handleBan(user.tg_id)} />
+          )}
+          <Popconfirm title="Delete user?" onConfirm={() => handleDelete(user.tg_id)}>
+            <Button size="small" danger icon={<DeleteOutlined />} />
+          </Popconfirm>
+        </Space>
+      </div>
+    </Card>
+  );
+
   return (
     <>
-      <Space style={{ marginBottom: 16 }} wrap>
+      <div style={{ marginBottom: 16, display: "flex", flexWrap: "wrap", gap: 8 }}>
         <Input
           placeholder="Search by username or TG ID"
           prefix={<SearchOutlined />}
@@ -103,7 +140,7 @@ export default function UsersTable() {
             setSearch(e.target.value);
             setPage(1);
           }}
-          style={{ width: 280 }}
+          style={{ flex: 1, minWidth: isMobile ? "100%" : 200, maxWidth: isMobile ? "100%" : 280 }}
           allowClear
         />
         <Select
@@ -112,7 +149,7 @@ export default function UsersTable() {
             setFilter(v);
             setPage(1);
           }}
-          style={{ width: 120 }}
+          style={{ width: isMobile ? "100%" : 120 }}
           options={[
             { value: "all", label: "All" },
             { value: "paid", label: "Paid" },
@@ -120,30 +157,51 @@ export default function UsersTable() {
             { value: "banned", label: "Banned" },
           ]}
         />
-      </Space>
+      </div>
 
-      <Table
-        rowKey="id"
-        columns={columns}
-        dataSource={data}
-        loading={loading}
-        pagination={{
-          current: page,
-          pageSize: perPage,
-          total,
-          onChange: setPage,
-          showSizeChanger: false,
-          showTotal: (t) => `Total: ${t}`,
-        }}
-        size="small"
-        scroll={{ x: 700 }}
-      />
+      {isMobile ? (
+        <>
+          {loading ? (
+            <div style={{ textAlign: "center", padding: 40, color: "rgba(255,255,255,0.4)" }}>Loading...</div>
+          ) : (
+            data.map(renderMobileCard)
+          )}
+          <div style={{ textAlign: "center", padding: "12px 0", color: "rgba(255,255,255,0.45)", fontSize: 12 }}>
+            Page {page} · Total: {total}
+          </div>
+          <div style={{ display: "flex", justifyContent: "center", gap: 8 }}>
+            <Button size="small" disabled={page <= 1} onClick={() => setPage(page - 1)}>
+              Prev
+            </Button>
+            <Button size="small" disabled={page * perPage >= total} onClick={() => setPage(page + 1)}>
+              Next
+            </Button>
+          </div>
+        </>
+      ) : (
+        <Table
+          rowKey="id"
+          columns={columns}
+          dataSource={data}
+          loading={loading}
+          pagination={{
+            current: page,
+            pageSize: perPage,
+            total,
+            onChange: setPage,
+            showSizeChanger: false,
+            showTotal: (t) => `Total: ${t}`,
+          }}
+          size="small"
+          scroll={{ x: 700 }}
+        />
+      )}
 
       <Drawer
         title={selectedUser ? `User: ${selectedUser.username || selectedUser.tg_id}` : "User"}
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
-        width={500}
+        width={isMobile ? "100%" : 500}
       >
         {selectedUser && (
           <>

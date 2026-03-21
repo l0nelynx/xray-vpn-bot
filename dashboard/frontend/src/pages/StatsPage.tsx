@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
-import { Row, Col, Select, Space, Typography, Card, Tag } from "antd";
+import { Row, Col, Select, Typography, Card, Tag } from "antd";
 import RevenueChart from "../components/RevenueChart";
 import UserGrowthChart from "../components/UserGrowthChart";
 import PaymentMethodPieChart from "../components/PaymentMethodPieChart";
 import StatsCard from "../components/StatsCard";
 import { api } from "../api/client";
 import type { OverviewStats, OrderStatusStat } from "../api/types";
+import useIsMobile from "../hooks/useIsMobile";
 
 const statusTagColor: Record<string, string> = {
   created: "blue",
@@ -28,6 +29,7 @@ export default function StatsPage() {
   const [stats, setStats] = useState<OverviewStats | null>(null);
   const [orderStatuses, setOrderStatuses] = useState<OrderStatusStat[]>([]);
   const [loading, setLoading] = useState(true);
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     Promise.all([
@@ -48,8 +50,17 @@ export default function StatsPage() {
 
   return (
     <div>
-      <Space style={{ marginBottom: 20 }} align="center">
-        <Typography.Title level={4} style={{ margin: 0, color: "rgba(255,255,255,0.88)" }}>
+      <div
+        style={{
+          marginBottom: isMobile ? 12 : 20,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: 8,
+        }}
+      >
+        <Typography.Title level={isMobile ? 5 : 4} style={{ margin: 0, color: "rgba(255,255,255,0.88)" }}>
           Statistics
         </Typography.Title>
         <Select
@@ -58,21 +69,21 @@ export default function StatsPage() {
           style={{ width: 130 }}
           options={periodOptions}
         />
-      </Space>
+      </div>
 
-      <Row gutter={[16, 16]}>
+      <Row gutter={[isMobile ? 8 : 16, isMobile ? 8 : 16]}>
         <Col xs={24} sm={8}>
           <StatsCard title="Avg Order" value={stats?.avg_order ?? 0} loading={loading} color="#ff7a45" />
         </Col>
-        <Col xs={24} sm={8}>
-          <StatsCard title="Conversion Rate" value={`${conversionRate}%`} loading={loading} color="#36cfc9" />
+        <Col xs={12} sm={8}>
+          <StatsCard title="Conversion" value={`${conversionRate}%`} loading={loading} color="#36cfc9" />
         </Col>
-        <Col xs={24} sm={8}>
+        <Col xs={12} sm={8}>
           <StatsCard title="Total Orders" value={totalOrders} loading={loading} color="#4f8cff" />
         </Col>
       </Row>
 
-      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+      <Row gutter={[isMobile ? 8 : 16, isMobile ? 8 : 16]} style={{ marginTop: isMobile ? 8 : 16 }}>
         <Col xs={24} lg={16}>
           <RevenueChart period={period} />
         </Col>
@@ -81,7 +92,7 @@ export default function StatsPage() {
         </Col>
       </Row>
 
-      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+      <Row gutter={[isMobile ? 8 : 16, isMobile ? 8 : 16]} style={{ marginTop: isMobile ? 8 : 16 }}>
         <Col xs={24} lg={12}>
           <UserGrowthChart period={period} />
         </Col>
