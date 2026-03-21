@@ -15,8 +15,16 @@ const statusTagColor: Record<string, string> = {
   cancelled: "orange",
 };
 
+const periodOptions = [
+  { value: "today", label: "Today" },
+  { value: "yesterday", label: "Yesterday" },
+  { value: "week", label: "Week" },
+  { value: "month", label: "Month" },
+  { value: "6month", label: "6 Months" },
+];
+
 export default function StatsPage() {
-  const [period, setPeriod] = useState("day");
+  const [period, setPeriod] = useState("month");
   const [stats, setStats] = useState<OverviewStats | null>(null);
   const [orderStatuses, setOrderStatuses] = useState<OrderStatusStat[]>([]);
   const [loading, setLoading] = useState(true);
@@ -47,12 +55,8 @@ export default function StatsPage() {
         <Select
           value={period}
           onChange={setPeriod}
-          style={{ width: 120 }}
-          options={[
-            { value: "day", label: "Daily" },
-            { value: "week", label: "Weekly" },
-            { value: "month", label: "Monthly" },
-          ]}
+          style={{ width: 130 }}
+          options={periodOptions}
         />
       </Space>
 
@@ -79,7 +83,7 @@ export default function StatsPage() {
 
       <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
         <Col xs={24} lg={12}>
-          <UserGrowthChart />
+          <UserGrowthChart period={period} />
         </Col>
         <Col xs={24} lg={12}>
           <Card

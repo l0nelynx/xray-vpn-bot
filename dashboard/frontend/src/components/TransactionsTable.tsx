@@ -66,6 +66,13 @@ export default function TransactionsTable() {
     },
     { title: "Days", dataIndex: "days_ordered", key: "days_ordered", width: 60 },
     { title: "Date", dataIndex: "created_at", key: "created_at", width: 160 },
+    {
+      title: "Expires",
+      dataIndex: "expire_date",
+      key: "expire_date",
+      width: 160,
+      render: (v: string | null) => v ?? "—",
+    },
   ];
 
   return (
@@ -136,7 +143,7 @@ export default function TransactionsTable() {
           showTotal: (t) => `Total: ${t}`,
         }}
         size="small"
-        scroll={{ x: 900 }}
+        scroll={{ x: 1060 }}
       />
     </>
   );

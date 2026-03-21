@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Row, Col, Card, Table, Tag, Typography } from "antd";
+import { Row, Col, Card, Table, Tag, Typography, Select, Space } from "antd";
 import {
   UserOutlined,
   DollarOutlined,
@@ -20,10 +20,19 @@ const statusColor: Record<string, string> = {
   cancelled: "orange",
 };
 
+const periodOptions = [
+  { value: "today", label: "Today" },
+  { value: "yesterday", label: "Yesterday" },
+  { value: "week", label: "Week" },
+  { value: "month", label: "Month" },
+  { value: "6month", label: "6 Months" },
+];
+
 export default function DashboardPage() {
   const [stats, setStats] = useState<OverviewStats | null>(null);
   const [recent, setRecent] = useState<TransactionItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [period, setPeriod] = useState("month");
 
   useEffect(() => {
     Promise.all([
@@ -53,9 +62,17 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <Typography.Title level={4} style={{ marginBottom: 20, color: "rgba(255,255,255,0.88)" }}>
-        Dashboard
-      </Typography.Title>
+      <Space style={{ marginBottom: 20 }} align="center">
+        <Typography.Title level={4} style={{ margin: 0, color: "rgba(255,255,255,0.88)" }}>
+          Dashboard
+        </Typography.Title>
+        <Select
+          value={period}
+          onChange={setPeriod}
+          style={{ width: 130 }}
+          options={periodOptions}
+        />
+      </Space>
 
       <Row gutter={[16, 16]}>
         <Col xs={24} sm={12} lg={6}>
@@ -98,7 +115,7 @@ export default function DashboardPage() {
 
       <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
         <Col xs={24} lg={16}>
-          <RevenueChart />
+          <RevenueChart period={period} />
         </Col>
         <Col xs={24} lg={8}>
           <PaymentMethodPieChart />
@@ -107,7 +124,7 @@ export default function DashboardPage() {
 
       <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
         <Col xs={24} lg={12}>
-          <UserGrowthChart />
+          <UserGrowthChart period={period} />
         </Col>
         <Col xs={24} lg={12}>
           <Card

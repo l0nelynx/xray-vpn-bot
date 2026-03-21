@@ -25,6 +25,7 @@ export interface TransactionItem {
   delivery_status: number;
   days_ordered: number;
   created_at: string | null;
+  expire_date: string | null;
 }
 
 export interface PaginatedResponse<T> {

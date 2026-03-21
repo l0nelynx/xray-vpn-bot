@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select, func
@@ -8,6 +8,29 @@ from ..database.models import User, Transaction
 from ..database.session import async_session
 
 router = APIRouter(prefix="/api/stats", tags=["stats"])
+
+
+def _period_range(period: str):
+    """Return (date_from_iso, date_to_iso) for the given period name."""
+    now = datetime.now()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    if period == "today":
+        return today_start.isoformat(timespec="seconds"), now.isoformat(timespec="seconds")
+    elif period == "yesterday":
+        yd = today_start - timedelta(days=1)
+        return yd.isoformat(timespec="seconds"), today_start.isoformat(timespec="seconds")
+    elif period == "week":
+        wk = today_start - timedelta(days=6)
+        return wk.isoformat(timespec="seconds"), now.isoformat(timespec="seconds")
+    elif period == "month":
+        mo = today_start - timedelta(days=29)
+        return mo.isoformat(timespec="seconds"), now.isoformat(timespec="seconds")
+    elif period == "6month":
+        mo6 = today_start - timedelta(days=179)
+        return mo6.isoformat(timespec="seconds"), now.isoformat(timespec="seconds")
+    else:
+        return None, None
 
 
 @router.get("/overview")
@@ -48,17 +71,22 @@ async def revenue(
     period: str = Query("day"),
     _: str = Depends(get_current_user),
 ):
-    """Revenue aggregated by period. Period: day, week, month."""
+    """Revenue aggregated by period.
+
+    Periods: today, yesterday, week, month, 6month.
+    Groups by day, except 6month which groups by ISO week (Mon-Sun).
+    """
+    date_from, date_to = _period_range(period)
+
     async with async_session() as session:
-        if period == "month":
-            date_expr = func.substr(Transaction.created_at, 1, 7)
-        elif period == "week":
-            # ISO week: truncate to YYYY-MM-DD then group
+        if period == "6month":
+            # Group by ISO week: use strftime to get year + week number
+            # SQLite: compute Monday of the week via julianday trick
             date_expr = func.substr(Transaction.created_at, 1, 10)
         else:
             date_expr = func.substr(Transaction.created_at, 1, 10)
 
-        result = await session.execute(
+        query = (
             select(date_expr.label("date"), func.sum(Transaction.amount).label("total"))
             .where(
                 Transaction.order_status.in_(["confirmed", "delivered"]),
@@ -68,14 +96,45 @@ async def revenue(
             .group_by("date")
             .order_by("date")
         )
+
+        if date_from:
+            query = query.where(Transaction.created_at >= date_from)
+        if date_to:
+            query = query.where(Transaction.created_at <= date_to)
+
+        result = await session.execute(query)
         rows = result.all()
+
+    if period == "6month":
+        # Aggregate daily data into weekly buckets (Monday-based)
+        from collections import OrderedDict
+        weekly: OrderedDict[str, float] = OrderedDict()
+        for row in rows:
+            try:
+                d = datetime.fromisoformat(row.date)
+                # Monday of that week
+                monday = d - timedelta(days=d.weekday())
+                week_label = monday.strftime("%Y-%m-%d")
+                weekly[week_label] = weekly.get(week_label, 0) + float(row.total or 0)
+            except (ValueError, TypeError):
+                continue
+        return [{"date": k, "revenue": v} for k, v in weekly.items()]
 
     return [{"date": row.date, "revenue": float(row.total or 0)} for row in rows]
 
 
 @router.get("/user-growth")
-async def user_growth(_: str = Depends(get_current_user)):
-    """Number of new users per day (by earliest transaction date)."""
+async def user_growth(
+    period: str = Query("month"),
+    _: str = Depends(get_current_user),
+):
+    """Number of new users per day (by earliest transaction date).
+
+    Periods: today, yesterday, week, month, 6month.
+    Groups by day, except 6month which groups by week.
+    """
+    date_from, date_to = _period_range(period)
+
     async with async_session() as session:
         # Users who have transactions — by first transaction date
         sub = (
@@ -88,12 +147,32 @@ async def user_growth(_: str = Depends(get_current_user)):
             .subquery()
         )
 
-        result = await session.execute(
+        query = (
             select(sub.c.first_date.label("date"), func.count().label("count"))
             .group_by(sub.c.first_date)
             .order_by(sub.c.first_date)
         )
+
+        if date_from:
+            query = query.where(sub.c.first_date >= date_from[:10])
+        if date_to:
+            query = query.where(sub.c.first_date <= date_to[:10])
+
+        result = await session.execute(query)
         rows = result.all()
+
+    if period == "6month":
+        from collections import OrderedDict
+        weekly: OrderedDict[str, int] = OrderedDict()
+        for row in rows:
+            try:
+                d = datetime.fromisoformat(row.date)
+                monday = d - timedelta(days=d.weekday())
+                week_label = monday.strftime("%Y-%m-%d")
+                weekly[week_label] = weekly.get(week_label, 0) + row.count
+            except (ValueError, TypeError):
+                continue
+        return [{"date": k, "count": v} for k, v in weekly.items()]
 
     return [{"date": row.date, "count": row.count} for row in rows]
 

@@ -8,7 +8,7 @@ interface Props {
   period?: string;
 }
 
-export default function RevenueChart({ period = "day" }: Props) {
+export default function RevenueChart({ period = "month" }: Props) {
   const [data, setData] = useState<RevenuePoint[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -38,24 +38,28 @@ export default function RevenueChart({ period = "day" }: Props) {
         xField="date"
         yField="revenue"
         height={300}
-        color="#4f8cff"
-        columnStyle={{
-          radius: [4, 4, 0, 0],
-          fill: "l(270) 0:#4f8cff 1:rgba(79,140,255,0.3)",
+        style={{
+          radiusTopLeft: 4,
+          radiusTopRight: 4,
+          fill: "#4f8cff",
+          maxWidth: 32,
         }}
-        xAxis={{
-          label: {
-            style: { fill: "rgba(255,255,255,0.45)", fontSize: 11 },
+        axis={{
+          x: {
+            label: {
+              style: { fill: "rgba(255,255,255,0.65)", fontSize: 11 },
+              autoRotate: true,
+            },
+            line: { style: { stroke: "rgba(255,255,255,0.1)" } },
+            tick: null,
           },
-          line: { style: { stroke: "rgba(255,255,255,0.06)" } },
-          tickLine: null,
-        }}
-        yAxis={{
-          label: {
-            style: { fill: "rgba(255,255,255,0.45)", fontSize: 11 },
-          },
-          grid: {
-            line: { style: { stroke: "rgba(255,255,255,0.06)", lineDash: [3, 3] } },
+          y: {
+            label: {
+              style: { fill: "rgba(255,255,255,0.65)", fontSize: 11 },
+            },
+            grid: {
+              style: { stroke: "rgba(255,255,255,0.08)", lineDash: [3, 3] },
+            },
           },
         }}
         tooltip={{

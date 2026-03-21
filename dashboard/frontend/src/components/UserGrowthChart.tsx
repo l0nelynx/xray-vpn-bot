@@ -4,16 +4,21 @@ import { Column } from "@ant-design/charts";
 import { api } from "../api/client";
 import type { GrowthPoint } from "../api/types";
 
-export default function UserGrowthChart() {
+interface Props {
+  period?: string;
+}
+
+export default function UserGrowthChart({ period = "month" }: Props) {
   const [data, setData] = useState<GrowthPoint[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    setLoading(true);
     api
-      .get<GrowthPoint[]>("/stats/user-growth")
+      .get<GrowthPoint[]>(`/stats/user-growth?period=${period}`)
       .then(setData)
       .finally(() => setLoading(false));
-  }, []);
+  }, [period]);
 
   if (loading)
     return (
@@ -33,24 +38,28 @@ export default function UserGrowthChart() {
         xField="date"
         yField="count"
         height={300}
-        color="#36cfc9"
-        columnStyle={{
-          radius: [4, 4, 0, 0],
-          fill: "l(270) 0:#36cfc9 1:rgba(54,207,201,0.3)",
+        style={{
+          radiusTopLeft: 4,
+          radiusTopRight: 4,
+          fill: "#36cfc9",
+          maxWidth: 32,
         }}
-        xAxis={{
-          label: {
-            style: { fill: "rgba(255,255,255,0.45)", fontSize: 11 },
+        axis={{
+          x: {
+            label: {
+              style: { fill: "rgba(255,255,255,0.65)", fontSize: 11 },
+              autoRotate: true,
+            },
+            line: { style: { stroke: "rgba(255,255,255,0.1)" } },
+            tick: null,
           },
-          line: { style: { stroke: "rgba(255,255,255,0.06)" } },
-          tickLine: null,
-        }}
-        yAxis={{
-          label: {
-            style: { fill: "rgba(255,255,255,0.45)", fontSize: 11 },
-          },
-          grid: {
-            line: { style: { stroke: "rgba(255,255,255,0.06)", lineDash: [3, 3] } },
+          y: {
+            label: {
+              style: { fill: "rgba(255,255,255,0.65)", fontSize: 11 },
+            },
+            grid: {
+              style: { stroke: "rgba(255,255,255,0.08)", lineDash: [3, 3] },
+            },
           },
         }}
         tooltip={{
