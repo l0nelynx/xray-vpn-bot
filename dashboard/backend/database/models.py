@@ -17,6 +17,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(100), nullable=True)
     is_banned: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", nullable=True)
     language: Mapped[str] = mapped_column(String(5), default=None, nullable=True)
+    vip: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=True)
 
     transactions: Mapped[list["Transaction"]] = relationship(back_populates="user")
 

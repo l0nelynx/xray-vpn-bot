@@ -38,6 +38,9 @@ class User(Base):
     # Язык интерфейса пользователя (ru/en), None = не выбран
     language: Mapped[str] = mapped_column(String(5), default=None, nullable=True)
 
+    # VIP-флаг (защита от Sub Clean)
+    vip: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=True)
+
     # Добавляем отношение один-ко-многим с таблицей transactions
     transactions: Mapped[list["Transaction"]] = relationship(back_populates="user")
 
@@ -102,6 +105,14 @@ class Transaction(Base):
     )
 
 
+class DisabledUser(Base):
+    __tablename__ = 'disabled_users'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tg_id = mapped_column(BigInteger, unique=True)
+    original_status: Mapped[str] = mapped_column(String(20))
+    disabled_at: Mapped[str] = mapped_column(String(30))
+
+
 async def async_main():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -127,6 +138,12 @@ async def async_main():
                     "ALTER TABLE users ADD COLUMN language VARCHAR(5) DEFAULT 'ru'"
                 ))
                 logging.info("Migration: added language column to users table")
+
+            if 'vip' not in columns:
+                sync_conn.execute(text(
+                    "ALTER TABLE users ADD COLUMN vip INTEGER DEFAULT 0"
+                ))
+                logging.info("Migration: added vip column to users table")
 
             # Миграция: добавляем новые колонки в transactions если таблица существует
             if 'transactions' in insp.get_table_names():

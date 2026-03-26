@@ -18,6 +18,17 @@ from remnawave.models import (
 logger = logging.getLogger(__name__)
 
 # ============================================================================
+# Status mapping: RemnaWave string → SDK enum
+# ============================================================================
+
+_STATUS_MAP = {
+    "active": UserStatus.ACTIVE,
+    "disabled": UserStatus.DISABLED,
+    "limited": UserStatus.LIMITED,
+    "expired": UserStatus.EXPIRED,
+}
+
+# ============================================================================
 # Singleton SDK instance — reuses HTTP connection pool across all calls
 # ============================================================================
 
@@ -162,8 +173,10 @@ async def update_user(
 
         update_data = {
             "uuid": uuid.UUID(user_uuid),
-            "status": UserStatus.ACTIVE if status != "disabled" else UserStatus.DISABLED,
         }
+
+        if status is not None:
+            update_data["status"] = _STATUS_MAP.get(status, UserStatus.ACTIVE)
 
         if username:
             update_data["username"] = username

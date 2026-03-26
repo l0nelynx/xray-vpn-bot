@@ -67,6 +67,8 @@ async def list_users(
             base = base.where(~User.id.in_(active_paid_sq))
         elif filter == "banned":
             base = base.where(User.is_banned == True)
+        elif filter == "vip":
+            base = base.where(User.vip == 1)
 
         count_q = select(func.count()).select_from(base.subquery())
         total = await session.scalar(count_q) or 0
@@ -91,6 +93,7 @@ async def list_users(
                 "is_paid": bool(is_paid),
                 "email": user.email,
                 "language": user.language,
+                "vip": bool(user.vip),
             })
 
     return {"items": users, "total": total, "page": page, "per_page": per_page}
@@ -119,6 +122,7 @@ async def get_user(tg_id: int, _: str = Depends(get_current_user)):
             "email": user.email,
             "is_banned": bool(user.is_banned),
             "language": user.language,
+            "vip": bool(user.vip),
             "transactions_count": tx_count,
             "total_spent": float(total_spent),
         }
@@ -173,6 +177,28 @@ async def unban_user(tg_id: int, _: str = Depends(get_current_user)):
         user.is_banned = False
         await session.commit()
     return {"ok": True, "message": f"User {tg_id} unbanned"}
+
+
+@router.post("/{tg_id}/vip")
+async def set_vip(tg_id: int, _: str = Depends(get_current_user)):
+    async with async_session() as session:
+        user = await session.scalar(select(User).where(User.tg_id == tg_id))
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        user.vip = 1
+        await session.commit()
+    return {"ok": True, "message": f"User {tg_id} VIP enabled"}
+
+
+@router.post("/{tg_id}/unvip")
+async def unset_vip(tg_id: int, _: str = Depends(get_current_user)):
+    async with async_session() as session:
+        user = await session.scalar(select(User).where(User.tg_id == tg_id))
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        user.vip = 0
+        await session.commit()
+    return {"ok": True, "message": f"User {tg_id} VIP disabled"}
 
 
 @router.delete("/{tg_id}")

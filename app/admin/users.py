@@ -135,6 +135,7 @@ async def _build_user_card(tg_id: int) -> tuple[str, InlineKeyboardMarkup] | Non
         return None
 
     banned_text = "Да" if info["is_banned"] else "Нет"
+    vip_text = "Да" if info.get("vip") else "Нет"
     email_text = info.get("email") or "—"
     text = (
         f"<b>Карточка пользователя</b>\n\n"
@@ -143,7 +144,8 @@ async def _build_user_card(tg_id: int) -> tuple[str, InlineKeyboardMarkup] | Non
         f"Email: {email_text}\n"
         f"API: {info['api_provider'] or '—'}\n"
         f"UUID: <code>{info['vless_uuid'] or '—'}</code>\n"
-        f"Забанен: {banned_text}"
+        f"Забанен: {banned_text}\n"
+        f"VIP: {vip_text}"
     )
 
     # Блок транзакций
@@ -179,8 +181,13 @@ async def _build_user_card(tg_id: int) -> tuple[str, InlineKeyboardMarkup] | Non
     else:
         ban_btn = InlineKeyboardButton(text="Забанить", callback_data=f"admin_ban:{tg_id}")
 
+    if info.get("vip"):
+        vip_btn = InlineKeyboardButton(text="Снять VIP", callback_data=f"admin_unvip:{tg_id}")
+    else:
+        vip_btn = InlineKeyboardButton(text="Установить VIP", callback_data=f"admin_vip:{tg_id}")
+
     rows = [
-        [ban_btn],
+        [ban_btn, vip_btn],
         [InlineKeyboardButton(text="Удалить", callback_data=f"admin_delete:{tg_id}")],
         [InlineKeyboardButton(text="Отправить сообщение", callback_data=f"admin_msg:{tg_id}")],
         [InlineKeyboardButton(text="Регистрация email", callback_data=f"admin_email:{tg_id}")],
@@ -214,3 +221,25 @@ async def _show_user_card(callback: CallbackQuery, tg_id: int):
         return
     text, kb = result
     await callback.message.edit_text(text, parse_mode='HTML', reply_markup=kb)
+
+
+# ==================== VIP toggle ====================
+
+@users_router.callback_query(F.data.startswith("admin_vip:"))
+async def admin_set_vip(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        return
+    tg_id = int(callback.data.split(":")[1])
+    await rq.set_user_vip(tg_id, 1)
+    await callback.answer("VIP установлен")
+    await _show_user_card(callback, tg_id)
+
+
+@users_router.callback_query(F.data.startswith("admin_unvip:"))
+async def admin_unset_vip(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        return
+    tg_id = int(callback.data.split(":")[1])
+    await rq.set_user_vip(tg_id, 0)
+    await callback.answer("VIP снят")
+    await _show_user_card(callback, tg_id)

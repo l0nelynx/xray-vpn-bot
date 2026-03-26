@@ -4,7 +4,7 @@ from sqlalchemy import select, update, func, delete, exists
 from sqlalchemy.orm import aliased
 import string
 import random
-from app.database.models import User, Transaction, Promo
+from app.database.models import User, Transaction, Promo, DisabledUser
 from app.database.models import async_session
 
 
@@ -549,6 +549,7 @@ async def get_user_full_info_by_tg_id(tg_id: int) -> dict | None:
             "api_provider": user.api_provider,
             "is_banned": bool(user.is_banned),
             "email": user.email,
+            "vip": bool(user.vip),
         }
 
 
@@ -809,3 +810,85 @@ async def get_promo_usage_users(promo_code: str) -> list[dict]:
             .where(Promo.used_promo == promo_code)
         )
         return [{"tg_id": row[0], "username": row[1]} for row in result.all()]
+
+
+# ==================== Sub Clean / VIP functions ====================
+
+async def get_free_non_vip_remnawave_users() -> list[dict]:
+    """Получает пользователей RemnaWave без транзакций, без VIP, не забаненных."""
+    async with async_session() as session:
+        has_any_tx = exists(
+            select(Transaction.user_id).where(Transaction.user_id == User.id)
+        ).correlate(User)
+
+        result = await session.execute(
+            select(User).where(
+                ~has_any_tx,
+                (User.vip == 0) | (User.vip == None),  # noqa: E711
+                User.api_provider == "remnawave",
+                (User.is_banned == False) | (User.is_banned == None),  # noqa: E712
+            )
+        )
+        users = result.scalars().all()
+        return [
+            {
+                "tg_id": u.tg_id,
+                "username": u.username,
+                "vless_uuid": u.vless_uuid,
+            }
+            for u in users
+        ]
+
+
+async def create_disabled_user(tg_id: int, original_status: str) -> None:
+    """Записывает пользователя в disabled_users перед отключением."""
+    async with async_session() as session:
+        existing = await session.scalar(
+            select(DisabledUser).where(DisabledUser.tg_id == tg_id)
+        )
+        if existing:
+            existing.original_status = original_status
+            existing.disabled_at = datetime.now().isoformat(timespec='seconds')
+        else:
+            session.add(DisabledUser(
+                tg_id=tg_id,
+                original_status=original_status,
+                disabled_at=datetime.now().isoformat(timespec='seconds'),
+            ))
+        await session.commit()
+
+
+async def get_disabled_user(tg_id: int) -> dict | None:
+    """Получает запись disabled_user для восстановления статуса."""
+    async with async_session() as session:
+        du = await session.scalar(
+            select(DisabledUser).where(DisabledUser.tg_id == tg_id)
+        )
+        if not du:
+            return None
+        return {
+            "tg_id": du.tg_id,
+            "original_status": du.original_status,
+            "disabled_at": du.disabled_at,
+        }
+
+
+async def delete_disabled_user(tg_id: int) -> bool:
+    """Удаляет запись из disabled_users после восстановления."""
+    async with async_session() as session:
+        result = await session.execute(
+            delete(DisabledUser).where(DisabledUser.tg_id == tg_id)
+        )
+        await session.commit()
+        return result.rowcount > 0
+
+
+async def set_user_vip(tg_id: int, vip: int) -> bool:
+    """Устанавливает/снимает VIP флаг пользователя."""
+    async with async_session() as session:
+        user = await session.scalar(select(User).where(User.tg_id == tg_id))
+        if not user:
+            return False
+        user.vip = vip
+        await session.commit()
+        return True

@@ -1,5 +1,5 @@
 import { Table, Tag, Button, Space, Popconfirm, Input, Select, Drawer, Descriptions, List, Card } from "antd";
-import { SearchOutlined, StopOutlined, CheckOutlined, DeleteOutlined, EyeOutlined } from "@ant-design/icons";
+import { SearchOutlined, StopOutlined, CheckOutlined, DeleteOutlined, EyeOutlined, CrownOutlined } from "@ant-design/icons";
 import { useState, useEffect, useCallback } from "react";
 import { api } from "../api/client";
 import type { UserItem, UserDetail, PaginatedResponse, TransactionItem } from "../api/types";
@@ -50,6 +50,11 @@ export default function UsersTable() {
     fetchUsers();
   };
 
+  const handleToggleVip = async (tg_id: number, currentVip: boolean) => {
+    await api.post(`/users/${tg_id}/${currentVip ? "unvip" : "vip"}`);
+    fetchUsers();
+  };
+
   const openDrawer = async (tg_id: number) => {
     const user = await api.get<UserDetail>(`/users/${tg_id}`);
     const tx = await api.get<TransactionItem[]>(`/users/${tg_id}/transactions`);
@@ -69,6 +74,7 @@ export default function UsersTable() {
       width: 120,
       render: (_: unknown, r: UserItem) => (
         <Space>
+          {r.vip && <Tag color="gold">VIP</Tag>}
           {r.is_banned && <Tag color="red">Banned</Tag>}
           {r.is_paid ? <Tag color="green">Paid</Tag> : <Tag>Free</Tag>}
         </Space>
@@ -77,10 +83,17 @@ export default function UsersTable() {
     {
       title: "Actions",
       key: "actions",
-      width: 180,
+      width: 220,
       render: (_: unknown, r: UserItem) => (
         <Space size="small">
           <Button size="small" icon={<EyeOutlined />} onClick={() => openDrawer(r.tg_id)} />
+          <Button
+            size="small"
+            icon={<CrownOutlined />}
+            onClick={() => handleToggleVip(r.tg_id, r.vip)}
+            title={r.vip ? "Remove VIP" : "Set VIP"}
+            style={r.vip ? { color: "#faad14", borderColor: "#faad14" } : undefined}
+          />
           {r.is_banned ? (
             <Button size="small" icon={<CheckOutlined />} onClick={() => handleUnban(r.tg_id)} title="Unban" />
           ) : (
@@ -110,6 +123,7 @@ export default function UsersTable() {
             TG: {user.tg_id} · {user.api_provider}
           </div>
           <Space size={4}>
+            {user.vip && <Tag color="gold" style={{ margin: 0 }}>VIP</Tag>}
             {user.is_banned && <Tag color="red" style={{ margin: 0 }}>Banned</Tag>}
             {user.is_paid ? <Tag color="green" style={{ margin: 0 }}>Paid</Tag> : <Tag style={{ margin: 0 }}>Free</Tag>}
           </Space>
@@ -154,6 +168,7 @@ export default function UsersTable() {
             { value: "all", label: "All" },
             { value: "paid", label: "Paid" },
             { value: "free", label: "Free" },
+            { value: "vip", label: "VIP" },
             { value: "banned", label: "Banned" },
           ]}
         />
@@ -211,6 +226,7 @@ export default function UsersTable() {
               <Descriptions.Item label="Email">{selectedUser.email || "—"}</Descriptions.Item>
               <Descriptions.Item label="Provider">{selectedUser.api_provider}</Descriptions.Item>
               <Descriptions.Item label="Banned">{selectedUser.is_banned ? "Yes" : "No"}</Descriptions.Item>
+              <Descriptions.Item label="VIP">{selectedUser.vip ? "Yes" : "No"}</Descriptions.Item>
               <Descriptions.Item label="Language">{selectedUser.language || "—"}</Descriptions.Item>
               <Descriptions.Item label="Total Spent">{selectedUser.total_spent}</Descriptions.Item>
               <Descriptions.Item label="Transactions">{selectedUser.transactions_count}</Descriptions.Item>

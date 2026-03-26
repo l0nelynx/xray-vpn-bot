@@ -1,6 +1,6 @@
 from aiogram import F, Router
 from aiogram.filters import Command
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 import logging
 import app.database.requests as rq
 import app.keyboards as kb
@@ -214,6 +214,63 @@ async def invite_friends(callback: CallbackQuery):
     )
 
     await callback.message.edit_text(text=text, parse_mode='HTML', reply_markup=get_to_main_localized(lang))
+
+
+@router.callback_query(F.data == 'subcheck_reactivate')
+async def subcheck_reactivate(callback: CallbackQuery):
+    """Handle re-subscription check after Sub Clean disabled the user."""
+    lang = await get_user_lang(callback.from_user.id)
+    tg_id = callback.from_user.id
+
+    # Check if user is in disabled_users table
+    disabled_info = await rq.get_disabled_user(tg_id)
+    if not disabled_info:
+        await callback.answer(lang.msg_sub_clean_not_disabled, show_alert=True)
+        return
+
+    # Check channel subscription
+    is_subscribed = await check_tg_subscription(
+        bot=bot, chat_id=secrets.get('news_id'), user_id=tg_id
+    )
+
+    if not is_subscribed:
+        news_url = secrets.get('news_url', '')
+        kb_retry = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text=lang.btn_sub_channel, url=news_url)],
+            [InlineKeyboardButton(text=lang.btn_i_resubscribed, callback_data="subcheck_reactivate")],
+        ])
+        await callback.message.edit_text(
+            text=lang.msg_sub_clean_still_not_subscribed,
+            parse_mode='HTML',
+            reply_markup=kb_retry,
+        )
+        return
+
+    # User is subscribed again — restore original status
+    import app.api.remnawave.api as rem
+
+    user_ctx = await rq.get_user_full_context(tg_id)
+    if not user_ctx or not user_ctx.get("vless_uuid"):
+        await callback.message.edit_text(
+            text=lang.msg_sub_clean_reactivation_error,
+            parse_mode='HTML',
+        )
+        return
+
+    original_status = disabled_info["original_status"]
+    result = await rem.update_user(user_ctx["vless_uuid"], status=original_status)
+
+    if result:
+        await rq.delete_disabled_user(tg_id)
+        await callback.message.edit_text(
+            text=lang.msg_sub_clean_reactivated,
+            parse_mode='HTML',
+        )
+    else:
+        await callback.message.edit_text(
+            text=lang.msg_sub_clean_reactivation_error,
+            parse_mode='HTML',
+        )
 
 
 @router.callback_query(F.data == 'Migrate_RemnaWave')

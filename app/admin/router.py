@@ -23,6 +23,7 @@ BTN_PROMOS = "Промокоды"
 BTN_BAN = "Бан/Разбан"
 BTN_CLEANUP_TX = "Очистка транзакций"
 BTN_LOGS = "Логи ошибок"
+BTN_SUB_CLEAN = "Sub Clean"
 BTN_CONFIG = "Конфигурация"
 BTN_CLOSE = "Закрыть админку"
 
@@ -50,7 +51,7 @@ def admin_menu_kb() -> ReplyKeyboardMarkup:
             [KeyboardButton(text=BTN_FILL_USERNAMES), KeyboardButton(text=BTN_BACKUP)],
             [KeyboardButton(text=BTN_PROMOS), KeyboardButton(text=BTN_ANNOUNCE)],
             [KeyboardButton(text=BTN_CLEANUP_TX), KeyboardButton(text=BTN_BAN)],
-            [KeyboardButton(text=BTN_LOGS)],
+            [KeyboardButton(text=BTN_LOGS), KeyboardButton(text=BTN_SUB_CLEAN)],
             [KeyboardButton(text=BTN_CONFIG), KeyboardButton(text=BTN_CLOSE)],
         ],
         resize_keyboard=True,
@@ -122,6 +123,7 @@ from .email import email_router
 from .promos import promos_router
 from .logs import logs_router
 from .config_manager import config_router
+from .sub_clean import sub_clean_router
 
 router.include_router(users_router)
 router.include_router(ban_router)
@@ -135,3 +137,4 @@ router.include_router(email_router)
 router.include_router(promos_router)
 router.include_router(logs_router)
 router.include_router(config_router)
+router.include_router(sub_clean_router)

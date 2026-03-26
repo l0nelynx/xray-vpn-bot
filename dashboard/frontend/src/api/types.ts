@@ -5,6 +5,7 @@ export interface UserItem {
   api_provider: string;
   is_banned: boolean;
   is_paid: boolean;
+  vip: boolean;
   email: string | null;
   language: string | null;
 }

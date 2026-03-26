@@ -480,3 +480,31 @@ msg_device_deleted = "✅ Device successfully deleted."
 msg_device_delete_error = "❌ Failed to delete device."
 btn_delete_device = "🗑 Delete device"
 btn_back_to_devices = "◀️ Back to devices"
+
+# ==================== Sub Clean ====================
+
+btn_sub_channel = "Subscribe to channel"
+btn_i_resubscribed = "I've subscribed!"
+
+msg_sub_clean_notification = (
+    "<b>VPN access suspended</b>\n\n"
+    "You unsubscribed from our channel.\n"
+    "Subscribe again to restore your free access."
+)
+
+msg_sub_clean_still_not_subscribed = (
+    "<b>You haven't subscribed to the channel yet.</b>\n\n"
+    "Subscribe and tap the button again."
+)
+
+msg_sub_clean_reactivated = (
+    "<b>Access restored!</b>\n\n"
+    "Thank you for subscribing. Your VPN is active again."
+)
+
+msg_sub_clean_reactivation_error = (
+    "<b>Failed to restore access.</b>\n\n"
+    "Try again later or contact support."
+)
+
+msg_sub_clean_not_disabled = "Your subscription was not suspended."
