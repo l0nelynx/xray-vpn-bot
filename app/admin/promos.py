@@ -101,7 +101,49 @@ async def admin_promo_card(callback: CallbackQuery):
     )
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Назад к списку", callback_data="admin_promos:0")]
+        [InlineKeyboardButton(text="Удалить промокод", callback_data=f"admin_promo_del:{promo_code}")],
+        [InlineKeyboardButton(text="Назад к списку", callback_data="admin_promos:0")],
     ])
 
     await callback.message.edit_text(text, parse_mode='HTML', reply_markup=kb)
+
+
+# ==================== Удаление промокода ====================
+
+@promos_router.callback_query(F.data.startswith("admin_promo_del:"))
+async def admin_promo_delete_confirm(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        return
+
+    promo_code = callback.data.split(":", 1)[1]
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="Да, удалить", callback_data=f"admin_promo_del_ok:{promo_code}"),
+            InlineKeyboardButton(text="Отмена", callback_data=f"admin_promo:{promo_code}"),
+        ]
+    ])
+
+    await callback.message.edit_text(
+        f"Удалить промокод <code>{promo_code}</code>?\n\n"
+        f"У пользователей, которые его использовали, будет сброшена привязка.",
+        parse_mode='HTML',
+        reply_markup=kb,
+    )
+
+
+@promos_router.callback_query(F.data.startswith("admin_promo_del_ok:"))
+async def admin_promo_delete_execute(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        return
+
+    promo_code = callback.data.split(":", 1)[1]
+    deleted = await rq.delete_promo(promo_code)
+
+    if deleted:
+        await callback.message.edit_text(
+            f"Промокод <code>{promo_code}</code> удалён.",
+            parse_mode='HTML',
+        )
+    else:
+        await callback.answer("Промокод не найден", show_alert=True)

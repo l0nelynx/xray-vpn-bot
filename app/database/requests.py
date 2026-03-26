@@ -802,6 +802,23 @@ async def get_promos_paginated(page: int, per_page: int = 10):
         return promos, total
 
 
+async def delete_promo(promo_code: str) -> bool:
+    """Удаляет промокод и очищает used_promo у пользователей, которые его использовали."""
+    async with async_session() as session:
+        promo = await session.scalar(select(Promo).where(Promo.promo_code == promo_code))
+        if not promo:
+            return False
+        # Очищаем used_promo у тех, кто использовал этот промокод
+        await session.execute(
+            update(Promo).where(Promo.used_promo == promo_code).values(used_promo=None)
+        )
+        await session.execute(
+            delete(Promo).where(Promo.promo_code == promo_code)
+        )
+        await session.commit()
+        return True
+
+
 async def get_promo_usage_users(promo_code: str) -> list[dict]:
     async with async_session() as session:
         result = await session.execute(
