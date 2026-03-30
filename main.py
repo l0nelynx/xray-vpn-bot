@@ -17,6 +17,7 @@ from app.handlers.base import router as router_base
 from app.handlers.devices import router as router_devices
 from app.handlers.events import start_bot, stop_bot
 from app.handlers.payments import router as router_payments
+from app.handlers.dynamic_menus import router as router_dynamic_menus
 from app.settings import bot, admin_bot, cp, run_webserver, app_uvi, limiter
 
 app_uvi.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -43,6 +44,7 @@ dp.callback_query.middleware(UsernameRequiredMiddleware())
 dp.include_router(router_base)
 dp.include_router(router_devices)
 dp.include_router(router_payments)
+dp.include_router(router_dynamic_menus)
 dp.startup.register(start_bot)
 dp.shutdown.register(stop_bot)
 

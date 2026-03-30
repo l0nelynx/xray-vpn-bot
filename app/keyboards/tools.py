@@ -107,7 +107,7 @@ class TariffKeyboardBuilder:
 
         # Форматирование текста: добавление валюты и форматирование цены
         formatted_price = f"{amount:.2f}".rstrip('0').rstrip('.')
-        text = f"🔒БЕЗЛИМИТ - {self.period} | {formatted_price} {self.currency}"
+        text = f"{self.period} | {formatted_price} {self.currency}"
 
         return InlineKeyboardButton(text=text, callback_data=call_data)
 
@@ -152,25 +152,64 @@ class OptimizedTariffKeyboard:
             currency = params['currency']
             period = params['period']
 
-            tariff_builder = TariffKeyboardBuilder(
-                method=self.method,
-                price=self.base_price,
-                days=days,
-                disc=disc,
-                currency=currency,
-                period=period,
-                discount_func=self.discount_func,
-                extra_discount=self.extra_discount
-            )
+            # If DB provides a direct price, use it
+            db_price = params.get('db_price')
+            if db_price and db_price > 0:
+                amount = db_price
+                if self.extra_discount > 0:
+                    amount = amount * (1 - self.extra_discount / 100)
 
-            button = tariff_builder.build()
-            keyboard_buttons.append([button])  # Each button in its own row
+                call_data = PaymentCallbackData(
+                    tag='data', method=self.method, amount=amount, days=days
+                ).pack()
+                formatted_price = f"{amount:.2f}".rstrip('0').rstrip('.')
+                text = f"{period} | {formatted_price} {currency}"
+                keyboard_buttons.append([InlineKeyboardButton(text=text, callback_data=call_data)])
+            else:
+                tariff_builder = TariffKeyboardBuilder(
+                    method=self.method,
+                    price=self.base_price,
+                    days=days,
+                    disc=disc,
+                    currency=currency,
+                    period=period,
+                    discount_func=self.discount_func,
+                    extra_discount=self.extra_discount
+                )
+                button = tariff_builder.build()
+                keyboard_buttons.append([button])
 
         # Add navigation buttons at the bottom
         keyboard_buttons.append([InlineKeyboardButton(text="Назад", callback_data='Premium')])
         keyboard_buttons.append([InlineKeyboardButton(text='На главную', callback_data='Main')])
 
         return InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
+
+    @staticmethod
+    async def from_db(payment_method: str, base_price: int, extra_discount: int = 0) -> Optional[InlineKeyboardMarkup]:
+        """Build tariff keyboard from DB data. Returns None if DB has no data."""
+        from app.tariffs import get_tariffs_stars_async, get_tariffs_crypto_async, get_tariffs_sbp_async, get_tariffs_crystal_async
+
+        method_map = {
+            'stars': get_tariffs_stars_async,
+            'crypto': get_tariffs_crypto_async,
+            'SBP_APAY': get_tariffs_sbp_async,
+            'SBP': get_tariffs_sbp_async,
+            'CRYSTAL': get_tariffs_crystal_async,
+        }
+
+        getter = method_map.get(payment_method)
+        if not getter:
+            return None
+
+        tariffs = await getter()
+        keyboard = OptimizedTariffKeyboard(
+            tariff=tariffs,
+            method=payment_method,
+            base_price=base_price,
+            extra_discount=extra_discount,
+        )
+        return keyboard.build()
 
 def create_tariff_keyboard(
         tariff: Dict[str, dict],

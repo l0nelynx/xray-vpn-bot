@@ -73,3 +73,50 @@ export interface PromoItem {
   days_purchased: number;
   days_rewarded: number;
 }
+
+export interface TariffPrice {
+  id?: number;
+  payment_method: string;
+  price: number;
+  currency: string;
+  is_active: boolean;
+}
+
+export interface TariffPlan {
+  id: number;
+  slug: string;
+  name_ru: string;
+  name_en: string;
+  days: number;
+  sort_order: number;
+  is_active: boolean;
+  discount_percent: number;
+  created_at: string | null;
+  prices: TariffPrice[];
+}
+
+export interface MenuButton {
+  id: number;
+  screen_id: number;
+  text_ru: string;
+  text_en: string;
+  callback_data: string | null;
+  url: string | null;
+  row: number;
+  col: number;
+  sort_order: number;
+  button_type: string;
+  is_active: boolean;
+  visibility_condition: string;
+}
+
+export interface MenuScreen {
+  id: number;
+  slug: string;
+  name: string;
+  message_text_ru: string | null;
+  message_text_en: string | null;
+  is_system: boolean;
+  is_active: boolean;
+  buttons: MenuButton[];
+}

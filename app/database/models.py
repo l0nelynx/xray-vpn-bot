@@ -1,6 +1,6 @@
 import logging
 
-from sqlalchemy import BigInteger, String, ForeignKey, Index, Integer, Boolean, text, inspect
+from sqlalchemy import BigInteger, String, ForeignKey, Index, Integer, Boolean, Float, Text, UniqueConstraint, text, inspect
 from sqlalchemy.ext.asyncio import AsyncAttrs, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -113,6 +113,79 @@ class DisabledUser(Base):
     disabled_at: Mapped[str] = mapped_column(String(30))
 
 
+class CacheVersion(Base):
+    __tablename__ = 'cache_version'
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    version: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class TariffPlan(Base):
+    __tablename__ = 'tariff_plans'
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    slug: Mapped[str] = mapped_column(String(50), unique=True)
+    name_ru: Mapped[str] = mapped_column(String(100))
+    name_en: Mapped[str] = mapped_column(String(100))
+    days: Mapped[int] = mapped_column(Integer)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    discount_percent: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[str] = mapped_column(String(30), nullable=True)
+
+    prices: Mapped[list["TariffPrice"]] = relationship(back_populates="tariff", cascade="all, delete-orphan")
+
+
+class TariffPrice(Base):
+    __tablename__ = 'tariff_prices'
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tariff_id: Mapped[int] = mapped_column(ForeignKey("tariff_plans.id", ondelete="CASCADE"))
+    payment_method: Mapped[str] = mapped_column(String(30))
+    price: Mapped[float] = mapped_column(Float)
+    currency: Mapped[str] = mapped_column(String(10))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    tariff: Mapped["TariffPlan"] = relationship(back_populates="prices")
+
+    __table_args__ = (
+        UniqueConstraint('tariff_id', 'payment_method', name='uq_tariff_payment'),
+    )
+
+
+class MenuScreen(Base):
+    __tablename__ = 'menu_screens'
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    slug: Mapped[str] = mapped_column(String(50), unique=True)
+    name: Mapped[str] = mapped_column(String(100))
+    message_text_ru: Mapped[str] = mapped_column(Text, nullable=True)
+    message_text_en: Mapped[str] = mapped_column(Text, nullable=True)
+    is_system: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    buttons: Mapped[list["MenuButton"]] = relationship(back_populates="screen", cascade="all, delete-orphan")
+
+
+class MenuButton(Base):
+    __tablename__ = 'menu_buttons'
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    screen_id: Mapped[int] = mapped_column(ForeignKey("menu_screens.id", ondelete="CASCADE"))
+    text_ru: Mapped[str] = mapped_column(String(200))
+    text_en: Mapped[str] = mapped_column(String(200))
+    callback_data: Mapped[str] = mapped_column(String(100), nullable=True)
+    url: Mapped[str] = mapped_column(String(500), nullable=True)
+    row: Mapped[int] = mapped_column(Integer, default=0)
+    col: Mapped[int] = mapped_column(Integer, default=0)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    button_type: Mapped[str] = mapped_column(String(20), default="callback")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    visibility_condition: Mapped[str] = mapped_column(String(50), default="always")
+
+    screen: Mapped["MenuScreen"] = relationship(back_populates="buttons")
+
+
 async def async_main():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -188,3 +261,146 @@ async def async_main():
                 logging.info("Migration: added ix_user_username index to users table")
 
         await conn.run_sync(_check_and_migrate)
+
+    # Seed cache_version row and tariff/menu data if empty
+    await _seed_cache_version()
+    await _seed_tariffs_and_menus()
+
+
+async def _seed_cache_version():
+    """Ensure cache_version row exists."""
+    from sqlalchemy import select, func
+    async with async_session() as session:
+        count = await session.scalar(select(func.count()).select_from(CacheVersion))
+        if not count:
+            session.add(CacheVersion(id=1, version=0))
+            await session.commit()
+
+
+async def _seed_tariffs_and_menus():
+    """Seed default tariffs and menu screens if tables are empty."""
+    from datetime import datetime
+    from sqlalchemy import select, func
+
+    async with async_session() as session:
+        count = await session.scalar(select(func.count()).select_from(TariffPlan))
+        if count and count > 0:
+            return
+
+        now = datetime.now().isoformat()
+
+        # Seed tariff plans
+        tariffs = [
+            TariffPlan(slug="month_30", name_ru="1 Месяц", name_en="1 Month", days=30,
+                       sort_order=0, is_active=True, discount_percent=0, created_at=now),
+            TariffPlan(slug="month_90", name_ru="3 Месяца", name_en="3 Months", days=90,
+                       sort_order=1, is_active=True, discount_percent=0, created_at=now),
+            TariffPlan(slug="month_360", name_ru="Год", name_en="1 Year", days=360,
+                       sort_order=2, is_active=True, discount_percent=0, created_at=now),
+        ]
+        session.add_all(tariffs)
+        await session.flush()
+
+        # Seed tariff prices for each plan × payment method
+        payment_methods = [
+            ("stars", "⭐️"),
+            ("crypto", "USDT"),
+            ("SBP_APAY", "RUB"),
+            ("CRYSTAL", "RUB"),
+        ]
+        for tariff in tariffs:
+            for method, currency in payment_methods:
+                session.add(TariffPrice(
+                    tariff_id=tariff.id, payment_method=method,
+                    price=0, currency=currency, is_active=True
+                ))
+
+        # Seed menu screens with buttons
+        screens_data = [
+            {
+                "slug": "main_new", "name": "Main Menu (New User)",
+                "message_text_ru": "Добро пожаловать!", "message_text_en": "Welcome!",
+                "is_system": True,
+                "buttons": [
+                    ("🔒 Купить Premium", "🔒 Buy Premium", "Premium", 0),
+                    ("📱 Инструкция", "📱 Instructions", "Others", 1),
+                    ("🆓 Бесплатная версия", "🆓 Free Version", "Free", 2),
+                    ("👥 Пригласить друзей", "👥 Invite Friends", "Invite_Friends", 3),
+                    ("⚙️ Настройки", "⚙️ Settings", "Settings", 4),
+                ]
+            },
+            {
+                "slug": "main_pro", "name": "Main Menu (Pro User)",
+                "message_text_ru": "", "message_text_en": "",
+                "is_system": True,
+                "buttons": [
+                    ("🔄 Продлить подписку", "🔄 Extend Subscription", "Extend_Month", 0),
+                    ("📱 Инструкция", "📱 Instructions", "Others", 1),
+                    ("📊 Моя подписка", "📊 My Subscription", "Sub_Info", 2),
+                    ("📲 Устройства", "📲 Devices", "Devices", 3),
+                    ("👥 Пригласить друзей", "👥 Invite Friends", "Invite_Friends", 4),
+                    ("⚙️ Настройки", "⚙️ Settings", "Settings", 5),
+                ]
+            },
+            {
+                "slug": "main_free", "name": "Main Menu (Free User)",
+                "message_text_ru": "", "message_text_en": "",
+                "is_system": True,
+                "buttons": [
+                    ("🔒 Купить Premium", "🔒 Buy Premium", "Premium", 0),
+                    ("📱 Инструкция", "📱 Instructions", "Others", 1),
+                    ("📊 Моя подписка", "📊 My Subscription", "Sub_Info", 2),
+                    ("📲 Устройства", "📲 Devices", "Devices", 3),
+                    ("👥 Пригласить друзей", "👥 Invite Friends", "Invite_Friends", 4),
+                    ("⚙️ Настройки", "⚙️ Settings", "Settings", 5),
+                ]
+            },
+            {
+                "slug": "pay_methods", "name": "Payment Methods",
+                "message_text_ru": "", "message_text_en": "",
+                "is_system": True,
+                "buttons": [
+                    ("⭐️ Telegram Stars", "⭐️ Telegram Stars", "Stars_Plans", 0),
+                    ("💎 Криптовалюта", "💎 Cryptocurrency", "Crypto_Plans", 1),
+                    ("💳 Crystal Pay", "💳 Crystal Pay", "Crystal_plans", 2),
+                    ("💳 СБП / Apple Pay", "💳 SBP / Apple Pay", "SBP_Apay", 3),
+                    ("🎁 У меня есть промокод", "🎁 I have a promo code", "Enter_Promo", 4, "show_promo"),
+                    ("◀️ Назад", "◀️ Back", "Main", 5),
+                ]
+            },
+            {
+                "slug": "settings", "name": "Settings",
+                "message_text_ru": "", "message_text_en": "",
+                "is_system": True,
+                "buttons": [
+                    ("🌐 Язык", "🌐 Language", "Change_Language", 0),
+                    ("📄 Пользовательское соглашение", "📄 User Agreement", "Agreement", 1),
+                    ("🔒 Политика конфиденциальности", "🔒 Privacy Policy", "Privacy", 2),
+                    ("◀️ На главную", "◀️ Main Menu", "Main", 3),
+                ]
+            },
+        ]
+
+        for screen_data in screens_data:
+            screen = MenuScreen(
+                slug=screen_data["slug"],
+                name=screen_data["name"],
+                message_text_ru=screen_data["message_text_ru"],
+                message_text_en=screen_data["message_text_en"],
+                is_system=screen_data["is_system"],
+                is_active=True,
+            )
+            session.add(screen)
+            await session.flush()
+
+            for btn_data in screen_data["buttons"]:
+                text_ru, text_en, callback, sort = btn_data[0], btn_data[1], btn_data[2], btn_data[3]
+                visibility = btn_data[4] if len(btn_data) > 4 else "always"
+                session.add(MenuButton(
+                    screen_id=screen.id, text_ru=text_ru, text_en=text_en,
+                    callback_data=callback, row=sort, col=0, sort_order=sort,
+                    button_type="callback", is_active=True, visibility_condition=visibility,
+                ))
+
+        await session.commit()
+        logging.info("Seed: tariff plans, prices, and menu screens created")

@@ -17,7 +17,7 @@ from app.handlers.tools import success_payment_handler
 from app.handlers.subscription_service import deliver_subscription, SubscriptionType
 from app.locale.utils import get_user_lang
 from app.keyboards.localized import get_pay_methods_localized, get_to_main_localized
-from app.keyboards.tools import create_tariff_keyboard, get_price_stars, get_price_crypto, get_sbp_price
+from app.keyboards.tools import create_tariff_keyboard, OptimizedTariffKeyboard, get_price_stars, get_price_crypto, get_sbp_price
 from app.tariffs import get_tariffs_stars, get_tariffs_crypto, get_tariffs_sbp
 from app.settings import bot, cp, secrets
 import app.database.requests as rq
@@ -118,8 +118,16 @@ async def stars_plan(callback: CallbackQuery, state: FSMContext):
     state_data = await state.get_data()
     promo_discount = state_data.get('PromoDiscount', 0)
 
-    # Build tariff keyboards dynamically with promo discount
-    keyboards = {
+    # Build tariff keyboards from DB (async), fallback to hardcoded
+    db_keyboards = {
+        'Stars_Plans': ('stars', get_price_stars()),
+        'Crypto_Plans': ('crypto', get_price_crypto()),
+        'SBP_Plans': ('SBP', get_sbp_price()),
+        'SBP_Apay': ('SBP_APAY', get_sbp_price()),
+        'Crystal_plans': ('CRYSTAL', get_sbp_price()),
+    }
+
+    fallback_keyboards = {
         'Stars_Plans': lambda: create_tariff_keyboard(tariff=get_tariffs_stars(), method='stars', base_price=get_price_stars(), extra_discount=promo_discount),
         'Crypto_Plans': lambda: create_tariff_keyboard(tariff=get_tariffs_crypto(), method='crypto', base_price=get_price_crypto(), extra_discount=promo_discount),
         'SBP_Plans': lambda: create_tariff_keyboard(tariff=get_tariffs_sbp(), method='SBP', base_price=get_sbp_price(), extra_discount=promo_discount),
@@ -127,9 +135,17 @@ async def stars_plan(callback: CallbackQuery, state: FSMContext):
         'Crystal_plans': lambda: create_tariff_keyboard(tariff=get_tariffs_sbp(), method='CRYSTAL', base_price=get_sbp_price(), extra_discount=promo_discount),
     }
 
-    builder = keyboards.get(callback.data)
-    if builder:
-        keyboard = builder()
+    keyboard = None
+    db_info = db_keyboards.get(callback.data)
+    if db_info:
+        method, base_price = db_info
+        keyboard = await OptimizedTariffKeyboard.from_db(method, base_price, extra_discount=promo_discount)
+    if not keyboard:
+        builder = fallback_keyboards.get(callback.data)
+        if builder:
+            keyboard = builder()
+
+    if keyboard:
         lang = await get_user_lang(callback.from_user.id)
         await callback.message.edit_text(lang.msg_choose_tariff, reply_markup=keyboard)
         print(f"{callback.data.split('_')[0]} has been chosen")

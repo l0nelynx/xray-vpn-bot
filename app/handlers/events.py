@@ -5,6 +5,7 @@ import app.keyboards as kb
 import app.api.remnawave.api as rem
 from app.keyboards.localized import (
     get_main_new_localized, get_main_pro_localized, get_main_free_localized,
+    get_dynamic_keyboard,
 )
 from app.locale.utils import get_user_lang
 from app.database.models import async_main
@@ -55,16 +56,27 @@ async def main_menu(message_func, menu_type, user_id: int = None, days=None, dat
         link: Subscription link
         user_uuid: RemnaWave user UUID for device count lookup
     """
+    # Resolve language
+    lang_code = "ru"
     if user_id:
-        lang = await get_user_lang(user_id)
-    else:
-        from app.locale import lang_ru
-        lang = lang_ru
+        lang_code = await rq.get_user_language(user_id) or "ru"
+    from app.locale import get_lang
+    lang = get_lang(lang_code)
 
-    keyboards_map = {
+    # Try DB-driven keyboard first, fallback to hardcoded
+    slug_map = {"pro": "main_pro", "free": "main_free", "new": "main_new"}
+    slug = slug_map.get(menu_type, "main_new")
+    dynamic_kb = await get_dynamic_keyboard(slug, lang_code)
+
+    fallback_map = {
         "pro": get_main_pro_localized(lang),
         "free": get_main_free_localized(lang),
         "new": get_main_new_localized(lang),
+    }
+    keyboards_map = {
+        "pro": dynamic_kb or fallback_map["pro"],
+        "free": dynamic_kb or fallback_map["free"],
+        "new": dynamic_kb or fallback_map["new"],
     }
 
     # Build subscription info block for pro/free users

@@ -6,6 +6,8 @@ import DashboardPage from "./pages/DashboardPage";
 import UsersPage from "./pages/UsersPage";
 import TransactionsPage from "./pages/TransactionsPage";
 import StatsPage from "./pages/StatsPage";
+import TariffEditorPage from "./pages/TariffEditorPage";
+import MenuEditorPage from "./pages/MenuEditorPage";
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   if (!isAuthenticated()) {
@@ -30,6 +32,8 @@ export default function App() {
         <Route path="users" element={<UsersPage />} />
         <Route path="transactions" element={<TransactionsPage />} />
         <Route path="stats" element={<StatsPage />} />
+        <Route path="tariffs" element={<TariffEditorPage />} />
+        <Route path="menus" element={<MenuEditorPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
