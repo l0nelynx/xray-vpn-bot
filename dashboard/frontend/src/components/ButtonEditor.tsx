@@ -114,9 +114,9 @@ export default function ButtonEditor({ open, button, onSave, onCancel }: ButtonE
                 allowClear
                 options={allCallbackOptions}
                 placeholder="Select handler or screen..."
-                filterOption={(input, option) =>
-                  ((option?.value as string) ?? "").toLowerCase().includes(input.toLowerCase()) ||
-                  ((option?.label as string) ?? "").toLowerCase().includes(input.toLowerCase())
+                filterOption={(input, option: any) =>
+                  (option?.value ?? "").toLowerCase().includes(input.toLowerCase()) ||
+                  (option?.label ?? "").toLowerCase().includes(input.toLowerCase())
                 }
               />
             </Form.Item>
