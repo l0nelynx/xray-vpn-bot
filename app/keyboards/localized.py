@@ -47,26 +47,12 @@ def get_main_free_localized(lang) -> InlineKeyboardMarkup:
     ])
 
 
-def get_main_marzban_pro_localized(lang) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=lang.btn_extend_subscription, callback_data='Extend_Month')],
-        [InlineKeyboardButton(text=lang.btn_migrate_beta, callback_data='Migrate_RemnaWave')],
-        [InlineKeyboardButton(text=lang.btn_install_instructions, callback_data='Others')],
-        [InlineKeyboardButton(text=lang.btn_sub_info, callback_data='Sub_Info')],
-        [InlineKeyboardButton(text=lang.btn_invite_friends, callback_data='Invite_Friends')],
-        [InlineKeyboardButton(text=lang.btn_settings, callback_data='Settings')],
-    ])
-
-
-def get_main_marzban_free_localized(lang) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=lang.btn_buy_premium, callback_data='Premium')],
-        [InlineKeyboardButton(text=lang.btn_migrate_beta, callback_data='Migrate_RemnaWave')],
-        [InlineKeyboardButton(text=lang.btn_install_instructions, callback_data='Others')],
-        [InlineKeyboardButton(text=lang.btn_sub_info, callback_data='Sub_Info')],
-        [InlineKeyboardButton(text=lang.btn_invite_friends, callback_data='Invite_Friends')],
-        [InlineKeyboardButton(text=lang.btn_settings, callback_data='Settings')],
-    ])
+# DISABLED: Marzban keyboard functions removed — Remnawave is the only API
+# def get_main_marzban_pro_localized(lang) -> InlineKeyboardMarkup:
+#     ...
+#
+# def get_main_marzban_free_localized(lang) -> InlineKeyboardMarkup:
+#     ...
 
 
 def get_others_localized(lang) -> InlineKeyboardMarkup:
@@ -129,12 +115,13 @@ def get_policy_menu_localized(lang) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def get_migration_confirm_localized(lang) -> InlineKeyboardMarkup:
-    builder = InlineKeyboardBuilder()
-    builder.button(text=lang.btn_confirm_migration, callback_data='confirm_migrate')
-    builder.row()
-    builder.button(text=lang.btn_cancel, callback_data='Main')
-    return builder.as_markup()
+# DISABLED: Marzban migration confirm keyboard removed
+# def get_migration_confirm_localized(lang) -> InlineKeyboardMarkup:
+#     builder = InlineKeyboardBuilder()
+#     builder.button(text=lang.btn_confirm_migration, callback_data='confirm_migrate')
+#     builder.row()
+#     builder.button(text=lang.btn_cancel, callback_data='Main')
+#     return builder.as_markup()
 
 
 def get_limited_menu_localized(lang) -> InlineKeyboardMarkup:

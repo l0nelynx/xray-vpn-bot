@@ -48,7 +48,7 @@ async def get_user_by_username(username: str):
         return user
 
 
-async def create_user_with_info(tg_id: int, username: str, vless_uuid: str = None, api_provider: str = "marzban"):
+async def create_user_with_info(tg_id: int, username: str, vless_uuid: str = None, api_provider: str = "remnawave"):
     """
     Создает нового пользователя с полной информацией
 

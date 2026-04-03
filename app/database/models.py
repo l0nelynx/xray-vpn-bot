@@ -26,8 +26,8 @@ class User(Base):
     # UUID для VLESS конфигурации
     vless_uuid: Mapped[str] = mapped_column(String(100), nullable=True)
 
-    # API провайдер, на котором зарегистрирован пользователь (marzban/remnawave)
-    api_provider: Mapped[str] = mapped_column(String(50), default="marzban")
+    # API провайдер, на котором зарегистрирован пользователь (remnawave)
+    api_provider: Mapped[str] = mapped_column(String(50), default="remnawave")
 
     # Email пользователя (для поиска в RemnaWave)
     email: Mapped[str] = mapped_column(String(100), nullable=True)

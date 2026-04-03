@@ -10,7 +10,7 @@ from typing import Optional, Union
 from aiogram.types import Message, CallbackQuery
 
 import app.keyboards as kb
-import app.marzban.templates as templates
+# import app.marzban.templates as templates  # DISABLED: Marzban removed
 from app.locale.lang_ru import admin_transaction_message, admin_migration_message
 from app.locale.utils import get_user_lang
 from app.settings import bot, admin_bot, secrets
@@ -107,51 +107,30 @@ async def deliver_subscription(
         # Get user's language for localized messages
         lang = await get_user_lang(user_id)
 
-        # Проверяем, нужна ли миграция из Marzban
-        api_provider = await detect_user_api_provider(user_id, username)
+        # DISABLED: Marzban auto-migration removed — Remnawave is the only API
+        # api_provider = await detect_user_api_provider(user_id, username)
+        # if api_provider == "marzban":
+        #     marzban_info = await get_user_info(username, api="marzban")
+        #     if marzban_info != 404:
+        #         expire_days = await get_user_days(marzban_info)
+        #         marzban_data_limit = marzban_info.get("data_limit", 0)
+        #         is_pro = marzban_info.get("status") == "active" and marzban_data_limit is None
+        #         migration_squad_id = secrets.get("rw_pro_id") if is_pro else secrets.get("rw_free_id")
+        #         external_squad_migration_id = secrets.get("rw_ext_pro_id") if is_pro else secrets.get("rw_ext_free_id")
+        #         migration_limit = 0 if (marzban_data_limit == 0 or marzban_data_limit is None) else marzban_data_limit // (1024 * 1024 * 1024)
+        #         new_user_info = await add_new_user_info(
+        #             name=username, userid=user_id, limit=migration_limit,
+        #             expire_days=expire_days, api="remnawave",
+        #             email=f"{username}@marzban.ru",
+        #             description=f"Auto-migrated from Marzban ({'Pro' if is_pro else 'Free'})",
+        #             squad_id=migration_squad_id, external_squad_id=external_squad_migration_id
+        #         )
+        #         if new_user_info:
+        #             logging.info(f"Auto-migrated {username} from Marzban to RemnaWave")
+        #         else:
+        #             logging.error(f"Auto-migration failed for {username}")
 
-        if api_provider == "marzban":
-            # Автоматическая миграция Marzban -> RemnaWave
-            marzban_info = await get_user_info(username, api="marzban")
-            if marzban_info != 404:
-                expire_days = await get_user_days(marzban_info)
-                marzban_data_limit = marzban_info.get("data_limit", 0)
-                is_pro = marzban_info.get("status") == "active" and marzban_data_limit is None
-
-                migration_squad_id = secrets.get("rw_pro_id") if is_pro else secrets.get("rw_free_id")
-                external_squad_migration_id = secrets.get("rw_ext_pro_id") if is_pro else secrets.get("rw_ext_free_id")
-                # Marzban возвращает data_limit в байтах, а RemnaWave принимает в GB
-                migration_limit = 0 if (marzban_data_limit == 0 or marzban_data_limit is None) else marzban_data_limit // (1024 * 1024 * 1024)
-
-                new_user_info = await add_new_user_info(
-                    name=username,
-                    userid=user_id,
-                    limit=migration_limit,
-                    expire_days=expire_days,
-                    api="remnawave",
-                    email=f"{username}@marzban.ru",
-                    description=f"Auto-migrated from Marzban ({'Pro' if is_pro else 'Free'})",
-                    squad_id=migration_squad_id,
-                    external_squad_id=external_squad_migration_id
-                )
-
-                if new_user_info:
-                    logging.info(f"Auto-migrated {username} from Marzban to RemnaWave")
-                    await _notify.send_message(
-                        chat_id=secrets.get('admin_id'),
-                        text=admin_migration_message.format(
-                            username=username,
-                            user_id=user_id,
-                            expire_days=expire_days,
-                            data_limit=migration_limit if migration_limit > 0 else 'Без лимита',
-                            sub_type='Pro' if is_pro else 'Free'
-                        ),
-                        parse_mode='HTML'
-                    )
-                else:
-                    logging.error(f"Auto-migration failed for {username}")
-
-        # Стандартная логика — get_user_info теперь найдёт пользователя в RemnaWave
+        # Стандартная логика — RemnaWave is the only API
         user_info = await get_user_info(username)
 
         scenario = await get_subscription_scenario(
@@ -228,7 +207,7 @@ async def deliver_subscription(
                                             limit=0,
                                             res_strat="no_reset",
                                             expire_days=new_days,
-                                            template=templates.vless_france,
+                                            # template=templates.vless_france,  # DISABLED: Marzban templates removed
                                             api="remnawave"
                                         )
                                     else:
@@ -238,7 +217,7 @@ async def deliver_subscription(
                                             limit=0,
                                             res_strat="no_reset",
                                             expire_days=reward_days,
-                                            template=templates.vless_france,
+                                            # template=templates.vless_france,  # DISABLED: Marzban templates removed
                                             api="remnawave",
                                             squad_id=secrets.get("rw_pro_id")
                                         )
@@ -301,7 +280,7 @@ async def _handle_new_user(
         limit=data_limit,
         #res_strat=reset_strategy,
         expire_days=days,
-        template=templates.vless_france,
+        # template=templates.vless_france,  # DISABLED: Marzban templates removed
         email=f"{username}@marzban.ru",
         description="Telegram subscription",
         squad_id=squad_id,
@@ -355,7 +334,7 @@ async def _handle_extend_subscription(
         limit=0,
         res_strat="no_reset",
         expire_days=new_expire_days,
-        template=templates.vless_france,
+        # template=templates.vless_france,  # DISABLED: Marzban templates removed
         api="remnawave",
         squad_id=squad_id,
         external_squad_id=external_squad_id
@@ -416,7 +395,7 @@ async def _handle_update_subscription(
         limit=data_limit,
         res_strat=reset_strategy,
         expire_days=days,
-        template=templates.vless_france,
+        # template=templates.vless_france,  # DISABLED: Marzban templates removed
         api="remnawave",
         squad_id=squad_id,
         external_squad_id=external_squad_id

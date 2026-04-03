@@ -2,7 +2,7 @@ import time
 import uuid
 
 import app.api.remnawave.api as rem
-import app.marzban.marzban as mz
+# import app.marzban.marzban as mz  # DISABLED: Marzban removed, Remnawave is primary API
 import app.database.requests as rq
 
 from aiogram.types import Message, CallbackQuery
@@ -10,12 +10,12 @@ from aiogram.types import Message, CallbackQuery
 from app.settings import bot, secrets
 import app.keyboards as kb
 
-import app.marzban.templates as templates
+# import app.marzban.templates as templates  # DISABLED: Marzban removed
 from app.handlers.events import main_menu
 from app.handlers.subscription_service import deliver_subscription, SubscriptionType
 from app.locale.utils import get_user_lang
 from app.keyboards.localized import (
-    get_main_marzban_pro_localized, get_main_marzban_free_localized,
+    # get_main_marzban_pro_localized, get_main_marzban_free_localized,  # DISABLED: Marzban removed
     get_connect_localized,
 )
 from aiogram import Bot
@@ -33,7 +33,7 @@ def time_to_unix(days: int):
 async def resolve_user(tg_id: int, username: str) -> tuple[str, dict | int]:
     """
     Определяет API-провайдер пользователя и получает его данные за минимум запросов.
-    Объединяет логику detect_user_api_provider + get_user_info.
+    Remnawave — единственный активный API-провайдер.
 
     Returns:
         (api_provider, user_info) — где user_info = dict с данными или 404
@@ -41,29 +41,24 @@ async def resolve_user(tg_id: int, username: str) -> tuple[str, dict | int]:
     # 1. Проверяем БД
     api_provider = await rq.get_user_api_provider(username)
 
-    if api_provider == "remnawave":
-        info = await get_user_info(username, api="remnawave")
-        if info != 404:
-            return "remnawave", info
-
-    if api_provider == "marzban" or api_provider is None:
-        # Пробуем Marzban
-        try:
-            async with mz.MarzbanAsync() as marz:
-                marz_info = await marz.get_user(name=username)
-                if marz_info and marz_info != 404 and not isinstance(marz_info, int):
-                    if not api_provider:
-                        await rq.update_user_api_info(tg_id, username, api_provider="marzban")
-                    return "marzban", marz_info
-        except Exception:
-            pass
-
-    if api_provider is None:
-        # Пробуем RemnaWave (по email, потом по username)
-        info = await get_user_info(username, api="remnawave")
-        if info != 404:
+    # Пробуем RemnaWave (основной и единственный провайдер)
+    info = await get_user_info(username, api="remnawave")
+    if info != 404:
+        if api_provider != "remnawave":
             await rq.update_user_api_info(tg_id, username, api_provider="remnawave")
-            return "remnawave", info
+        return "remnawave", info
+
+    # DISABLED: Marzban fallback removed — Remnawave is the only API
+    # if api_provider == "marzban" or api_provider is None:
+    #     try:
+    #         async with mz.MarzbanAsync() as marz:
+    #             marz_info = await marz.get_user(name=username)
+    #             if marz_info and marz_info != 404 and not isinstance(marz_info, int):
+    #                 if not api_provider:
+    #                     await rq.update_user_api_info(tg_id, username, api_provider="marzban")
+    #                 return "marzban", marz_info
+    #     except Exception:
+    #         pass
 
     return "none", 404
 
@@ -105,11 +100,12 @@ async def get_user_info(username, api: str = "remnawave"):
         dict: Информация о пользователе или 404 если пользователь не найден
     """
     try:
-        if api == "marzban":
-            async with mz.MarzbanAsync() as marz:
-                user_info = await marz.get_user(name=username)
-            return user_info
-        elif api == "remnawave":
+        # DISABLED: Marzban branch removed — Remnawave is the only API
+        # if api == "marzban":
+        #     async with mz.MarzbanAsync() as marz:
+        #         user_info = await marz.get_user(name=username)
+        #     return user_info
+        if api == "remnawave" or api == "marzban":
             # REMNAWAVE INTEGRATION — fallback на email если есть
             user_info = None
             db_user = await rq.get_full_username_info(username)
@@ -152,7 +148,7 @@ async def add_new_user_info(
     limit: int = 0,
     res_strat: str = "no_reset",
     expire_days: int = 30,
-    template: dict = templates.vless_template,
+    template: dict = None,  # DISABLED: Marzban templates removed
     api: str = "remnawave",
     email: str = None,
     description: str = "created by backend v2",
@@ -188,25 +184,18 @@ async def add_new_user_info(
             expire_days = max(1, round((expire_days - current_time) / (24 * 60 * 60)))
             logger.warning(f"Warning: expire_days was UNIX timestamp, converted to {expire_days} days")
 
-        if api == "marzban":
-            async with mz.MarzbanAsync() as marz:
-                buyer_nfo = await marz.add_user(
-                    template=template,
-                    name=f"{name}",
-                    usrid=f"{userid}",
-                    limit=limit,
-                    res_strat=res_strat,
-                    expire=(int(time.time() + time_to_unix(expire_days)))
-                )
+        # DISABLED: Marzban branch removed — Remnawave is the only API
+        # if api == "marzban":
+        #     async with mz.MarzbanAsync() as marz:
+        #         buyer_nfo = await marz.add_user(
+        #             template=template, name=f"{name}", usrid=f"{userid}",
+        #             limit=limit, res_strat=res_strat,
+        #             expire=(int(time.time() + time_to_unix(expire_days)))
+        #         )
+        #     await rq.update_user_api_info(username=name, api_provider="marzban")
+        #     return buyer_nfo
 
-            # Сохраняем информацию об API провайдере в БД
-            await rq.update_user_api_info(
-                username=name,
-                api_provider="marzban"
-            )
-            return buyer_nfo
-
-        elif api == "remnawave":
+        if api == "remnawave" or api == "marzban":
             # REMNAWAVE INTEGRATION с расширенными параметрами
             if email is None:
                 email = f"{name}@marzban.ru"
@@ -247,7 +236,7 @@ async def set_user_info(
     limit: int = 0,
     res_strat: str = "no_reset",
     expire_days: int = 30,
-    template: dict = templates.vless_template,
+    template: dict = None,  # DISABLED: Marzban templates removed
     api: str = "remnawave",
     description: str = "updated by backend v2",
     squad_id: str = secrets.get('rw_free_id'),
@@ -280,18 +269,16 @@ async def set_user_info(
             expire_days = max(1, round((expire_days - current_time) / (24 * 60 * 60)))
             logger.warning(f"Warning: expire_days was UNIX timestamp, converted to {expire_days} days")
 
-        if api == "marzban":
-            async with mz.MarzbanAsync() as marz:
-                buyer_nfo = await marz.set_user(
-                    template=template,
-                    name=f"{name}",
-                    limit=limit,
-                    res_strat=res_strat,
-                    expire=(int(time.time() + time_to_unix(expire_days)))
-                )
-            return buyer_nfo
+        # DISABLED: Marzban branch removed — Remnawave is the only API
+        # if api == "marzban":
+        #     async with mz.MarzbanAsync() as marz:
+        #         buyer_nfo = await marz.set_user(
+        #             template=template, name=f"{name}", limit=limit,
+        #             res_strat=res_strat, expire=(int(time.time() + time_to_unix(expire_days)))
+        #         )
+        #     return buyer_nfo
 
-        elif api == "remnawave":
+        if api == "remnawave" or api == "marzban":
             # REMNAWAVE INTEGRATION
             db_userdata = await rq.get_full_username_info(name)
 
@@ -337,15 +324,15 @@ async def detect_user_api_provider(tg_id: int,username: str) -> str:
         return api_provider
 
     # Если в БД нет информации, пытаемся определить по API
-    try:
-        # Проверяем Marzban
-        async with mz.MarzbanAsync() as marz:
-            user_info = await marz.get_user(name=username)
-            if user_info and user_info != 404:
-                await rq.update_user_api_info(tg_id, username, api_provider="marzban")
-                return "marzban"
-    except:
-        pass
+    # DISABLED: Marzban detection removed — Remnawave is the only API
+    # try:
+    #     async with mz.MarzbanAsync() as marz:
+    #         user_info = await marz.get_user(name=username)
+    #         if user_info and user_info != 404:
+    #             await rq.update_user_api_info(tg_id, username, api_provider="marzban")
+    #             return "marzban"
+    # except:
+    #     pass
 
     try:
         # Проверяем RemnaWave — сначала по email, потом по username
@@ -361,7 +348,6 @@ async def detect_user_api_provider(tg_id: int,username: str) -> str:
     except:
         pass
 
-    # По умолчанию возвращаем Marzban
     return "none"
 
 
@@ -390,17 +376,16 @@ async def startup_user_dialog(message):
         expire = user_info.get("expire")
         is_pro = status == "active" and data_limit is None
 
-        # Если пользователь на Marzban, показываем специальное меню с опцией миграции
-        if api_provider == "marzban":
-            if is_pro:
-                logger.debug("User has an active Pro subscription on Marzban")
-                text = lang.marzban_user_with_upgrade_option + lang.start_agreement
-                await message_func(text, reply_markup=get_main_marzban_pro_localized(lang), parse_mode="HTML")
-            else:
-                logger.debug("User has an active Free subscription on Marzban")
-                text = lang.marzban_user_with_upgrade_option + lang.start_free + lang.start_agreement
-                await message_func(text, reply_markup=get_main_marzban_free_localized(lang), parse_mode="HTML")
-        else:
+        # DISABLED: Marzban menu branch removed — all users go through RemnaWave flow
+        # if api_provider == "marzban":
+        #     if is_pro:
+        #         text = lang.marzban_user_with_upgrade_option + lang.start_agreement
+        #         await message_func(text, reply_markup=get_main_marzban_pro_localized(lang), parse_mode="HTML")
+        #     else:
+        #         text = lang.marzban_user_with_upgrade_option + lang.start_free + lang.start_agreement
+        #         await message_func(text, reply_markup=get_main_marzban_free_localized(lang), parse_mode="HTML")
+
+        if True:  # All users use RemnaWave flow
             # Получаем оставшиеся дни для отображения в меню
             expire_days = await get_user_days(user_info)
             raw_data_limit = user_info.get("data_limit")

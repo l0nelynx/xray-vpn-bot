@@ -7,7 +7,8 @@ import app.keyboards as kb
 from app.keyboards.localized import (
     get_language_select_keyboard, get_others_localized, get_subcheck_free_localized,
     get_agreement_menu_localized, get_policy_menu_localized, get_to_main_localized,
-    get_migration_confirm_localized, get_connect_localized, get_pay_methods_localized,
+    # get_migration_confirm_localized, get_connect_localized,  # DISABLED: Marzban migration removed
+    get_connect_localized, get_pay_methods_localized,
     get_settings_menu_localized, get_language_change_keyboard,
 )
 from app.locale.utils import get_user_lang
@@ -273,132 +274,11 @@ async def subcheck_reactivate(callback: CallbackQuery):
         )
 
 
-@router.callback_query(F.data == 'Migrate_RemnaWave')
-async def migrate_to_remnawave_confirm(callback: CallbackQuery):
-    lang = await get_user_lang(callback.from_user.id)
-    await callback.message.edit_text(
-        text=lang.marzban_user_with_upgrade_option,
-        parse_mode='HTML',
-        reply_markup=get_migration_confirm_localized(lang)
-    )
-
-
-@router.callback_query(F.data == 'confirm_migrate')
-async def process_migration(callback: CallbackQuery):
-    lang = await get_user_lang(callback.from_user.id)
-    from app.handlers.tools import detect_user_api_provider, get_user_info, add_new_user_info
-    import app.database.requests as rq
-
-    username = callback.from_user.username
-    user_id = callback.from_user.id
-
-    try:
-        await callback.message.edit_text(
-            text=lang.migration_in_progress,
-            parse_mode='HTML'
-        )
-
-        api_provider = await detect_user_api_provider(user_id, username)
-
-        if api_provider == "remnawave":
-            await callback.message.edit_text(
-                text=lang.msg_already_on_beta,
-                parse_mode='HTML',
-                reply_markup=get_to_main_localized(lang)
-            )
-            return
-
-        user_info = await get_user_info(username, api="marzban")
-
-        if user_info == 404:
-            await callback.message.edit_text(
-                text=lang.migration_error.format(support_bot=secrets.get('support_bot_id')),
-                parse_mode='HTML',
-                reply_markup=get_to_main_localized(lang)
-            )
-            return
-
-        expire_days = await get_user_days(user_info)
-        print(f"DAYS_{expire_days}")
-        data_limit = user_info.get("data_limit", 0)
-
-        is_pro = user_info.get("status") == "active" and data_limit is None
-
-        if is_pro:
-            squad_id = secrets.get("rw_pro_id")
-            external_squad_id = secrets.get("rw_ext_pro_id")
-            description = "Migrated from Marzban (Pro)"
-        else:
-            squad_id = secrets.get("rw_free_id")
-            external_squad_id = secrets.get("rw_ext_free_id")
-            description = "Migrated from Marzban (Free)"
-
-        if data_limit == 0 or data_limit is None:
-            data_limit = 0
-        else:
-            data_limit = data_limit // (1024 * 1024 * 1024)
-        print(f"LIMIT_{data_limit}")
-
-        new_user_info = await add_new_user_info(
-            name=username,
-            userid=user_id,
-            limit=data_limit,
-            res_strat="month",
-            expire_days=expire_days,
-            api="remnawave",
-            email=f"{username}@marzban.ru",
-            description=description,
-            squad_id=squad_id,
-            external_squad_id=external_squad_id,
-        )
-
-        if not new_user_info:
-            await callback.message.edit_text(
-                text=lang.migration_error.format(support_bot=secrets.get('support_bot_id')),
-                parse_mode='HTML',
-                reply_markup=get_to_main_localized(lang)
-            )
-            return
-
-        print(f"{user_id}_USERID")
-        await rq.update_user_api_info(tg_id=int(user_id),
-                                      username=username,
-                                      vless_uuid=new_user_info.get("uuid"),
-                                      api_provider="remnawave")
-
-        success_text = lang.migration_success.format(
-            link=new_user_info.get("subscription_url"),
-            days=expire_days,
-            limit=data_limit if data_limit > 0 else "Без лимита"
-        )
-
-        await callback.message.edit_text(
-            text=success_text,
-            parse_mode='HTML',
-            reply_markup=get_connect_localized(lang, new_user_info.get("subscription_url"))
-        )
-
-        # Admin message always in Russian
-        from app.locale.lang_ru import admin_migration_message
-        admin_message = admin_migration_message.format(
-            username=username,
-            user_id=user_id,
-            expire_days=expire_days,
-            data_limit=data_limit if data_limit > 0 else 'Без лимита',
-            sub_type='Pro' if is_pro else 'Free'
-        )
-
-        _notify = admin_bot or bot
-        await _notify.send_message(
-            chat_id=secrets.get('admin_id'),
-            text=admin_message,
-            parse_mode='HTML'
-        )
-
-    except Exception as e:
-        logging.error(f"Error during migration for {username}: {e}")
-        await callback.message.edit_text(
-            text=lang.migration_error.format(support_bot=secrets.get('support_bot_id')),
-            parse_mode='HTML',
-            reply_markup=get_to_main_localized(lang)
-        )
+# DISABLED: Marzban migration handlers removed — Remnawave is the only API
+# @router.callback_query(F.data == 'Migrate_RemnaWave')
+# async def migrate_to_remnawave_confirm(callback: CallbackQuery):
+#     ...
+#
+# @router.callback_query(F.data == 'confirm_migrate')
+# async def process_migration(callback: CallbackQuery):
+#     ...
