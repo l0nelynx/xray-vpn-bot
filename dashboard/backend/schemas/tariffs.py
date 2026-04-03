@@ -23,6 +23,7 @@ class TariffPlanSchema(BaseModel):
     is_active: bool
     discount_percent: int
     created_at: Optional[str] = None
+    squad_profile_id: Optional[int] = None
     prices: list[TariffPriceSchema] = []
 
     class Config:
@@ -37,6 +38,7 @@ class TariffPlanCreate(BaseModel):
     sort_order: int = 0
     is_active: bool = True
     discount_percent: int = 0
+    squad_profile_id: Optional[int] = None
     prices: list[TariffPriceSchema] = []
 
 
@@ -48,6 +50,7 @@ class TariffPlanUpdate(BaseModel):
     sort_order: Optional[int] = None
     is_active: Optional[bool] = None
     discount_percent: Optional[int] = None
+    squad_profile_id: Optional[int] = None
     prices: Optional[list[TariffPriceSchema]] = None
 
 

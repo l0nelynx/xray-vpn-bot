@@ -1,19 +1,12 @@
 import { Table, Space, Select, DatePicker, Tag, Card, Button } from "antd";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import dayjs from "dayjs";
 import { api } from "../api/client";
 import type { TransactionItem, PaginatedResponse } from "../api/types";
 import useIsMobile from "../hooks/useIsMobile";
+import { STATUS_COLORS } from "../utils/constants";
 
 const { RangePicker } = DatePicker;
-
-const statusColor: Record<string, string> = {
-  created: "blue",
-  confirmed: "green",
-  delivered: "cyan",
-  failed: "red",
-  cancelled: "orange",
-};
 
 export default function TransactionsTable() {
   const [data, setData] = useState<TransactionItem[]>([]);
@@ -25,8 +18,13 @@ export default function TransactionsTable() {
   const [dateRange, setDateRange] = useState<[string, string]>(["", ""]);
   const [loading, setLoading] = useState(false);
   const isMobile = useIsMobile();
+  const abortRef = useRef<AbortController | null>(null);
 
   const fetchData = useCallback(async () => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     setLoading(true);
     try {
       let url = `/transactions?page=${page}&per_page=${perPage}`;
@@ -35,9 +33,12 @@ export default function TransactionsTable() {
       if (dateRange[0]) url += `&date_from=${dateRange[0]}`;
       if (dateRange[1]) url += `&date_to=${dateRange[1]}`;
 
-      const res = await api.get<PaginatedResponse<TransactionItem>>(url);
+      const res = await api.get<PaginatedResponse<TransactionItem>>(url, controller.signal);
       setData(res.items);
       setTotal(res.total);
+    } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") return;
+      throw e;
     } finally {
       setLoading(false);
     }
@@ -45,6 +46,7 @@ export default function TransactionsTable() {
 
   useEffect(() => {
     fetchData();
+    return () => abortRef.current?.abort();
   }, [fetchData]);
 
   const columns = [
@@ -64,7 +66,7 @@ export default function TransactionsTable() {
       dataIndex: "order_status",
       key: "order_status",
       width: 100,
-      render: (s: string) => <Tag color={statusColor[s] || "default"}>{s}</Tag>,
+      render: (s: string) => <Tag color={STATUS_COLORS[s] || "default"}>{s}</Tag>,
     },
     { title: "Days", dataIndex: "days_ordered", key: "days_ordered", width: 60 },
     { title: "Date", dataIndex: "created_at", key: "created_at", width: 160 },
@@ -85,7 +87,7 @@ export default function TransactionsTable() {
       styles={{ body: { padding: "12px" } }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-        <Tag color={statusColor[tx.order_status] || "default"} style={{ margin: 0 }}>
+        <Tag color={STATUS_COLORS[tx.order_status] || "default"} style={{ margin: 0 }}>
           {tx.order_status}
         </Tag>
         <span style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.88)" }}>

@@ -1,4 +1,5 @@
-import { CSSProperties } from "react";
+import { CSSProperties, useMemo } from "react";
+import { sanitizeTelegramHtml } from "../utils/sanitize";
 
 interface PreviewButton {
   text: string;
@@ -13,6 +14,10 @@ interface TelegramPreviewProps {
 }
 
 export default function TelegramPreview({ messageText, buttons, style }: TelegramPreviewProps) {
+  const sanitizedHtml = useMemo(
+    () => (messageText ? sanitizeTelegramHtml(messageText.replace(/\n/g, "<br/>")) : ""),
+    [messageText]
+  );
   // Group buttons by row
   const rows: Record<number, PreviewButton[]> = {};
   buttons.forEach((btn) => {
@@ -97,7 +102,7 @@ export default function TelegramPreview({ messageText, buttons, style }: Telegra
             maxHeight: 120,
             overflow: "auto",
           }}
-          dangerouslySetInnerHTML={{ __html: messageText.replace(/\n/g, "<br/>") }}
+          dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
         />
       )}
 

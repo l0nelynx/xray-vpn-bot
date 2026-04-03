@@ -15,6 +15,7 @@ from app.api.a_pay import create_sbp_link as apays_create_sbp_link
 from app.api.crystal_pay import crystal_create_link
 from app.handlers.tools import success_payment_handler
 from app.handlers.subscription_service import deliver_subscription, SubscriptionType
+from app.database.tariff_repository import get_tariff_slug_by_days
 from app.locale.utils import get_user_lang
 from app.keyboards.localized import get_pay_methods_localized, get_to_main_localized
 from app.keyboards.tools import create_tariff_keyboard, OptimizedTariffKeyboard, get_price_stars, get_price_crypto, get_sbp_price
@@ -117,6 +118,8 @@ async def process_promo_input(message: Message, state: FSMContext):
 async def stars_plan(callback: CallbackQuery, state: FSMContext):
     state_data = await state.get_data()
     promo_discount = state_data.get('PromoDiscount', 0)
+    lang_code = await rq.get_user_language(callback.from_user.id) or "ru"
+    lang = await get_user_lang(callback.from_user.id)
 
     # Build tariff keyboards from DB (async), fallback to hardcoded
     db_keyboards = {
@@ -139,14 +142,13 @@ async def stars_plan(callback: CallbackQuery, state: FSMContext):
     db_info = db_keyboards.get(callback.data)
     if db_info:
         method, base_price = db_info
-        keyboard = await OptimizedTariffKeyboard.from_db(method, base_price, extra_discount=promo_discount)
+        keyboard = await OptimizedTariffKeyboard.from_db(method, base_price, extra_discount=promo_discount, lang=lang_code)
     if not keyboard:
         builder = fallback_keyboards.get(callback.data)
         if builder:
             keyboard = builder()
 
     if keyboard:
-        lang = await get_user_lang(callback.from_user.id)
         await callback.message.edit_text(lang.msg_choose_tariff, reply_markup=keyboard)
         print(f"{callback.data.split('_')[0]} has been chosen")
         await state.set_state(PaymentState.PaymentTariff)
@@ -193,7 +195,8 @@ async def invoice_handler(callback: CallbackQuery, callback_data: kb.PaymentCall
     else:
         print('WRONG METHOD FROM KEYBOARD!')
 
-    await state.update_data(PaymentDays=days, PaymentMethod=method)
+    tariff_slug = await get_tariff_slug_by_days(method, days)
+    await state.update_data(PaymentDays=days, PaymentMethod=method, TariffSlug=tariff_slug)
     await state.set_state(PaymentState.PaymentInvoice)
 
 
@@ -204,6 +207,7 @@ async def payment_handler(invoice: Invoice, message: CallbackQuery):
     days = int(invoice.payload)
     transaction_id = str(uuid.uuid4())
     amount = getattr(invoice, 'amount', 0)
+    tariff_slug = await get_tariff_slug_by_days('crypto', days)
     await rq.create_transaction(
         user_tg_id=message.from_user.id,
         user_transaction=transaction_id,
@@ -224,6 +228,7 @@ async def payment_handler(invoice: Invoice, message: CallbackQuery):
         reset_strategy="no_reset",
         transaction_id=transaction_id,
         amount=float(amount),
+        tariff_slug=tariff_slug,
     )
 
 
@@ -259,6 +264,7 @@ async def success_stars_payment_handler(message: Message, state: FSMContext):
     )
     await rq.claim_order_for_processing(transaction_id)
 
+    tariff_slug = states_data.get("TariffSlug")
     await deliver_subscription(
         message=message,
         username=message.from_user.username,
@@ -270,6 +276,7 @@ async def success_stars_payment_handler(message: Message, state: FSMContext):
         reset_strategy="no_reset",
         transaction_id=transaction_id,
         amount=float(amount),
+        tariff_slug=tariff_slug,
     )
 
     await state.clear()

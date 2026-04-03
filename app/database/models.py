@@ -120,6 +120,17 @@ class CacheVersion(Base):
     version: Mapped[int] = mapped_column(Integer, default=0)
 
 
+class SquadProfile(Base):
+    __tablename__ = 'squad_profiles'
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(100))
+    squad_id: Mapped[str] = mapped_column(String(100))
+    external_squad_id: Mapped[str] = mapped_column(String(100))
+
+    tariffs: Mapped[list["TariffPlan"]] = relationship(back_populates="squad_profile")
+
+
 class TariffPlan(Base):
     __tablename__ = 'tariff_plans'
 
@@ -132,8 +143,10 @@ class TariffPlan(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     discount_percent: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[str] = mapped_column(String(30), nullable=True)
+    squad_profile_id: Mapped[int] = mapped_column(ForeignKey("squad_profiles.id"), nullable=True)
 
     prices: Mapped[list["TariffPrice"]] = relationship(back_populates="tariff", cascade="all, delete-orphan")
+    squad_profile: Mapped["SquadProfile"] = relationship(back_populates="tariffs")
 
 
 class TariffPrice(Base):
@@ -252,6 +265,15 @@ async def async_main():
                     ))
                     logging.info("Migration: backfilled expire_date for existing confirmed/delivered transactions")
 
+            # Миграция: добавляем squad_profile_id в tariff_plans если колонки ещё нет
+            if 'tariff_plans' in insp.get_table_names():
+                tp_columns = [col['name'] for col in insp.get_columns('tariff_plans')]
+                if 'squad_profile_id' not in tp_columns:
+                    sync_conn.execute(text(
+                        "ALTER TABLE tariff_plans ADD COLUMN squad_profile_id INTEGER REFERENCES squad_profiles(id)"
+                    ))
+                    logging.info("Migration: added squad_profile_id column to tariff_plans table")
+
             # Миграция: добавляем индекс на username если его ещё нет
             indexes = [idx['name'] for idx in insp.get_indexes('users')]
             if 'ix_user_username' not in indexes:
@@ -265,6 +287,7 @@ async def async_main():
     # Seed cache_version row and tariff/menu data if empty
     await _seed_cache_version()
     await _seed_tariffs_and_menus()
+    await _backfill_screen_texts()
 
 
 async def _seed_cache_version():
@@ -281,6 +304,8 @@ async def _seed_tariffs_and_menus():
     """Seed default tariffs and menu screens if tables are empty."""
     from datetime import datetime
     from sqlalchemy import select, func
+    import app.locale.lang_ru as lang_ru
+    import app.locale.lang_en as lang_en
 
     async with async_session() as session:
         count = await session.scalar(select(func.count()).select_from(TariffPlan))
@@ -319,7 +344,8 @@ async def _seed_tariffs_and_menus():
         screens_data = [
             {
                 "slug": "main_new", "name": "Main Menu (New User)",
-                "message_text_ru": "Добро пожаловать!", "message_text_en": "Welcome!",
+                "message_text_ru": lang_ru.start_base + lang_ru.start_new + lang_ru.start_agreement,
+                "message_text_en": lang_en.start_base + lang_en.start_new + lang_en.start_agreement,
                 "is_system": True,
                 "buttons": [
                     ("🔒 Купить Premium", "🔒 Buy Premium", "Premium", 0),
@@ -331,7 +357,8 @@ async def _seed_tariffs_and_menus():
             },
             {
                 "slug": "main_pro", "name": "Main Menu (Pro User)",
-                "message_text_ru": "", "message_text_en": "",
+                "message_text_ru": lang_ru.start_pro + "{sub_info}" + lang_ru.start_agreement,
+                "message_text_en": lang_en.start_pro + "{sub_info}" + lang_en.start_agreement,
                 "is_system": True,
                 "buttons": [
                     ("🔄 Продлить подписку", "🔄 Extend Subscription", "Extend_Month", 0),
@@ -344,7 +371,8 @@ async def _seed_tariffs_and_menus():
             },
             {
                 "slug": "main_free", "name": "Main Menu (Free User)",
-                "message_text_ru": "", "message_text_en": "",
+                "message_text_ru": lang_ru.start_free + "{sub_info}" + lang_ru.start_agreement,
+                "message_text_en": lang_en.start_free + "{sub_info}" + lang_en.start_agreement,
                 "is_system": True,
                 "buttons": [
                     ("🔒 Купить Premium", "🔒 Buy Premium", "Premium", 0),
@@ -357,7 +385,8 @@ async def _seed_tariffs_and_menus():
             },
             {
                 "slug": "pay_methods", "name": "Payment Methods",
-                "message_text_ru": "", "message_text_en": "",
+                "message_text_ru": lang_ru.text_pay_method,
+                "message_text_en": lang_en.text_pay_method,
                 "is_system": True,
                 "buttons": [
                     ("⭐️ Telegram Stars", "⭐️ Telegram Stars", "Stars_Plans", 0),
@@ -370,7 +399,8 @@ async def _seed_tariffs_and_menus():
             },
             {
                 "slug": "settings", "name": "Settings",
-                "message_text_ru": "", "message_text_en": "",
+                "message_text_ru": "⚙️ Настройки",
+                "message_text_en": "⚙️ Settings",
                 "is_system": True,
                 "buttons": [
                     ("🌐 Язык", "🌐 Language", "Change_Language", 0),
@@ -404,3 +434,53 @@ async def _seed_tariffs_and_menus():
 
         await session.commit()
         logging.info("Seed: tariff plans, prices, and menu screens created")
+
+
+async def _backfill_screen_texts():
+    """Backfill empty message_text_ru/en for existing screens."""
+    from sqlalchemy import select
+    import app.locale.lang_ru as lang_ru
+    import app.locale.lang_en as lang_en
+
+    texts = {
+        "main_new": {
+            "ru": lang_ru.start_base + lang_ru.start_new + lang_ru.start_agreement,
+            "en": lang_en.start_base + lang_en.start_new + lang_en.start_agreement,
+        },
+        "main_pro": {
+            "ru": lang_ru.start_pro + "{sub_info}" + lang_ru.start_agreement,
+            "en": lang_en.start_pro + "{sub_info}" + lang_en.start_agreement,
+        },
+        "main_free": {
+            "ru": lang_ru.start_free + "{sub_info}" + lang_ru.start_agreement,
+            "en": lang_en.start_free + "{sub_info}" + lang_en.start_agreement,
+        },
+        "pay_methods": {
+            "ru": lang_ru.text_pay_method,
+            "en": lang_en.text_pay_method,
+        },
+        "settings": {
+            "ru": "⚙️ Настройки",
+            "en": "⚙️ Settings",
+        },
+    }
+
+    async with async_session() as session:
+        result = await session.execute(
+            select(MenuScreen).where(MenuScreen.slug.in_(texts.keys()))
+        )
+        screens = result.scalars().all()
+        updated = 0
+        for screen in screens:
+            t = texts.get(screen.slug)
+            if not t:
+                continue
+            if not screen.message_text_ru:
+                screen.message_text_ru = t["ru"]
+                updated += 1
+            if not screen.message_text_en:
+                screen.message_text_en = t["en"]
+                updated += 1
+        if updated:
+            await session.commit()
+            logging.info("Backfill: updated %d screen text fields", updated)

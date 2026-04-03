@@ -92,7 +92,15 @@ export interface TariffPlan {
   is_active: boolean;
   discount_percent: number;
   created_at: string | null;
+  squad_profile_id: number | null;
   prices: TariffPrice[];
+}
+
+export interface SquadProfile {
+  id: number;
+  name: string;
+  squad_id: string;
+  external_squad_id: string;
 }
 
 export interface MenuButton {

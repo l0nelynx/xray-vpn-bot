@@ -3,12 +3,14 @@ import logging
 import app.database.requests as rq
 import app.keyboards as kb
 import app.api.remnawave.api as rem
+from collections import defaultdict
 from app.keyboards.localized import (
     get_main_new_localized, get_main_pro_localized, get_main_free_localized,
     get_dynamic_keyboard,
 )
 from app.locale.utils import get_user_lang
 from app.database.models import async_main
+from app.database.tariff_repository import get_screen_text
 from app.settings import bot, admin_bot, secrets
 from io import BytesIO
 from aiogram.types import BufferedInputFile
@@ -111,7 +113,14 @@ async def main_menu(message_func, menu_type, user_id: int = None, days=None, dat
         "new": lang.start_base + lang.start_new + lang.start_agreement,
     }
 
-    text = texts_map.get(menu_type, texts_map["new"])
+    # Try DB text first, fall back to hardcoded locale text
+    db_text = await get_screen_text(slug, lang_code)
+    if db_text:
+        # Support {sub_info} placeholder; ignore unknown placeholders
+        safe_map = defaultdict(str, sub_info=sub_info_text)
+        text = db_text.format_map(safe_map)
+    else:
+        text = texts_map.get(menu_type, texts_map["new"])
     keyboard = keyboards_map.get(menu_type, keyboards_map["new"])
 
     await message_func(text, reply_markup=keyboard, parse_mode="HTML")

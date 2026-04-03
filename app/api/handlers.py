@@ -5,6 +5,7 @@ import time
 import app.database.requests as rq
 import app.locale.lang_ru as ru
 from app.handlers.subscription_service import deliver_subscription, SubscriptionType
+from app.database.tariff_repository import get_tariff_slug_by_days
 from app.settings import bot, admin_bot, secrets
 
 _notify = admin_bot or bot
@@ -83,6 +84,9 @@ async def payment_process_background(order_id: str):
                 transaction_id=order_id,
             )
 
+            # Resolve tariff slug for squad profile lookup
+            tariff_slug = await get_tariff_slug_by_days(payment_method_name, tariff_days)
+
             # Используем новую унифицированную систему доставки подписок
             # message=None для фоновых задач, пользователь получит сообщение напрямую
             delivery_result = await deliver_subscription(
@@ -96,6 +100,7 @@ async def payment_process_background(order_id: str):
                 reset_strategy="no_reset",
                 transaction_id=order_id,
                 amount=tx_amount,
+                tariff_slug=tariff_slug,
             )
 
             # Проверяем результат доставки
@@ -122,6 +127,7 @@ async def payment_process_background(order_id: str):
                         reset_strategy="no_reset",
                         transaction_id=order_id,
                         amount=tx_amount,
+                        tariff_slug=tariff_slug,
                     )
 
                     if delivery_result["status"] == "success":

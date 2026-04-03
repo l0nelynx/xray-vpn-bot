@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Row, Col, Card, Table, Tag, Typography, Select, Space } from "antd";
+import { Row, Col, Card, Table, Tag, Typography, Select, Space, message } from "antd";
 import {
   UserOutlined,
   DollarOutlined,
@@ -12,22 +12,7 @@ import PaymentMethodPieChart from "../components/PaymentMethodPieChart";
 import { api } from "../api/client";
 import type { OverviewStats, TransactionItem } from "../api/types";
 import useIsMobile from "../hooks/useIsMobile";
-
-const statusColor: Record<string, string> = {
-  created: "blue",
-  confirmed: "green",
-  delivered: "cyan",
-  failed: "red",
-  cancelled: "orange",
-};
-
-const periodOptions = [
-  { value: "today", label: "Today" },
-  { value: "yesterday", label: "Yesterday" },
-  { value: "week", label: "Week" },
-  { value: "month", label: "Month" },
-  { value: "6month", label: "6 Months" },
-];
+import { STATUS_COLORS, PERIOD_OPTIONS } from "../utils/constants";
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<OverviewStats | null>(null);
@@ -43,6 +28,9 @@ export default function DashboardPage() {
     ]).then(([s, r]) => {
       setStats(s);
       setRecent(r);
+    }).catch(() => {
+      message.error("Failed to load dashboard data");
+    }).finally(() => {
       setLoading(false);
     });
   }, []);
@@ -57,7 +45,7 @@ export default function DashboardPage() {
       dataIndex: "order_status",
       key: "status",
       width: 100,
-      render: (s: string) => <Tag color={statusColor[s] || "default"}>{s}</Tag>,
+      render: (s: string) => <Tag color={STATUS_COLORS[s] || "default"}>{s}</Tag>,
     },
     { title: "Date", dataIndex: "created_at", key: "date", width: 160 },
   ];
@@ -82,7 +70,7 @@ export default function DashboardPage() {
         </div>
       </div>
       <div style={{ textAlign: "right", marginLeft: 8 }}>
-        <Tag color={statusColor[tx.order_status] || "default"} style={{ margin: 0 }}>
+        <Tag color={STATUS_COLORS[tx.order_status] || "default"} style={{ margin: 0 }}>
           {tx.amount != null ? tx.amount : "—"}
         </Tag>
       </div>
@@ -108,7 +96,7 @@ export default function DashboardPage() {
           value={period}
           onChange={setPeriod}
           style={{ width: 130 }}
-          options={periodOptions}
+          options={PERIOD_OPTIONS}
         />
       </div>
 

@@ -1,5 +1,7 @@
 const API_BASE = "/bot/dashboard/api";
 
+let _redirecting = false;
+
 function getToken(): string | null {
   return localStorage.getItem("token");
 }
@@ -36,7 +38,10 @@ async function request<T>(
 
   if (res.status === 401) {
     clearToken();
-    window.location.href = "/bot/dashboard/login";
+    if (!_redirecting) {
+      _redirecting = true;
+      window.location.href = "/bot/dashboard/login";
+    }
     throw new Error("Unauthorized");
   }
 
@@ -49,7 +54,7 @@ async function request<T>(
 }
 
 export const api = {
-  get: <T>(path: string) => request<T>(path),
+  get: <T>(path: string, signal?: AbortSignal) => request<T>(path, { signal }),
   post: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "POST", body: body ? JSON.stringify(body) : undefined }),
   put: <T>(path: string, body?: unknown) =>

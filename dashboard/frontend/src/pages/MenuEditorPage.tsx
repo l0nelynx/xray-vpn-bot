@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import {
   Typography, Card, Button, Input, Switch, Space, Row, Col, List,
   message, Popconfirm, Select, Empty, Badge,
@@ -20,6 +20,7 @@ import type { MenuScreen, MenuButton as MenuButtonType } from "../api/types";
 import TelegramPreview from "../components/TelegramPreview";
 import ButtonEditor from "../components/ButtonEditor";
 import useIsMobile from "../hooks/useIsMobile";
+import useUnsavedWarning from "../hooks/useUnsavedWarning";
 
 function SortableButtonItem({
   btn, onEdit, onDelete,
@@ -80,7 +81,11 @@ export default function MenuEditorPage() {
   const [editingBtn, setEditingBtn] = useState<Partial<MenuButtonType> | null>(null);
   const [btnEditorOpen, setBtnEditorOpen] = useState(false);
   const [previewLang, setPreviewLang] = useState<"ru" | "en">("ru");
+  const [isDirty, setIsDirty] = useState(false);
   const isMobile = useIsMobile();
+  const snapshotRef = useRef("");
+
+  useUnsavedWarning(isDirty);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
@@ -91,6 +96,8 @@ export default function MenuEditorPage() {
     try {
       const data = await api.get<MenuScreen[]>("/menus/screens");
       setScreens(data);
+      snapshotRef.current = JSON.stringify(data);
+      setIsDirty(false);
       if (data.length > 0 && !selectedId) {
         setSelectedId(data[0].id);
       }
@@ -104,9 +111,11 @@ export default function MenuEditorPage() {
 
   const updateScreen = (field: string, value: unknown) => {
     if (!selected) return;
-    setScreens((prev) =>
-      prev.map((s) => (s.id === selected.id ? { ...s, [field]: value } : s))
-    );
+    setScreens((prev) => {
+      const next = prev.map((s) => (s.id === selected.id ? { ...s, [field]: value } : s));
+      setIsDirty(JSON.stringify(next) !== snapshotRef.current);
+      return next;
+    });
   };
 
   const handleSave = async () => {

@@ -9,7 +9,7 @@ from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from app.database.models import async_session, TariffPlan, TariffPrice, MenuScreen, MenuButton, CacheVersion
+from app.database.models import async_session, TariffPlan, TariffPrice, MenuScreen, MenuButton, CacheVersion, SquadProfile
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +64,7 @@ async def _ensure_tariff_cache():
         async with async_session() as session:
             result = await session.execute(
                 select(TariffPlan)
-                .options(selectinload(TariffPlan.prices))
+                .options(selectinload(TariffPlan.prices), selectinload(TariffPlan.squad_profile))
                 .where(TariffPlan.is_active == True)
                 .order_by(TariffPlan.sort_order)
             )
@@ -77,6 +77,7 @@ async def _ensure_tariff_cache():
                     method = price.payment_method
                     if method not in _tariff_cache:
                         _tariff_cache[method] = []
+                    squad = plan.squad_profile
                     _tariff_cache[method].append({
                         "slug": plan.slug,
                         "name_ru": plan.name_ru,
@@ -85,6 +86,8 @@ async def _ensure_tariff_cache():
                         "discount_percent": plan.discount_percent,
                         "price": price.price,
                         "currency": price.currency,
+                        "squad_id": squad.squad_id if squad else None,
+                        "external_squad_id": squad.external_squad_id if squad else None,
                     })
             logger.debug("Tariff cache refreshed: %d methods", len(_tariff_cache))
     except Exception as e:
@@ -135,6 +138,30 @@ async def get_tariffs_for_method(payment_method: str) -> Optional[list[dict]]:
     """Get tariffs with prices for a specific payment method."""
     await _ensure_tariff_cache()
     return _tariff_cache.get(payment_method)
+
+
+async def get_tariff_slug_by_days(payment_method: str, days: int) -> Optional[str]:
+    """Find tariff slug by payment method and days."""
+    await _ensure_tariff_cache()
+    method_tariffs = _tariff_cache.get(payment_method, [])
+    for t in method_tariffs:
+        if t["days"] == days:
+            return t["slug"]
+    return None
+
+
+async def get_squad_for_tariff_slug(tariff_slug: str) -> Optional[dict]:
+    """Get squad_id and external_squad_id for a tariff by its slug. Returns None if not found or no squad assigned."""
+    await _ensure_tariff_cache()
+    for method_tariffs in _tariff_cache.values():
+        for t in method_tariffs:
+            if t["slug"] == tariff_slug:
+                sid = t.get("squad_id")
+                esid = t.get("external_squad_id")
+                if sid and esid:
+                    return {"squad_id": sid, "external_squad_id": esid}
+                return None
+    return None
 
 
 async def get_screen_buttons(screen_slug: str, lang_code: str = "ru") -> Optional[list[dict]]:

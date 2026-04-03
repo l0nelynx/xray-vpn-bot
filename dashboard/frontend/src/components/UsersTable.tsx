@@ -1,9 +1,10 @@
-import { Table, Tag, Button, Space, Popconfirm, Input, Select, Drawer, Descriptions, List, Card } from "antd";
+import { Table, Tag, Button, Space, Popconfirm, Input, Select, Drawer, Descriptions, List, Card, message } from "antd";
 import { SearchOutlined, StopOutlined, CheckOutlined, DeleteOutlined, EyeOutlined, CrownOutlined } from "@ant-design/icons";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "../api/client";
 import type { UserItem, UserDetail, PaginatedResponse, TransactionItem } from "../api/types";
 import useIsMobile from "../hooks/useIsMobile";
+import useDebounce from "../hooks/useDebounce";
 
 export default function UsersTable() {
   const [data, setData] = useState<UserItem[]>([]);
@@ -17,42 +18,69 @@ export default function UsersTable() {
   const [selectedUser, setSelectedUser] = useState<UserDetail | null>(null);
   const [userTx, setUserTx] = useState<TransactionItem[]>([]);
   const isMobile = useIsMobile();
+  const debouncedSearch = useDebounce(search, 400);
+  const abortRef = useRef<AbortController | null>(null);
 
   const fetchUsers = useCallback(async () => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     setLoading(true);
     try {
       const res = await api.get<PaginatedResponse<UserItem>>(
-        `/users?page=${page}&per_page=${perPage}&search=${encodeURIComponent(search)}&filter=${filter}`
+        `/users?page=${page}&per_page=${perPage}&search=${encodeURIComponent(debouncedSearch)}&filter=${filter}`,
+        controller.signal
       );
       setData(res.items);
       setTotal(res.total);
+    } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") return;
+      throw e;
     } finally {
       setLoading(false);
     }
-  }, [page, perPage, search, filter]);
+  }, [page, perPage, debouncedSearch, filter]);
 
   useEffect(() => {
     fetchUsers();
+    return () => abortRef.current?.abort();
   }, [fetchUsers]);
 
   const handleBan = async (tg_id: number) => {
-    await api.post(`/users/${tg_id}/ban`);
-    fetchUsers();
+    try {
+      await api.post(`/users/${tg_id}/ban`);
+      fetchUsers();
+    } catch {
+      message.error("Failed to ban user");
+    }
   };
 
   const handleUnban = async (tg_id: number) => {
-    await api.post(`/users/${tg_id}/unban`);
-    fetchUsers();
+    try {
+      await api.post(`/users/${tg_id}/unban`);
+      fetchUsers();
+    } catch {
+      message.error("Failed to unban user");
+    }
   };
 
   const handleDelete = async (tg_id: number) => {
-    await api.delete(`/users/${tg_id}`);
-    fetchUsers();
+    try {
+      await api.delete(`/users/${tg_id}`);
+      fetchUsers();
+    } catch {
+      message.error("Failed to delete user");
+    }
   };
 
   const handleToggleVip = async (tg_id: number, currentVip: boolean) => {
-    await api.post(`/users/${tg_id}/${currentVip ? "unvip" : "vip"}`);
-    fetchUsers();
+    try {
+      await api.post(`/users/${tg_id}/${currentVip ? "unvip" : "vip"}`);
+      fetchUsers();
+    } catch {
+      message.error("Failed to toggle VIP status");
+    }
   };
 
   const openDrawer = async (tg_id: number) => {
@@ -97,7 +125,9 @@ export default function UsersTable() {
           {r.is_banned ? (
             <Button size="small" icon={<CheckOutlined />} onClick={() => handleUnban(r.tg_id)} title="Unban" />
           ) : (
-            <Button size="small" danger icon={<StopOutlined />} onClick={() => handleBan(r.tg_id)} title="Ban" />
+            <Popconfirm title="Ban this user?" onConfirm={() => handleBan(r.tg_id)}>
+              <Button size="small" danger icon={<StopOutlined />} title="Ban" />
+            </Popconfirm>
           )}
           <Popconfirm title="Delete this user and all transactions?" onConfirm={() => handleDelete(r.tg_id)}>
             <Button size="small" danger icon={<DeleteOutlined />} />
@@ -133,7 +163,9 @@ export default function UsersTable() {
           {user.is_banned ? (
             <Button size="small" icon={<CheckOutlined />} onClick={() => handleUnban(user.tg_id)} />
           ) : (
-            <Button size="small" danger icon={<StopOutlined />} onClick={() => handleBan(user.tg_id)} />
+            <Popconfirm title="Ban this user?" onConfirm={() => handleBan(user.tg_id)}>
+              <Button size="small" danger icon={<StopOutlined />} />
+            </Popconfirm>
           )}
           <Popconfirm title="Delete user?" onConfirm={() => handleDelete(user.tg_id)}>
             <Button size="small" danger icon={<DeleteOutlined />} />

@@ -8,6 +8,7 @@ import TransactionsPage from "./pages/TransactionsPage";
 import StatsPage from "./pages/StatsPage";
 import TariffEditorPage from "./pages/TariffEditorPage";
 import MenuEditorPage from "./pages/MenuEditorPage";
+import SquadProfilesPage from "./pages/SquadProfilesPage";
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   if (!isAuthenticated()) {
@@ -34,6 +35,7 @@ export default function App() {
         <Route path="stats" element={<StatsPage />} />
         <Route path="tariffs" element={<TariffEditorPage />} />
         <Route path="menus" element={<MenuEditorPage />} />
+        <Route path="squads" element={<SquadProfilesPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

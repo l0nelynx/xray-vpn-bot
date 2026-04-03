@@ -80,6 +80,7 @@ async def deliver_subscription(
     reset_strategy: str = "no_reset",
     transaction_id: Optional[str] = None,
     amount: Optional[float] = None,
+    tariff_slug: Optional[str] = None,
 ) -> dict:
     """
     Unified function to deliver subscription to user.
@@ -168,17 +169,26 @@ async def deliver_subscription(
             amount=amount,
         )
 
+        # Resolve squad from tariff (for PAID subscriptions)
+        tariff_squad = None
+        if subscription_type == SubscriptionType.PAID and tariff_slug:
+            from app.database.tariff_repository import get_squad_for_tariff_slug
+            tariff_squad = await get_squad_for_tariff_slug(tariff_slug)
+
         if scenario == SubscriptionScenario.NEW_USER:
             result = await _handle_new_user(
-                message, username, user_id, days, data_limit, reset_strategy, subscription_type, lang
+                message, username, user_id, days, data_limit, reset_strategy, subscription_type, lang,
+                tariff_squad=tariff_squad,
             )
         elif scenario == SubscriptionScenario.EXTEND:
             result = await _handle_extend_subscription(
-                message, username, user_id, days, subscription_type, lang, user_info=user_info
+                message, username, user_id, days, subscription_type, lang, user_info=user_info,
+                tariff_squad=tariff_squad,
             )
         elif scenario == SubscriptionScenario.UPDATE:
             result = await _handle_update_subscription(
-                message, username, user_id, days, data_limit, reset_strategy, subscription_type, lang
+                message, username, user_id, days, data_limit, reset_strategy, subscription_type, lang,
+                tariff_squad=tariff_squad,
             )
         elif scenario == SubscriptionScenario.LIMITED:
             result = await _handle_limited(message, username, subscription_type, lang, user_info=user_info)
@@ -272,6 +282,7 @@ async def _handle_new_user(
     reset_strategy: str,
     subscription_type: SubscriptionType,
     lang=None,
+    tariff_squad: Optional[dict] = None,
 ) -> dict:
     """Handle new user subscription creation"""
     # Lazy import to avoid circular dependency
@@ -280,8 +291,8 @@ async def _handle_new_user(
         squad_id = secrets.get("rw_free_id")
         external_squad_id = secrets.get("rw_ext_free_id")
     else:
-        squad_id = secrets.get("rw_pro_id")
-        external_squad_id = secrets.get("rw_ext_pro_id")
+        squad_id = tariff_squad["squad_id"] if tariff_squad else secrets.get("rw_pro_id")
+        external_squad_id = tariff_squad["external_squad_id"] if tariff_squad else secrets.get("rw_ext_pro_id")
     print("Days:", days)
     print("Data Limit (GB):", data_limit)
     buyer_info = await add_new_user_info(
@@ -321,6 +332,7 @@ async def _handle_extend_subscription(
     subscription_type: SubscriptionType,
     lang=None,
     user_info: dict = None,
+    tariff_squad: Optional[dict] = None,
 ) -> dict:
     """Handle existing subscription extension"""
     # Lazy import to avoid circular dependency
@@ -334,8 +346,8 @@ async def _handle_extend_subscription(
         external_squad_id = secrets.get("rw_ext_free_id")
         new_expire_days = days
     else:
-        squad_id = secrets.get("rw_pro_id")
-        external_squad_id = secrets.get("rw_ext_pro_id")
+        squad_id = tariff_squad["squad_id"] if tariff_squad else secrets.get("rw_pro_id")
+        external_squad_id = tariff_squad["external_squad_id"] if tariff_squad else secrets.get("rw_ext_pro_id")
         new_expire_days = expire_day + days if isinstance(expire_day, int) else days
 
     buyer_info = await set_user_info(
@@ -374,6 +386,7 @@ async def _handle_update_subscription(
     reset_strategy: str,
     subscription_type: SubscriptionType,
     lang=None,
+    tariff_squad: Optional[dict] = None,
 ) -> dict:
     """Handle subscription update (replacement)"""
     # Lazy import to avoid circular dependency
@@ -382,8 +395,12 @@ async def _handle_update_subscription(
     import app.database.requests as rq_update
 
     # При переходе с FREE на PAID — ставим PRO squad, при FREE — FREE squad
-    squad_id = secrets.get("rw_pro_id") if subscription_type == SubscriptionType.PAID else secrets.get("rw_free_id")
-    external_squad_id = secrets.get("rw_ext_pro_id") if subscription_type == SubscriptionType.PAID else secrets.get("rw_ext_free_id")
+    if subscription_type == SubscriptionType.PAID:
+        squad_id = tariff_squad["squad_id"] if tariff_squad else secrets.get("rw_pro_id")
+        external_squad_id = tariff_squad["external_squad_id"] if tariff_squad else secrets.get("rw_ext_pro_id")
+    else:
+        squad_id = secrets.get("rw_free_id")
+        external_squad_id = secrets.get("rw_ext_free_id")
     # Сброс трафика при выдаче FREE подписки (чтобы limited пользователь мог снова пользоваться)
     if subscription_type == SubscriptionType.FREE and data_limit > 0:
         try:

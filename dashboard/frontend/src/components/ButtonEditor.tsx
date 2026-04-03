@@ -42,6 +42,13 @@ export default function ButtonEditor({ open, button, onSave, onCancel }: ButtonE
     }
   }, [open]);
 
+  // Sync form values when button or open changes to avoid stale data
+  useEffect(() => {
+    if (open && button) {
+      form.setFieldsValue(button);
+    }
+  }, [open, button, form]);
+
   const screenOptions = screens.map((s) => ({
     value: `screen:${s.slug}`,
     label: `${s.name} (${s.slug})`,

@@ -53,6 +53,7 @@ async def create_plan(body: TariffPlanCreate, _: str = Depends(get_current_user)
             sort_order=body.sort_order,
             is_active=body.is_active,
             discount_percent=body.discount_percent,
+            squad_profile_id=body.squad_profile_id,
             created_at=datetime.now().isoformat(),
         )
         session.add(plan)
@@ -108,6 +109,10 @@ async def update_plan(plan_id: int, body: TariffPlanUpdate, _: str = Depends(get
             val = getattr(body, field, None)
             if val is not None:
                 setattr(plan, field, val)
+
+        # squad_profile_id is nullable — allow explicit None to unlink
+        if "squad_profile_id" in body.model_fields_set:
+            plan.squad_profile_id = body.squad_profile_id
 
         if body.prices is not None:
             # Remove existing prices and replace

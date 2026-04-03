@@ -124,7 +124,8 @@ class OptimizedTariffKeyboard:
             method: str,
             base_price: int,
             discount_func: Optional[Callable[[float, int], float]] = None,
-            extra_discount: int = 0
+            extra_discount: int = 0,
+            lang: str = "ru",
     ):
         """
         Initialize tariff keyboard builder
@@ -134,12 +135,14 @@ class OptimizedTariffKeyboard:
         :param base_price: Base price
         :param discount_func: Optional discount function
         :param extra_discount: Additional promo discount (%)
+        :param lang: Language code for localization
         """
         self.tariff = tariff
         self.method = method
         self.base_price = base_price
         self.discount_func = discount_func
         self.extra_discount = extra_discount
+        self.lang = lang
 
     def build(self) -> InlineKeyboardMarkup:
         """Build the complete tariff keyboard"""
@@ -180,13 +183,15 @@ class OptimizedTariffKeyboard:
                 keyboard_buttons.append([button])
 
         # Add navigation buttons at the bottom
-        keyboard_buttons.append([InlineKeyboardButton(text="Назад", callback_data='Premium')])
-        keyboard_buttons.append([InlineKeyboardButton(text='На главную', callback_data='Main')])
+        back_text = "Back" if self.lang == "en" else "Назад"
+        main_text = "Main menu" if self.lang == "en" else "На главную"
+        keyboard_buttons.append([InlineKeyboardButton(text=back_text, callback_data='Premium')])
+        keyboard_buttons.append([InlineKeyboardButton(text=main_text, callback_data='Main')])
 
         return InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
 
     @staticmethod
-    async def from_db(payment_method: str, base_price: int, extra_discount: int = 0) -> Optional[InlineKeyboardMarkup]:
+    async def from_db(payment_method: str, base_price: int, extra_discount: int = 0, lang: str = "ru") -> Optional[InlineKeyboardMarkup]:
         """Build tariff keyboard from DB data. Returns None if DB has no data."""
         from app.tariffs import get_tariffs_stars_async, get_tariffs_crypto_async, get_tariffs_sbp_async, get_tariffs_crystal_async
 
@@ -202,12 +207,13 @@ class OptimizedTariffKeyboard:
         if not getter:
             return None
 
-        tariffs = await getter()
+        tariffs = await getter(lang=lang)
         keyboard = OptimizedTariffKeyboard(
             tariff=tariffs,
             method=payment_method,
             base_price=base_price,
             extra_discount=extra_discount,
+            lang=lang,
         )
         return keyboard.build()
 

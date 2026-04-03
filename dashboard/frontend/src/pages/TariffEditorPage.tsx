@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import {
   Typography, Card, Button, Input, InputNumber, Switch, Space, Row, Col,
   message, Popconfirm, Select, Collapse, Empty,
@@ -15,10 +15,11 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { api } from "../api/client";
-import type { TariffPlan, TariffPrice } from "../api/types";
+import type { TariffPlan, TariffPrice, SquadProfile } from "../api/types";
 import TariffPriceMatrix from "../components/TariffPriceMatrix";
 import TelegramPreview from "../components/TelegramPreview";
 import useIsMobile from "../hooks/useIsMobile";
+import useUnsavedWarning from "../hooks/useUnsavedWarning";
 
 const DEFAULT_PRICES: TariffPrice[] = [
   { payment_method: "stars", price: 0, currency: "⭐️", is_active: true },
@@ -28,11 +29,12 @@ const DEFAULT_PRICES: TariffPrice[] = [
 ];
 
 function SortableTariffCard({
-  plan, onUpdate, onDelete,
+  plan, onUpdate, onDelete, squadProfiles,
 }: {
   plan: TariffPlan;
   onUpdate: (plan: TariffPlan) => void;
   onDelete: (id: number) => void;
+  squadProfiles: SquadProfile[];
 }) {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: plan.id });
 
@@ -94,6 +96,20 @@ function SortableTariffCard({
                   <InputNumber size="small" min={0} max={100} value={plan.discount_percent} onChange={(v) => updateField("discount_percent", v ?? 0)} style={{ width: "100%" }} />
                 </Col>
               </Row>
+              <Row gutter={12}>
+                <Col span={8}>
+                  <label style={{ fontSize: 11, color: "rgba(255,255,255,0.45)" }}>Squad Profile</label>
+                  <Select
+                    size="small"
+                    allowClear
+                    placeholder="None (use config)"
+                    value={plan.squad_profile_id}
+                    onChange={(v) => updateField("squad_profile_id", v ?? null)}
+                    style={{ width: "100%" }}
+                    options={squadProfiles.map((s) => ({ value: s.id, label: s.name }))}
+                  />
+                </Col>
+              </Row>
 
               <div>
                 <Typography.Text style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", display: "block", marginBottom: 8 }}>
@@ -121,19 +137,30 @@ function SortableTariffCard({
 
 export default function TariffEditorPage() {
   const [plans, setPlans] = useState<TariffPlan[]>([]);
+  const [squadProfiles, setSquadProfiles] = useState<SquadProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [previewMethod, setPreviewMethod] = useState("stars");
   const [previewLang, setPreviewLang] = useState<"ru" | "en">("ru");
+  const [isDirty, setIsDirty] = useState(false);
   const isMobile = useIsMobile();
+  const snapshotRef = useRef("");
+
+  useUnsavedWarning(isDirty);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await api.get<TariffPlan[]>("/tariffs/plans");
+      const [data, squads] = await Promise.all([
+        api.get<TariffPlan[]>("/tariffs/plans"),
+        api.get<SquadProfile[]>("/squads"),
+      ]);
       setPlans(data);
+      setSquadProfiles(squads);
+      snapshotRef.current = JSON.stringify(data);
+      setIsDirty(false);
     } catch {
       message.error("Failed to load tariffs");
     }
@@ -154,7 +181,11 @@ export default function TariffEditorPage() {
   };
 
   const handleUpdate = (updated: TariffPlan) => {
-    setPlans((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+    setPlans((prev) => {
+      const next = prev.map((p) => (p.id === updated.id ? updated : p));
+      setIsDirty(JSON.stringify(next) !== snapshotRef.current);
+      return next;
+    });
   };
 
   const handleDelete = async (id: number) => {
@@ -177,6 +208,7 @@ export default function TariffEditorPage() {
         sort_order: plans.length,
         is_active: true,
         discount_percent: 0,
+        squad_profile_id: null,
         prices: DEFAULT_PRICES,
       });
       setPlans((prev) => [...prev, newPlan]);
@@ -193,9 +225,9 @@ export default function TariffEditorPage() {
       await api.put("/tariffs/plans/reorder", {
         items: plans.map((p, i) => ({ id: p.id, sort_order: i })),
       });
-      // Save each plan
-      for (const plan of plans) {
-        await api.put(`/tariffs/plans/${plan.id}`, {
+      // Save each plan in parallel
+      await Promise.all(plans.map((plan) =>
+        api.put(`/tariffs/plans/${plan.id}`, {
           slug: plan.slug,
           name_ru: plan.name_ru,
           name_en: plan.name_en,
@@ -203,9 +235,10 @@ export default function TariffEditorPage() {
           sort_order: plan.sort_order,
           is_active: plan.is_active,
           discount_percent: plan.discount_percent,
+          squad_profile_id: plan.squad_profile_id,
           prices: plan.prices,
-        });
-      }
+        })
+      ));
       message.success("All tariffs saved!");
       await load();
     } catch {
@@ -258,6 +291,7 @@ export default function TariffEditorPage() {
                     plan={plan}
                     onUpdate={handleUpdate}
                     onDelete={handleDelete}
+                    squadProfiles={squadProfiles}
                   />
                 ))}
               </SortableContext>

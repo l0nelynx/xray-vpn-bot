@@ -32,7 +32,7 @@ def _fallback_sbp():
     }
 
 
-def _db_to_legacy(db_tariffs: list[dict]) -> dict:
+def _db_to_legacy(db_tariffs: list[dict], lang: str = "ru") -> dict:
     """Convert DB tariff list to legacy dict format."""
     result = {}
     for t in db_tariffs:
@@ -41,39 +41,41 @@ def _db_to_legacy(db_tariffs: list[dict]) -> dict:
             'days': str(t['days']),
             'disc': str(t.get('discount_percent', 0)),
             'currency': t['currency'],
-            'period': t['name_ru'],
+            'period': t['name_en'] if lang == "en" else t['name_ru'],
             'db_price': t.get('price'),  # direct price from DB
+            'squad_id': t.get('squad_id'),
+            'external_squad_id': t.get('external_squad_id'),
         }
     return result
 
 
 # ---- Async DB-backed getters ----
 
-async def get_tariffs_stars_async():
+async def get_tariffs_stars_async(lang: str = "ru"):
     db = await get_tariffs_for_method('stars')
     if db:
-        return _db_to_legacy(db)
+        return _db_to_legacy(db, lang)
     return _fallback_stars()
 
 
-async def get_tariffs_crypto_async():
+async def get_tariffs_crypto_async(lang: str = "ru"):
     db = await get_tariffs_for_method('crypto')
     if db:
-        return _db_to_legacy(db)
+        return _db_to_legacy(db, lang)
     return _fallback_crypto()
 
 
-async def get_tariffs_sbp_async():
+async def get_tariffs_sbp_async(lang: str = "ru"):
     db = await get_tariffs_for_method('SBP_APAY')
     if db:
-        return _db_to_legacy(db)
+        return _db_to_legacy(db, lang)
     return _fallback_sbp()
 
 
-async def get_tariffs_crystal_async():
+async def get_tariffs_crystal_async(lang: str = "ru"):
     db = await get_tariffs_for_method('CRYSTAL')
     if db:
-        return _db_to_legacy(db)
+        return _db_to_legacy(db, lang)
     return _fallback_sbp()
 
 

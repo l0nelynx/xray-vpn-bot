@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Row, Col, Select, Typography, Card, Tag } from "antd";
+import { Row, Col, Select, Typography, Card, Tag, message } from "antd";
 import RevenueChart from "../components/RevenueChart";
 import UserGrowthChart from "../components/UserGrowthChart";
 import PaymentMethodPieChart from "../components/PaymentMethodPieChart";
@@ -7,22 +7,7 @@ import StatsCard from "../components/StatsCard";
 import { api } from "../api/client";
 import type { OverviewStats, OrderStatusStat } from "../api/types";
 import useIsMobile from "../hooks/useIsMobile";
-
-const statusTagColor: Record<string, string> = {
-  created: "blue",
-  confirmed: "green",
-  delivered: "cyan",
-  failed: "red",
-  cancelled: "orange",
-};
-
-const periodOptions = [
-  { value: "today", label: "Today" },
-  { value: "yesterday", label: "Yesterday" },
-  { value: "week", label: "Week" },
-  { value: "month", label: "Month" },
-  { value: "6month", label: "6 Months" },
-];
+import { STATUS_COLORS, PERIOD_OPTIONS } from "../utils/constants";
 
 export default function StatsPage() {
   const [period, setPeriod] = useState("month");
@@ -38,6 +23,9 @@ export default function StatsPage() {
     ]).then(([s, os]) => {
       setStats(s);
       setOrderStatuses(os);
+    }).catch(() => {
+      message.error("Failed to load statistics");
+    }).finally(() => {
       setLoading(false);
     });
   }, []);
@@ -67,7 +55,7 @@ export default function StatsPage() {
           value={period}
           onChange={setPeriod}
           style={{ width: 130 }}
-          options={periodOptions}
+          options={PERIOD_OPTIONS}
         />
       </div>
 
@@ -111,7 +99,7 @@ export default function StatsPage() {
                   borderBottom: "1px solid rgba(255,255,255,0.04)",
                 }}
               >
-                <Tag color={statusTagColor[s.status] || "default"} style={{ margin: 0 }}>
+                <Tag color={STATUS_COLORS[s.status] || "default"} style={{ margin: 0 }}>
                   {s.status}
                 </Tag>
                 <span style={{ color: "rgba(255,255,255,0.85)", fontWeight: 600, fontSize: 16 }}>

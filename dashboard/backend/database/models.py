@@ -62,6 +62,17 @@ class CacheVersion(Base):
     version: Mapped[int] = mapped_column(Integer, default=0)
 
 
+class SquadProfile(Base):
+    __tablename__ = "squad_profiles"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(100))
+    squad_id: Mapped[str] = mapped_column(String(100))
+    external_squad_id: Mapped[str] = mapped_column(String(100))
+
+    tariffs: Mapped[list["TariffPlan"]] = relationship(back_populates="squad_profile")
+
+
 class TariffPlan(Base):
     __tablename__ = "tariff_plans"
 
@@ -74,8 +85,10 @@ class TariffPlan(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     discount_percent: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[str] = mapped_column(String(30), nullable=True)
+    squad_profile_id: Mapped[int] = mapped_column(ForeignKey("squad_profiles.id"), nullable=True)
 
     prices: Mapped[list["TariffPrice"]] = relationship(back_populates="tariff", cascade="all, delete-orphan")
+    squad_profile: Mapped["SquadProfile"] = relationship(back_populates="tariffs")
 
 
 class TariffPrice(Base):
