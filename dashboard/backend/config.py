@@ -24,3 +24,11 @@ def get_dashboard_password() -> str:
 
 def get_secret_key() -> str:
     return get_config().get("dashboard_secret", "xray-vpn-dashboard-jwt-secret-key")
+
+
+def get_telemt_server() -> str:
+    return get_config().get("telemt_server", "")
+
+
+def get_telemt_header() -> str:
+    return get_config().get("telemt_header", "")

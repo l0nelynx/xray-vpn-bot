@@ -14,6 +14,7 @@ import {
   ShoppingOutlined,
   AppstoreOutlined,
   TeamOutlined,
+  CloudServerOutlined,
 } from "@ant-design/icons";
 import { clearToken } from "../api/client";
 import useIsMobile from "../hooks/useIsMobile";
@@ -28,6 +29,7 @@ const menuItems = [
   { key: "/tariffs", icon: <ShoppingOutlined />, label: "Tariffs" },
   { key: "/menus", icon: <AppstoreOutlined />, label: "Bot Menus" },
   { key: "/squads", icon: <TeamOutlined />, label: "Squads" },
+  { key: "/telemt", icon: <CloudServerOutlined />, label: "Telemt" },
 ];
 
 export default function Layout() {

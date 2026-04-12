@@ -118,6 +118,88 @@ export interface MenuButton {
   visibility_condition: string;
 }
 
+// Telemt types
+export interface TelmtEnvelope<T> {
+  ok: boolean;
+  data: T;
+  revision: string;
+}
+
+export interface TelmtSystemInfo {
+  version: string;
+  target_arch: string;
+  target_os: string;
+  build_profile: string;
+  git_commit?: string;
+  build_time_utc?: string;
+  rustc_version?: string;
+  process_started_at_epoch_secs: number;
+  uptime_seconds: number;
+  config_path: string;
+  config_hash: string;
+  config_reload_count: number;
+  last_config_reload_epoch_secs?: number;
+}
+
+export interface TelmtSummary {
+  uptime_seconds: number;
+  connections_total: number;
+  connections_bad_total: number;
+  handshake_timeouts_total: number;
+  configured_users: number;
+}
+
+export interface TelmtHealth {
+  status: string;
+  read_only: boolean;
+}
+
+export interface TelmtRuntimeGates {
+  accepting_new_connections: boolean;
+  conditional_cast_enabled: boolean;
+  me_runtime_ready: boolean;
+  me2dc_fallback_enabled: boolean;
+  use_middle_proxy: boolean;
+  startup_status: string;
+  startup_stage: string;
+  startup_progress_pct: number;
+}
+
+export interface TelmtUserLink {
+  classic: string[];
+  secure: string[];
+  tls: string[];
+}
+
+export interface TelmtUser {
+  username: string;
+  in_runtime: boolean;
+  user_ad_tag: string | null;
+  max_tcp_conns: number | null;
+  expiration_rfc3339: string | null;
+  data_quota_bytes: number | null;
+  max_unique_ips: number | null;
+  current_connections: number;
+  active_unique_ips: number;
+  active_unique_ips_list: string[];
+  recent_unique_ips: number;
+  recent_unique_ips_list: string[];
+  total_octets: number;
+  links: TelmtUserLink;
+}
+
+export interface TelmtSecurityPosture {
+  api_read_only: boolean;
+  api_whitelist_enabled: boolean;
+  api_whitelist_entries: number;
+  api_auth_header_enabled: boolean;
+  proxy_protocol_enabled: boolean;
+  log_level: string;
+  telemetry_core_enabled: boolean;
+  telemetry_user_enabled: boolean;
+  telemetry_me_level: string;
+}
+
 export interface MenuScreen {
   id: number;
   slug: string;
