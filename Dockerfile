@@ -8,7 +8,7 @@ RUN touch ./db.sqlite3
 RUN apk add --no-cache bash curl
 
 COPY ./app ./app
-COPY ./uvicorn ./uvicorn
+# COPY ./uvicorn ./uvicorn
 COPY ./main.py ./main.py
 COPY ./support.py ./support.py
 
