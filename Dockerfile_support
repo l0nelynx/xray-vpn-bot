@@ -6,9 +6,9 @@ COPY requirements_support.txt ./
 RUN pip install --no-cache-dir -r requirements_support.txt
 RUN apk add --no-cache bash procps
 
-COPY ./config.yml ./config.yml
+# COPY ./config.yml ./config.yml
 COPY ./support.py ./support.py
-COPY ./support_db.py ./support_db.py
+# COPY ./support_db.py ./support_db.py
 # COPY ./db/db.sqlite3 ./db/db.sqlite3
 
 CMD ["/bin/sh", "-c", "python support.py"]
