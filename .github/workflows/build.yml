@@ -31,12 +31,20 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}  # автоматически доступен
 
-      - name: Build and push bot
+      - name: Build and push seller-bot
         uses: docker/build-push-action@v5
         with:
           context: ./
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/bot:${{ steps.tag.outputs.TAG }}
+          tags: ghcr.io/${{ github.repository_owner }}/seller-bot:${{ steps.tag.outputs.TAG }}
+
+      - name: Build and push support-bot
+        uses: docker/build-push-action@v5
+        with:
+          context: ./
+          file: ./Dockerfile_support
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/support-bot:${{ steps.tag.outputs.TAG }}
 
       - name: Build and push dashboard
         uses: docker/build-push-action@v5
