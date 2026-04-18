@@ -36,11 +36,11 @@ jobs:
         with:
           context: ./
           push: true
-          tags: ghcr.io/${{ github.repository }}/backend:${{ steps.tag.outputs.TAG }}
+          tags: ghcr.io/${{ github.repository_owner }}/bot:${{ steps.tag.outputs.TAG }}
 
       - name: Build and push dashboard
         uses: docker/build-push-action@v5
         with:
           context: ./dashboard
           push: true
-          tags: ghcr.io/${{ github.repository }}/frontend:${{ steps.tag.outputs.TAG }}
+          tags: ghcr.io/${{ github.repository_owner }}/dashboard:${{ steps.tag.outputs.TAG }}
