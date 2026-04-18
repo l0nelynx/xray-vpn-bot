@@ -2,84 +2,79 @@
 # Copy this file to config.yml and fill in your actual values
 # NEVER commit config.yml to git - it contains sensitive data!
 
-# ===== ESSENTIAL SETTINGS =====
-token: "yourbottoken"                          # Main Telegram bot token
-support_token: "yoursupportbottoken"           # Support bot token
-admin_id: 123456789                            # Your Telegram ID (admin)
-test_id: 987654321                             # Test user ID (optional)
+# ===== MAIN =====
+branding_name: "YourVPN"                           # Service name shown to users
+support_bot_id: "@YourSupportBot"                  # Support bot @username mention
+news_url: "https://t.me/YourNewsChannel"           # News / announcements channel
+agreement_url: "https://example.com/agreement"     # User agreement URL
+policy_url: "https://example.com/policy"           # Privacy policy URL
+uvicorn_host: "0.0.0.0"                            # Webhook server host
+uvicorn_port: 5000                                 # Webhook server port
+# uvicorn_ssl_key: "./uvicorn/ssl/key.pem"         # (disabled: SSL is terminated upstream, see app/settings.py)
+# uvicorn_ssl_cert: "./uvicorn/ssl/fullchain.pem"  # (disabled)
 
-# ===== MARZBAN VPN CONFIGURATION =====
-marz_url: "https://example.com:8000"           # Marzban API/Dashboard address
-auth_name: "username"                          # Marzban API login
-auth_pass: "password"                          # Marzban API password
+# ===== BOTS =====
+token: "yourbottoken"                              # Main user-facing bot token
+support_token: "yoursupportbottoken"               # Support bot token
+admin_bot_token: "youradminbottoken"               # Admin bot token (admin panel / broadcasts)
+admin_id: 123456789                                # Admin Telegram user ID
+news_id: -1001234567890                            # News channel ID (numeric, for broadcasts)
 
-# ===== PRICING CONFIGURATION =====
-stars_price: 150                               # Base price of 1-month plan in TG Stars
-crypto_price: 2.00                             # Base price of 1-month plan in USDT
-sbp_price: 150                                 # Base price of 1-month plan in RUB (SBP)
-discount: 5                                    # Base discount in % for 3-month+ plans
+# ===== REMNAWAVE =====
+remnawave_url: "https://panel.example.com"         # Remnawave panel URL
+remnawave_token: "your-remnawave-api-token"        # Remnawave API token (long-lived JWT)
+rw_free_id: "uuid-of-free-squad"                   # Internal Squad ID used for FREE plan users
+rw_pro_id: "uuid-of-pro-squad"                     # Internal Squad ID used for PRO plan users
+rw_ext_free_id: "uuid-of-ext-free-squad"           # External Squad ID for FREE users (no extended access)
+rw_ext_pro_id: "uuid-of-ext-pro-squad"             # External Squad ID for PRO users (extended access)
 
-# ===== FREE PLAN SETTINGS =====
-free_traffic: 5                                # Traffic limit in GB for FREE plan
-free_days: 30                                  # Plan limit in Days for FREE plan
+# ===== DASHBOARD =====
+dashboard_login: admin                             # Dashboard admin login
+dashboard_password: change-me                      # Dashboard admin password
+dashboard_secret: change-me-to-random-string       # JWT secret for dashboard sessions
 
-# ===== LOCALIZATION =====
-language: ru                                   # Language code (currently: ru)
+# ===== TELEMT (external server management) =====
+telemt_server: "https://telemt.example.com"        # Telemt API base URL (host management)
+telemt_header: "your-telemt-auth-header"           # Authorization header value for Telemt
 
-# ===== BOT LINKS & REFERENCES =====
-support_bot_id: "@YourSupportBot"              # Support bot @username mention
-bot_url: "https://t.me/YourMainBot"            # Main bot link
-news_url: "https://t.me/YourNewsChannel"       # News channel link
-agreement_url: "https://example.com/agreement" # User agreement URL
-policy_url: "https://example.com/policy"       # Privacy policy URL
-news_id: -1001234567890                        # News channel ID (for broadcasts)
+# ===== PROMO =====
+promo_discount: 20                                 # Discount (%) granted by a promo code
+promo_days_reward: 3                               # Extra days granted by a promo code
+admin_logs_length: 20                              # Number of recent ERROR rows shown in admin logs panel
 
 # ===== PAYMENT GATEWAY: CRYPTOBOT =====
-crypto: "UQCiOJeH4xC_XtyNcFXNX9MpHxc7NMyD1BkCeKFcBuC9tfVH"  # CryptoBot donation link
-crypto_bot_token: "438815:AAsvxLeze45RRirq8Cl7QtGL0N6cRvWpPH8"  # CryptoBot API token
+crypto_bot_token: "your_cryptobot_api_token"       # CryptoBot API token
 
 # ===== PAYMENT GATEWAY: CRYSTAL PAY =====
-crystal_login: "your_crystal_login"            # Crystal Pay login
-crystal_secret: "your_crystal_secret"          # Crystal Pay secret key
-crystal_salt: "your_crystal_salt"              # Crystal Pay salt
+crystal_login: "your_crystal_login"
+crystal_secret: "your_crystal_secret"
+crystal_salt: "your_crystal_salt"
 crystal_webhook: "https://example.com:5000/crystal_webhook"  # Crystal Pay webhook URL
 
 # ===== PAYMENT GATEWAY: A-PAYS =====
-apay_id: 1234                                  # A-Pays merchant ID
-apay_secret: "your_apay_secret"                # A-Pays secret key
-apay_api_url: "https://apays.io"               # A-Pays API URL
+apay_id: 1234                                      # A-Pays merchant ID
+apay_secret: "your_apay_secret"                    # A-Pays secret key
+apay_api_url: "https://apays.io"
 
-# ===== PAYMENT GATEWAY: PLATEGA =====
-platega_api_key: "your_platega_api_key"        # Platega API key
-platega_merchant_id: "your_merchant_uuid"      # Platega merchant ID (UUID)
-platega_url: "https://app.platega.io"          # Platega API URL
+# ===== BASE PRICES =====
+# These values are used only on first launch to seed default tariffs.
+# After deployment, manage tariffs and menus through the Dashboard.
+stars_price: 150                                   # 1-month base price in Telegram Stars
+crypto_price: 2                                    # 1-month base price in USDT
+sbp_price: 150                                     # 1-month base price in RUB (SBP)
+discount: 5                                        # Base discount (%) for plans of 3+ months
+free_traffic: 10                                   # Traffic limit (GB) for FREE plan
+free_days: 30                                      # Duration (days) for FREE plan
 
-# ===== PAYMENT GATEWAY: DIGISELLER =====
-dig_item_id_0: "5422669"                       # Digiseller item ID for product
-
-# ===== SERVER CONFIGURATION =====
-uvicorn_host: '0.0.0.0'                        # Server host address
-uvicorn_port: 5000                             # Server port
-uvicorn_ssl_key: "./uvicorn/ssl/key.pem"       # Path to SSL private key
-uvicorn_ssl_cert: "./uvicorn/ssl/fullchain.pem"  # Path to SSL certificate
-
-# ===== WEBHOOK CONFIGURATION =====
-webhook_host: "https://example.com:5000/payment_webhook"  # Main payment webhook URL
-crystal_webhook_host: "https://example.com:5000"  # Crystal Pay webhook host
-
-# ===== STORE (GGSel) =====
-store_url: "https://store.example.com"             # Store backend URL (order-params API)
-store_api_token: "your_store_api_token"            # Store API Bearer token
-
-# ===== DASHBOARD =====
-dashboard_login: admin                              # Dashboard admin login
-dashboard_password: your-secure-password            # Dashboard admin password
-dashboard_secret: change-me-to-random-string        # JWT secret key for dashboard
+# ===== LEGACY (kept for backwards compatibility - not required for new deploys) =====
+# marz_url: "https://example.com:8000"
+# auth_name: "username"
+# auth_pass: "password"
 
 # ===== NOTES =====
-# 1. Replace all placeholder values with your actual credentials
-# 2. URLs must include protocol (https:// or http://)
-# 3. For production, use HTTPS and valid SSL certificates
-# 4. Keep this file secure - never share or commit it to git
-# 5. For payment gateways, only fill in credentials for gateways you use
-# 6. Ensure firewall allows your configured port (default: 5000)
+# 1. Replace every placeholder with real credentials.
+# 2. URLs must include protocol (https:// or http://).
+# 3. For production, terminate TLS on a reverse proxy (nginx, Caddy, Traefik).
+# 4. Keep this file out of version control.
+# 5. Fill in only the payment gateway blocks you actually use.
+# 6. Ensure the firewall allows the configured uvicorn_port (default: 5000).

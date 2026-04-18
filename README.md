@@ -1,86 +1,132 @@
 # Telegram VPN Sales Bot
 
-Advanced Telegram bot for selling VPN subscriptions powered by Marzban VPN with multi-payment gateway support.
+Advanced Telegram bot suite for selling VPN subscriptions, backed by **Remnawave** and driven through a web **Dashboard** with a built-in tariff/menu builder.
 
 ## Features
 - 🔐 Sell VPN subscriptions via Telegram
-- 💳 Multiple payment gateways (CryptoBot, Crystal Pay, A-Pays, Digiseller, Platega)
-- 🌐 Integration with Marzban VPN API
+- 💳 Multiple payment gateways (CryptoBot, Crystal Pay, A-Pays)
+- 🌐 Remnawave VPN API integration (internal + external squads)
+- 🧩 Web Dashboard with tariff constructor and menu builder
+- 🛰️ Telemt server management from the Dashboard
 - 💬 Dedicated support bot
-- 📊 User database with SQLite
-- 🚀 FastAPI webhook integration
-- 🐳 Docker & Docker Compose support
-- 🔄 Async/await architecture with aiogram 3.x
-- 📱 Responsive keyboard UI optimization
+- 🛠️ Admin bot for broadcasts, moderation and logs
+- 📊 SQLite storage with async SQLAlchemy
+- 🚀 FastAPI webhook endpoints for payments
+- 🐳 Docker Compose deployment (seller-bot + support-bot + dashboard)
+- 🔄 Async aiogram 3.x architecture
+
+## Architecture
+
+The project ships three containers orchestrated by `docker-compose.yml`:
+
+| Service | Image | Purpose |
+|---------|-------|---------|
+| `seller-bot` | `ghcr.io/l0nelynx/seller-bot` | Main user-facing Telegram bot + payment webhooks (port `5000`) |
+| `support-bot` | `ghcr.io/l0nelynx/support-bot` | Standalone bot for user↔admin conversations |
+| `dashboard` | `ghcr.io/l0nelynx/dashboard` | React + FastAPI admin panel (port `8000`, mapped to `8080` on host) |
+
+Images are built by CI (`.github/workflows/build.yml` and `.gitlab-ci.yml`) and published as:
+- `:latest` — built from `main`
+- `:staging` — built from `develop`
+- `:sha-<short>` / `:build-<n>` — immutable per-build tags
+
+## Dashboard
+
+The Dashboard is a web app bundled with the project (`dashboard/`) that turns configuration into a UI workflow:
+
+- **Tariff constructor** — create, reorder, price and toggle subscription plans without touching code. Changes propagate to the bot automatically.
+- **Menu builder** — design the bot's inline menus (screens, buttons, links) and edit them live.
+- **Users & transactions** — browse customers, subscriptions and payment history.
+- **Promos** — manage promo codes and bonus settings.
+- **Squad profiles** — bind Remnawave squads to plans.
+- **Telemt control** — view system info/health of the external Telemt server and manage host/server state directly from the Dashboard.
+- **Stats** — traffic and revenue dashboards.
+
+The Dashboard authenticates via `dashboard_login` / `dashboard_password` from `config.yml` and issues JWTs signed with `dashboard_secret`. It is mounted at `/bot/dashboard` (expose it behind a reverse proxy).
 
 ## Quick Start
 
 ### Prerequisites
-- Python 3.10+
-- Docker & Docker Compose (optional)
-- Marzban VPN instance
-- Telegram Bot Token
+- Docker & Docker Compose
+- A running Remnawave panel with an API token
+- Telegram bot tokens (main bot, support bot, admin bot)
 - (Optional) Payment gateway credentials
+- (Optional) Telemt server if you want host management from the Dashboard
 
-### Configuration
-1. Copy the example config file:
+### 1. Configure
+
 ```bash
 cp config-example.yml config.yml
+# then edit config.yml
 ```
 
-2. Edit `config.yml` with your sensitive data (see `config-example.yml` for all available options):
+Fill in at minimum:
+
 ```yaml
-# Essential Configuration
-token: "yourbottoken"
-support_token: "yoursupportbottoken"
-admin_id: "id"
-marz_url: "https://example.com:8000"
-auth_name: "username"
-auth_pass: "password"
+branding_name: "YourVPN"
+token: "<main bot token>"
+support_token: "<support bot token>"
+admin_bot_token: "<admin bot token>"
+admin_id: 123456789
 
-# Pricing
-stars_price: 150              # Base price in TG Stars (1-month)
-crypto_price: 2               # Base price in USDT (1-month)
-sbp_price: 150                # Base price in RUB (1-month)
-discount: 5                   # Discount % for 3+ month plans
+remnawave_url: "https://panel.example.com"
+remnawave_token: "<remnawave api token>"
+rw_free_id: "<free squad uuid>"
+rw_pro_id: "<pro squad uuid>"
+rw_ext_free_id: "<external free squad uuid>"
+rw_ext_pro_id: "<external pro squad uuid>"
 
-# Free Plan Settings
-free_traffic: 5               # Traffic limit in GB
-free_days: 30                 # Duration in days
-
-# Payment Gateways
-crypto_bot_token: "token"
-crystal_login: "login"
-crystal_secret: "secret"
-# ... additional payment gateway configs
+dashboard_login: admin
+dashboard_password: <strong password>
+dashboard_secret: <random string>
 ```
 
-3. **IMPORTANT SECURITY**: Add `config.yml` to `.gitignore` to prevent exposing sensitive data!
+> ⚠️ Add `config.yml` to `.gitignore` — it contains secrets.
 
-4. Create database:
+### 2. Prepare the database
+
 ```bash
 mkdir -p db
 touch db/db.sqlite3
 ```
 
-### Run with Docker (VPN bot only)
+### 3. Prepare the shared Docker network
+
+The compose file expects an external network named `backend-network` (typical when running behind a reverse proxy). Create it once:
+
 ```bash
-docker build -t xray-vpn-bot .
-docker run -d --name vpn-bot -v $(pwd)/config.yml:/app/config.yml xray-vpn-bot
+docker network create backend-network
 ```
 
-### Run with Docker Compose (VPN + Support bot)
+### 4. Launch
+
+Pull the published images and start everything:
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+Or build locally from source:
+
 ```bash
 docker compose build
 docker compose up -d
 ```
 
-### Run Locally
+Services:
+- Seller bot webhooks: `127.0.0.1:5000`
+- Dashboard: `127.0.0.1:8080` (FastAPI listens on `:8000` inside the container)
+
+Put a reverse proxy (nginx / Caddy / Traefik) in front to terminate TLS and expose the Dashboard at `/bot/dashboard` and the payment webhook endpoints on your public domain.
+
+### Running locally (without Docker)
+
 ```bash
 python -m venv venv
-# On Windows:
+# Windows:
 venv\Scripts\activate
-# On macOS/Linux:
+# Linux / macOS:
 source venv/bin/activate
 
 pip install -r requirements.txt
@@ -89,193 +135,154 @@ python support.py &
 wait
 ```
 
-### Environment Setup (Local Development)
-```bash
-python -m venv venv
-source venv/bin/activate  # or 'venv\Scripts\activate' on Windows
-pip install -r requirements.txt
-```
+The Dashboard has its own stack (`dashboard/backend` + `dashboard/frontend`); see `dashboard/Dockerfile` for the reference build.
 
-## Configuration Options
+## Configuration Reference
 
-### Essential Settings
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `token` | string | Telegram bot token |
-| `support_token` | string | Support bot token |
-| `admin_id` | integer | Admin Telegram ID |
-| `marz_url` | string | Marzban API/Dashboard URL |
-| `auth_name` | string | Marzban API username |
-| `auth_pass` | string | Marzban API password |
+### Main
 
-### Pricing & Plans
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `stars_price` | integer | 1-month plan price in TG Stars |
-| `crypto_price` | float | 1-month plan price in USDT |
-| `sbp_price` | integer | 1-month plan price in RUB (SBP) |
-| `discount` | integer | Discount % for 3+ month plans |
-| `free_traffic` | integer | Free plan traffic limit (GB) |
-| `free_days` | integer | Free plan duration (days) |
+| Parameter | Description |
+|-----------|-------------|
+| `branding_name` | Service name shown to users |
+| `support_bot_id` | Support bot `@username` mention |
+| `news_url` | Public news/announcements channel link |
+| `agreement_url`, `policy_url` | User agreement and privacy policy URLs |
+| `uvicorn_host`, `uvicorn_port` | Webhook server bind address/port |
+
+### Bots
+
+| Parameter | Description |
+|-----------|-------------|
+| `token` | Main Telegram bot token |
+| `support_token` | Support bot token |
+| `admin_bot_token` | Admin bot token (admin panel + broadcasts) |
+| `admin_id` | Admin Telegram user ID |
+| `news_id` | Numeric ID of the news channel (for broadcasts) |
+
+### Remnawave
+
+| Parameter | Description |
+|-----------|-------------|
+| `remnawave_url` | Remnawave panel URL |
+| `remnawave_token` | Remnawave API token |
+| `rw_free_id` / `rw_pro_id` | Internal squad IDs for FREE / PRO users |
+| `rw_ext_free_id` / `rw_ext_pro_id` | External squad IDs (extended-access variants) |
+
+### Dashboard
+
+| Parameter | Description |
+|-----------|-------------|
+| `dashboard_login` | Dashboard admin login |
+| `dashboard_password` | Dashboard admin password |
+| `dashboard_secret` | JWT signing secret |
+
+### Telemt
+
+| Parameter | Description |
+|-----------|-------------|
+| `telemt_server` | Telemt API base URL |
+| `telemt_header` | Authorization header value forwarded to Telemt |
+
+### Promo / Admin
+
+| Parameter | Description |
+|-----------|-------------|
+| `promo_discount` | Promo code discount in % |
+| `promo_days_reward` | Promo code extra days reward |
+| `admin_logs_length` | Rows shown in the admin logs panel |
 
 ### Payment Gateways
+
 | Parameter | Description |
 |-----------|-------------|
 | `crypto_bot_token` | CryptoBot API token |
-| `crystal_login` | Crystal Pay login |
-| `crystal_secret` | Crystal Pay secret key |
-| `crystal_salt` | Crystal Pay salt |
-| `crystal_webhook` | Crystal Pay webhook URL |
-| `apay_id` | A-Pays merchant ID |
-| `apay_secret` | A-Pays secret key |
-| `platega_api_key` | Platega API key |
-| `platega_merchant_id` | Platega merchant ID |
-| `dig_item_id_0` | Digiseller item ID |
+| `crystal_login` / `crystal_secret` / `crystal_salt` / `crystal_webhook` | Crystal Pay credentials + webhook URL |
+| `apay_id` / `apay_secret` / `apay_api_url` | A-Pays merchant ID, secret, API URL |
 
-### Server & Webhooks
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `uvicorn_host` | string | Server host (default: 0.0.0.0) |
-| `uvicorn_port` | integer | Server port (default: 5000) |
-| `uvicorn_ssl_key` | string | Path to SSL private key |
-| `uvicorn_ssl_cert` | string | Path to SSL certificate |
-| `crystal_webhook_host` | string | Crystal Pay webhook URL |
-| `webhook_host` | string | Payment webhook URL |
+### Seed prices
 
-### URLs & References
+These values seed defaults on first launch only — after that, manage tariffs through the Dashboard's tariff constructor:
+
 | Parameter | Description |
 |-----------|-------------|
-| `agreement_url` | User agreement URL |
-| `policy_url` | Privacy policy URL |
-| `bot_url` | Telegram bot link |
-| `news_url` | Telegram channel for news |
-| `support_bot_id` | Support bot mention (@username) |
-
-### Localization
-| Parameter | Values | Description |
-|-----------|--------|-------------|
-| `language` | `ru` | Bot language (currently Russian only) |
+| `stars_price` | 1-month base price in Telegram Stars |
+| `crypto_price` | 1-month base price in USDT |
+| `sbp_price` | 1-month base price in RUB (SBP) |
+| `discount` | Base discount (%) for plans of 3+ months |
+| `free_traffic` | FREE plan traffic limit (GB) |
+| `free_days` | FREE plan duration (days) |
 
 ## Project Structure
+
 ```
 .
-├── app/                          # Application code
-│   ├── api/                      # Payment gateway integrations
+├── app/                          # Seller bot application code
+│   ├── admin/                    # Admin bot (broadcasts, bans, logs, migrations, ...)
+│   ├── api/                      # Payment gateway + Remnawave + Telemt clients
 │   │   ├── a_pay.py
 │   │   ├── crystal_pay.py
-│   │   ├── digiseller.py
-│   │   ├── ggsel.py
-│   │   └── remnawave/
-│   ├── database/                 # Database models & queries
-│   │   ├── models.py
-│   │   └── requests.py
-│   ├── handlers/                 # Bot command & event handlers
-│   │   ├── base.py
-│   │   ├── payments.py
-│   │   ├── broadcast.py
-│   │   └── events.py
-│   ├── keyboards/                # UI buttons & keyboards
-│   │   ├── keyboards.py
-│   │   └── buttons.py
-│   ├── locale/                   # Language files
-│   │   └── lang_ru.py
-│   ├── marzban/                  # Marzban VPN API
-│   │   ├── marzban.py
-│   │   └── templates.py
-│   ├── support/                  # Support bot database
-│   │   └── db.py
-│   ├── settings.py               # Configuration loader
-│   ├── utils.py                  # Utility functions
-│   └── views.py                  # View helpers
-├── db/                           # Database storage
-│   └── db.sqlite3
-├── uvicorn/                      # SSL certificates
-│   └── ssl/
-├── config-example.yml            # Example configuration
-├── config.yml                    # Sensitive configuration (gitignored)
-├── Dockerfile                    # Docker image definition
-├── docker-compose.yml            # Docker Compose orchestration
-├── main.py                       # VPN bot entry point
+│   │   ├── remnawave/
+│   │   └── telemt.py
+│   ├── database/                 # Async SQLAlchemy models & queries
+│   ├── handlers/                 # Bot command and callback handlers
+│   ├── keyboards/                # Inline/reply keyboards
+│   ├── locale/                   # Russian + English locale files
+│   ├── marzban/                  # (legacy) kept for migration purposes
+│   ├── settings.py               # Config loader + bot/uvicorn bootstrap
+│   └── tariffs.py                # Runtime tariff helpers
+├── dashboard/                    # Admin dashboard (React + FastAPI)
+│   ├── backend/                  # FastAPI app, routers, JWT auth
+│   ├── frontend/                 # React + Vite SPA
+│   └── Dockerfile
+├── db/                           # SQLite storage (mounted into containers)
+├── uvicorn/                      # Optional SSL artifacts
+├── main.py                       # Seller bot entry point
 ├── support.py                    # Support bot entry point
-├── requirements.txt              # Python dependencies
-└── README.md                     # This file
+├── Dockerfile                    # Seller bot image
+├── Dockerfile_support            # Support bot image
+├── docker-compose.yml            # Full stack orchestration
+├── config-example.yml            # Example configuration
+├── config.yml                    # Your configuration (gitignored)
+├── requirements.txt              # Seller bot deps
+├── requirements_support.txt      # Support bot deps
+└── .github/workflows/build.yml   # CI: build & push to GHCR
 ```
 
 ## Dependencies
 
-Core Framework:
-- **aiogram** 3.21+ - Modern async Telegram bot framework
-- **FastAPI** 0.116+ - Web framework for webhooks
-- **SQLAlchemy** 2.0+ - ORM for database operations
+Core:
+- **aiogram** 3.21+ — async Telegram framework
+- **FastAPI** 0.116+ — webhook endpoints + Dashboard API
+- **SQLAlchemy** 2.0+ / **aiosqlite** — async ORM on SQLite
+- **uvicorn** / **slowapi** — ASGI server + rate limiting
 
-HTTP & Data:
-- **aiohttp** 3.13+ - Async HTTP client
-- **requests** 2.32+ - Synchronous HTTP client
-- **aiosend** 3.0+ - CryptoBot API wrapper
+HTTP / data:
+- **aiohttp**, **requests**, **httpx** — HTTP clients
+- **aiosend** — CryptoBot wrapper
+- **orjson**, **PyYAML**, **pydantic** — (de)serialization + validation
 
-Database:
-- **aiosqlite** 0.21+ - Async SQLite driver
-
-Configuration & Utils:
-- **PyYAML** 6.0+ - YAML configuration parsing
-- **python-dotenv** 1.1+ - Environment variable loading
-- **pydantic** 2.11+ - Data validation
-- **magic-filter** 1.0+ - Advanced filtering for handlers
-- **orjson** 3.11+ - Fast JSON serialization
-
-VPN Integration:
-- **remnawave** 2.1+ - Marzban VPN API wrapper
+VPN integration:
+- **remnawave** 2.1+ — Remnawave API SDK
 
 ## Troubleshooting
 
-### Common Issues
+**`config file not found`** — the container must mount `config.yml` at `/usr/src/app/config.yml` (seller/support) or `/app/config.yml` (dashboard). Check the `volumes:` in `docker-compose.yml`.
 
-**Bot token not recognized:**
-```
-AttributeError: Bot token not found
-```
-Ensure `token` is set in `config.yml`
+**`'token' is not set in config.yml`** — `config.yml` is loaded but missing the main bot token. Compare against `config-example.yml`.
 
-**Database connection error:**
-```
-FileNotFoundError: config file not found
-```
-Run: `mkdir -p db && touch db/db.sqlite3`
+**Payment webhooks not firing** — verify your reverse proxy forwards to port `5000` of the seller-bot container, and that `crystal_webhook` / A-Pays callback URLs point to the public domain (HTTPS).
 
-**Webhook not receiving payments:**
-- Verify `webhook_host`, `crystal_webhook_host` match your domain
-- Check SSL certificates are valid
-- Ensure firewall allows port 5000 (or configured port)
+**Remnawave connection failed** — verify `remnawave_url` includes `https://`, the API token is valid, and the squad UUIDs (`rw_free_id`, `rw_pro_id`, `rw_ext_*`) exist in the panel.
 
-**Marzban connection failed:**
-- Verify `marz_url` includes protocol (https://)
-- Check `auth_name` and `auth_pass` credentials
-- Ensure Marzban API is accessible from bot server
+**Dashboard 401 on login** — `dashboard_login` / `dashboard_password` must match what you enter in the UI; rotating `dashboard_secret` invalidates existing sessions.
 
-## Development
-
-### Running Tests
-```bash
-python test.py
-python test_keyboards.py
-```
-
-### Building Docker Image
-```bash
-docker build -t xray-vpn-bot:latest .
-```
-
-### Database Migrations
-See `MIGRATION_GUIDE.md` for schema changes
-
-### Performance Optimization
-See `OPTIMIZATION_DETAILED.md` for keyboard and handler optimization tips
+**Telemt calls return 503** — `telemt_server` is empty or unreachable. Fill it in (and `telemt_header`) if you want host management from the Dashboard.
 
 ## License
-MIT License - see [LICENSE](LICENSE) for details
+MIT License — see [LICENSE](LICENSE).
 
 ## Support
-For issues and feature requests, please open an issue on GitHub.
+Open an issue on GitHub for bugs and feature requests.
 
 ---
 **Made with ❤️ for the VPN community**
