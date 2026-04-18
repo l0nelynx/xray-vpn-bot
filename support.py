@@ -44,6 +44,7 @@ except Exception as e:
 
 SUPPORT_TOKEN = secrets.get('support_token')
 ADMIN_ID = secrets.get('admin_id')
+BRAND = secrets.get('branding_name', 'VPN')
 
 bot = Bot(token=SUPPORT_TOKEN)
 dp = Dispatcher()
@@ -74,7 +75,7 @@ def is_admin(message: Message) -> bool:
 @dp.message(Command("start"))
 async def cmd_start(message: Message):
     """Обработчик команды /start"""
-    await message.answer("👋 Здравствуйте! Это служба поддержки CheezyVPN. "
+    await message.answer(f"👋 Здравствуйте! Это служба поддержки {BRAND}. "
                          "Напишите ваш вопрос или отправьте изображение, и мы ответим в ближайшее время.")
 
 
@@ -296,7 +297,7 @@ async def admin_text_reply(message: Message, state: FSMContext):
         # Отправляем ответ пользователю
         await bot.send_message(
             chat_id=user_id,
-            text=f"👨‍💻 <b>Поддержка CheezyVPN:</b>\n\n{message.text}",
+            text=f"👨‍💻 <b>Поддержка {BRAND}:</b>\n\n{message.text}",
             parse_mode="HTML"
         )
 
@@ -336,7 +337,7 @@ async def admin_photo_reply(message: Message, state: FSMContext):
         await bot.send_photo(
             chat_id=user_id,
             photo=message.photo[-1].file_id,
-            caption=f"👨‍💻 <b>Поддержка CheezyVPN:</b>\n\n{message.caption or ''}",
+            caption=f"👨‍💻 <b>Поддержка {BRAND}:</b>\n\n{message.caption or ''}",
             parse_mode="HTML"
         )
 
@@ -376,7 +377,7 @@ async def admin_document_reply(message: Message, state: FSMContext):
         await bot.send_document(
             chat_id=user_id,
             document=message.document.file_id,
-            caption=f"👨‍💻 <b>Поддержка CheezyVPN:</b>\n\n{message.caption or ''}",
+            caption=f"👨‍💻 <b>Поддержка {BRAND}:</b>\n\n{message.caption or ''}",
             parse_mode="HTML"
         )
 
@@ -417,7 +418,7 @@ async def admin_video_reply(message: Message, state: FSMContext):
         await bot.send_video(
             chat_id=user_id,
             video=message.video.file_id,
-            caption=f"👨‍💻 <b>Поддержка CheezyVPN:</b>\n\n{message.caption or ''}",
+            caption=f"👨‍💻 <b>Поддержка {BRAND}:</b>\n\n{message.caption or ''}",
             parse_mode="HTML"
         )
 

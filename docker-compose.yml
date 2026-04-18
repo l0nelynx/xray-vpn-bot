@@ -1,6 +1,7 @@
 services:
   seller-bot:
     container_name: seller-bot
+    image: ghcr.io/l0nelynx/seller-bot:${IMAGE_TAG:-staging}
     build:
       context: .
       dockerfile: Dockerfile
@@ -29,6 +30,7 @@ services:
           memory: 350M
   support-bot:
     container_name: support-bot
+    image: ghcr.io/l0nelynx/support-bot:${IMAGE_TAG:-staging}
     build:
       context: .
       dockerfile: Dockerfile_support
@@ -52,6 +54,7 @@ services:
           memory: 128M
   dashboard:
     container_name: dashboard
+    image: ghcr.io/l0nelynx/dashboard:${IMAGE_TAG:-staging}
     build: ./dashboard
     volumes:
       - type: bind

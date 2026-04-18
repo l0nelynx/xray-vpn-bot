@@ -1,8 +1,9 @@
 from app.settings import secrets
 
 news_url = secrets.get('news_url')
+brand = secrets.get('branding_name', 'VPN')
 
-text_help = """
+text_help = f"""
 <b>📱 Настройка VPN через Happ</b>
 
 <u>🔹 ШАГ 1: Установите приложение</u>
@@ -11,7 +12,7 @@ text_help = """
 • Android: <a href="https://play.google.com/store/apps/details?id=com.happproxy">скачать</a>
 
 <u>🔹 ШАГ 2: Получите подписку</u>
-1️⃣ Приобретите VPN-подписку 
+1️⃣ Приобретите VPN-подписку
 2️⃣ Скопируйте 🔑 <b>ссылку подключения</b> из полученного сообщения
 
 <u>🔹 ШАГ 3: Импортируйте ключ</u>
@@ -20,7 +21,7 @@ text_help = """
 3. Выберите 📋 <b>"Импорт из буфера обмена"</b>
 
 <u>🔹 ШАГ 4: Подключитесь</u>
-1. Перейдите в раздел 🌐 <b>"Cheezy VPN"</b>
+1. Перейдите в раздел 🌐 <b>"{brand}"</b>
 2. Выберите сервер из списка
 3. Нажмите 🔛 <b>кнопку подключения</b>
 
@@ -90,7 +91,7 @@ text_answers = {
     'instruction_windows': "Инструкция для Windows/Linux"
 }
 
-start_base = ("<b>Добро пожаловать в CheezyVPN!</b>\n\n"
+start_base = (f"<b>Добро пожаловать в {brand}!</b>\n\n"
               "Интернет без границ — именно так, как он задуман:\n\n"
               "🌍 <b>Доступ к любимым сервисам</b> — стриминги, нейросети, "
               "зарубежные площадки работают без ограничений\n"
@@ -101,7 +102,7 @@ start_base = ("<b>Добро пожаловать в CheezyVPN!</b>\n\n"
               "📱 <b>Простая настройка</b> — подключение в пару кликов "
               "на любом устройстве\n\n"
               "Netflix, Spotify, ChatGPT, Midjourney и другие — "
-              "всё доступно с CheezyVPN\n")
+              f"всё доступно с {brand}\n")
 start_new = "<b>Попробуй бесплатно или выбери PRO — решать тебе</b>\n\n"
 start_free = ("📱 <b>У тебя активна бесплатная подписка FREE</b>\n\n"
               "Хочешь больше?\n"
@@ -114,42 +115,42 @@ start_pro = ("⚡️ <b>Ты с нами — отлично!</b>\n"
              "Ниже — информация о текущей подписке и возможность продлить её\n\n")
 
 free_menu = (f"<b>Почти готово!</b>\n\n"
-             f"Подпишись на наш канал <a href='{news_url}'>Cheezy VPN</a>, "
+             f"Подпишись на наш канал <a href='{news_url}'>{brand}</a>, "
              f"чтобы получить бесплатный доступ\n\n"
              "Уже подписался? Жми кнопку ниже\n")
 
 free_menu_notsub = (f"<b>Ты ещё не подписался на канал</b> "
-                    f"<a href='{news_url}'>Cheezy VPN</a>\n\n"
+                    f"<a href='{news_url}'>{brand}</a>\n\n"
                     "Подпишись — и бесплатный доступ твой\n")
 
 # Telemt free subscription
 telemt_free_menu = (f"<b>Почти готово!</b>\n\n"
-                    f"Подпишись на наш канал <a href='{news_url}'>Cheezy VPN</a>, "
-                    f"чтобы получить доступ к Telegram Proxy от CheezyVPN\n\n"
+                    f"Подпишись на наш канал <a href='{news_url}'>{brand}</a>, "
+                    f"чтобы получить доступ к Telegram Proxy от {brand}\n\n"
                     "Уже подписался? Жми кнопку ниже\n")
 
 telemt_free_menu_notsub = (f"<b>Ты ещё не подписался на канал</b> "
-                           f"<a href='{news_url}'>Cheezy VPN</a>\n\n"
-                           "Подпишись — и доступ к Telegram Proxy от CheezyVPN твой\n")
+                           f"<a href='{news_url}'>{brand}</a>\n\n"
+                           f"Подпишись — и доступ к Telegram Proxy от {brand} твой\n")
 
-telemt_free_success = ("<b>Готово! Твой Telegram Proxy от CheezyVPN создан</b>\n\n"
+telemt_free_success = (f"<b>Готово! Твой Telegram Proxy от {brand} создан</b>\n\n"
                        "{links}\n\n"
                        "Жми на ссылку и добавляй прокси в Telegram\n"
                        "Учти, что ссылка работает на одного клиента - если хочешь поделиться приглашай друзей\n")
 
-telemt_free_already_exists = ("<b>У тебя уже есть Telegram Proxy от CheezyVPN</b>\n\n"
+telemt_free_already_exists = (f"<b>У тебя уже есть Telegram Proxy от {brand}</b>\n\n"
                               "{links}\n\n"
                               "Жми на ссылку и добавляй прокси в Telegram\n"
                               "Учти, что ссылка работает на одного клиента - если хочешь поделиться приглашай друзей\n")
 
-telemt_free_error = "<b>Ошибка при создании Telegram Proxy от CheezyVPN</b>\nПопробуй позже или обратись в поддержку\n"
+telemt_free_error = f"<b>Ошибка при создании Telegram Proxy от {brand}</b>\nПопробуй позже или обратись в поддержку\n"
 
 start_agreement = (
-    "<i>Используя CheezyVPN, ты соглашаешься с Пользовательским соглашением "
+    f"<i>Используя {brand}, ты соглашаешься с Пользовательским соглашением "
     "и Политикой конфиденциальности. Ознакомься с документами перед оплатой</i>\n")
 
 user_agreement = (f"""
-<b>🔒 ПОЛЬЗОВАТЕЛЬСКОЕ СОГЛАШЕНИЕ CheezyVPN</b>
+<b>🔒 ПОЛЬЗОВАТЕЛЬСКОЕ СОГЛАШЕНИЕ {brand}</b>
 
 <b>1. Предмет соглашения</b>
 1.1. Сервис предоставляет доступ к VPN через Telegram-бота
@@ -184,7 +185,7 @@ user_agreement = (f"""
 <em>Используя сервис, вы подтверждаете согласие с условиями</em>
 """)
 privacy_policy = f"""
-<b>🔐 ПОЛИТИКА КОНФИДЕНЦИАЛЬНОСТИ CheezyVPN</b>
+<b>🔐 ПОЛИТИКА КОНФИДЕНЦИАЛЬНОСТИ {brand}</b>
 
 <b>1. Собираемые данные</b>
 1.1. <u>Обязательно:</u>
