@@ -10,45 +10,52 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      matrix:
+        include:
+          - name: seller-bot
+            context: ./
+            file: ./Dockerfile
+          - name: support-bot
+            context: ./
+            file: ./Dockerfile_support
+          - name: dashboard
+            context: ./dashboard
+            file: ./dashboard/Dockerfile
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Define image tag
-        id: tag
-        run: |
-          if [ "${{ github.ref_name }}" = "main" ]; then
-            echo "TAG=latest" >> $GITHUB_OUTPUT
-          else
-            echo "TAG=staging" >> $GITHUB_OUTPUT
-          fi
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}  # автоматически доступен
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push seller-bot
+      - name: Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}
+          tags: |
+            # moving environment tags
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=staging,enable=${{ github.ref == 'refs/heads/develop' }}
+            # immutable per-build tags
+            type=sha,prefix=sha-,format=short
+            type=raw,value=build-${{ github.run_number }}
+
+      - name: Build and push ${{ matrix.name }}
         uses: docker/build-push-action@v5
         with:
-          context: ./
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/seller-bot:${{ steps.tag.outputs.TAG }}
-
-      - name: Build and push support-bot
-        uses: docker/build-push-action@v5
-        with:
-          context: ./
-          file: ./Dockerfile_support
-          push: true
-          tags: ghcr.io/${{ github.repository_owner }}/support-bot:${{ steps.tag.outputs.TAG }}
-
-      - name: Build and push dashboard
-        uses: docker/build-push-action@v5
-        with:
-          context: ./dashboard
-          push: true
-          tags: ghcr.io/${{ github.repository_owner }}/dashboard:${{ steps.tag.outputs.TAG }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
