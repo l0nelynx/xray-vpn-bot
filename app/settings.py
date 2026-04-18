@@ -50,9 +50,6 @@ _original_config = copy.deepcopy(secrets)
 if not secrets.get('token'):
     raise ValueError("❌ CRITICAL: 'token' is not set in config.yml!")
 
-if not secrets.get('ggsel_bot_token'):
-    print("⚠️ Warning: 'ggsel_bot_token' is not set in config.yml")
-
 if not secrets.get('crypto_bot_token'):
     print("⚠️ Warning: 'crypto_bot_token' is not set in config.yml")
 
