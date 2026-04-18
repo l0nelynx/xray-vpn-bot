@@ -1,8 +1,9 @@
 from app.settings import secrets
 
 news_url = secrets.get('news_url')
+brand = secrets.get('branding_name', 'VPN')
 
-text_help = """
+text_help = f"""
 <b>📱 VPN Setup via Happ</b>
 
 <u>🔹 STEP 1: Install the app</u>
@@ -20,7 +21,7 @@ Download <b>Happ</b> for:
 3. Select 📋 <b>"Import from clipboard"</b>
 
 <u>🔹 STEP 4: Connect</u>
-1. Go to 🌐 <b>"Cheezy VPN"</b> section
+1. Go to 🌐 <b>"{brand}"</b> section
 2. Select a server from the list
 3. Tap 🔛 <b>the connect button</b>
 
@@ -96,7 +97,7 @@ text_answers = {
     'instruction_windows': "Instructions for Windows/Linux"
 }
 
-start_base = ("<b>Welcome to CheezyVPN!</b>\n\n"
+start_base = (f"<b>Welcome to {brand}!</b>\n\n"
               "Internet without borders — just as it was meant to be:\n\n"
               "🌍 <b>Access your favorite services</b> — streaming, AI tools, "
               "international platforms work without restrictions\n"
@@ -107,7 +108,7 @@ start_base = ("<b>Welcome to CheezyVPN!</b>\n\n"
               "📱 <b>Easy setup</b> — connect in a few clicks "
               "on any device\n\n"
               "Netflix, Spotify, ChatGPT, Midjourney and more — "
-              "everything is available with CheezyVPN\n")
+              f"everything is available with {brand}\n")
 start_new = "<b>Try for free or choose PRO — it's up to you</b>\n\n"
 start_free = ("📱 <b>Your FREE subscription is active</b>\n\n"
               "Want more?\n"
@@ -120,40 +121,40 @@ start_pro = ("⚡️ <b>You're with us — great!</b>\n"
              "Below — information about your current subscription and the option to renew it\n\n")
 
 free_menu = (f"<b>Almost there!</b>\n\n"
-             f"Subscribe to our channel <a href='{news_url}'>Cheezy VPN</a> "
+             f"Subscribe to our channel <a href='{news_url}'>{brand}</a> "
              f"to get free access\n\n"
              "Already subscribed? Tap the button below\n")
 
 free_menu_notsub = (f"<b>You haven't subscribed to the channel yet</b> "
-                    f"<a href='{news_url}'>Cheezy VPN</a>\n\n"
+                    f"<a href='{news_url}'>{brand}</a>\n\n"
                     "Subscribe — and free access is yours\n")
 
 # Telemt free subscription
 telemt_free_menu = (f"<b>Almost there!</b>\n\n"
-                    f"Subscribe to our channel <a href='{news_url}'>Cheezy VPN</a> "
-                    f"to get Telegram Proxy by CheezyVPN access\n\n"
+                    f"Subscribe to our channel <a href='{news_url}'>{brand}</a> "
+                    f"to get Telegram Proxy by {brand} access\n\n"
                     "Already subscribed? Tap the button below\n")
 
 telemt_free_menu_notsub = (f"<b>You haven't subscribed to the channel yet</b> "
-                           f"<a href='{news_url}'>Cheezy VPN</a>\n\n"
-                           "Subscribe — and Telegram Proxy by CheezyVPN access is yours\n")
+                           f"<a href='{news_url}'>{brand}</a>\n\n"
+                           f"Subscribe — and Telegram Proxy by {brand} access is yours\n")
 
-telemt_free_success = ("<b>Done! Your Telegram Proxy by CheezyVPN account is created</b>\n\n"
+telemt_free_success = (f"<b>Done! Your Telegram Proxy by {brand} account is created</b>\n\n"
                        "{links}\n\n"
                        "Click the link and connect\n")
 
-telemt_free_already_exists = ("<b>You already have a Telegram Proxy by CheezyVPN account</b>\n\n"
+telemt_free_already_exists = (f"<b>You already have a Telegram Proxy by {brand} account</b>\n\n"
                               "{links}\n\n"
                               "Click the link and connect\n")
 
-telemt_free_error = "<b>Error creating Telegram Proxy by CheezyVPN account</b>\nTry again later or contact support\n"
+telemt_free_error = f"<b>Error creating Telegram Proxy by {brand} account</b>\nTry again later or contact support\n"
 
 start_agreement = (
-    "<b>By using CheezyVPN, you agree to the Terms of Service "
+    f"<b>By using {brand}, you agree to the Terms of Service "
     "and Privacy Policy. Please review the documents before payment</b>\n")
 
 user_agreement = (f"""
-<b>🔒 CheezyVPN TERMS OF SERVICE</b>
+<b>🔒 {brand} TERMS OF SERVICE</b>
 
 <b>1. Subject of agreement</b>
 1.1. The service provides VPN access via Telegram bot
@@ -188,7 +189,7 @@ Support: {secrets.get('support_bot_id')}
 <em>By using the service, you confirm your agreement with the terms</em>
 """)
 privacy_policy = f"""
-<b>🔐 CheezyVPN PRIVACY POLICY</b>
+<b>🔐 {brand} PRIVACY POLICY</b>
 
 <b>1. Collected data</b>
 1.1. <u>Required:</u>
@@ -418,7 +419,7 @@ msg_lang_current = "🌐 Current language: <b>English</b>\n\nChoose language:"
 
 # ==================== Button Labels ====================
 
-btn_buy_premium = "🔒Buy CheezeVPN Premium⭐️"
+btn_buy_premium = f"🔒Buy {brand} Premium⭐️"
 btn_extend_subscription = "🔒Extend subscription"
 btn_install_instructions = "Setup instructions"
 btn_free_version = "Free version"
