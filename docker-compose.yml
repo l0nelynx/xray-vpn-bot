@@ -1,0 +1,83 @@
+services:
+  seller-bot:
+    container_name: seller-bot
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - type: bind
+        source: ./db/db.sqlite3
+        target: /usr/src/app/db.sqlite3
+      - /var/lib/marzban/certs/:/usr/src/app/uvicorn/ssl
+      - ./config.yml:/usr/src/app/config.yml
+      - ./dig_data.json:/usr/src/app/dig_data.json
+    networks:
+      - backend-network
+    ports:
+       - '127.0.0.1:5000:5000'
+#      - "5000:5000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 350M
+  support-bot:
+    container_name: support-bot
+    build:
+      context: .
+      dockerfile: Dockerfile_support
+    volumes:
+      - type: bind
+        source: ./db/db.sqlite3
+        target: /usr/src/app/db/db.sqlite3
+      - ./config.yml:/usr/src/app/config.yml
+    restart: unless-stopped
+    networks:
+      - backend-network
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f support.py"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+  dashboard:
+    container_name: dashboard
+    build: ./dashboard
+    volumes:
+      - type: bind
+        source: ./db/db.sqlite3
+        target: /app/db.sqlite3
+      - ./config.yml:/app/config.yml:ro
+    networks:
+      - backend-network
+    ports:
+      - '127.0.0.1:8080:8000'
+    environment:
+      - DB_PATH=/app/db.sqlite3
+      - CONFIG_PATH=/app/config.yml
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+networks:
+  backend-network:
+    name: backend-network
+    driver: bridge
+    external: true

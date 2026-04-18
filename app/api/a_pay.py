@@ -1,0 +1,150 @@
+import hashlib
+import hmac
+import logging
+import uuid
+from typing import Optional
+
+import aiohttp
+from aiogram.types import CallbackQuery
+from fastapi import Request, BackgroundTasks
+from pydantic import BaseModel
+
+import app.database.requests as rq
+import app.locale.lang_ru as ru
+from app.api.handlers import payment_process_background
+from app.settings import secrets
+
+
+class APayWebhookData(BaseModel):
+    order_id: str
+    status: str
+    sign: str
+
+
+# Настройка логирования
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+class PaymentProcessor:
+    def __init__(self, client_id: int, secret: str, api_url: str):
+        self.client_id = client_id
+        self.secret = secret
+        self.api_url = api_url
+        self.session = None
+
+    async def __aenter__(self):
+        """Инициализация сессии при входе в контекст"""
+        self.session = aiohttp.ClientSession()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Закрытие сессии при выходе из контекста"""
+        if self.session:
+            await self.session.close()
+
+    async def create_payment_link(self, order_id: str,
+                                  amount: float) -> Optional[str]:
+        headers = {
+            'Content-Type': 'application/json'
+        }
+
+        body = {
+            "client_id": self.client_id,
+            "order_id": f"{order_id}",
+            "amount": amount,
+            "sign": f'{hashlib.md5(f"{order_id}:{amount}:{self.secret}".encode()).hexdigest()}'
+
+        }
+        # Логируем запрос (без секретных данных в продакшене)
+        logger.info(f"Creating payment link for transaction: {order_id}")
+        logger.debug(f"Request headers: {headers}")
+        logger.debug(f"Request body: {body}")
+        try:
+            async with self.session.get(
+                    url=f"{self.api_url}/backend/create_order",
+                    params=body
+                    #json=body
+                    #headers=headers
+            ) as response:
+                print(headers)
+                print(body)
+                if response.status == 200:
+                    response_data = await response.json()
+                    payment_link = response_data.get("url")
+                    print(f"Status{response_data}")
+                    logger.info(f"Payment link created successfully: {payment_link}")
+                    return response_data
+                else:
+                    error_text = await response.text()
+                    logger.error(f"Error creating payment link: {response.status} - {error_text}")
+                    return None
+
+        except aiohttp.ClientError as e:
+            logger.error(f"HTTP client error: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error: {e}")
+            return None
+
+
+async def create_sbp_link(callback: CallbackQuery, amount, days: int):
+    if await rq.is_user_banned(callback.from_user.id):
+        await callback.answer("Ваш аккаунт заблокирован.", show_alert=True)
+        return None
+
+    transaction_id = uuid.uuid4()
+    if await rq.get_full_transaction_info(f"{transaction_id}"):  # For safety
+        transaction_id = uuid.uuid4()
+    print(transaction_id)
+    async with PaymentProcessor(secrets.get('apay_id'), secrets.get('apay_secret'),
+                                secrets.get('apay_api_url')) as processor:
+        data = await processor.create_payment_link(
+            order_id=f"{transaction_id}",
+            amount=amount
+        )
+        if data:
+            link = data.get("url")
+            # user_transaction = data.get("transactionId")
+            status = data.get("status")
+            user_transaction = f"{transaction_id}"
+            await rq.create_transaction(user_tg_id=callback.from_user.id,
+                                        user_transaction=user_transaction,
+                                        username=callback.from_user.username,
+                                        days=days,
+                                        payment_method='SBP_APAY',
+                                        amount=float(amount) / 100)
+            return link
+        # Testing only
+        user_transaction = f"{transaction_id}"
+        await rq.create_transaction(user_tg_id=callback.from_user.id,
+                                    user_transaction=user_transaction,
+                                    username=callback.from_user.username,
+                                    days=days,
+                                    payment_method='SBP_APAY',
+                                    amount=float(amount) / 100)
+
+
+async def payment_webhook_handler(request: Request, background_tasks: BackgroundTasks):
+    try:
+        raw_data = await request.json()
+        logging.info(f"Получен платежный вебхук: {raw_data}")
+        try:
+            payment_data = APayWebhookData(**raw_data)
+        except Exception as e:
+            logging.warning(f"Invalid webhook payload: {e}")
+            return {"status": "error", "message": "Invalid payload"}
+
+        if payment_data.status == "approved":
+            expected_sign = hashlib.md5(
+                f"{payment_data.order_id}:{payment_data.status}:{secrets.get('apay_secret')}".encode()
+            ).hexdigest()
+            if hmac.compare_digest(payment_data.sign, expected_sign):
+                logging.info(f'Оплата подтверждена, ID транзакции - {payment_data.order_id}')
+                background_tasks.add_task(payment_process_background, payment_data.order_id)
+                return {"status": "success"}
+            else:
+                return {"status": "received", "message": "Payment status is not CONFIRMED"}
+    except Exception as e:
+        logging.error(f"Ошибка обработки платежа: {e}")
+        return {"status": "error", "message": str(e)}

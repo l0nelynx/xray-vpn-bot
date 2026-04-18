@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python:*)",
+      "Bash(xargs grep:*)",
+      "Bash(ls:*)",
+      "Bash(xargs wc:*)",
+      "Bash(npx tsc:*)",
+      "Bash(grep:*)",
+      "Bash(npm install:*)",
+      "Bash(curl -s -H \"Authorization: RJGhECElSAiG+V0d4KC1raqr73GTSMsbPTkZ5kJFSgg=\" \"https://cad666.spicycheeze.xyz/v1/system/info\")",
+      "Bash(curl:*)",
+      "Bash(find .:*)",
+      "Bash(find /c/Users/l0nelynx/XRAY-VPN-BOT -name \"*.py\" -type f -exec grep -l \"dashboard.backend.main\\\\|dashboard.backend import\" {} \\\\;)",
+      "Bash(find:*)"
+    ]
+  }
+}

@@ -1,0 +1,85 @@
+# Telegram VPN Bot Configuration
+# Copy this file to config.yml and fill in your actual values
+# NEVER commit config.yml to git - it contains sensitive data!
+
+# ===== ESSENTIAL SETTINGS =====
+token: "yourbottoken"                          # Main Telegram bot token
+support_token: "yoursupportbottoken"           # Support bot token
+admin_id: 123456789                            # Your Telegram ID (admin)
+test_id: 987654321                             # Test user ID (optional)
+
+# ===== MARZBAN VPN CONFIGURATION =====
+marz_url: "https://example.com:8000"           # Marzban API/Dashboard address
+auth_name: "username"                          # Marzban API login
+auth_pass: "password"                          # Marzban API password
+
+# ===== PRICING CONFIGURATION =====
+stars_price: 150                               # Base price of 1-month plan in TG Stars
+crypto_price: 2.00                             # Base price of 1-month plan in USDT
+sbp_price: 150                                 # Base price of 1-month plan in RUB (SBP)
+discount: 5                                    # Base discount in % for 3-month+ plans
+
+# ===== FREE PLAN SETTINGS =====
+free_traffic: 5                                # Traffic limit in GB for FREE plan
+free_days: 30                                  # Plan limit in Days for FREE plan
+
+# ===== LOCALIZATION =====
+language: ru                                   # Language code (currently: ru)
+
+# ===== BOT LINKS & REFERENCES =====
+support_bot_id: "@YourSupportBot"              # Support bot @username mention
+bot_url: "https://t.me/YourMainBot"            # Main bot link
+news_url: "https://t.me/YourNewsChannel"       # News channel link
+agreement_url: "https://example.com/agreement" # User agreement URL
+policy_url: "https://example.com/policy"       # Privacy policy URL
+news_id: -1001234567890                        # News channel ID (for broadcasts)
+
+# ===== PAYMENT GATEWAY: CRYPTOBOT =====
+crypto: "UQCiOJeH4xC_XtyNcFXNX9MpHxc7NMyD1BkCeKFcBuC9tfVH"  # CryptoBot donation link
+crypto_bot_token: "438815:AAsvxLeze45RRirq8Cl7QtGL0N6cRvWpPH8"  # CryptoBot API token
+
+# ===== PAYMENT GATEWAY: CRYSTAL PAY =====
+crystal_login: "your_crystal_login"            # Crystal Pay login
+crystal_secret: "your_crystal_secret"          # Crystal Pay secret key
+crystal_salt: "your_crystal_salt"              # Crystal Pay salt
+crystal_webhook: "https://example.com:5000/crystal_webhook"  # Crystal Pay webhook URL
+
+# ===== PAYMENT GATEWAY: A-PAYS =====
+apay_id: 1234                                  # A-Pays merchant ID
+apay_secret: "your_apay_secret"                # A-Pays secret key
+apay_api_url: "https://apays.io"               # A-Pays API URL
+
+# ===== PAYMENT GATEWAY: PLATEGA =====
+platega_api_key: "your_platega_api_key"        # Platega API key
+platega_merchant_id: "your_merchant_uuid"      # Platega merchant ID (UUID)
+platega_url: "https://app.platega.io"          # Platega API URL
+
+# ===== PAYMENT GATEWAY: DIGISELLER =====
+dig_item_id_0: "5422669"                       # Digiseller item ID for product
+
+# ===== SERVER CONFIGURATION =====
+uvicorn_host: '0.0.0.0'                        # Server host address
+uvicorn_port: 5000                             # Server port
+uvicorn_ssl_key: "./uvicorn/ssl/key.pem"       # Path to SSL private key
+uvicorn_ssl_cert: "./uvicorn/ssl/fullchain.pem"  # Path to SSL certificate
+
+# ===== WEBHOOK CONFIGURATION =====
+webhook_host: "https://example.com:5000/payment_webhook"  # Main payment webhook URL
+crystal_webhook_host: "https://example.com:5000"  # Crystal Pay webhook host
+
+# ===== STORE (GGSel) =====
+store_url: "https://store.example.com"             # Store backend URL (order-params API)
+store_api_token: "your_store_api_token"            # Store API Bearer token
+
+# ===== DASHBOARD =====
+dashboard_login: admin                              # Dashboard admin login
+dashboard_password: your-secure-password            # Dashboard admin password
+dashboard_secret: change-me-to-random-string        # JWT secret key for dashboard
+
+# ===== NOTES =====
+# 1. Replace all placeholder values with your actual credentials
+# 2. URLs must include protocol (https:// or http://)
+# 3. For production, use HTTPS and valid SSL certificates
+# 4. Keep this file secure - never share or commit it to git
+# 5. For payment gateways, only fill in credentials for gateways you use
+# 6. Ensure firewall allows your configured port (default: 5000)
