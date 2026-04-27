@@ -21,9 +21,32 @@ app.include_router(me.router, prefix=BASE_PATH)
 app.include_router(support.router, prefix=BASE_PATH)
 
 
+async def _has_column(conn, table: str, column: str) -> bool:
+    rows = (await conn.execute(text(f"PRAGMA table_info({table})"))).all()
+    return any(r[1] == column for r in rows)
+
+
+async def _table_exists(conn, table: str) -> bool:
+    row = (await conn.execute(
+        text("SELECT name FROM sqlite_master WHERE type='table' AND name=:n"),
+        {"n": table},
+    )).first()
+    return row is not None
+
+
 @app.on_event("startup")
 async def ensure_support_tables():
     async with engine.begin() as conn:
+        if await _table_exists(conn, "support_tickets"):
+            required = ["user_id", "username", "subject", "message", "status",
+                        "created_at", "updated_at"]
+            if not all([await _has_column(conn, "support_tickets", c) for c in required]):
+                await conn.execute(text("DROP TABLE IF EXISTS support_messages"))
+                await conn.execute(text("DROP TABLE support_tickets"))
+        if await _table_exists(conn, "support_messages") and \
+                not await _has_column(conn, "support_messages", "ticket_id"):
+            await conn.execute(text("DROP TABLE support_messages"))
+
         await conn.execute(text(
             "CREATE TABLE IF NOT EXISTS support_tickets ("
             " id INTEGER PRIMARY KEY AUTOINCREMENT,"
