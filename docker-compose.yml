@@ -6,9 +6,7 @@ services:
       context: .
       dockerfile: Dockerfile
     volumes:
-      - type: bind
-        source: ./db/db.sqlite3
-        target: /usr/src/app/db.sqlite3
+      - ./db:/usr/src/app/db
       - /var/lib/marzban/certs/:/usr/src/app/uvicorn/ssl
       - ./config.yml:/usr/src/app/config.yml
       - ./dig_data.json:/usr/src/app/dig_data.json
@@ -17,6 +15,8 @@ services:
     ports:
        - '127.0.0.1:5000:5000'
 #      - "5000:5000"
+    environment:
+      - DB_PATH=/usr/src/app/db/db.sqlite3
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
@@ -35,9 +35,7 @@ services:
       context: .
       dockerfile: Dockerfile_support
     volumes:
-      - type: bind
-        source: ./db/db.sqlite3
-        target: /usr/src/app/db/db.sqlite3
+      - ./db:/usr/src/app/db
       - ./config.yml:/usr/src/app/config.yml
     restart: unless-stopped
     networks:
@@ -57,16 +55,14 @@ services:
     image: ghcr.io/l0nelynx/dashboard:${IMAGE_TAG:-staging}
     build: ./dashboard
     volumes:
-      - type: bind
-        source: ./db/db.sqlite3
-        target: /app/db.sqlite3
+      - ./db:/app/db
       - ./config.yml:/app/config.yml:ro
     networks:
       - backend-network
     ports:
       - '127.0.0.1:8080:8000'
     environment:
-      - DB_PATH=/app/db.sqlite3
+      - DB_PATH=/app/db/db.sqlite3
       - CONFIG_PATH=/app/config.yml
     restart: unless-stopped
     healthcheck:
@@ -84,14 +80,12 @@ services:
     image: ghcr.io/l0nelynx/miniapp:${IMAGE_TAG:-staging}
     build: ./miniapp
     volumes:
-      - type: bind
-        source: ./db/db.sqlite3
-        target: /app/db.sqlite3
+      - ./db:/app/db
       - ./config.yml:/app/config.yml:ro
     networks:
       - backend-network
     environment:
-      - DB_PATH=/app/db.sqlite3
+      - DB_PATH=/app/db/db.sqlite3
       - CONFIG_PATH=/app/config.yml
     restart: unless-stopped
     depends_on:

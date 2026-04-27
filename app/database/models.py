@@ -1,10 +1,12 @@
 import logging
+import os
 
 from sqlalchemy import BigInteger, String, ForeignKey, Index, Integer, Boolean, Float, Text, UniqueConstraint, text, inspect
 from sqlalchemy.ext.asyncio import AsyncAttrs, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
-engine = create_async_engine(url='sqlite+aiosqlite:///db.sqlite3')
+DB_PATH = os.environ.get('DB_PATH', 'db.sqlite3')
+engine = create_async_engine(url=f'sqlite+aiosqlite:///{DB_PATH}')
 
 async_session = async_sessionmaker(engine)
 

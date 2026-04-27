@@ -11,7 +11,7 @@ from .router import BTN_BACKUP
 
 backup_router = Router()
 
-DB_PATH = "db.sqlite3"
+DB_PATH = os.environ.get("DB_PATH", "db.sqlite3")
 MAX_BACKUP_SIZE_MB = 500
 
 
