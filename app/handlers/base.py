@@ -1,5 +1,5 @@
 from aiogram import F, Router
-from aiogram.filters import Command
+from aiogram.filters import Command, CommandObject
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 import logging
 import app.database.requests as rq
@@ -25,7 +25,7 @@ router = Router()
 
 
 @router.message(Command("start"))  # Start command handler
-async def cmd_start(message: Message):
+async def cmd_start(message: Message, command: CommandObject = None):
     if await rq.is_user_banned(message.from_user.id):
         lang = await get_user_lang(message.from_user.id)
         await message.answer(lang.msg_account_banned)
@@ -42,9 +42,30 @@ async def cmd_start(message: Message):
             parse_mode='HTML',
             reply_markup=get_language_select_keyboard()
         )
-    else:
-        # Language already chosen — go straight to main menu
-        await startup_user_dialog(message)
+        return
+
+    # Deep-link payloads from MiniApp (?start=buy|extend|trial)
+    payload = (command.args or "").strip().lower() if command else ""
+    if payload in ("buy", "extend", "trial"):
+        lang = await get_user_lang(message.from_user.id)
+        if payload == "trial":
+            await message.answer(
+                text=lang.free_menu, parse_mode='HTML',
+                disable_web_page_preview=True,
+                reply_markup=get_subcheck_free_localized(lang),
+            )
+            return
+        # buy / extend → меню способов оплаты
+        show_promo = await rq.can_use_promo(message.from_user.id)
+        text = lang.text_extend_pay_method if payload == "extend" else lang.text_pay_method
+        await message.answer(
+            text=text, parse_mode='HTML',
+            reply_markup=get_pay_methods_localized(lang, show_promo=show_promo),
+        )
+        return
+
+    # Language already chosen — go straight to main menu
+    await startup_user_dialog(message)
 
 
 @router.message(Command("lang"))  # Language change command

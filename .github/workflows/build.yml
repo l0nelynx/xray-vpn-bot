@@ -26,6 +26,9 @@ jobs:
           - name: dashboard
             context: ./dashboard
             file: ./dashboard/Dockerfile
+          - name: miniapp
+            context: ./miniapp
+            file: ./miniapp/Dockerfile
 
     steps:
       - name: Checkout

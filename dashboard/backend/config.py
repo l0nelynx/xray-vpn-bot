@@ -40,3 +40,7 @@ def get_store_url() -> str:
 
 def get_store_api_token() -> str:
     return get_config().get("store_api_token", "")
+
+
+def get_bot_token() -> str:
+    return get_config().get("token", "")

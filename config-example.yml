@@ -8,6 +8,8 @@ support_bot_id: "@YourSupportBot"                  # Support bot @username menti
 news_url: "https://t.me/YourNewsChannel"           # News / announcements channel
 agreement_url: "https://example.com/agreement"     # User agreement URL
 policy_url: "https://example.com/policy"           # Privacy policy URL
+bot_url: "https://t.me/YourBot"                    # Bot deep-link (used by MiniApp Welcome screen)
+miniapp_url: "https://example.com/bot/miniapp"     # Public HTTPS URL of the Telegram Mini App (must be HTTPS)
 uvicorn_host: "0.0.0.0"                            # Webhook server host
 uvicorn_port: 5000                                 # Webhook server port
 # uvicorn_ssl_key: "./uvicorn/ssl/key.pem"         # (disabled: SSL is terminated upstream, see app/settings.py)

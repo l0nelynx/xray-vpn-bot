@@ -141,6 +141,42 @@ class MenuButton(Base):
     screen: Mapped["MenuScreen"] = relationship(back_populates="buttons")
 
 
+class SupportTicket(Base):
+    __tablename__ = "support_tickets"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    username: Mapped[str] = mapped_column(String(100), nullable=True)
+    subject: Mapped[str] = mapped_column(String(200))
+    message: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(20), default="open", server_default="open")
+    created_at: Mapped[str] = mapped_column(String(30))
+    updated_at: Mapped[str] = mapped_column(String(30))
+
+    messages: Mapped[list["SupportMessage"]] = relationship(
+        back_populates="ticket", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        Index("ix_support_tickets_user_id", "user_id"),
+        Index("ix_support_tickets_status", "status"),
+    )
+
+
+class SupportMessage(Base):
+    __tablename__ = "support_messages"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ticket_id: Mapped[int] = mapped_column(ForeignKey("support_tickets.id", ondelete="CASCADE"))
+    sender: Mapped[str] = mapped_column(String(20))
+    text: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[str] = mapped_column(String(30))
+
+    ticket: Mapped["SupportTicket"] = relationship(back_populates="messages")
+
+    __table_args__ = (Index("ix_support_messages_ticket_id", "ticket_id"),)
+
+
 class TelmtFreeParams(Base):
     """Single-row settings table for Telemt free user parameters."""
     __tablename__ = "telemt_free_params"

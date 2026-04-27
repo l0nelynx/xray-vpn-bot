@@ -210,8 +210,50 @@ class TelmtFreeParams(Base):
     expire_days: Mapped[int] = mapped_column(Integer, default=30)
 
 
+class SupportTicket(Base):
+    __tablename__ = 'support_tickets'
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    username: Mapped[str] = mapped_column(String(100), nullable=True)
+    subject: Mapped[str] = mapped_column(String(200))
+    message: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(20), default="open", server_default="open")
+    created_at: Mapped[str] = mapped_column(String(30))
+    updated_at: Mapped[str] = mapped_column(String(30))
+
+    messages: Mapped[list["SupportMessage"]] = relationship(
+        back_populates="ticket", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        Index('ix_support_tickets_user_id', 'user_id'),
+        Index('ix_support_tickets_status', 'status'),
+    )
+
+
+class SupportMessage(Base):
+    __tablename__ = 'support_messages'
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ticket_id: Mapped[int] = mapped_column(
+        ForeignKey("support_tickets.id", ondelete="CASCADE")
+    )
+    sender: Mapped[str] = mapped_column(String(20))
+    text: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[str] = mapped_column(String(30))
+
+    ticket: Mapped["SupportTicket"] = relationship(back_populates="messages")
+
+    __table_args__ = (
+        Index('ix_support_messages_ticket_id', 'ticket_id'),
+    )
+
+
 async def async_main():
     async with engine.begin() as conn:
+        await conn.execute(text("PRAGMA journal_mode=WAL"))
+        await conn.execute(text("PRAGMA busy_timeout=5000"))
         await conn.run_sync(Base.metadata.create_all)
 
         # Миграция: добавляем is_banned если колонки ещё нет
@@ -292,6 +334,43 @@ async def async_main():
                     "CREATE INDEX ix_user_username ON users (username)"
                 ))
                 logging.info("Migration: added ix_user_username index to users table")
+
+            # Миграция: создаём таблицы поддержки (MiniApp)
+            existing_tables = set(insp.get_table_names())
+            if 'support_tickets' not in existing_tables:
+                sync_conn.execute(text(
+                    "CREATE TABLE support_tickets ("
+                    " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                    " user_id INTEGER NOT NULL REFERENCES users(id),"
+                    " username VARCHAR(100),"
+                    " subject VARCHAR(200) NOT NULL,"
+                    " message TEXT NOT NULL,"
+                    " status VARCHAR(20) NOT NULL DEFAULT 'open',"
+                    " created_at VARCHAR(30) NOT NULL,"
+                    " updated_at VARCHAR(30) NOT NULL"
+                    ")"
+                ))
+                sync_conn.execute(text(
+                    "CREATE INDEX ix_support_tickets_user_id ON support_tickets(user_id)"
+                ))
+                sync_conn.execute(text(
+                    "CREATE INDEX ix_support_tickets_status ON support_tickets(status)"
+                ))
+                logging.info("Migration: created support_tickets table")
+            if 'support_messages' not in existing_tables:
+                sync_conn.execute(text(
+                    "CREATE TABLE support_messages ("
+                    " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                    " ticket_id INTEGER NOT NULL REFERENCES support_tickets(id) ON DELETE CASCADE,"
+                    " sender VARCHAR(20) NOT NULL,"
+                    " text TEXT NOT NULL,"
+                    " created_at VARCHAR(30) NOT NULL"
+                    ")"
+                ))
+                sync_conn.execute(text(
+                    "CREATE INDEX ix_support_messages_ticket_id ON support_messages(ticket_id)"
+                ))
+                logging.info("Migration: created support_messages table")
 
         await conn.run_sync(_check_and_migrate)
 

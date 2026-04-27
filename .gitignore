@@ -4,6 +4,7 @@
 XRAY-VPN-BOT.iml
 venv
 uvicorn
+node_modules
 Deprecated
 db.sqlite3
 config.yml

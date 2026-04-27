@@ -5,7 +5,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 import os
 
 from .auth import LoginRequest, TokenResponse, create_access_token, verify_credentials, get_current_user
-from .routers import users, transactions, stats, promos, tariffs, menus, squads, telemt, store
+from .routers import users, transactions, stats, promos, tariffs, menus, squads, telemt, store, support
 
 BASE_PATH = "/bot/dashboard"
 
@@ -21,6 +21,7 @@ app.include_router(menus.router, prefix=BASE_PATH)
 app.include_router(squads.router, prefix=BASE_PATH)
 app.include_router(telemt.router, prefix=BASE_PATH)
 app.include_router(store.router, prefix=BASE_PATH)
+app.include_router(support.router, prefix=BASE_PATH)
 
 
 @app.get("/health")

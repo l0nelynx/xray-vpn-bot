@@ -198,4 +198,13 @@ async def get_dynamic_keyboard(screen_slug: str, lang_code: str = "ru",
             ))
 
     keyboard = [rows[r] for r in sorted(rows.keys())]
+
+    # MiniApp button — добавляется в главное меню, если задан miniapp_url
+    miniapp_url = secrets.get('miniapp_url')
+    if miniapp_url and screen_slug in ("main_new", "main_pro", "main_free"):
+        miniapp_label = "🚀 Открыть приложение" if lang_code == "ru" else "🚀 Open app"
+        keyboard.insert(0, [InlineKeyboardButton(
+            text=miniapp_label, web_app=WebAppInfo(url=miniapp_url),
+        )])
+
     return InlineKeyboardMarkup(inline_keyboard=keyboard)

@@ -79,6 +79,33 @@ services:
       resources:
         limits:
           memory: 256M
+  miniapp:
+    container_name: miniapp
+    image: ghcr.io/l0nelynx/miniapp:${IMAGE_TAG:-staging}
+    build: ./miniapp
+    volumes:
+      - type: bind
+        source: ./db/db.sqlite3
+        target: /app/db.sqlite3
+      - ./config.yml:/app/config.yml:ro
+    networks:
+      - backend-network
+    environment:
+      - DB_PATH=/app/db.sqlite3
+      - CONFIG_PATH=/app/config.yml
+    restart: unless-stopped
+    depends_on:
+      - seller-bot
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
 networks:
   backend-network:
     name: backend-network
