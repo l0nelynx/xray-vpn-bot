@@ -7,12 +7,16 @@
   --app-bg: #fff9f0;
   --app-text: #2c2c2c;
   --app-border: #2c2c2c;
+  --bubble-user-bg: #d9f7be;
+  --bubble-admin-bg: #ffffff;
 }
 
 body.theme-dark {
   --app-bg: #171717;
   --app-text: #f5f5f5;
   --app-border: #8c8c8c;
+  --bubble-user-bg: #274916;
+  --bubble-admin-bg: #303030;
 }
 
 html,
@@ -143,10 +147,10 @@ body,
 
 .message-bubble.user {
   align-self: flex-end;
-  background: #d9f7be !important;
+  background: var(--bubble-user-bg) !important;
 }
 
 .message-bubble.admin {
   align-self: flex-start;
-  background: #ffffff !important;
+  background: var(--bubble-admin-bg) !important;
 }

@@ -1,10 +1,9 @@
 import {
   FileTextOutlined,
   KeyOutlined,
-  RightOutlined,
   SafetyOutlined,
 } from "@ant-design/icons";
-import { Card, List, Tag, Typography, theme } from "antd";
+import { Button, Card, Space, Tag, Typography, theme } from "antd";
 import { LinksInfo } from "../api/client";
 import { openLink, showAlert } from "../tg/webapp";
 
@@ -59,31 +58,34 @@ export default function SettingsPage({ links, username }: Props) {
         </Card>
       )}
 
-      <div
-        style={{
-          border: `1px solid ${token.colorBorderSecondary}`,
-          borderRadius: token.borderRadiusLG,
-          overflow: "hidden",
-          background: token.colorBgContainer,
-        }}
-      >
-        <List
-          dataSource={items}
-          renderItem={(item) => (
-            <List.Item
+      <Space direction="vertical" size={12} style={{ width: "100%" }}>
+        {items.map((item) => (
+          <Button
+            key={item.key}
+            block
+            size="large"
+            onClick={item.onClick}
+            style={{
+              height: "auto",
+              minHeight: token.controlHeightLG,
+              paddingInline: 16,
+              paddingBlock: 12,
+              justifyContent: "flex-start",
+            }}
+          >
+            <span
               style={{
-                cursor: "pointer",
-                background: token.colorBgContainer,
-                paddingInline: 16,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 10,
               }}
-              onClick={item.onClick}
             >
-              <List.Item.Meta avatar={item.icon} title={item.title} />
-              <RightOutlined style={{ color: token.colorTextTertiary }} />
-            </List.Item>
-          )}
-        />
-      </div>
+              {item.icon}
+              <span>{item.title}</span>
+            </span>
+          </Button>
+        ))}
+      </Space>
     </div>
   );
 }
