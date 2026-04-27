@@ -150,7 +150,7 @@ const useIllustrationTheme = (): ConfigProviderProps => {
             },
           },
         },
-      }) as ConfigProviderProps,
+      }) as unknown as ConfigProviderProps,
     [styles],
   );
 };
