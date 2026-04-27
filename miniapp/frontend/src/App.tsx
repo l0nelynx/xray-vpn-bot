@@ -1,3 +1,4 @@
+import { ConfigProvider, Result, Spin, Alert } from "antd";
 import { Navigate, Route, Routes } from "react-router-dom";
 import BottomTabs from "./components/BottomTabs";
 import { useMe } from "./hooks/useMe";
@@ -7,28 +8,42 @@ import SupportCreatePage from "./pages/SupportCreatePage";
 import SupportPage from "./pages/SupportPage";
 import SupportTicketPage from "./pages/SupportTicketPage";
 import WelcomePage from "./pages/WelcomePage";
+import useIllustrationTheme from "./theme/illustrationTheme";
 
-export default function App() {
+function AppInner() {
   const { data, loading, error, reload } = useMe();
 
   if (loading) {
-    return <div className="spinner-wrap">Загрузка…</div>;
+    return (
+      <div className="spinner-wrap">
+        <Spin size="large" />
+      </div>
+    );
   }
 
   if (error) {
+    const isUsername = error === "username required";
     return (
       <div className="page">
-        <div className="error-banner">
-          {error === "username required"
-            ? "Установите username в настройках Telegram, чтобы пользоваться сервисом."
-            : `Ошибка: ${error}`}
-        </div>
+        <Result
+          status={isUsername ? "warning" : "error"}
+          title={isUsername ? "Нужен username" : "Ошибка"}
+          subTitle={
+            isUsername
+              ? "Установите username в настройках Telegram, чтобы пользоваться сервисом."
+              : error
+          }
+        />
       </div>
     );
   }
 
   if (!data) {
-    return <div className="spinner-wrap">Нет данных</div>;
+    return (
+      <div className="page">
+        <Alert type="warning" message="Нет данных" />
+      </div>
+    );
   }
 
   if (!data.registered) {
@@ -50,5 +65,14 @@ export default function App() {
       </Routes>
       <BottomTabs />
     </div>
+  );
+}
+
+export default function App() {
+  const configProps = useIllustrationTheme();
+  return (
+    <ConfigProvider {...configProps}>
+      <AppInner />
+    </ConfigProvider>
   );
 }

@@ -1,3 +1,4 @@
+import { Button, Space, Typography } from "antd";
 import { MeResponse } from "../api/client";
 import SubscriptionCard from "../components/SubscriptionCard";
 import { openTelegramLink } from "../tg/webapp";
@@ -19,33 +20,32 @@ export default function HomePage({ me, reload }: Props) {
 
   return (
     <div className="page">
-      <div className="page-title">Подписка</div>
+      <Typography.Title level={3} style={{ marginBottom: 20 }}>
+        Подписка
+      </Typography.Title>
 
       {sub ? (
-        <>
+        <Space direction="vertical" size={12} style={{ width: "100%" }}>
           <SubscriptionCard sub={sub} />
-          <button className="btn" onClick={() => open("extend")}>
+          <Button type="primary" size="large" block onClick={() => open("extend")}>
             Продлить подписку
-          </button>
-          <button className="btn secondary" onClick={reload}>
+          </Button>
+          <Button size="large" block onClick={reload}>
             Обновить
-          </button>
-        </>
+          </Button>
+        </Space>
       ) : (
-        <>
-          <div className="section">
-            <p style={{ color: "var(--hint)" }}>
-              У вас пока нет подписки. Выберите тариф или активируйте пробную
-              версию.
-            </p>
-          </div>
-          <button className="btn" onClick={() => open("buy")}>
+        <Space direction="vertical" size={12} style={{ width: "100%" }}>
+          <Typography.Paragraph type="secondary">
+            У вас пока нет подписки. Выберите тариф или активируйте пробную версию.
+          </Typography.Paragraph>
+          <Button type="primary" size="large" block onClick={() => open("buy")}>
             Купить
-          </button>
-          <button className="btn secondary" onClick={() => open("trial")}>
+          </Button>
+          <Button size="large" block onClick={() => open("trial")}>
             Пробная версия
-          </button>
-        </>
+          </Button>
+        </Space>
       )}
     </div>
   );

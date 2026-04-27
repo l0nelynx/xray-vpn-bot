@@ -1,3 +1,10 @@
+import {
+  FileTextOutlined,
+  KeyOutlined,
+  RightOutlined,
+  SafetyOutlined,
+} from "@ant-design/icons";
+import { Card, List, Tag, Typography } from "antd";
 import { LinksInfo } from "../api/client";
 import { openLink, showAlert } from "../tg/webapp";
 
@@ -7,38 +14,62 @@ interface Props {
 }
 
 export default function SettingsPage({ links, username }: Props) {
+  const items = [
+    {
+      key: "policy",
+      icon: <SafetyOutlined />,
+      title: "Политика конфиденциальности",
+      onClick: () => openLink(links.policy_url),
+    },
+    {
+      key: "agreement",
+      icon: <FileTextOutlined />,
+      title: "Пользовательское соглашение",
+      onClick: () => openLink(links.agreement_url),
+    },
+    {
+      key: "login",
+      icon: <KeyOutlined />,
+      title: "Вход в аккаунт",
+      onClick: () =>
+        showAlert("Раздел «Вход в аккаунт» появится в следующей версии."),
+    },
+  ];
+
   return (
     <div className="page">
-      <div className="page-title">Аккаунт</div>
+      <Typography.Title level={3} style={{ marginBottom: 20 }}>
+        Аккаунт
+      </Typography.Title>
 
       {username && (
-        <div className="section">
-          <div className="row">
-            <span className="row-label">Telegram</span>
-            <span className="row-value">@{username}</span>
+        <Card size="small" style={{ marginBottom: 16 }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            <Typography.Text type="secondary">Telegram</Typography.Text>
+            <Tag color="processing">@{username}</Tag>
           </div>
-        </div>
+        </Card>
       )}
 
-      <div className="list-row" onClick={() => openLink(links.policy_url)}>
-        <span>🔒 Политика конфиденциальности</span>
-        <span className="chevron">›</span>
-      </div>
-
-      <div className="list-row" onClick={() => openLink(links.agreement_url)}>
-        <span>📄 Пользовательское соглашение</span>
-        <span className="chevron">›</span>
-      </div>
-
-      <div
-        className="list-row"
-        onClick={() =>
-          showAlert("Раздел «Вход в аккаунт» появится в следующей версии.")
-        }
-      >
-        <span>🔑 Вход в аккаунт</span>
-        <span className="chevron">›</span>
-      </div>
+      <List
+        bordered
+        dataSource={items}
+        renderItem={(item) => (
+          <List.Item
+            style={{ cursor: "pointer", background: "#FFFFFF" }}
+            onClick={item.onClick}
+          >
+            <List.Item.Meta avatar={item.icon} title={item.title} />
+            <RightOutlined style={{ color: "#999" }} />
+          </List.Item>
+        )}
+      />
     </div>
   );
 }

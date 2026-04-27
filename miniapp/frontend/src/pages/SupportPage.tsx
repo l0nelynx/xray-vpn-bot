@@ -1,3 +1,5 @@
+import { PlusOutlined } from "@ant-design/icons";
+import { Alert, Empty, FloatButton, Spin, Typography } from "antd";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, TicketSummary } from "../api/client";
@@ -17,18 +19,28 @@ export default function SupportPage() {
 
   return (
     <div className="page">
-      <div className="page-title">Поддержка</div>
+      <Typography.Title level={3} style={{ marginBottom: 20 }}>
+        Поддержка
+      </Typography.Title>
 
-      {error && <div className="error-banner">{error}</div>}
+      {error && <Alert type="error" message={error} style={{ marginBottom: 16 }} />}
 
-      {tickets === null && !error && <div className="spinner-wrap">Загрузка…</div>}
+      {tickets === null && !error && (
+        <div className="spinner-wrap">
+          <Spin />
+        </div>
+      )}
 
       {tickets && tickets.length === 0 && (
-        <div className="empty">
-          У вас пока нет обращений.
-          <br />
-          Нажмите «+», чтобы создать.
-        </div>
+        <Empty
+          description={
+            <>
+              У вас пока нет обращений.
+              <br />
+              Нажмите «+», чтобы создать.
+            </>
+          }
+        />
       )}
 
       {tickets &&
@@ -40,9 +52,12 @@ export default function SupportPage() {
           />
         ))}
 
-      <button className="fab" onClick={() => navigate("/support/new")}>
-        +
-      </button>
+      <FloatButton
+        icon={<PlusOutlined />}
+        type="primary"
+        onClick={() => navigate("/support/new")}
+        style={{ right: 24, bottom: 88 }}
+      />
     </div>
   );
 }

@@ -1,3 +1,5 @@
+import { ArrowLeftOutlined } from "@ant-design/icons";
+import { Alert, Button, Card, Descriptions, Tag, Typography } from "antd";
 import dayjs from "dayjs";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -7,6 +9,12 @@ const STATUS_LABELS: Record<string, string> = {
   open: "Открыт",
   in_progress: "В работе",
   closed: "Закрыт",
+};
+
+const STATUS_COLOR: Record<string, string> = {
+  open: "processing",
+  in_progress: "warning",
+  closed: "default",
 };
 
 export default function SupportTicketPage() {
@@ -25,42 +33,51 @@ export default function SupportTicketPage() {
 
   return (
     <div className="page">
-      <button
-        className="btn secondary"
-        style={{ marginTop: 0, marginBottom: 12 }}
+      <Button
+        icon={<ArrowLeftOutlined />}
         onClick={() => navigate("/support")}
+        style={{ marginBottom: 12 }}
       >
-        ← Назад к списку
-      </button>
+        Назад
+      </Button>
 
-      {error && <div className="error-banner">{error}</div>}
+      {error && <Alert type="error" message={error} style={{ marginBottom: 16 }} />}
 
       {ticket && (
         <>
-          <div className="page-title">{ticket.subject}</div>
-          <div className="section">
-            <div className="row">
-              <span className="row-label">Статус</span>
-              <span className={`badge ${ticket.status}`}>
-                {STATUS_LABELS[ticket.status] || ticket.status}
-              </span>
-            </div>
-            <div className="row">
-              <span className="row-label">Создан</span>
-              <span className="row-value">
+          <Typography.Title level={3} style={{ marginBottom: 16 }}>
+            {ticket.subject}
+          </Typography.Title>
+
+          <Card size="small" style={{ marginBottom: 16 }}>
+            <Descriptions column={1} size="small" colon={false}>
+              <Descriptions.Item label="Статус">
+                <Tag color={STATUS_COLOR[ticket.status] || "default"}>
+                  {STATUS_LABELS[ticket.status] || ticket.status}
+                </Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="Создан">
                 {dayjs(ticket.created_at).format("DD.MM.YYYY HH:mm")}
-              </span>
-            </div>
-          </div>
+              </Descriptions.Item>
+            </Descriptions>
+          </Card>
 
           <div className="thread">
             {ticket.messages.map((m) => (
-              <div key={m.id} className={`message-bubble ${m.sender}`}>
-                <div>{m.text}</div>
-                <div className="message-time">
+              <Card
+                key={m.id}
+                size="small"
+                className={`message-bubble ${m.sender}`}
+                styles={{ body: { padding: 12 } }}
+              >
+                <Typography.Paragraph style={{ marginBottom: 6, whiteSpace: "pre-wrap" }}>
+                  {m.text}
+                </Typography.Paragraph>
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  {m.sender === "admin" ? "Поддержка" : "Вы"} ·{" "}
                   {dayjs(m.created_at).format("DD.MM.YYYY HH:mm")}
-                </div>
-              </div>
+                </Typography.Text>
+              </Card>
             ))}
           </div>
         </>

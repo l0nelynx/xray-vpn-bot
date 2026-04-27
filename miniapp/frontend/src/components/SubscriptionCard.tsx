@@ -1,3 +1,4 @@
+import { Card, Descriptions, Progress, Tag } from "antd";
 import { SubscriptionInfo } from "../api/client";
 
 interface Props {
@@ -11,45 +12,45 @@ const STATUS_LABELS: Record<string, string> = {
   limited: "Ограничена",
 };
 
+const STATUS_COLOR: Record<string, string> = {
+  active: "success",
+  expired: "error",
+  disabled: "default",
+  limited: "warning",
+};
+
 export default function SubscriptionCard({ sub }: Props) {
   const usagePct =
     sub.data_limit_gb && sub.data_limit_gb > 0
       ? Math.min(100, Math.round((sub.traffic_used_gb / sub.data_limit_gb) * 100))
       : 0;
 
+  const statusKey = sub.status || "";
+  const statusLabel = STATUS_LABELS[statusKey] || statusKey || "—";
+  const statusColor = STATUS_COLOR[statusKey] || "default";
+
   return (
-    <div className="section">
-      <div className="row">
-        <span className="row-label">Тариф</span>
-        <span className="row-value">{sub.tariff}</span>
-      </div>
-      <div className="row">
-        <span className="row-label">Статус</span>
-        <span className={`badge ${sub.status || "open"}`}>
-          {(sub.status && STATUS_LABELS[sub.status]) || sub.status || "—"}
-        </span>
-      </div>
-      <div className="row">
-        <span className="row-label">Осталось дней</span>
-        <span className="row-value">{sub.days_left}</span>
-      </div>
-      <div className="row">
-        <span className="row-label">Устройства</span>
-        <span className="row-value">{sub.devices_count}</span>
-      </div>
-      <div style={{ paddingTop: 12 }}>
-        <div className="row" style={{ borderBottom: 0, paddingBottom: 4 }}>
-          <span className="row-label">Трафик</span>
-          <span className="row-value">
-            {sub.traffic_used_gb} / {sub.data_limit_gb ?? "∞"} ГБ
-          </span>
-        </div>
-        {sub.data_limit_gb && (
-          <div className="progress">
-            <div className="progress-bar" style={{ width: `${usagePct}%` }} />
-          </div>
-        )}
-      </div>
-    </div>
+    <Card style={{ marginBottom: 16 }}>
+      <Descriptions column={1} size="small" colon={false} labelStyle={{ width: 140 }}>
+        <Descriptions.Item label="Тариф">
+          <Tag color="processing" style={{ fontWeight: 600 }}>
+            {sub.tariff}
+          </Tag>
+        </Descriptions.Item>
+        <Descriptions.Item label="Статус">
+          <Tag color={statusColor}>{statusLabel}</Tag>
+        </Descriptions.Item>
+        <Descriptions.Item label="Осталось дней">
+          <b>{sub.days_left}</b>
+        </Descriptions.Item>
+        <Descriptions.Item label="Устройства">{sub.devices_count}</Descriptions.Item>
+        <Descriptions.Item label="Трафик">
+          {sub.traffic_used_gb} / {sub.data_limit_gb ?? "∞"} ГБ
+        </Descriptions.Item>
+      </Descriptions>
+      {sub.data_limit_gb ? (
+        <Progress percent={usagePct} status={usagePct >= 95 ? "exception" : "active"} />
+      ) : null}
+    </Card>
   );
 }

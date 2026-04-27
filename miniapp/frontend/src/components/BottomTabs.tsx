@@ -1,9 +1,14 @@
+import {
+  HomeOutlined,
+  MessageOutlined,
+  SettingOutlined,
+} from "@ant-design/icons";
 import { useLocation, useNavigate } from "react-router-dom";
 
 const TABS = [
-  { path: "/", icon: "🏠", label: "Главная" },
-  { path: "/support", icon: "💬", label: "Поддержка" },
-  { path: "/settings", icon: "⚙️", label: "Аккаунт" },
+  { path: "/", icon: <HomeOutlined />, label: "Главная" },
+  { path: "/support", icon: <MessageOutlined />, label: "Поддержка" },
+  { path: "/settings", icon: <SettingOutlined />, label: "Аккаунт" },
 ];
 
 export default function BottomTabs() {
@@ -16,7 +21,7 @@ export default function BottomTabs() {
   };
 
   return (
-    <div className="bottom-tabs">
+    <nav className="bottom-tabs">
       {TABS.map((tab) => (
         <button
           key={tab.path}
@@ -24,9 +29,9 @@ export default function BottomTabs() {
           onClick={() => navigate(tab.path)}
         >
           <span className="icon">{tab.icon}</span>
-          <span>{tab.label}</span>
+          <span className="label">{tab.label}</span>
         </button>
       ))}
-    </div>
+    </nav>
   );
 }

@@ -1,29 +1,26 @@
+import { Alert, Button, Form, Input, Space, Typography } from "antd";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, TicketDetail } from "../api/client";
 
+interface FormValues {
+  subject: string;
+  message: string;
+}
+
 export default function SupportCreatePage() {
   const navigate = useNavigate();
-  const [subject, setSubject] = useState("");
-  const [message, setMessage] = useState("");
+  const [form] = Form.useForm<FormValues>();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const submit = async () => {
+  const submit = async (values: FormValues) => {
     setError(null);
-    if (subject.trim().length < 1 || subject.trim().length > 200) {
-      setError("Тема должна быть от 1 до 200 символов");
-      return;
-    }
-    if (message.trim().length < 1 || message.trim().length > 4000) {
-      setError("Сообщение должно быть от 1 до 4000 символов");
-      return;
-    }
     setSubmitting(true);
     try {
       const t = await api.post<TicketDetail>("/support/tickets", {
-        subject: subject.trim(),
-        message: message.trim(),
+        subject: values.subject.trim(),
+        message: values.message.trim(),
       });
       navigate(`/support/${t.id}`, { replace: true });
     } catch (e: any) {
@@ -35,31 +32,49 @@ export default function SupportCreatePage() {
 
   return (
     <div className="page">
-      <div className="page-title">Новое обращение</div>
+      <Typography.Title level={3} style={{ marginBottom: 20 }}>
+        Новое обращение
+      </Typography.Title>
 
-      {error && <div className="error-banner">{error}</div>}
+      {error && <Alert type="error" message={error} style={{ marginBottom: 16 }} />}
 
-      <input
-        className="input"
-        placeholder="Тема"
-        value={subject}
-        maxLength={200}
-        onChange={(e) => setSubject(e.target.value)}
-      />
-      <textarea
-        className="textarea"
-        placeholder="Опишите проблему"
-        value={message}
-        maxLength={4000}
-        onChange={(e) => setMessage(e.target.value)}
-      />
+      <Form form={form} layout="vertical" onFinish={submit}>
+        <Form.Item
+          label="Тема"
+          name="subject"
+          rules={[
+            { required: true, message: "Введите тему" },
+            { max: 200, message: "Не более 200 символов" },
+          ]}
+        >
+          <Input placeholder="Тема обращения" maxLength={200} />
+        </Form.Item>
 
-      <button className="btn" disabled={submitting} onClick={submit}>
-        {submitting ? "Отправка…" : "Отправить"}
-      </button>
-      <button className="btn secondary" onClick={() => navigate(-1)}>
-        Отмена
-      </button>
+        <Form.Item
+          label="Сообщение"
+          name="message"
+          rules={[
+            { required: true, message: "Опишите проблему" },
+            { max: 4000, message: "Не более 4000 символов" },
+          ]}
+        >
+          <Input.TextArea
+            placeholder="Опишите проблему"
+            rows={6}
+            maxLength={4000}
+            showCount
+          />
+        </Form.Item>
+
+        <Space direction="vertical" size={12} style={{ width: "100%" }}>
+          <Button type="primary" size="large" block htmlType="submit" loading={submitting}>
+            Отправить
+          </Button>
+          <Button size="large" block onClick={() => navigate(-1)}>
+            Отмена
+          </Button>
+        </Space>
+      </Form>
     </div>
   );
 }
