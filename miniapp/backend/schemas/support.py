@@ -6,6 +6,10 @@ class TicketCreate(BaseModel):
     message: str = Field(min_length=1, max_length=4000)
 
 
+class TicketReply(BaseModel):
+    text: str = Field(min_length=1, max_length=4000)
+
+
 class TicketSummary(BaseModel):
     id: int
     subject: str

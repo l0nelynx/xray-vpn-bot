@@ -1,9 +1,18 @@
-import { ArrowLeftOutlined } from "@ant-design/icons";
-import { Alert, Button, Card, Descriptions, Tag, Typography } from "antd";
+import { ArrowLeftOutlined, SendOutlined } from "@ant-design/icons";
+import {
+  Alert,
+  Button,
+  Card,
+  Descriptions,
+  Input,
+  Space,
+  Tag,
+  Typography,
+} from "antd";
 import dayjs from "dayjs";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { api, TicketDetail } from "../api/client";
+import { api, MessageItem, TicketDetail } from "../api/client";
 
 const STATUS_LABELS: Record<string, string> = {
   open: "Открыт",
@@ -22,6 +31,9 @@ export default function SupportTicketPage() {
   const navigate = useNavigate();
   const [ticket, setTicket] = useState<TicketDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [reply, setReply] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -30,6 +42,32 @@ export default function SupportTicketPage() {
       .then(setTicket)
       .catch((e) => setError(e?.detail || String(e)));
   }, [id]);
+
+  const sendReply = async () => {
+    if (!id || !ticket) return;
+    const text = reply.trim();
+    if (!text) return;
+    setSending(true);
+    setSendError(null);
+    try {
+      const msg = await api.post<MessageItem>(
+        `/support/tickets/${id}/messages`,
+        { text },
+      );
+      setTicket({
+        ...ticket,
+        messages: [...ticket.messages, msg],
+        updated_at: msg.created_at,
+      });
+      setReply("");
+    } catch (e: any) {
+      setSendError(e?.detail || String(e));
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const isClosed = ticket?.status === "closed";
 
   return (
     <div className="page">
@@ -80,6 +118,39 @@ export default function SupportTicketPage() {
               </Card>
             ))}
           </div>
+
+          {isClosed ? (
+            <Alert
+              type="info"
+              message="Обращение закрыто. Создайте новое, если нужна помощь."
+              style={{ marginTop: 16 }}
+            />
+          ) : (
+            <Card size="small" style={{ marginTop: 16 }}>
+              <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                {sendError && <Alert type="error" message={sendError} />}
+                <Input.TextArea
+                  value={reply}
+                  onChange={(e) => setReply(e.target.value)}
+                  placeholder="Ваше сообщение"
+                  rows={4}
+                  maxLength={4000}
+                  showCount
+                />
+                <Button
+                  type="primary"
+                  size="large"
+                  block
+                  icon={<SendOutlined />}
+                  loading={sending}
+                  disabled={!reply.trim()}
+                  onClick={sendReply}
+                >
+                  Отправить
+                </Button>
+              </Space>
+            </Card>
+          )}
         </>
       )}
     </div>
