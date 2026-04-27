@@ -4,7 +4,10 @@ from fastapi.responses import FileResponse, JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 import os
 
+from sqlalchemy import text
+
 from .auth import LoginRequest, TokenResponse, create_access_token, verify_credentials, get_current_user
+from .database.session import engine
 from .routers import users, transactions, stats, promos, tariffs, menus, squads, telemt, store, support
 
 BASE_PATH = "/bot/dashboard"
@@ -22,6 +25,39 @@ app.include_router(squads.router, prefix=BASE_PATH)
 app.include_router(telemt.router, prefix=BASE_PATH)
 app.include_router(store.router, prefix=BASE_PATH)
 app.include_router(support.router, prefix=BASE_PATH)
+
+
+@app.on_event("startup")
+async def ensure_support_tables():
+    async with engine.begin() as conn:
+        await conn.execute(text(
+            "CREATE TABLE IF NOT EXISTS support_tickets ("
+            " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            " user_id INTEGER NOT NULL REFERENCES users(id),"
+            " username VARCHAR(100),"
+            " subject VARCHAR(200) NOT NULL,"
+            " message TEXT NOT NULL,"
+            " status VARCHAR(20) NOT NULL DEFAULT 'open',"
+            " created_at VARCHAR(30) NOT NULL,"
+            " updated_at VARCHAR(30) NOT NULL)"
+        ))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_support_tickets_user_id ON support_tickets(user_id)"
+        ))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_support_tickets_status ON support_tickets(status)"
+        ))
+        await conn.execute(text(
+            "CREATE TABLE IF NOT EXISTS support_messages ("
+            " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            " ticket_id INTEGER NOT NULL REFERENCES support_tickets(id) ON DELETE CASCADE,"
+            " sender VARCHAR(20) NOT NULL,"
+            " text TEXT NOT NULL,"
+            " created_at VARCHAR(30) NOT NULL)"
+        ))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_support_messages_ticket_id ON support_messages(ticket_id)"
+        ))
 
 
 @app.get("/health")
