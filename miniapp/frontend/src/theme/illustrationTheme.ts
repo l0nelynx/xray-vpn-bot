@@ -44,14 +44,38 @@ const useStyles = createStyles(({ css, token }) => {
   };
 });
 
-const useIllustrationTheme = (): ConfigProviderProps => {
+type ThemeMode = "light" | "dark";
+
+const useIllustrationTheme = (mode: ThemeMode = "light"): ConfigProviderProps => {
   const { styles } = useStyles();
+
   return useMemo<ConfigProviderProps>(
-    () =>
-      ({
-        theme: {
-          algorithm: theme.defaultAlgorithm,
-          token: {
+    () => {
+      const isDark = mode === "dark";
+      const tokens = isDark
+        ? {
+            colorText: "#F5F5F5",
+            colorPrimary: "#73D13D",
+            colorSuccess: "#73D13D",
+            colorWarning: "#FFD666",
+            colorError: "#FF7875",
+            colorInfo: "#69B1FF",
+            colorBorder: "#F5F5F5",
+            colorBorderSecondary: "#8C8C8C",
+            lineWidth: 2,
+            lineWidthBold: 2,
+            borderRadius: 12,
+            borderRadiusLG: 16,
+            borderRadiusSM: 8,
+            controlHeight: 40,
+            controlHeightSM: 34,
+            controlHeightLG: 48,
+            fontSize: 15,
+            fontWeightStrong: 600,
+            colorBgBase: "#171717",
+            colorBgContainer: "#262626",
+          }
+        : {
             colorText: "#2C2C2C",
             colorPrimary: "#52C41A",
             colorSuccess: "#51CF66",
@@ -72,7 +96,13 @@ const useIllustrationTheme = (): ConfigProviderProps => {
             fontWeightStrong: 600,
             colorBgBase: "#FFF9F0",
             colorBgContainer: "#FFFFFF",
-          },
+          };
+      const cardBg = isDark ? "#303030" : "#FFF0F6";
+
+      return {
+        theme: {
+          algorithm: isDark ? theme.darkAlgorithm : theme.defaultAlgorithm,
+          token: tokens,
           components: {
             Button: {
               primaryShadow: "none",
@@ -85,7 +115,7 @@ const useIllustrationTheme = (): ConfigProviderProps => {
             },
             Card: {
               boxShadow: "4px 4px 0 #2C2C2C",
-              colorBgContainer: "#FFF0F6",
+              colorBgContainer: cardBg,
             },
             Tooltip: {
               colorBorder: "#2C2C2C",
@@ -150,8 +180,9 @@ const useIllustrationTheme = (): ConfigProviderProps => {
             },
           },
         },
-      }) as unknown as ConfigProviderProps,
-    [styles],
+      } as unknown as ConfigProviderProps;
+    },
+    [mode, styles],
   );
 };
 

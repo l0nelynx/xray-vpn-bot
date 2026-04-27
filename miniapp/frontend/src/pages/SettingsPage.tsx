@@ -4,7 +4,7 @@ import {
   RightOutlined,
   SafetyOutlined,
 } from "@ant-design/icons";
-import { Card, List, Tag, Typography } from "antd";
+import { Card, List, Tag, Typography, theme } from "antd";
 import { LinksInfo } from "../api/client";
 import { openLink, showAlert } from "../tg/webapp";
 
@@ -14,6 +14,8 @@ interface Props {
 }
 
 export default function SettingsPage({ links, username }: Props) {
+  const { token } = theme.useToken();
+
   const items = [
     {
       key: "policy",
@@ -57,19 +59,31 @@ export default function SettingsPage({ links, username }: Props) {
         </Card>
       )}
 
-      <List
-        bordered
-        dataSource={items}
-        renderItem={(item) => (
-          <List.Item
-            style={{ cursor: "pointer", background: "#FFFFFF" }}
-            onClick={item.onClick}
-          >
-            <List.Item.Meta avatar={item.icon} title={item.title} />
-            <RightOutlined style={{ color: "#999" }} />
-          </List.Item>
-        )}
-      />
+      <div
+        style={{
+          border: `1px solid ${token.colorBorderSecondary}`,
+          borderRadius: token.borderRadiusLG,
+          overflow: "hidden",
+          background: token.colorBgContainer,
+        }}
+      >
+        <List
+          dataSource={items}
+          renderItem={(item) => (
+            <List.Item
+              style={{
+                cursor: "pointer",
+                background: token.colorBgContainer,
+                paddingInline: 16,
+              }}
+              onClick={item.onClick}
+            >
+              <List.Item.Meta avatar={item.icon} title={item.title} />
+              <RightOutlined style={{ color: token.colorTextTertiary }} />
+            </List.Item>
+          )}
+        />
+      </div>
     </div>
   );
 }

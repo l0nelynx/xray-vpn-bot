@@ -27,7 +27,7 @@ export default function HomePage({ me, reload }: Props) {
       {sub ? (
         <Space direction="vertical" size={12} style={{ width: "100%" }}>
           <SubscriptionCard sub={sub} />
-          <Button type="primary" size="large" block onClick={() => open("extend")}>
+          <Button size="large" block onClick={() => open("extend")}>
             Продлить подписку
           </Button>
           <Button size="large" block onClick={reload}>
