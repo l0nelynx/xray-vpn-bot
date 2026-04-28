@@ -7,7 +7,7 @@ from sqlalchemy import text
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .database.session import engine
-from .routers import me, support
+from .routers import devices, me, support
 
 BASE_PATH = "/bot/miniapp"
 
@@ -19,6 +19,7 @@ app = FastAPI(
 
 app.include_router(me.router, prefix=BASE_PATH)
 app.include_router(support.router, prefix=BASE_PATH)
+app.include_router(devices.router, prefix=BASE_PATH)
 
 
 async def _has_column(conn, table: str, column: str) -> bool:

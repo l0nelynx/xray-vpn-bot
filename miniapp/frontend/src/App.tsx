@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import BottomTabs from "./components/BottomTabs";
 import { useMe } from "./hooks/useMe";
+import DevicesPage from "./pages/DevicesPage";
 import HomePage from "./pages/HomePage";
 import SettingsPage from "./pages/SettingsPage";
 import SupportCreatePage from "./pages/SupportCreatePage";
@@ -67,6 +68,7 @@ function AppInner({ themeMode, onToggleTheme }: AppInnerProps) {
       </button>
       <Routes>
         <Route path="/" element={<HomePage me={data} reload={reload} />} />
+        <Route path="/devices" element={<DevicesPage />} />
         <Route path="/support" element={<SupportPage />} />
         <Route path="/support/new" element={<SupportCreatePage />} />
         <Route path="/support/:id" element={<SupportTicketPage />} />

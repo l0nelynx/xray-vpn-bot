@@ -1,4 +1,5 @@
 import { Button, Space, Typography } from "antd";
+import { useNavigate } from "react-router-dom";
 import { MeResponse } from "../api/client";
 import SubscriptionCard from "../components/SubscriptionCard";
 import { openTelegramLink } from "../tg/webapp";
@@ -9,6 +10,7 @@ interface Props {
 }
 
 export default function HomePage({ me, reload }: Props) {
+  const navigate = useNavigate();
   const botUrl = me.links.bot_url;
   const sub = me.subscription;
 
@@ -29,6 +31,9 @@ export default function HomePage({ me, reload }: Props) {
           <SubscriptionCard sub={sub} />
           <Button size="large" block onClick={() => open("extend")}>
             Продлить подписку
+          </Button>
+          <Button size="large" block onClick={() => navigate("/devices")}>
+            Мои устройства
           </Button>
           <Button size="large" block onClick={reload}>
             Обновить

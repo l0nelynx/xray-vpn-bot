@@ -42,6 +42,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 export const api = {
   get: <T>(path: string) => request<T>("GET", path),
   post: <T>(path: string, body?: unknown) => request<T>("POST", path, body),
+  delete: <T>(path: string) => request<T>("DELETE", path),
 };
 
 export interface UserInfo {
@@ -97,4 +98,19 @@ export interface TicketDetail {
   created_at: string;
   updated_at: string;
   messages: MessageItem[];
+}
+
+export interface DeviceItem {
+  hwid: string;
+  platform: string | null;
+  os_version: string | null;
+  device_model: string | null;
+  user_agent: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface DevicesResponse {
+  total: number;
+  devices: DeviceItem[];
 }
