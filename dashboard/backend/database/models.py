@@ -177,6 +177,45 @@ class SupportMessage(Base):
     __table_args__ = (Index("ix_support_messages_ticket_id", "ticket_id"),)
 
 
+class WebAppMenuNode(Base):
+    """Tree of webapp menu nodes built in the dashboard tariff constructor.
+
+    A node is either a `buttons` group (renders a sublist) or an `invoice`
+    leaf that triggers payment creation when tapped in the webapp.
+    """
+    __tablename__ = "webapp_menu_nodes"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    parent_id: Mapped[int] = mapped_column(
+        ForeignKey("webapp_menu_nodes.id", ondelete="CASCADE"), nullable=True
+    )
+    text: Mapped[str] = mapped_column(String(200))
+    action: Mapped[str] = mapped_column(String(20), default="buttons")
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
+
+    # Invoice action params (NULL when action != "invoice")
+    invoice_provider: Mapped[str] = mapped_column(String(30), nullable=True)
+    invoice_amount: Mapped[float] = mapped_column(Float, nullable=True)
+    invoice_currency: Mapped[str] = mapped_column(String(10), nullable=True)
+    invoice_days: Mapped[int] = mapped_column(Integer, nullable=True)
+    invoice_tariff_slug: Mapped[str] = mapped_column(String(50), nullable=True)
+
+    parent: Mapped["WebAppMenuNode"] = relationship(
+        "WebAppMenuNode",
+        remote_side="WebAppMenuNode.id",
+        back_populates="children",
+    )
+    children: Mapped[list["WebAppMenuNode"]] = relationship(
+        "WebAppMenuNode",
+        back_populates="parent",
+        cascade="all, delete-orphan",
+        order_by="WebAppMenuNode.sort_order",
+    )
+
+    __table_args__ = (Index("ix_webapp_menu_nodes_parent_id", "parent_id"),)
+
+
 class TelmtFreeParams(Base):
     """Single-row settings table for Telemt free user parameters."""
     __tablename__ = "telemt_free_params"

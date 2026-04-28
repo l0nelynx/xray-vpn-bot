@@ -29,7 +29,7 @@ export default function HomePage({ me, reload }: Props) {
       {sub ? (
         <Space direction="vertical" size={12} style={{ width: "100%" }}>
           <SubscriptionCard sub={sub} />
-          <Button size="large" block onClick={() => open("extend")}>
+          <Button type="primary" size="large" block onClick={() => navigate("/buy")}>
             Продлить подписку
           </Button>
           <Button size="large" block onClick={() => navigate("/devices")}>
@@ -44,7 +44,7 @@ export default function HomePage({ me, reload }: Props) {
           <Typography.Paragraph type="secondary">
             У вас пока нет подписки. Выберите тариф или активируйте пробную версию.
           </Typography.Paragraph>
-          <Button type="primary" size="large" block onClick={() => open("buy")}>
+          <Button type="primary" size="large" block onClick={() => navigate("/buy")}>
             Купить
           </Button>
           <Button size="large" block onClick={() => open("trial")}>

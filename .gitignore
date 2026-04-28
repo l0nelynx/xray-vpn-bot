@@ -1,6 +1,8 @@
 .env
 .venv
 .idea
+.claude
+__pycache__
 XRAY-VPN-BOT.iml
 venv
 uvicorn

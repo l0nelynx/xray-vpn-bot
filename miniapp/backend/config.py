@@ -53,3 +53,36 @@ def get_rw_pro_id() -> str:
 
 def get_rw_free_id() -> str:
     return get_config().get("rw_free_id", "")
+
+
+def get_apay_id() -> int | None:
+    value = get_config().get("apay_id")
+    return int(value) if value is not None else None
+
+
+def get_apay_secret() -> str:
+    return get_config().get("apay_secret", "")
+
+
+def get_apay_api_url() -> str:
+    return get_config().get("apay_api_url", "")
+
+
+def get_crystal_login() -> str:
+    return get_config().get("crystal_login", "")
+
+
+def get_crystal_secret() -> str:
+    return get_config().get("crystal_secret", "")
+
+
+def get_crystal_salt() -> str:
+    return get_config().get("crystal_salt", "")
+
+
+def get_crystal_webhook() -> str:
+    return get_config().get("crystal_webhook", "")
+
+
+def get_crypto_bot_token() -> str:
+    return get_config().get("crypto_bot_token", "")

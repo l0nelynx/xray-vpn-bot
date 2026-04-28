@@ -17,6 +17,7 @@ import {
   CloudServerOutlined,
   ShopOutlined,
   MessageOutlined,
+  MobileOutlined,
 } from "@ant-design/icons";
 import { clearToken } from "../api/client";
 import useIsMobile from "../hooks/useIsMobile";
@@ -34,6 +35,15 @@ const menuItems = [
   { key: "/telemt", icon: <CloudServerOutlined />, label: "Telemt" },
   { key: "/store", icon: <ShopOutlined />, label: "Store" },
   { key: "/support", icon: <MessageOutlined />, label: "Support" },
+  {
+    key: "webapp",
+    icon: <MobileOutlined />,
+    label: "WebApp",
+    children: [
+      { key: "/webapp/tariffs", label: "Tariff Constructor" },
+      { key: "/webapp/settings", label: "Settings" },
+    ],
+  },
 ];
 
 export default function Layout() {
@@ -50,6 +60,7 @@ export default function Layout() {
   };
 
   const handleMenuClick = (key: string) => {
+    if (!key.startsWith("/")) return;
     navigate(key);
     if (isMobile) setMobileMenuOpen(false);
   };

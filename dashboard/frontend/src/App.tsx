@@ -12,6 +12,8 @@ import SquadProfilesPage from "./pages/SquadProfilesPage";
 import TelmtPage from "./pages/TelmtPage";
 import StorePage from "./pages/StorePage";
 import SupportPage from "./pages/SupportPage";
+import WebAppTariffsPage from "./pages/WebAppTariffsPage";
+import WebAppSettingsPage from "./pages/WebAppSettingsPage";
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   if (!isAuthenticated()) {
@@ -42,6 +44,8 @@ export default function App() {
         <Route path="telemt" element={<TelmtPage />} />
         <Route path="store" element={<StorePage />} />
         <Route path="support" element={<SupportPage />} />
+        <Route path="webapp/tariffs" element={<WebAppTariffsPage />} />
+        <Route path="webapp/settings" element={<WebAppSettingsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

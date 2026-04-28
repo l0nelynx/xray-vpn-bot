@@ -114,3 +114,67 @@ export interface DevicesResponse {
   total: number;
   devices: DeviceItem[];
 }
+
+export type PaymentProviderName = "apay" | "crystal" | "crypto";
+
+export interface ProviderInfo {
+  name: PaymentProviderName;
+  payment_method: string;
+  currencies: string[];
+}
+
+export interface ProvidersResponse {
+  providers: ProviderInfo[];
+}
+
+export interface InvoiceCreateRequest {
+  provider: PaymentProviderName;
+  amount: number;
+  currency: string;
+  days: number;
+  tariff_slug?: string;
+  description?: string;
+}
+
+export interface InvoiceResponse {
+  provider: PaymentProviderName;
+  invoice_id: string;
+  url: string;
+  amount: number;
+  currency: string;
+  transaction_id: string;
+  payment_method: string;
+}
+
+export const payments = {
+  listProviders: () => api.get<ProvidersResponse>("/payments/providers"),
+  createInvoice: (body: InvoiceCreateRequest) =>
+    api.post<InvoiceResponse>("/payments/invoice", body),
+};
+
+export type MenuNodeAction = "buttons" | "invoice";
+
+export interface MenuInvoice {
+  provider: PaymentProviderName;
+  amount: number;
+  currency: string;
+  days: number | null;
+  tariff_slug: string | null;
+}
+
+export interface MenuNode {
+  id: number;
+  parent_id: number | null;
+  text: string;
+  action: MenuNodeAction;
+  invoice: MenuInvoice | null;
+  children: MenuNode[];
+}
+
+export interface MenuTreeResponse {
+  tree: MenuNode[];
+}
+
+export const menu = {
+  getTree: () => api.get<MenuTreeResponse>("/menu/tree"),
+};
