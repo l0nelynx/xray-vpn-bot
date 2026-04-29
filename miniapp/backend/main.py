@@ -7,7 +7,7 @@ from sqlalchemy import text
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .database.session import engine
-from .routers import devices, me, menu, payments, support
+from .routers import devices, me, menu, payments, promo, support
 
 BASE_PATH = "/bot/miniapp"
 
@@ -22,6 +22,7 @@ app.include_router(support.router, prefix=BASE_PATH)
 app.include_router(devices.router, prefix=BASE_PATH)
 app.include_router(payments.router, prefix=BASE_PATH)
 app.include_router(menu.router, prefix=BASE_PATH)
+app.include_router(promo.router, prefix=BASE_PATH)
 
 
 async def _has_column(conn, table: str, column: str) -> bool:
@@ -44,6 +45,25 @@ async def ensure_support_tables():
                 not await _has_column(conn, "transactions", "tariff_slug"):
             await conn.execute(text(
                 "ALTER TABLE transactions ADD COLUMN tariff_slug VARCHAR(200)"
+            ))
+        if await _table_exists(conn, "promos"):
+            if not await _has_column(conn, "promos", "discount_percent"):
+                await conn.execute(text(
+                    "ALTER TABLE promos ADD COLUMN discount_percent INTEGER"
+                ))
+            if not await _has_column(conn, "promos", "used_promo_consumed"):
+                await conn.execute(text(
+                    "ALTER TABLE promos ADD COLUMN used_promo_consumed BOOLEAN DEFAULT 0"
+                ))
+        await conn.execute(text(
+            "CREATE TABLE IF NOT EXISTS promo_settings ("
+            " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            " default_discount_percent INTEGER NOT NULL DEFAULT 20)"
+        ))
+        row = (await conn.execute(text("SELECT id FROM promo_settings WHERE id=1"))).first()
+        if not row:
+            await conn.execute(text(
+                "INSERT INTO promo_settings (id, default_discount_percent) VALUES (1, 20)"
             ))
         if await _table_exists(conn, "support_tickets"):
             required = ["user_id", "username", "subject", "message", "status",

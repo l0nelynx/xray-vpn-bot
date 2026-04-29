@@ -262,6 +262,15 @@ async def deliver_subscription(
             except Exception as promo_err:
                 logging.error(f"Error processing referral reward: {promo_err}")
 
+            # Mark the buyer's activated promo as consumed so the discount only
+            # applies once. Referral chain above already used `used_promo`, so
+            # we keep that field and only flip the consumed flag.
+            try:
+                if buyer_promo and buyer_promo.get('used_promo') and not buyer_promo.get('used_promo_consumed'):
+                    await rq.mark_promo_consumed(user_id)
+            except Exception as consume_err:
+                logging.warning(f"Failed to mark promo consumed: {consume_err}")
+
         # Обновляем delivery_status после успешной доставки
         if transaction_id:
             await rq.update_delivery_status(transaction_id, 1)

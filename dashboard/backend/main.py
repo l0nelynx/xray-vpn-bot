@@ -84,6 +84,27 @@ async def ensure_support_tables():
             "CREATE INDEX IF NOT EXISTS ix_support_messages_ticket_id ON support_messages(ticket_id)"
         ))
 
+        # Promo discount + settings
+        if await _table_exists(conn, "promos"):
+            if not await _has_column(conn, "promos", "discount_percent"):
+                await conn.execute(text(
+                    "ALTER TABLE promos ADD COLUMN discount_percent INTEGER"
+                ))
+            if not await _has_column(conn, "promos", "used_promo_consumed"):
+                await conn.execute(text(
+                    "ALTER TABLE promos ADD COLUMN used_promo_consumed BOOLEAN DEFAULT 0"
+                ))
+        await conn.execute(text(
+            "CREATE TABLE IF NOT EXISTS promo_settings ("
+            " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            " default_discount_percent INTEGER NOT NULL DEFAULT 20)"
+        ))
+        row = (await conn.execute(text("SELECT id FROM promo_settings WHERE id=1"))).first()
+        if not row:
+            await conn.execute(text(
+                "INSERT INTO promo_settings (id, default_discount_percent) VALUES (1, 20)"
+            ))
+
         # Webapp menu tree (tariff constructor)
         await conn.execute(text(
             "CREATE TABLE IF NOT EXISTS webapp_menu_nodes ("

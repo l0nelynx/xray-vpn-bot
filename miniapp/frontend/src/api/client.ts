@@ -178,3 +178,22 @@ export interface MenuTreeResponse {
 export const menu = {
   getTree: () => api.get<MenuTreeResponse>("/menu/tree"),
 };
+
+export interface PromoState {
+  can_activate: boolean;
+  active_promo: string | null;
+  discount_percent: number;
+  default_discount_percent: number;
+}
+
+export interface PromoActivateResponse {
+  ok: boolean;
+  active_promo: string;
+  discount_percent: number;
+}
+
+export const promo = {
+  getState: () => api.get<PromoState>("/promo"),
+  activate: (promo_code: string) =>
+    api.post<PromoActivateResponse>("/promo", { promo_code }),
+};

@@ -1,8 +1,8 @@
-import { Alert, Button, Empty, Space, Spin, Typography } from "antd";
+import { Alert, Button, Empty, Space, Spin, Tag, Typography } from "antd";
 import { LeftOutlined } from "@ant-design/icons";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ApiError, MeResponse, MenuNode, api, menu, payments } from "../api/client";
+import { ApiError, MeResponse, MenuNode, PromoState, api, menu, payments, promo as promoApi } from "../api/client";
 import { hapticImpact, openLink, showAlert } from "../tg/webapp";
 
 function findNode(nodes: MenuNode[], id: number): MenuNode | null {
@@ -14,18 +14,24 @@ function findNode(nodes: MenuNode[], id: number): MenuNode | null {
   return null;
 }
 
+function discountedAmount(amount: number, pct: number): number {
+  return Math.round(amount * (1 - pct / 100) * 100) / 100;
+}
+
 export default function BuyMenuPage() {
   const navigate = useNavigate();
   const [tree, setTree] = useState<MenuNode[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [path, setPath] = useState<number[]>([]);
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [promoState, setPromoState] = useState<PromoState | null>(null);
 
   useEffect(() => {
     menu
       .getTree()
       .then((r) => setTree(r.tree))
       .catch((e: ApiError | Error) => setError(e.message));
+    promoApi.getState().then(setPromoState).catch(() => {});
   }, []);
 
   if (error) {
@@ -53,6 +59,10 @@ export default function BuyMenuPage() {
     else setPath((p) => p.slice(0, -1));
   };
 
+  const activeDiscount = promoState?.active_promo && promoState.discount_percent > 0
+    ? promoState.discount_percent
+    : 0;
+
   const handleClick = async (node: MenuNode) => {
     hapticImpact("light");
     if (node.action === "buttons") {
@@ -69,7 +79,6 @@ export default function BuyMenuPage() {
     }
     setBusyId(node.id);
     try {
-      // Snapshot current subscription state so success-screen can detect change.
       let baselineExpireIso: string | null = null;
       let baselineDaysLeft = 0;
       try {
@@ -89,6 +98,8 @@ export default function BuyMenuPage() {
         description: node.text,
       });
       openLink(res.url);
+      // Promo is consumed after delivery — refresh state optimistically
+      setPromoState((prev) => prev ? { ...prev, can_activate: true, active_promo: null, discount_percent: 0 } : prev);
       navigate("/buy/success", {
         state: {
           paymentUrl: res.url,
@@ -114,27 +125,62 @@ export default function BuyMenuPage() {
         Тарифы
       </Typography.Title>
 
+      {activeDiscount > 0 && (
+        <Alert
+          type="success"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message={
+            <span>
+              Промокод <strong>{promoState!.active_promo}</strong> активен —{" "}
+              скидка <Tag color="success">−{activeDiscount}%</Tag> применится при оплате
+            </span>
+          }
+        />
+      )}
+
       {currentNodes.length === 0 ? (
         <Empty description="Здесь пока пусто" />
       ) : (
         <Space direction="vertical" size={12} style={{ width: "100%" }}>
-          {currentNodes.map((n) => (
-            <Button
-              key={n.id}
-              size="large"
-              block
-              type={n.action === "invoice" ? "primary" : "default"}
-              loading={busyId === n.id}
-              onClick={() => handleClick(n)}
-            >
-              {n.text}
-              {n.action === "invoice" && n.invoice && (
-                <span style={{ opacity: 0.7, marginLeft: 8 }}>
-                  · {n.invoice.amount} {n.invoice.currency}
+          {currentNodes.map((n) => {
+            const hasInvoice = n.action === "invoice" && n.invoice;
+            const origAmt = hasInvoice ? n.invoice!.amount : 0;
+            const discAmt = activeDiscount > 0 && hasInvoice
+              ? discountedAmount(origAmt, activeDiscount)
+              : null;
+
+            return (
+              <Button
+                key={n.id}
+                size="large"
+                block
+                type={hasInvoice ? "primary" : "default"}
+                loading={busyId === n.id}
+                onClick={() => handleClick(n)}
+              >
+                <span style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "space-between", width: "100%" }}>
+                  <span>{n.text}</span>
+                  {hasInvoice && (
+                    <span style={{ opacity: 0.85, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                      {discAmt !== null ? (
+                        <>
+                          <span style={{ textDecoration: "line-through", opacity: 0.55, fontSize: 12 }}>
+                            {origAmt} {n.invoice!.currency}
+                          </span>
+                          <span style={{ color: "#52c41a", fontWeight: 600 }}>
+                            {discAmt} {n.invoice!.currency}
+                          </span>
+                        </>
+                      ) : (
+                        <span>· {origAmt} {n.invoice!.currency}</span>
+                      )}
+                    </span>
+                  )}
                 </span>
-              )}
-            </Button>
-          ))}
+              </Button>
+            );
+          })}
         </Space>
       )}
     </div>

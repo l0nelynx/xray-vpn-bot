@@ -33,6 +33,15 @@ class Promo(Base):
     used_promo: Mapped[str] = mapped_column(String(20), nullable=True)
     days_purchased: Mapped[int] = mapped_column(Integer, default=0)
     days_rewarded: Mapped[int] = mapped_column(Integer, default=0)
+    discount_percent: Mapped[int] = mapped_column(Integer, nullable=True)
+    used_promo_consumed: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+
+
+class PromoSettings(Base):
+    __tablename__ = "promo_settings"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    default_discount_percent: Mapped[int] = mapped_column(Integer, default=20)
 
 
 class Transaction(Base):

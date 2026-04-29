@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 
-from ..database.models import Transaction, User
+from ..database.models import Promo, PromoSettings, Transaction, User
 from ..database.session import async_session
 from ..payments import (
     InvoiceRequest,
@@ -67,10 +67,25 @@ async def create_payment_invoice(
             f"provider '{provider.name}' does not support currency '{body.currency}'",
         )
 
+    # Apply promo discount if user has an unconsumed active promo
+    invoice_amount = body.amount
+    async with async_session() as session:
+        user_promo = await session.scalar(select(Promo).where(Promo.tg_id == tg.tg_id))
+        if user_promo and user_promo.used_promo and not user_promo.used_promo_consumed:
+            owner_promo = await session.scalar(
+                select(Promo).where(Promo.promo_code == user_promo.used_promo)
+            )
+            if owner_promo and owner_promo.discount_percent is not None:
+                discount_pct = owner_promo.discount_percent
+            else:
+                ps = await session.scalar(select(PromoSettings).where(PromoSettings.id == 1))
+                discount_pct = ps.default_discount_percent if ps else 20
+            invoice_amount = round(body.amount * (1 - discount_pct / 100), 2)
+
     transaction_id = str(uuid.uuid4())
     request = InvoiceRequest(
         transaction_id=transaction_id,
-        amount=body.amount,
+        amount=invoice_amount,
         currency=body.currency.upper(),
         days=body.days,
         user_tg_id=tg.tg_id,

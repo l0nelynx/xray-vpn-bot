@@ -686,6 +686,8 @@ def _promo_to_dict(promo: Promo) -> dict:
         "used_promo": promo.used_promo,
         "days_purchased": promo.days_purchased,
         "days_rewarded": promo.days_rewarded,
+        "discount_percent": promo.discount_percent,
+        "used_promo_consumed": bool(promo.used_promo_consumed),
     }
 
 
@@ -714,6 +716,7 @@ async def use_promo(tg_id: int, promo_code: str) -> bool:
         promo = await session.scalar(select(Promo).where(Promo.tg_id == tg_id))
         if promo:
             promo.used_promo = promo_code
+            promo.used_promo_consumed = False
         else:
             # User hasn't created their own promo yet — create a record to store used_promo
             while True:
@@ -756,13 +759,18 @@ async def update_promo_days_rewarded(tg_id: int, days_rewarded: int) -> bool:
 
 
 async def can_use_promo(tg_id: int) -> bool:
-    """Возвращает True если пользователь ещё НЕ использовал чужой промокод."""
+    """Возвращает True если пользователь имеет право активировать (новый) промокод.
+
+    Активный неиспользованный промокод блокирует активацию. После списания скидки
+    (used_promo_consumed=True) пользователь снова может ввести новый промокод.
+    """
     async with async_session() as session:
         promo = await session.scalar(select(Promo).where(Promo.tg_id == tg_id))
         if not promo:
             return True
-        # Если used_promo заполнен — промокод уже был активирован
-        return promo.used_promo is None
+        if promo.used_promo is None:
+            return True
+        return bool(promo.used_promo_consumed)
 
 
 async def get_promos_paginated(page: int, per_page: int = 10):
@@ -819,6 +827,32 @@ async def delete_promo(promo_code: str) -> bool:
         )
         await session.commit()
         return True
+
+
+async def mark_promo_consumed(tg_id: int) -> None:
+    """Mark the user's activated promo as consumed (after first paid delivery)."""
+    async with async_session() as session:
+        promo = await session.scalar(select(Promo).where(Promo.tg_id == tg_id))
+        if promo and promo.used_promo and not promo.used_promo_consumed:
+            promo.used_promo_consumed = True
+            await session.commit()
+
+
+async def get_used_promo_with_discount(tg_id: int) -> dict | None:
+    """If user has an active (non-consumed) promo, return code + effective discount."""
+    from app.database.models import PromoSettings
+    async with async_session() as session:
+        promo = await session.scalar(select(Promo).where(Promo.tg_id == tg_id))
+        if not promo or not promo.used_promo or promo.used_promo_consumed:
+            return None
+        owner = await session.scalar(
+            select(Promo).where(Promo.promo_code == promo.used_promo)
+        )
+        discount = owner.discount_percent if owner and owner.discount_percent is not None else None
+        if discount is None:
+            settings = await session.scalar(select(PromoSettings).where(PromoSettings.id == 1))
+            discount = settings.default_discount_percent if settings else 20
+        return {"promo_code": promo.used_promo, "discount_percent": discount}
 
 
 async def get_promo_usage_users(promo_code: str) -> list[dict]:

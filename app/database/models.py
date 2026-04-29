@@ -60,6 +60,20 @@ class Promo(Base):
     used_promo: Mapped[str] = mapped_column(String(20), nullable=True)
     days_purchased: Mapped[int] = mapped_column(Integer, default=0)
     days_rewarded: Mapped[int] = mapped_column(Integer, default=0)
+    # NULL = use PromoSettings.default_discount_percent
+    discount_percent: Mapped[int] = mapped_column(Integer, nullable=True)
+    # True after the user's first paid purchase consumed the activated promo's
+    # discount; user is then allowed to activate a new promo. The original
+    # `used_promo` value is preserved so referral rewards continue to flow.
+    used_promo_consumed: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+
+
+class PromoSettings(Base):
+    """Single-row settings table for promo defaults."""
+    __tablename__ = 'promo_settings'
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    default_discount_percent: Mapped[int] = mapped_column(Integer, default=20)
 
 
 class Transaction(Base):
@@ -328,6 +342,20 @@ async def async_main():
                     ))
                     logging.info("Migration: added tariff_slug column to transactions table")
 
+            # Миграция: добавляем discount_percent в promos
+            if 'promos' in insp.get_table_names():
+                pr_columns = [col['name'] for col in insp.get_columns('promos')]
+                if 'discount_percent' not in pr_columns:
+                    sync_conn.execute(text(
+                        "ALTER TABLE promos ADD COLUMN discount_percent INTEGER"
+                    ))
+                    logging.info("Migration: added discount_percent column to promos table")
+                if 'used_promo_consumed' not in pr_columns:
+                    sync_conn.execute(text(
+                        "ALTER TABLE promos ADD COLUMN used_promo_consumed BOOLEAN DEFAULT 0"
+                    ))
+                    logging.info("Migration: added used_promo_consumed column to promos table")
+
             # Миграция: добавляем squad_profile_id в tariff_plans если колонки ещё нет
             if 'tariff_plans' in insp.get_table_names():
                 tp_columns = [col['name'] for col in insp.get_columns('tariff_plans')]
@@ -389,6 +417,7 @@ async def async_main():
     await _seed_tariffs_and_menus()
     await _backfill_screen_texts()
     await _seed_telemt_free_params()
+    await _seed_promo_settings()
 
 
 async def _seed_cache_version():
@@ -597,3 +626,14 @@ async def _seed_telemt_free_params():
                                         data_quota_bytes=None, expire_days=30))
             await session.commit()
             logging.info("Seed: telemt_free_params default row created")
+
+
+async def _seed_promo_settings():
+    """Ensure promo_settings has a default row."""
+    from sqlalchemy import select, func
+    async with async_session() as session:
+        count = await session.scalar(select(func.count()).select_from(PromoSettings))
+        if not count:
+            session.add(PromoSettings(id=1, default_discount_percent=20))
+            await session.commit()
+            logging.info("Seed: promo_settings default row created")
