@@ -2,7 +2,7 @@ import { Alert, Button, Empty, Space, Spin, Typography } from "antd";
 import { LeftOutlined } from "@ant-design/icons";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ApiError, MenuNode, menu, payments } from "../api/client";
+import { ApiError, MeResponse, MenuNode, api, menu, payments } from "../api/client";
 import { hapticImpact, openLink, showAlert } from "../tg/webapp";
 
 function findNode(nodes: MenuNode[], id: number): MenuNode | null {
@@ -69,6 +69,17 @@ export default function BuyMenuPage() {
     }
     setBusyId(node.id);
     try {
+      // Snapshot current subscription state so success-screen can detect change.
+      let baselineExpireIso: string | null = null;
+      let baselineDaysLeft = 0;
+      try {
+        const snapshot = await api.get<MeResponse>("/me");
+        baselineExpireIso = snapshot.subscription?.expire_iso ?? null;
+        baselineDaysLeft = snapshot.subscription?.days_left ?? 0;
+      } catch {
+        /* polling will work even without baseline */
+      }
+
       const res = await payments.createInvoice({
         provider: node.invoice.provider,
         amount: node.invoice.amount,
@@ -78,6 +89,13 @@ export default function BuyMenuPage() {
         description: node.text,
       });
       openLink(res.url);
+      navigate("/buy/success", {
+        state: {
+          paymentUrl: res.url,
+          baselineExpireIso,
+          baselineDaysLeft,
+        },
+      });
     } catch (e) {
       showAlert(`Ошибка создания счёта: ${(e as Error).message}`);
     } finally {

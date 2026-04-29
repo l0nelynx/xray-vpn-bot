@@ -4,6 +4,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import BottomTabs from "./components/BottomTabs";
 import { useMe } from "./hooks/useMe";
 import BuyMenuPage from "./pages/BuyMenuPage";
+import BuySuccessPage from "./pages/BuySuccessPage";
 import DevicesPage from "./pages/DevicesPage";
 import HomePage from "./pages/HomePage";
 import SettingsPage from "./pages/SettingsPage";
@@ -70,6 +71,7 @@ function AppInner({ themeMode, onToggleTheme }: AppInnerProps) {
       <Routes>
         <Route path="/" element={<HomePage me={data} reload={reload} />} />
         <Route path="/buy" element={<BuyMenuPage />} />
+        <Route path="/buy/success" element={<BuySuccessPage />} />
         <Route path="/devices" element={<DevicesPage />} />
         <Route path="/support" element={<SupportPage />} />
         <Route path="/support/new" element={<SupportCreatePage />} />
