@@ -84,8 +84,9 @@ async def payment_process_background(order_id: str):
                 transaction_id=order_id,
             )
 
-            # Resolve tariff slug for squad profile lookup
-            tariff_slug = await get_tariff_slug_by_days(payment_method_name, tariff_days)
+            # Prefer tariff_slug stored on the transaction (set by miniapp /
+            # tariff constructor); fall back to bot-side resolution by days.
+            tariff_slug = userdata.get("tariff_slug") or await get_tariff_slug_by_days(payment_method_name, tariff_days)
 
             # Используем новую унифицированную систему доставки подписок
             # message=None для фоновых задач, пользователь получит сообщение напрямую

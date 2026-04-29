@@ -34,6 +34,21 @@ class SubscriptionScenario(Enum):
     LIMITED = "limited"
 
 
+def _parse_squad_slug(slug: str) -> Optional[dict]:
+    """Parse "sid:<squad_id>:esid:<external_squad_id>" produced by the
+    WebApp Tariff Constructor. Returns None if the slug is not in this format.
+    """
+    if not slug or not slug.startswith("sid:"):
+        return None
+    try:
+        _, sid, marker, esid = slug.split(":", 3)
+    except ValueError:
+        return None
+    if marker != "esid" or not sid or not esid:
+        return None
+    return {"squad_id": sid, "external_squad_id": esid}
+
+
 async def get_subscription_scenario(
     user_id: int,
     user_info: dict,
@@ -148,11 +163,17 @@ async def deliver_subscription(
             amount=amount,
         )
 
-        # Resolve squad from tariff (for PAID subscriptions)
+        # Resolve squad from tariff (for PAID subscriptions).
+        # Two formats are supported for `tariff_slug`:
+        #  1) Existing tariff slug -> looked up via tariff_repository.
+        #  2) Ad-hoc squad encoded by the WebApp tariff constructor as
+        #     "sid:<squad_id>:esid:<external_squad_id>".
         tariff_squad = None
         if subscription_type == SubscriptionType.PAID and tariff_slug:
-            from app.database.tariff_repository import get_squad_for_tariff_slug
-            tariff_squad = await get_squad_for_tariff_slug(tariff_slug)
+            tariff_squad = _parse_squad_slug(tariff_slug)
+            if tariff_squad is None:
+                from app.database.tariff_repository import get_squad_for_tariff_slug
+                tariff_squad = await get_squad_for_tariff_slug(tariff_slug)
 
         if scenario == SubscriptionScenario.NEW_USER:
             result = await _handle_new_user(

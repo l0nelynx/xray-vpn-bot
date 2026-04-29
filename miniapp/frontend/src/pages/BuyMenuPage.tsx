@@ -63,13 +63,17 @@ export default function BuyMenuPage() {
       showAlert("Узел оплаты не настроен");
       return;
     }
+    if (!node.invoice.days || node.invoice.days <= 0) {
+      showAlert("Тариф не настроен: отсутствует количество дней");
+      return;
+    }
     setBusyId(node.id);
     try {
       const res = await payments.createInvoice({
         provider: node.invoice.provider,
         amount: node.invoice.amount,
         currency: node.invoice.currency,
-        days: node.invoice.days ?? 0,
+        days: node.invoice.days,
         tariff_slug: node.invoice.tariff_slug ?? undefined,
         description: node.text,
       });

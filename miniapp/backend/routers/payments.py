@@ -107,6 +107,7 @@ async def create_payment_invoice(
                 payment_method=provider.payment_method,
                 amount=float(body.amount),
                 created_at=_now_iso(),
+                tariff_slug=body.tariff_slug,
             )
         )
         await session.commit()

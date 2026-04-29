@@ -39,11 +39,29 @@ interface DraftNode {
   invoice_amount: number | null;
   invoice_currency: string | null;
   invoice_days: number | null;
-  invoice_tariff_slug: string | null;
+  invoice_squad_id: string;
+  invoice_external_squad_id: string;
   is_active: boolean;
 }
 
+// Constructor packs sid/esid into a single tariff_slug column on the server
+// using the format consumed by app.handlers.subscription_service._parse_squad_slug.
+function packSlug(sid: string, esid: string): string | null {
+  const s = sid.trim();
+  const e = esid.trim();
+  if (!s && !e) return null;
+  return `sid:${s}:esid:${e}`;
+}
+
+function unpackSlug(slug: string | null): { sid: string; esid: string } {
+  if (!slug || !slug.startsWith("sid:")) return { sid: "", esid: "" };
+  const parts = slug.split(":");
+  if (parts.length !== 4 || parts[2] !== "esid") return { sid: "", esid: "" };
+  return { sid: parts[1], esid: parts[3] };
+}
+
 function nodeToDraft(n: MenuNode): DraftNode {
+  const { sid, esid } = unpackSlug(n.invoice_tariff_slug);
   return {
     text: n.text,
     action: n.action,
@@ -51,7 +69,8 @@ function nodeToDraft(n: MenuNode): DraftNode {
     invoice_amount: n.invoice_amount,
     invoice_currency: n.invoice_currency,
     invoice_days: n.invoice_days,
-    invoice_tariff_slug: n.invoice_tariff_slug,
+    invoice_squad_id: sid,
+    invoice_external_squad_id: esid,
     is_active: n.is_active,
   };
 }
@@ -64,7 +83,8 @@ function draftEquals(a: DraftNode, b: DraftNode): boolean {
     a.invoice_amount === b.invoice_amount &&
     a.invoice_currency === b.invoice_currency &&
     a.invoice_days === b.invoice_days &&
-    a.invoice_tariff_slug === b.invoice_tariff_slug &&
+    a.invoice_squad_id === b.invoice_squad_id &&
+    a.invoice_external_squad_id === b.invoice_external_squad_id &&
     a.is_active === b.is_active
   );
 }
@@ -180,14 +200,20 @@ function NodeRow({
                 style={{ width: 90 }}
               />
               <Input
-                placeholder="Tariff slug (optional)"
-                value={draft.invoice_tariff_slug ?? ""}
+                placeholder="squad_id (sid)"
+                value={draft.invoice_squad_id}
                 onChange={(e) =>
-                  setDraft(node.id, {
-                    invoice_tariff_slug: e.target.value || null,
-                  })
+                  setDraft(node.id, { invoice_squad_id: e.target.value })
                 }
                 style={{ width: 160 }}
+              />
+              <Input
+                placeholder="external_squad_id (esid)"
+                value={draft.invoice_external_squad_id}
+                onChange={(e) =>
+                  setDraft(node.id, { invoice_external_squad_id: e.target.value })
+                }
+                style={{ width: 200 }}
               />
             </>
           )}
@@ -386,9 +412,26 @@ export default function WebAppTariffsPage() {
         message.error("Pick a currency");
         return;
       }
+      if (!draft.invoice_days || draft.invoice_days <= 0) {
+        message.error("Invoice 'days' must be greater than 0");
+        return;
+      }
     }
     try {
-      await api.put<MenuNode>(`/webapp-menu/nodes/${id}`, draft);
+      const payload = {
+        text: draft.text,
+        action: draft.action,
+        is_active: draft.is_active,
+        invoice_provider: draft.invoice_provider,
+        invoice_amount: draft.invoice_amount,
+        invoice_currency: draft.invoice_currency,
+        invoice_days: draft.invoice_days,
+        invoice_tariff_slug: packSlug(
+          draft.invoice_squad_id,
+          draft.invoice_external_squad_id,
+        ),
+      };
+      await api.put<MenuNode>(`/webapp-menu/nodes/${id}`, payload);
       message.success("Saved");
       await reload();
     } catch (e: unknown) {

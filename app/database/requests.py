@@ -289,6 +289,7 @@ async def get_full_transaction_info(transaction_id: str):
                 "payment_method": transaction.payment_method,
                 "amount": transaction.amount,
                 "created_at": transaction.created_at,
+                "tariff_slug": transaction.tariff_slug,
             }
         else:
             return None

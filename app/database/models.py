@@ -95,6 +95,9 @@ class Transaction(Base):
     # Дата истечения подписки (ISO формат, рассчитывается при подтверждении)
     expire_date: Mapped[str] = mapped_column(String(30), nullable=True)
 
+    # Tariff slug (existing tariff slug OR ad-hoc encoded squad: "sid:<id>:esid:<id>")
+    tariff_slug: Mapped[str] = mapped_column(String(200), nullable=True)
+
     # Внешний ключ к таблице users
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
 
@@ -319,6 +322,11 @@ async def async_main():
                         "AND days_ordered IS NOT NULL"
                     ))
                     logging.info("Migration: backfilled expire_date for existing confirmed/delivered transactions")
+                if 'tariff_slug' not in tx_columns:
+                    sync_conn.execute(text(
+                        "ALTER TABLE transactions ADD COLUMN tariff_slug VARCHAR(200)"
+                    ))
+                    logging.info("Migration: added tariff_slug column to transactions table")
 
             # Миграция: добавляем squad_profile_id в tariff_plans если колонки ещё нет
             if 'tariff_plans' in insp.get_table_names():

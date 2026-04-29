@@ -40,6 +40,11 @@ async def _table_exists(conn, table: str) -> bool:
 @app.on_event("startup")
 async def ensure_support_tables():
     async with engine.begin() as conn:
+        if await _table_exists(conn, "transactions") and \
+                not await _has_column(conn, "transactions", "tariff_slug"):
+            await conn.execute(text(
+                "ALTER TABLE transactions ADD COLUMN tariff_slug VARCHAR(200)"
+            ))
         if await _table_exists(conn, "support_tickets"):
             required = ["user_id", "username", "subject", "message", "status",
                         "created_at", "updated_at"]
