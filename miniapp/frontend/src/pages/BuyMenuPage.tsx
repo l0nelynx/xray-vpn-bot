@@ -165,10 +165,10 @@ export default function BuyMenuPage() {
                     <span style={{ opacity: 0.85, display: "inline-flex", alignItems: "center", gap: 6 }}>
                       {discAmt !== null ? (
                         <>
-                          <span style={{ textDecoration: "line-through", opacity: 0.55, fontSize: 12 }}>
+                          <span style={{ textDecoration: "line-through", opacity: 0.5, fontSize: 12 }}>
                             {origAmt} {n.invoice!.currency}
                           </span>
-                          <span style={{ color: "#52c41a", fontWeight: 600 }}>
+                          <span style={{ fontWeight: 700 }}>
                             {discAmt} {n.invoice!.currency}
                           </span>
                         </>
