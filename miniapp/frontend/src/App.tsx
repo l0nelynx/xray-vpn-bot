@@ -1,5 +1,4 @@
 import { ConfigProvider, Result, Spin, Alert } from "antd";
-import { useEffect, useState } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import BottomTabs from "./components/BottomTabs";
 import { useMe } from "./hooks/useMe";
@@ -13,14 +12,9 @@ import SupportCreatePage from "./pages/SupportCreatePage";
 import SupportPage from "./pages/SupportPage";
 import SupportTicketPage from "./pages/SupportTicketPage";
 import WelcomePage from "./pages/WelcomePage";
-import useIllustrationTheme from "./theme/illustrationTheme";
+import { liquidGlassConfig } from "./theme/liquidGlass";
 
-interface AppInnerProps {
-  themeMode: "light" | "dark";
-  onToggleTheme: () => void;
-}
-
-function AppInner({ themeMode, onToggleTheme }: AppInnerProps) {
+function AppInner() {
   const { data, loading, error, reload, refresh } = useMe();
 
   if (loading) {
@@ -61,14 +55,7 @@ function AppInner({ themeMode, onToggleTheme }: AppInnerProps) {
   }
 
   return (
-    <div className="app with-theme-toggle">
-      <button
-        type="button"
-        className="theme-toggle"
-        onClick={onToggleTheme}
-      >
-        {themeMode === "light" ? "Тёмная" : "Светлая"}
-      </button>
+    <div className="app">
       <Routes>
         <Route path="/" element={<HomePage me={data} reload={reload} refresh={refresh} />} />
         <Route path="/buy" element={<BuyMenuPage />} />
@@ -90,21 +77,9 @@ function AppInner({ themeMode, onToggleTheme }: AppInnerProps) {
 }
 
 export default function App() {
-  const [themeMode, setThemeMode] = useState<"light" | "dark">("light");
-
-  useEffect(() => {
-    document.body.classList.toggle("theme-dark", themeMode === "dark");
-  }, [themeMode]);
-
-  const configProps = useIllustrationTheme(themeMode);
   return (
-    <ConfigProvider {...configProps}>
-      <AppInner
-        themeMode={themeMode}
-        onToggleTheme={() =>
-          setThemeMode((prev) => (prev === "light" ? "dark" : "light"))
-        }
-      />
+    <ConfigProvider {...liquidGlassConfig}>
+      <AppInner />
     </ConfigProvider>
   );
 }

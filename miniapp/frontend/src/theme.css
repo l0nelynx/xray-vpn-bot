@@ -4,19 +4,7 @@
 }
 
 :root {
-  --app-bg: #fff9f0;
-  --app-text: #2c2c2c;
-  --app-border: #2c2c2c;
-  --bubble-user-bg: #d9f7be;
-  --bubble-admin-bg: #ffffff;
-}
-
-body.theme-dark {
-  --app-bg: #171717;
-  --app-text: #f5f5f5;
-  --app-border: #8c8c8c;
-  --bubble-user-bg: #274916;
-  --bubble-admin-bg: #303030;
+  color-scheme: dark;
 }
 
 html,
@@ -25,51 +13,75 @@ body,
   margin: 0;
   padding: 0;
   height: 100%;
-  background: var(--app-bg);
-  color: var(--app-text);
+  width: 100%;
+  overflow-x: hidden;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  background: #0B0B14;
+  color: rgba(255, 255, 255, 0.92);
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
     Roboto, Helvetica, Arial, sans-serif;
   font-size: 15px;
   line-height: 1.4;
   overscroll-behavior-y: contain;
+  position: relative;
+  min-height: 100vh;
+}
+
+/* Iridescent animated backdrop */
+body::before {
+  content: "";
+  position: fixed;
+  inset: -25%;
+  z-index: -2;
+  background:
+    radial-gradient(40% 38% at 22% 28%, rgba(110, 91, 255, 0.55), transparent 60%),
+    radial-gradient(46% 42% at 80% 20%, rgba(91, 200, 255, 0.50), transparent 62%),
+    radial-gradient(50% 46% at 30% 88%, rgba(255, 111, 181, 0.45), transparent 64%),
+    radial-gradient(42% 40% at 88% 78%, rgba(125, 220, 200, 0.40), transparent 60%);
+  filter: blur(70px) saturate(1.3);
+  animation: drift 28s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: radial-gradient(120% 80% at 50% 0%, transparent 0%, rgba(11, 11, 20, 0.55) 70%, rgba(11, 11, 20, 0.85) 100%);
+  pointer-events: none;
+}
+
+@keyframes drift {
+  0%   { transform: translate(0, 0) rotate(0deg) scale(1); }
+  50%  { transform: translate(2%, -3%) rotate(8deg) scale(1.05); }
+  100% { transform: translate(-3%, 2%) rotate(-6deg) scale(1.02); }
+}
+
+input,
+textarea,
+select {
+  font-size: 16px;
 }
 
 .app {
   display: flex;
   flex-direction: column;
   min-height: 100%;
-  padding-bottom: 80px;
+  padding-bottom: calc(96px + env(safe-area-inset-bottom));
 }
 
 .page {
   flex: 1;
   padding: 16px;
-}
-
-.app.with-theme-toggle .page {
-  padding-top: 64px;
-}
-
-.theme-toggle {
-  position: fixed;
-  top: 12px;
-  right: 12px;
-  z-index: 150;
-  border: 1px solid var(--app-border);
-  border-radius: 999px;
-  background: var(--app-bg);
-  color: var(--app-text);
-  font-family: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 6px 12px;
-  cursor: pointer;
-  opacity: 0.9;
-  transition: opacity 0.15s, color 0.15s, background-color 0.15s;
-}
-
-.theme-toggle:active {
-  opacity: 1;
+  padding-top: max(16px, env(safe-area-inset-top));
 }
 
 .page-centered {
@@ -87,41 +99,213 @@ body,
   padding: 40px;
 }
 
-/* Bottom navigation tabs — illustration style */
+/* Glass utility */
+.glass-card,
+.ant-card {
+  background: rgba(255, 255, 255, 0.06) !important;
+  backdrop-filter: blur(24px) saturate(1.6);
+  -webkit-backdrop-filter: blur(24px) saturate(1.6);
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 22px !important;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18) !important;
+}
+
+.glass-card.glass-success {
+  border-color: rgba(93, 211, 168, 0.45) !important;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 0 24px rgba(93, 211, 168, 0.15) !important;
+}
+
+.ant-card .ant-card-body {
+  padding: 16px;
+}
+
+/* Modal — strong glass */
+.ant-modal-content {
+  background: rgba(28, 28, 38, 0.72) !important;
+  backdrop-filter: blur(40px) saturate(1.8);
+  -webkit-backdrop-filter: blur(40px) saturate(1.8);
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  border-radius: 24px !important;
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.20) !important;
+}
+
+.ant-modal-header {
+  background: transparent !important;
+}
+
+/* Buttons */
+.ant-btn {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: 16px !important;
+  font-weight: 600;
+  transition: transform 0.15s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.ant-btn:active {
+  transform: scale(0.97);
+}
+
+.ant-btn-primary {
+  background: linear-gradient(135deg, #7C9CFF 0%, #B47CFF 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.20) !important;
+  box-shadow:
+    0 8px 24px rgba(124, 156, 255, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.30) !important;
+  color: #FFFFFF !important;
+}
+
+.ant-btn-primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #8FACFF 0%, #C28EFF 100%) !important;
+  box-shadow:
+    0 10px 30px rgba(124, 156, 255, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35) !important;
+}
+
+.ant-btn-primary:disabled {
+  opacity: 0.45;
+  background: rgba(255, 255, 255, 0.10) !important;
+  color: rgba(255, 255, 255, 0.5) !important;
+  box-shadow: none !important;
+}
+
+.ant-btn-default {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  color: rgba(255, 255, 255, 0.92) !important;
+}
+
+.ant-btn-default:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.14) !important;
+  border-color: rgba(255, 255, 255, 0.28) !important;
+  color: #FFFFFF !important;
+}
+
+.ant-btn-dashed {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px dashed rgba(255, 255, 255, 0.30) !important;
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+
+/* Inputs */
+.ant-input,
+.ant-input-affix-wrapper,
+textarea.ant-input {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  color: rgba(255, 255, 255, 0.92) !important;
+  border-radius: 14px !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.ant-input::placeholder,
+textarea.ant-input::placeholder {
+  color: rgba(255, 255, 255, 0.40) !important;
+}
+
+.ant-input:focus,
+.ant-input-affix-wrapper-focused,
+textarea.ant-input:focus {
+  border-color: rgba(124, 156, 255, 0.65) !important;
+  box-shadow: 0 0 0 3px rgba(124, 156, 255, 0.18) !important;
+}
+
+/* Tags as glass pills */
+.ant-tag {
+  background: rgba(255, 255, 255, 0.10) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  border-radius: 999px !important;
+  padding: 2px 10px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.ant-tag-success {
+  background: rgba(93, 211, 168, 0.18) !important;
+  border-color: rgba(93, 211, 168, 0.40) !important;
+  color: #5DD3A8 !important;
+}
+
+.ant-tag-error {
+  background: rgba(255, 138, 138, 0.18) !important;
+  border-color: rgba(255, 138, 138, 0.40) !important;
+  color: #FF8A8A !important;
+}
+
+.ant-tag-warning {
+  background: rgba(255, 212, 121, 0.18) !important;
+  border-color: rgba(255, 212, 121, 0.40) !important;
+  color: #FFD479 !important;
+}
+
+.ant-tag-processing {
+  background: rgba(125, 156, 255, 0.18) !important;
+  border-color: rgba(125, 156, 255, 0.40) !important;
+  color: #9DB8FF !important;
+}
+
+/* Alert — translucent + blur */
+.ant-alert {
+  border-radius: 16px !important;
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+}
+
+/* Floating glass tab bar */
 .bottom-tabs {
   position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  bottom: max(12px, env(safe-area-inset-bottom));
+  left: 12px;
+  right: 12px;
   display: flex;
-  background: var(--app-bg);
-  border-top: 1px solid var(--app-border);
-  padding: 8px 0 max(8px, env(safe-area-inset-bottom));
+  background: rgba(28, 28, 38, 0.55);
+  backdrop-filter: blur(28px) saturate(1.8);
+  -webkit-backdrop-filter: blur(28px) saturate(1.8);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 28px;
+  padding: 8px;
   z-index: 100;
+  box-shadow:
+    0 16px 40px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
 }
 
 .bottom-tabs button {
   flex: 1;
   background: transparent;
-  color: var(--app-text);
-  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 11px;
   font-family: inherit;
   font-weight: 600;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  padding: 6px 0;
+  justify-content: center;
+  gap: 3px;
+  padding: 8px 4px;
   border: 0;
   outline: 0;
   cursor: pointer;
-  opacity: 0.7;
-  transition: opacity 0.15s, color 0.15s;
+  border-radius: 20px;
+  transition: color 0.2s, background 0.2s, transform 0.1s;
+}
+
+.bottom-tabs button:active {
+  transform: scale(0.95);
 }
 
 .bottom-tabs button.active {
-  opacity: 1;
-  color: #52c41a;
+  color: #FFFFFF;
+  background: linear-gradient(135deg, rgba(124, 156, 255, 0.30), rgba(180, 124, 255, 0.30));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.20);
 }
 
 .bottom-tabs .icon {
@@ -131,6 +315,37 @@ body,
 
 .bottom-tabs .label {
   font-size: 11px;
+  letter-spacing: 0.2px;
+}
+
+/* Settings row — fixes long-label overflow */
+.settings-row {
+  height: auto !important;
+  min-height: 60px !important;
+  width: 100%;
+  padding: 14px 16px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 12px;
+  text-align: left;
+}
+
+.settings-row > .icon {
+  flex: 0 0 auto;
+  font-size: 18px;
+  display: inline-flex;
+  align-items: center;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.settings-row > .text {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.3;
+  font-weight: 500;
 }
 
 /* Support thread bubbles */
@@ -143,14 +358,59 @@ body,
 .message-bubble {
   max-width: 85%;
   word-break: break-word;
+  border-radius: 18px !important;
 }
 
 .message-bubble.user {
   align-self: flex-end;
-  background: var(--bubble-user-bg) !important;
+  background: linear-gradient(135deg, rgba(124, 156, 255, 0.24), rgba(180, 124, 255, 0.18)) !important;
+  border-color: rgba(124, 156, 255, 0.30) !important;
 }
 
 .message-bubble.admin {
   align-self: flex-start;
-  background: var(--bubble-admin-bg) !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Typography tone tweaks */
+.ant-typography {
+  color: rgba(255, 255, 255, 0.92);
+}
+
+h1.ant-typography,
+h2.ant-typography,
+h3.ant-typography,
+h4.ant-typography,
+h5.ant-typography,
+.ant-typography h1,
+.ant-typography h2,
+.ant-typography h3,
+.ant-typography h4,
+.ant-typography h5 {
+  color: #FFFFFF !important;
+  letter-spacing: -0.01em;
+}
+
+.ant-typography-secondary {
+  color: rgba(255, 255, 255, 0.55) !important;
+}
+
+/* Descriptions */
+.ant-descriptions-item-label {
+  color: rgba(255, 255, 255, 0.55) !important;
+}
+
+.ant-descriptions-item-content {
+  color: rgba(255, 255, 255, 0.92) !important;
+}
+
+/* Empty / Result */
+.ant-empty-description,
+.ant-result-subtitle {
+  color: rgba(255, 255, 255, 0.55) !important;
+}
+
+/* Progress rail tone */
+.ant-progress-bg {
+  background: linear-gradient(90deg, #7C9CFF, #B47CFF) !important;
 }

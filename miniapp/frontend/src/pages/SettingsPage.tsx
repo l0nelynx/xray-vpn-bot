@@ -4,7 +4,7 @@ import {
   KeyOutlined,
   SafetyOutlined,
 } from "@ant-design/icons";
-import { Button, Card, Input, Modal, Space, Tag, Typography, theme, message } from "antd";
+import { Button, Card, Input, Modal, Space, Tag, Typography, message } from "antd";
 import { useEffect, useState } from "react";
 import { LinksInfo, PromoState, promo as promoApi } from "../api/client";
 import { openLink, showAlert } from "../tg/webapp";
@@ -15,7 +15,6 @@ interface Props {
 }
 
 export default function SettingsPage({ links, username }: Props) {
-  const { token } = theme.useToken();
   const [promoState, setPromoState] = useState<PromoState | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [inputCode, setInputCode] = useState("");
@@ -114,8 +113,8 @@ export default function SettingsPage({ links, username }: Props) {
       )}
 
       {promoState?.active_promo && (
-        <Card size="small" style={{ marginBottom: 16, borderColor: token.colorSuccess }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <Card size="small" className="glass-success" style={{ marginBottom: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
             <Typography.Text type="secondary">Скидка активна</Typography.Text>
             <Tag color="success">−{promoState.discount_percent}% на следующую покупку</Tag>
           </div>
@@ -130,24 +129,10 @@ export default function SettingsPage({ links, username }: Props) {
             size="large"
             type={item.key === "promo" && !promoState?.active_promo ? "dashed" : "default"}
             onClick={item.onClick}
-            style={{
-              height: "auto",
-              minHeight: token.controlHeightLG,
-              paddingInline: 16,
-              paddingBlock: 12,
-              justifyContent: "flex-start",
-            }}
+            className="settings-row"
           >
-            <span
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 10,
-              }}
-            >
-              {item.icon}
-              <span>{item.title}</span>
-            </span>
+            <span className="icon">{item.icon}</span>
+            <span className="text">{item.title}</span>
           </Button>
         ))}
       </Space>
