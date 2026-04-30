@@ -1,4 +1,4 @@
-import { DeleteOutlined, ArrowLeftOutlined } from "@ant-design/icons";
+import { DeleteOutlined, ReloadOutlined } from "@ant-design/icons";
 import {
   Alert,
   Button,
@@ -13,7 +13,6 @@ import {
   message,
 } from "antd";
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { api, DeviceItem, DevicesResponse } from "../api/client";
 
 function formatDate(value: string | null): string {
@@ -26,7 +25,6 @@ function formatDate(value: string | null): string {
 }
 
 export default function DevicesPage() {
-  const navigate = useNavigate();
   const [devices, setDevices] = useState<DeviceItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
@@ -62,16 +60,18 @@ export default function DevicesPage() {
 
   return (
     <div className="page">
-      <Space style={{ marginBottom: 16 }}>
-        <Button
-          icon={<ArrowLeftOutlined />}
-          onClick={() => navigate("/")}
-          type="text"
-        />
+      <div className="page-header">
         <Typography.Title level={3} style={{ margin: 0 }}>
           Мои устройства
         </Typography.Title>
-      </Space>
+        <Button
+          className="refresh-fab"
+          shape="circle"
+          icon={<ReloadOutlined />}
+          onClick={load}
+          aria-label="Обновить"
+        />
+      </div>
 
       {error && (
         <Alert type="error" title={error} style={{ marginBottom: 16 }} />

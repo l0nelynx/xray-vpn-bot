@@ -1,8 +1,10 @@
+import { LinkOutlined, ReloadOutlined } from "@ant-design/icons";
 import { Button, Space, Typography } from "antd";
 import { useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { MeResponse } from "../api/client";
 import SubscriptionCard from "../components/SubscriptionCard";
+import { openLink } from "../tg/webapp";
 
 interface Props {
   me: MeResponse;
@@ -28,24 +30,38 @@ export default function HomePage({ me, reload, refresh }: Props) {
 
   return (
     <div className="page">
-      <Typography.Title level={3} style={{ marginBottom: 20 }}>
-        Подписка
-      </Typography.Title>
+      <div className="page-header">
+        <Typography.Title level={3} style={{ margin: 0 }}>
+          Подписка
+        </Typography.Title>
+        <Button
+          className="refresh-fab"
+          shape="circle"
+          icon={<ReloadOutlined />}
+          onClick={reload}
+          aria-label="Обновить"
+        />
+      </div>
 
       {sub ? (
         <Space direction="vertical" size={12} style={{ width: "100%" }}>
           <SubscriptionCard sub={sub} />
-          <Button type="primary" size="large" block onClick={() => navigate("/buy")}>
+          {sub.status === "active" && sub.subscription_url && (
+            <Button
+              type="primary"
+              size="large"
+              block
+              icon={<LinkOutlined />}
+              onClick={() => openLink(sub.subscription_url!)}
+            >
+              Подключиться
+            </Button>
+          )}
+          <Button size="large" block onClick={() => navigate("/buy")}>
             Продлить подписку
-          </Button>
-          <Button size="large" block onClick={() => navigate("/devices")}>
-            Мои устройства
           </Button>
           <Button size="large" block onClick={() => navigate("/free/telemt")}>
             Telegram Прокси
-          </Button>
-          <Button size="large" block onClick={reload}>
-            Обновить
           </Button>
         </Space>
       ) : (
@@ -61,9 +77,6 @@ export default function HomePage({ me, reload, refresh }: Props) {
           </Button>
           <Button size="large" block onClick={() => navigate("/free/telemt")}>
             Telegram Прокси
-          </Button>
-          <Button size="large" block onClick={reload}>
-            Обновить
           </Button>
         </Space>
       )}

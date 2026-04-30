@@ -99,6 +99,42 @@ select {
   padding: 40px;
 }
 
+/* Page header with floating refresh FAB */
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.refresh-fab.ant-btn {
+  width: 38px !important;
+  height: 38px !important;
+  min-width: 38px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
+  color: rgba(255, 255, 255, 0.92) !important;
+  backdrop-filter: blur(16px) saturate(1.6);
+  -webkit-backdrop-filter: blur(16px) saturate(1.6);
+  box-shadow:
+    0 4px 14px rgba(0, 0, 0, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22) !important;
+}
+
+.refresh-fab.ant-btn:hover {
+  background: rgba(255, 255, 255, 0.14) !important;
+  border-color: rgba(255, 255, 255, 0.30) !important;
+}
+
+.refresh-fab.ant-btn .anticon {
+  font-size: 16px;
+}
+
 /* Glass utility */
 .glass-card,
 .ant-card {

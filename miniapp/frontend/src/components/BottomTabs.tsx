@@ -1,5 +1,6 @@
 import {
   HomeOutlined,
+  LaptopOutlined,
   MessageOutlined,
   SettingOutlined,
 } from "@ant-design/icons";
@@ -7,6 +8,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 
 const TABS = [
   { path: "/", icon: <HomeOutlined />, label: "Главная" },
+  { path: "/devices", icon: <LaptopOutlined />, label: "Устройства" },
   { path: "/support", icon: <MessageOutlined />, label: "Поддержка" },
   { path: "/settings", icon: <SettingOutlined />, label: "Аккаунт" },
 ];
