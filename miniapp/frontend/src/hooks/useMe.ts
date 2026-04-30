@@ -6,23 +6,26 @@ export function useMe() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const reload = async () => {
-    setLoading(true);
+  const fetchMe = async (silent: boolean) => {
+    if (!silent) setLoading(true);
     try {
       const me = await api.get<MeResponse>("/me");
       setData(me);
       setError(null);
     } catch (e: any) {
       setError(e?.detail || String(e));
-      setData(null);
+      if (!silent) setData(null);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
+  const reload = () => fetchMe(false);
+  const refresh = () => fetchMe(true);
+
   useEffect(() => {
-    reload();
+    fetchMe(false);
   }, []);
 
-  return { data, loading, error, reload };
+  return { data, loading, error, reload, refresh };
 }

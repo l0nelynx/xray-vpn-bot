@@ -1,5 +1,5 @@
 import { CheckCircleFilled, LoadingOutlined } from "@ant-design/icons";
-import { Alert, Button, Card, Space, Typography } from "antd";
+import { Alert, Button, Card, Space, Spin, Typography } from "antd";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { free } from "../api/client";
@@ -15,6 +15,22 @@ interface ClaimedState {
   alreadyActive: boolean;
 }
 
+function openProxyLink(url: string) {
+  // Telegram's openTelegramLink only accepts https://t.me/...
+  // Convert tg://proxy?... and tg://socks?... to https://t.me/...
+  const tgPrefix = "tg://";
+  if (url.startsWith(tgPrefix)) {
+    const httpsLink = "https://t.me/" + url.slice(tgPrefix.length);
+    openTelegramLink(httpsLink);
+    return;
+  }
+  if (url.startsWith("https://t.me/") || url.startsWith("http://t.me/")) {
+    openTelegramLink(url);
+    return;
+  }
+  openLink(url);
+}
+
 export default function FreeTrialPage() {
   const navigate = useNavigate();
   const params = useParams<{ mode: Mode }>();
@@ -26,6 +42,7 @@ export default function FreeTrialPage() {
       ? "Подпишитесь на наш канал, чтобы получить бесплатный Telegram-прокси."
       : "Подпишитесь на наш канал, чтобы получить бесплатную подписку VPN.";
 
+  const [bootstrapping, setBootstrapping] = useState(true);
   const [newsUrl, setNewsUrl] = useState<string>("");
   const [waiting, setWaiting] = useState(false);
   const [timedOut, setTimedOut] = useState(false);
@@ -46,12 +63,27 @@ export default function FreeTrialPage() {
   };
 
   useEffect(() => {
-    free
-      .check()
-      .then((s) => setNewsUrl(s.news_url))
-      .catch(() => undefined);
-    return () => stopPolling();
-  }, []);
+    let cancelled = false;
+    (async () => {
+      try {
+        const status =
+          mode === "vpn" ? await free.vpnStatus() : await free.telemtStatus();
+        if (cancelled) return;
+        setNewsUrl(status.news_url);
+        if (status.has_access && status.url) {
+          setClaimed({ url: status.url, alreadyActive: true });
+        }
+      } catch {
+        /* fall through to subscribe flow */
+      } finally {
+        if (!cancelled) setBootstrapping(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      stopPolling();
+    };
+  }, [mode]);
 
   const tryClaim = async (): Promise<boolean> => {
     setClaimError(null);
@@ -134,8 +166,21 @@ export default function FreeTrialPage() {
   };
 
   const openConnect = () => {
-    if (claimed?.url) openLink(claimed.url);
+    if (!claimed?.url) return;
+    if (mode === "telemt") {
+      openProxyLink(claimed.url);
+    } else {
+      openLink(claimed.url);
+    }
   };
+
+  if (bootstrapping) {
+    return (
+      <div className="page" style={{ textAlign: "center", paddingTop: 60 }}>
+        <Spin size="large" />
+      </div>
+    );
+  }
 
   if (claimed) {
     return (
@@ -147,7 +192,7 @@ export default function FreeTrialPage() {
           </Typography.Title>
           <Typography.Paragraph type="secondary">
             {claimed.alreadyActive
-              ? "У вас уже есть активный доступ. Используйте ссылку ниже."
+              ? "У вас уже есть активный доступ. Используйте кнопку ниже."
               : "Спасибо за подписку! Нажмите кнопку, чтобы подключиться."}
           </Typography.Paragraph>
           <Space direction="vertical" size={12} style={{ width: "100%" }}>

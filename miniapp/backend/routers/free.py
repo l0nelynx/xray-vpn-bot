@@ -21,6 +21,12 @@ class SubscribeStateResponse(BaseModel):
     news_url: str
 
 
+class FreeStatusResponse(BaseModel):
+    has_access: bool
+    url: str | None = None
+    news_url: str = ""
+
+
 class ClaimResponse(BaseModel):
     ok: bool
     subscription_url: str | None = None
@@ -51,6 +57,40 @@ async def free_check(tg: TgUser = Depends(get_tg_user)) -> SubscribeStateRespons
     await _ensure_user(tg)
     subscribed = await is_user_subscribed_to_news(tg.tg_id)
     return SubscribeStateResponse(subscribed=subscribed, news_url=get_news_url())
+
+
+@router.get("/vpn/status", response_model=FreeStatusResponse)
+async def free_vpn_status(tg: TgUser = Depends(get_tg_user)) -> FreeStatusResponse:
+    user = await _ensure_user(tg)
+    free_squad = get_rw_free_id() or None
+    existing = await get_user_from_username(user.username)
+    if existing and existing.get("uuid"):
+        squads = {s.lower() for s in existing.get("active_squads", [])}
+        is_free = bool(free_squad and free_squad.lower() in squads)
+        is_active_pro = existing.get("status") == "active" and existing.get("data_limit") is None
+        if is_active_pro or is_free:
+            return FreeStatusResponse(
+                has_access=True,
+                url=existing.get("subscription_url"),
+                news_url=get_news_url(),
+            )
+    return FreeStatusResponse(has_access=False, news_url=get_news_url())
+
+
+@router.get("/telemt/status", response_model=FreeStatusResponse)
+async def free_telemt_status(tg: TgUser = Depends(get_tg_user)) -> FreeStatusResponse:
+    user = await _ensure_user(tg)
+    try:
+        existing = await get_telemt_user(user.username)
+    except RuntimeError:
+        existing = None
+    if existing:
+        return FreeStatusResponse(
+            has_access=True,
+            url=first_link(existing.get("links")),
+            news_url=get_news_url(),
+        )
+    return FreeStatusResponse(has_access=False, news_url=get_news_url())
 
 
 @router.post("/claim", response_model=ClaimResponse)

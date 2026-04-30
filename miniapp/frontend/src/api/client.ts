@@ -217,8 +217,16 @@ export interface TelemtClaimResponse {
   detail: string | null;
 }
 
+export interface FreeStatusResponse {
+  has_access: boolean;
+  url: string | null;
+  news_url: string;
+}
+
 export const free = {
   check: () => api.get<FreeCheckResponse>("/free/check"),
   claimVpn: () => api.post<FreeClaimResponse>("/free/claim"),
   claimTelemt: () => api.post<TelemtClaimResponse>("/free/telemt"),
+  vpnStatus: () => api.get<FreeStatusResponse>("/free/vpn/status"),
+  telemtStatus: () => api.get<FreeStatusResponse>("/free/telemt/status"),
 };

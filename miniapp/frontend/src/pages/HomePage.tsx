@@ -1,16 +1,30 @@
 import { Button, Space, Typography } from "antd";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useRef } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { MeResponse } from "../api/client";
 import SubscriptionCard from "../components/SubscriptionCard";
 
 interface Props {
   me: MeResponse;
   reload: () => void;
+  refresh: () => void;
 }
 
-export default function HomePage({ me, reload }: Props) {
+export default function HomePage({ me, reload, refresh }: Props) {
   const navigate = useNavigate();
+  const location = useLocation();
   const sub = me.subscription;
+
+  // Silently refresh whenever the user lands on "/", including on remounts
+  // after the user navigates back from another screen.
+  const lastReloadKey = useRef<string>("");
+  useEffect(() => {
+    const key = location.key || "default";
+    if (lastReloadKey.current !== key) {
+      lastReloadKey.current = key;
+      refresh();
+    }
+  }, [location.key, refresh]);
 
   return (
     <div className="page">
@@ -47,6 +61,9 @@ export default function HomePage({ me, reload }: Props) {
           </Button>
           <Button size="large" block onClick={() => navigate("/free/telemt")}>
             Telegram Прокси
+          </Button>
+          <Button size="large" block onClick={reload}>
+            Обновить
           </Button>
         </Space>
       )}

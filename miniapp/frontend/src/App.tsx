@@ -21,7 +21,7 @@ interface AppInnerProps {
 }
 
 function AppInner({ themeMode, onToggleTheme }: AppInnerProps) {
-  const { data, loading, error, reload } = useMe();
+  const { data, loading, error, reload, refresh } = useMe();
 
   if (loading) {
     return (
@@ -70,7 +70,7 @@ function AppInner({ themeMode, onToggleTheme }: AppInnerProps) {
         {themeMode === "light" ? "Тёмная" : "Светлая"}
       </button>
       <Routes>
-        <Route path="/" element={<HomePage me={data} reload={reload} />} />
+        <Route path="/" element={<HomePage me={data} reload={reload} refresh={refresh} />} />
         <Route path="/buy" element={<BuyMenuPage />} />
         <Route path="/buy/success" element={<BuySuccessPage />} />
         <Route path="/devices" element={<DevicesPage />} />
