@@ -6,6 +6,7 @@ import { useMe } from "./hooks/useMe";
 import BuyMenuPage from "./pages/BuyMenuPage";
 import BuySuccessPage from "./pages/BuySuccessPage";
 import DevicesPage from "./pages/DevicesPage";
+import FreeTrialPage from "./pages/FreeTrialPage";
 import HomePage from "./pages/HomePage";
 import SettingsPage from "./pages/SettingsPage";
 import SupportCreatePage from "./pages/SupportCreatePage";
@@ -73,6 +74,7 @@ function AppInner({ themeMode, onToggleTheme }: AppInnerProps) {
         <Route path="/buy" element={<BuyMenuPage />} />
         <Route path="/buy/success" element={<BuySuccessPage />} />
         <Route path="/devices" element={<DevicesPage />} />
+        <Route path="/free/:mode" element={<FreeTrialPage />} />
         <Route path="/support" element={<SupportPage />} />
         <Route path="/support/new" element={<SupportCreatePage />} />
         <Route path="/support/:id" element={<SupportTicketPage />} />

@@ -6,6 +6,7 @@ from sqlalchemy import select
 from ..config import (
     get_agreement_url,
     get_bot_url,
+    get_news_url,
     get_policy_url,
     get_rw_free_id,
     get_rw_pro_id,
@@ -24,6 +25,7 @@ def _links() -> LinksInfo:
         bot_url=get_bot_url(),
         policy_url=get_policy_url(),
         agreement_url=get_agreement_url(),
+        news_url=get_news_url(),
     )
 
 

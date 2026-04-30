@@ -22,6 +22,7 @@ class LinksInfo(BaseModel):
     bot_url: str
     policy_url: str
     agreement_url: str
+    news_url: str = ""
 
 
 class MeResponse(BaseModel):

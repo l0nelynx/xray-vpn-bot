@@ -7,7 +7,7 @@ from sqlalchemy import text
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .database.session import engine
-from .routers import devices, me, menu, payments, promo, support
+from .routers import devices, free, me, menu, payments, promo, support
 
 BASE_PATH = "/bot/miniapp"
 
@@ -23,6 +23,7 @@ app.include_router(devices.router, prefix=BASE_PATH)
 app.include_router(payments.router, prefix=BASE_PATH)
 app.include_router(menu.router, prefix=BASE_PATH)
 app.include_router(promo.router, prefix=BASE_PATH)
+app.include_router(free.router, prefix=BASE_PATH)
 
 
 async def _has_column(conn, table: str, column: str) -> bool:
@@ -102,6 +103,15 @@ async def ensure_support_tables():
         ))
         await conn.execute(text(
             "CREATE INDEX IF NOT EXISTS ix_support_messages_ticket_id ON support_messages(ticket_id)"
+        ))
+
+        await conn.execute(text(
+            "CREATE TABLE IF NOT EXISTS telmt_free_params ("
+            " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            " max_tcp_conns INTEGER,"
+            " max_unique_ips INTEGER,"
+            " data_quota_bytes BIGINT,"
+            " expire_days INTEGER DEFAULT 30)"
         ))
 
         # Webapp menu tree (authored in dashboard tariff constructor)

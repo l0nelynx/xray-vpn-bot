@@ -2,7 +2,6 @@ import { Button, Space, Typography } from "antd";
 import { useNavigate } from "react-router-dom";
 import { MeResponse } from "../api/client";
 import SubscriptionCard from "../components/SubscriptionCard";
-import { openTelegramLink } from "../tg/webapp";
 
 interface Props {
   me: MeResponse;
@@ -11,14 +10,7 @@ interface Props {
 
 export default function HomePage({ me, reload }: Props) {
   const navigate = useNavigate();
-  const botUrl = me.links.bot_url;
   const sub = me.subscription;
-
-  const open = (suffix: string) => {
-    if (!botUrl) return;
-    const sep = botUrl.includes("?") ? "&" : "?";
-    openTelegramLink(`${botUrl}${sep}start=${suffix}`);
-  };
 
   return (
     <div className="page">
@@ -35,6 +27,9 @@ export default function HomePage({ me, reload }: Props) {
           <Button size="large" block onClick={() => navigate("/devices")}>
             Мои устройства
           </Button>
+          <Button size="large" block onClick={() => navigate("/free/telemt")}>
+            Telegram Прокси
+          </Button>
           <Button size="large" block onClick={reload}>
             Обновить
           </Button>
@@ -47,8 +42,11 @@ export default function HomePage({ me, reload }: Props) {
           <Button type="primary" size="large" block onClick={() => navigate("/buy")}>
             Купить
           </Button>
-          <Button size="large" block onClick={() => open("trial")}>
-            Пробная версия
+          <Button size="large" block onClick={() => navigate("/free/vpn")}>
+            Попробовать Бесплатно
+          </Button>
+          <Button size="large" block onClick={() => navigate("/free/telemt")}>
+            Telegram Прокси
           </Button>
         </Space>
       )}

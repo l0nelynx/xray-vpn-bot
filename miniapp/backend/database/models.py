@@ -76,6 +76,16 @@ class SupportTicket(Base):
     )
 
 
+class TelmtFreeParams(Base):
+    __tablename__ = "telmt_free_params"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    max_tcp_conns: Mapped[int] = mapped_column(Integer, nullable=True)
+    max_unique_ips: Mapped[int] = mapped_column(Integer, nullable=True)
+    data_quota_bytes: Mapped[int] = mapped_column(BigInteger, nullable=True)
+    expire_days: Mapped[int] = mapped_column(Integer, default=30, nullable=True)
+
+
 class SupportMessage(Base):
     __tablename__ = "support_messages"
 

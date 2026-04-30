@@ -86,3 +86,35 @@ def get_crystal_webhook() -> str:
 
 def get_crypto_bot_token() -> str:
     return get_config().get("crypto_bot_token", "")
+
+
+def get_news_url() -> str:
+    return get_config().get("news_url", "")
+
+
+def get_news_id() -> int | None:
+    value = get_config().get("news_id")
+    try:
+        return int(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def get_free_days() -> int:
+    return int(get_config().get("free_days", 30) or 30)
+
+
+def get_free_traffic() -> int:
+    return int(get_config().get("free_traffic", 10) or 10)
+
+
+def get_rw_ext_free_id() -> str:
+    return get_config().get("rw_ext_free_id", "")
+
+
+def get_telemt_server() -> str:
+    return (get_config().get("telemt_server") or "").rstrip("/")
+
+
+def get_telemt_header() -> str:
+    return get_config().get("telemt_header", "") or ""

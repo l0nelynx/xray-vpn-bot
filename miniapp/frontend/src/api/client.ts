@@ -66,6 +66,7 @@ export interface LinksInfo {
   bot_url: string;
   policy_url: string;
   agreement_url: string;
+  news_url: string;
 }
 
 export interface MeResponse {
@@ -196,4 +197,28 @@ export const promo = {
   getState: () => api.get<PromoState>("/promo"),
   activate: (promo_code: string) =>
     api.post<PromoActivateResponse>("/promo", { promo_code }),
+};
+
+export interface FreeCheckResponse {
+  subscribed: boolean;
+  news_url: string;
+}
+
+export interface FreeClaimResponse {
+  ok: boolean;
+  subscription_url: string | null;
+  days: number | null;
+  detail: string | null;
+}
+
+export interface TelemtClaimResponse {
+  ok: boolean;
+  link: string | null;
+  detail: string | null;
+}
+
+export const free = {
+  check: () => api.get<FreeCheckResponse>("/free/check"),
+  claimVpn: () => api.post<FreeClaimResponse>("/free/claim"),
+  claimTelemt: () => api.post<TelemtClaimResponse>("/free/telemt"),
 };
