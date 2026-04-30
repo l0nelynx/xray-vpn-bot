@@ -37,7 +37,7 @@ export default function BuyMenuPage() {
   if (error) {
     return (
       <div className="page">
-        <Alert type="error" message="Не удалось загрузить меню" description={error} />
+        <Alert type="error" title="Не удалось загрузить меню" description={error} />
       </div>
     );
   }
@@ -130,7 +130,7 @@ export default function BuyMenuPage() {
           type="success"
           showIcon
           style={{ marginBottom: 16 }}
-          message={
+          title={
             <span>
               Промокод <strong>{promoState!.active_promo}</strong> активен —{" "}
               скидка <Tag color="success">−{activeDiscount}%</Tag> применится при оплате

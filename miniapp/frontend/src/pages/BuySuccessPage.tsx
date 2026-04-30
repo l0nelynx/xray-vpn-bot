@@ -91,7 +91,7 @@ export default function BuySuccessPage() {
       <div className="page">
         <Alert
           type="warning"
-          message="Подтверждение оплаты заняло больше времени, чем ожидалось"
+          title="Подтверждение оплаты заняло больше времени, чем ожидалось"
           description="Если деньги уже списаны — подписка появится в течение нескольких минут. Откройте главную и нажмите «Обновить»."
         />
         <div style={{ marginTop: 16 }}>

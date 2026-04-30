@@ -79,7 +79,7 @@ export default function SupportTicketPage() {
         Назад
       </Button>
 
-      {error && <Alert type="error" message={error} style={{ marginBottom: 16 }} />}
+      {error && <Alert type="error" title={error} style={{ marginBottom: 16 }} />}
 
       {ticket && (
         <>
@@ -122,13 +122,13 @@ export default function SupportTicketPage() {
           {isClosed ? (
             <Alert
               type="info"
-              message="Обращение закрыто. Создайте новое, если нужна помощь."
+              title="Обращение закрыто. Создайте новое, если нужна помощь."
               style={{ marginTop: 16 }}
             />
           ) : (
             <Card size="small" style={{ marginTop: 16 }}>
               <Space direction="vertical" size={12} style={{ width: "100%" }}>
-                {sendError && <Alert type="error" message={sendError} />}
+                {sendError && <Alert type="error" title={sendError} />}
                 <Input.TextArea
                   value={reply}
                   onChange={(e) => setReply(e.target.value)}

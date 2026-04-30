@@ -36,7 +36,7 @@ export default function SupportCreatePage() {
         Новое обращение
       </Typography.Title>
 
-      {error && <Alert type="error" message={error} style={{ marginBottom: 16 }} />}
+      {error && <Alert type="error" title={error} style={{ marginBottom: 16 }} />}
 
       <Form form={form} layout="vertical" onFinish={submit}>
         <Form.Item

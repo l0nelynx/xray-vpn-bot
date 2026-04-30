@@ -51,7 +51,7 @@ function AppInner({ themeMode, onToggleTheme }: AppInnerProps) {
   if (!data) {
     return (
       <div className="page">
-        <Alert type="warning" message="Нет данных" />
+        <Alert type="warning" title="Нет данных" />
       </div>
     );
   }

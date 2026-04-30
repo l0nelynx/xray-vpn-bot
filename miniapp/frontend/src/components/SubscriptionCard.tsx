@@ -31,7 +31,7 @@ export default function SubscriptionCard({ sub }: Props) {
 
   return (
     <Card style={{ marginBottom: 16 }}>
-      <Descriptions column={1} size="small" colon={false} labelStyle={{ width: 140 }}>
+      <Descriptions column={1} size="small" colon={false} styles={{ label: { width: 140 } }}>
         <Descriptions.Item label="Тариф">
           <Tag color="processing" style={{ fontWeight: 600 }}>
             {sub.tariff}

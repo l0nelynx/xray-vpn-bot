@@ -221,7 +221,7 @@ export default function FreeTrialPage() {
           <Alert
             type="error"
             showIcon
-            message={claimError}
+            title={claimError}
             style={{ marginBottom: 16 }}
             closable
             onClose={() => setClaimError(null)}
@@ -232,7 +232,7 @@ export default function FreeTrialPage() {
           <Alert
             type="warning"
             showIcon
-            message="Не удалось подтвердить подписку"
+            title="Не удалось подтвердить подписку"
             description="Убедитесь, что вы подписались на канал, и нажмите «Проверить»."
             style={{ marginBottom: 16 }}
           />

@@ -23,7 +23,7 @@ export default function SupportPage() {
         Поддержка
       </Typography.Title>
 
-      {error && <Alert type="error" message={error} style={{ marginBottom: 16 }} />}
+      {error && <Alert type="error" title={error} style={{ marginBottom: 16 }} />}
 
       {tickets === null && !error && (
         <div className="spinner-wrap">
