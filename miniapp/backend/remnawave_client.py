@@ -105,7 +105,7 @@ async def create_user(
         sdk = _get_sdk()
 
         if email is None:
-            email = f"{username}@bot.local"
+            email = f"{username}@miniapp.xyz"
 
         new_user = CreateUserRequestDto(
             expire_at=datetime.datetime.now() + datetime.timedelta(days=days),
