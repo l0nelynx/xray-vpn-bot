@@ -39,6 +39,19 @@ def get_agreement_url() -> str:
     return get_config().get("agreement_url", "")
 
 
+def get_branding_name() -> str:
+    return get_config().get("branding_name", "") or ""
+
+
+def get_support_bot_link() -> str:
+    cfg = get_config()
+    link = cfg.get("support_bot_link") or ""
+    if link:
+        return link
+    bot_id = (cfg.get("support_bot_id") or "").lstrip("@").strip()
+    return f"https://t.me/{bot_id}" if bot_id else ""
+
+
 def get_remnawave_url() -> str:
     return get_config().get("remnawave_url", "")
 

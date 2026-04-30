@@ -6,15 +6,16 @@ import {
 } from "@ant-design/icons";
 import { Button, Card, Input, Modal, Space, Tag, Typography, message } from "antd";
 import { useEffect, useState } from "react";
-import { LinksInfo, PromoState, promo as promoApi } from "../api/client";
-import { openLink, showAlert } from "../tg/webapp";
+import { useNavigate } from "react-router-dom";
+import { PromoState, promo as promoApi } from "../api/client";
+import { showAlert } from "../tg/webapp";
 
 interface Props {
-  links: LinksInfo;
   username: string;
 }
 
-export default function SettingsPage({ links, username }: Props) {
+export default function SettingsPage({ username }: Props) {
+  const navigate = useNavigate();
   const [promoState, setPromoState] = useState<PromoState | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [inputCode, setInputCode] = useState("");
@@ -57,13 +58,13 @@ export default function SettingsPage({ links, username }: Props) {
       key: "policy",
       icon: <SafetyOutlined />,
       title: "Политика конфиденциальности",
-      onClick: () => openLink(links.policy_url),
+      onClick: () => navigate("/policy"),
     },
     {
       key: "agreement",
       icon: <FileTextOutlined />,
       title: "Пользовательское соглашение",
-      onClick: () => openLink(links.agreement_url),
+      onClick: () => navigate("/agreement"),
     },
     {
       key: "login",

@@ -6,10 +6,12 @@ from sqlalchemy import select
 from ..config import (
     get_agreement_url,
     get_bot_url,
+    get_branding_name,
     get_news_url,
     get_policy_url,
     get_rw_free_id,
     get_rw_pro_id,
+    get_support_bot_link,
 )
 from ..database.models import User
 from ..database.session import async_session
@@ -26,6 +28,8 @@ def _links() -> LinksInfo:
         policy_url=get_policy_url(),
         agreement_url=get_agreement_url(),
         news_url=get_news_url(),
+        branding_name=get_branding_name(),
+        support_bot_link=get_support_bot_link(),
     )
 
 

@@ -67,6 +67,8 @@ export interface LinksInfo {
   policy_url: string;
   agreement_url: string;
   news_url: string;
+  branding_name: string;
+  support_bot_link: string;
 }
 
 export interface MeResponse {

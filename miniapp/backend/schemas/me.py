@@ -23,6 +23,8 @@ class LinksInfo(BaseModel):
     policy_url: str
     agreement_url: str
     news_url: str = ""
+    branding_name: str = ""
+    support_bot_link: str = ""
 
 
 class MeResponse(BaseModel):

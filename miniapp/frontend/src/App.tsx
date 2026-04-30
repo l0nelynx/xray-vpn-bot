@@ -6,7 +6,9 @@ import BuyMenuPage from "./pages/BuyMenuPage";
 import BuySuccessPage from "./pages/BuySuccessPage";
 import DevicesPage from "./pages/DevicesPage";
 import FreeTrialPage from "./pages/FreeTrialPage";
+import AgreementPage from "./pages/AgreementPage";
 import HomePage from "./pages/HomePage";
+import PolicyPage from "./pages/PolicyPage";
 import SettingsPage from "./pages/SettingsPage";
 import SupportCreatePage from "./pages/SupportCreatePage";
 import SupportPage from "./pages/SupportPage";
@@ -67,8 +69,10 @@ function AppInner() {
         <Route path="/support/:id" element={<SupportTicketPage />} />
         <Route
           path="/settings"
-          element={<SettingsPage links={data.links} username={data.user?.username || ""} />}
+          element={<SettingsPage username={data.user?.username || ""} />}
         />
+        <Route path="/policy" element={<PolicyPage links={data.links} />} />
+        <Route path="/agreement" element={<AgreementPage links={data.links} />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <BottomTabs />
