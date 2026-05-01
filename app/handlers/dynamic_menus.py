@@ -49,6 +49,7 @@ async def dynamic_screen_handler(callback: CallbackQuery, state: FSMContext):
             text=message_text,
             parse_mode="HTML",
             reply_markup=keyboard,
+            disable_web_page_preview=True
         )
     except Exception as e:
         logger.error("Failed to render dynamic screen '%s': %s", slug, e)
