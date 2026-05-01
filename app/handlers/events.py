@@ -123,7 +123,7 @@ async def main_menu(message_func, menu_type, user_id: int = None, days=None, dat
         text = texts_map.get(menu_type, texts_map["new"])
     keyboard = keyboards_map.get(menu_type, keyboards_map["new"])
 
-    await message_func(text, reply_markup=keyboard, parse_mode="HTML")
+    await message_func(text, reply_markup=keyboard, parse_mode="HTML", disable_web_page_preview=True)
 
 
 async def main_call(message_func, menu_type, user_id: int = None, days=None, data_limit=None):
