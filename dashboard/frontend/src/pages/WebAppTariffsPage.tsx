@@ -5,7 +5,7 @@ import {
 } from "antd";
 import {
   PlusOutlined, DeleteOutlined, SaveOutlined, CaretRightOutlined,
-  CaretDownOutlined,
+  CaretDownOutlined, ArrowUpOutlined, ArrowDownOutlined,
 } from "@ant-design/icons";
 import { api } from "../api/client";
 
@@ -100,10 +100,11 @@ function draftEquals(a: DraftNode, b: DraftNode): boolean {
 }
 
 function NodeRow({
-  node, providers, depth, drafts, setDraft, expanded, toggleExpand,
-  onSave, onDelete, onAddChild,
+  node, siblings, providers, depth, drafts, setDraft, expanded, toggleExpand,
+  onSave, onDelete, onAddChild, onMove,
 }: {
   node: MenuNode;
+  siblings: MenuNode[];
   providers: ProviderInfo[];
   depth: number;
   drafts: Record<number, DraftNode>;
@@ -113,6 +114,7 @@ function NodeRow({
   onSave: (id: number) => void;
   onDelete: (id: number) => void;
   onAddChild: (parentId: number) => void;
+  onMove: (id: number, direction: "up" | "down") => void;
 }) {
   const draft = drafts[node.id] ?? nodeToDraft(node);
   const dirty = !draftEquals(draft, nodeToDraft(node));
@@ -121,6 +123,13 @@ function NodeRow({
   const currencyOptions = provider?.currencies ?? [];
   const methodOptions = provider?.methods ?? [];
   const methodLocked = methodOptions.length <= 1;
+  const orderedSiblings = useMemo(
+    () => [...siblings].sort((a, b) => a.sort_order - b.sort_order || a.id - b.id),
+    [siblings],
+  );
+  const idx = orderedSiblings.findIndex((s) => s.id === node.id);
+  const canMoveUp = idx > 0;
+  const canMoveDown = idx >= 0 && idx < orderedSiblings.length - 1;
 
   const handleProviderChange = (val: string | undefined) => {
     const p = providers.find((pp) => pp.name === val);
@@ -247,6 +256,20 @@ function NodeRow({
           <Space size={4}>
             <Button
               size="small"
+              icon={<ArrowUpOutlined />}
+              disabled={!canMoveUp}
+              onClick={() => onMove(node.id, "up")}
+              title="Move up"
+            />
+            <Button
+              size="small"
+              icon={<ArrowDownOutlined />}
+              disabled={!canMoveDown}
+              onClick={() => onMove(node.id, "down")}
+              title="Move down"
+            />
+            <Button
+              size="small"
               type="primary"
               icon={<SaveOutlined />}
               disabled={!dirty}
@@ -277,21 +300,25 @@ function NodeRow({
 
       {node.action === "buttons" && isExpanded && (
         <div>
-          {node.children.map((c) => (
-            <NodeRow
-              key={c.id}
-              node={c}
-              providers={providers}
-              depth={depth + 1}
-              drafts={drafts}
-              setDraft={setDraft}
-              expanded={expanded}
-              toggleExpand={toggleExpand}
-              onSave={onSave}
-              onDelete={onDelete}
-              onAddChild={onAddChild}
-            />
-          ))}
+          {[...node.children]
+            .sort((a, b) => a.sort_order - b.sort_order || a.id - b.id)
+            .map((c) => (
+              <NodeRow
+                key={c.id}
+                node={c}
+                siblings={node.children}
+                providers={providers}
+                depth={depth + 1}
+                drafts={drafts}
+                setDraft={setDraft}
+                expanded={expanded}
+                toggleExpand={toggleExpand}
+                onSave={onSave}
+                onDelete={onDelete}
+                onAddChild={onAddChild}
+                onMove={onMove}
+              />
+            ))}
           {node.children.length === 0 && (
             <div
               style={{
@@ -476,6 +503,36 @@ export default function WebAppTariffsPage() {
     }
   };
 
+  const handleMove = async (id: number, direction: "up" | "down") => {
+    const node = flatten.find((n) => n.id === id);
+    if (!node) return;
+    const siblings = node.parent_id == null
+      ? tree
+      : flatten.find((n) => n.id === node.parent_id)?.children ?? [];
+    const ordered = [...siblings].sort(
+      (a, b) => a.sort_order - b.sort_order || a.id - b.id,
+    );
+    const idx = ordered.findIndex((s) => s.id === id);
+    const swapIdx = direction === "up" ? idx - 1 : idx + 1;
+    if (idx < 0 || swapIdx < 0 || swapIdx >= ordered.length) return;
+
+    const reordered = [...ordered];
+    [reordered[idx], reordered[swapIdx]] = [reordered[swapIdx], reordered[idx]];
+
+    const items = reordered.map((n, i) => ({
+      id: n.id,
+      parent_id: n.parent_id,
+      sort_order: i,
+    }));
+
+    try {
+      await api.put("/webapp-menu/reorder", { items });
+      await reload();
+    } catch (e: unknown) {
+      message.error(`Reorder failed: ${(e as Error).message}`);
+    }
+  };
+
   return (
     <div>
       <Space
@@ -504,10 +561,13 @@ export default function WebAppTariffsPage() {
           <Empty description="No menu nodes yet — click 'Add root menu' to start." />
         </Card>
       ) : (
-        tree.map((n) => (
+        [...tree]
+          .sort((a, b) => a.sort_order - b.sort_order || a.id - b.id)
+          .map((n) => (
           <NodeRow
             key={n.id}
             node={n}
+            siblings={tree}
             providers={providers}
             depth={0}
             drafts={drafts}
@@ -517,6 +577,7 @@ export default function WebAppTariffsPage() {
             onSave={handleSave}
             onDelete={handleDelete}
             onAddChild={handleAddChild}
+            onMove={handleMove}
           />
         ))
       )}
