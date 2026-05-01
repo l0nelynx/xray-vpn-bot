@@ -107,7 +107,7 @@ async def create_payment_invoice(
     # poller in app/handlers/payments.py can deliver the subscription.
     # Use the provider-issued id as the transaction key when available
     # (CrystalPay/CryptoPay) so the webhook lookups match.
-    persisted_id = invoice.invoice_id if provider.name in {"crystal", "crypto"} else transaction_id
+    persisted_id = invoice.invoice_id if provider.name in {"crystal", "crypto", "platega"} else transaction_id
 
     async with async_session() as session:
         session.add(

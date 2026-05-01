@@ -81,6 +81,26 @@ def get_apay_api_url() -> str:
     return get_config().get("apay_api_url", "")
 
 
+def get_platega_merchant_id() -> str:
+    return get_config().get("platega_merchant_id", "") or ""
+
+
+def get_platega_api_key() -> str:
+    return get_config().get("platega_api_key", "") or ""
+
+
+def get_platega_url() -> str:
+    return (get_config().get("platega_url") or "https://app.platega.io").rstrip("/")
+
+
+def get_platega_payment_method() -> int:
+    value = get_config().get("platega_payment_method", 2)
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 2
+
+
 def get_crystal_login() -> str:
     return get_config().get("crystal_login", "")
 

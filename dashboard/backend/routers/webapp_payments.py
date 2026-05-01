@@ -29,6 +29,11 @@ _PROVIDER_CATALOG = [
         "payment_method": "CRYPTOPAY",
         "currencies": ["USDT", "TON", "BTC", "ETH", "LTC", "BNB", "TRX", "USDC"],
     },
+    {
+        "name": "platega",
+        "payment_method": "PLATEGA",
+        "currencies": ["RUB"],
+    },
 ]
 
 

@@ -58,6 +58,12 @@ apay_id: 1234                                      # A-Pays merchant ID
 apay_secret: "your_apay_secret"                    # A-Pays secret key
 apay_api_url: "https://apays.io"
 
+# ===== PAYMENT GATEWAY: PLATEGA =====
+platega_merchant_id: "your-platega-merchant-uuid"  # Platega merchant UUID (X-MerchantId header)
+platega_api_key: "your_platega_api_key"            # Platega API key (X-Secret header)
+platega_url: "https://app.platega.io"              # Platega API base URL
+platega_payment_method: 2                          # Default payment method (2=SBP, 3=ERIP, 11=card, 12=intl, 13=crypto)
+
 # ===== BASE PRICES =====
 # These values are used only on first launch to seed default tariffs.
 # After deployment, manage tariffs and menus through the Dashboard.

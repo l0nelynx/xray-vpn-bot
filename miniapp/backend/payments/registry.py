@@ -4,6 +4,7 @@ from .apay import APayProvider
 from .base import Invoice, InvoiceRequest, PaymentError, PaymentProvider
 from .crypto import CryptoPayProvider
 from .crystal import CrystalPayProvider
+from .platega import PlategaProvider
 
 _REGISTRY: dict[str, PaymentProvider] = {}
 
@@ -33,5 +34,5 @@ async def create_invoice(provider_name: str, request: InvoiceRequest) -> Invoice
 
 
 # Default registrations — additional providers can register themselves at startup.
-for _provider_cls in (APayProvider, CrystalPayProvider, CryptoPayProvider):
+for _provider_cls in (APayProvider, CrystalPayProvider, CryptoPayProvider, PlategaProvider):
     register_provider(_provider_cls())
