@@ -28,7 +28,7 @@ router = Router()
 async def cmd_start(message: Message, command: CommandObject = None):
     if await rq.is_user_banned(message.from_user.id):
         lang = await get_user_lang(message.from_user.id)
-        await message.answer(lang.msg_account_banned)
+        await message.answer(lang.msg_account_banned, disable_web_page_preview=True)
         return
     await rq.set_user(message.from_user.id, message.from_user.username)
 
@@ -40,6 +40,7 @@ async def cmd_start(message: Message, command: CommandObject = None):
         await message.answer(
             text=lang_ru.lang_choose,
             parse_mode='HTML',
+            disable_web_page_preview=True,
             reply_markup=get_language_select_keyboard()
         )
         return
@@ -60,6 +61,7 @@ async def cmd_start(message: Message, command: CommandObject = None):
         text = lang.text_extend_pay_method if payload == "extend" else lang.text_pay_method
         await message.answer(
             text=text, parse_mode='HTML',
+            disable_web_page_preview=True,
             reply_markup=get_pay_methods_localized(lang, show_promo=show_promo),
         )
         return
@@ -74,6 +76,7 @@ async def cmd_lang(message: Message):
     await message.answer(
         text=lang.msg_lang_current,
         parse_mode='HTML',
+        disable_web_page_preview=True,
         reply_markup=get_language_change_keyboard(lang)
     )
 
@@ -92,6 +95,7 @@ async def set_language(callback: CallbackQuery):
 async def user_agreement(callback: CallbackQuery):
     lang = await get_user_lang(callback.from_user.id)
     await callback.message.edit_text(text=lang.user_agreement, parse_mode='HTML',
+                                     disable_web_page_preview=True,
                                      reply_markup=get_agreement_menu_localized(lang))
 
 
@@ -99,6 +103,7 @@ async def user_agreement(callback: CallbackQuery):
 async def privacy_policy(callback: CallbackQuery):
     lang = await get_user_lang(callback.from_user.id)
     await callback.message.edit_text(text=lang.privacy_policy, parse_mode='HTML',
+                                     disable_web_page_preview=True,
                                      reply_markup=get_policy_menu_localized(lang))
 
 
@@ -108,6 +113,7 @@ async def settings_menu(callback: CallbackQuery):
     await callback.message.edit_text(
         text=lang.msg_settings,
         parse_mode='HTML',
+        disable_web_page_preview=True,
         reply_markup=get_settings_menu_localized(lang)
     )
 
@@ -118,6 +124,7 @@ async def change_language_menu(callback: CallbackQuery):
     await callback.message.edit_text(
         text=lang.msg_lang_current,
         parse_mode='HTML',
+        disable_web_page_preview=True,
         reply_markup=get_language_change_keyboard(lang)
     )
 
@@ -172,12 +179,14 @@ async def free_buy(callback: CallbackQuery):
 
     if await rq.is_user_banned(callback.from_user.id):
         await callback.message.edit_text(text=lang.msg_account_banned, parse_mode='HTML',
+                                         disable_web_page_preview=True,
                                          reply_markup=get_to_main_localized(lang))
         return
 
     username = callback.from_user.username
     if not username or username == "None":
         await callback.message.edit_text(text=lang.msg_username_required, parse_mode='HTML',
+                                         disable_web_page_preview=True,
                                          reply_markup=get_to_main_localized(lang))
         return
 
@@ -202,12 +211,14 @@ async def telemt_free_buy(callback: CallbackQuery):
 
     if await rq.is_user_banned(callback.from_user.id):
         await callback.message.edit_text(text=lang.msg_account_banned, parse_mode='HTML',
+                                         disable_web_page_preview=True,
                                          reply_markup=get_to_main_localized(lang))
         return
 
     username = callback.from_user.username
     if not username or username == "None":
         await callback.message.edit_text(text=lang.msg_username_required, parse_mode='HTML',
+                                         disable_web_page_preview=True,
                                          reply_markup=get_to_main_localized(lang))
         return
 
@@ -227,6 +238,7 @@ async def telemt_free_buy(callback: CallbackQuery):
         await callback.message.edit_text(
             text=lang.telemt_free_already_exists.format(links=links_text),
             parse_mode='HTML',
+            disable_web_page_preview=True,
             reply_markup=get_to_main_localized(lang),
         )
         return
@@ -243,6 +255,7 @@ async def telemt_free_buy(callback: CallbackQuery):
 
     if not result:
         await callback.message.edit_text(text=lang.telemt_free_error, parse_mode='HTML',
+                                         disable_web_page_preview=True,
                                          reply_markup=get_to_main_localized(lang))
         return
 
@@ -250,6 +263,7 @@ async def telemt_free_buy(callback: CallbackQuery):
     await callback.message.edit_text(
         text=lang.telemt_free_success.format(links=links_text),
         parse_mode='HTML',
+        disable_web_page_preview=True,
         reply_markup=get_to_main_localized(lang),
     )
 
@@ -301,7 +315,8 @@ async def invite_friends(callback: CallbackQuery):
         days_rewarded=promo['days_rewarded'],
     )
 
-    await callback.message.edit_text(text=text, parse_mode='HTML', reply_markup=get_to_main_localized(lang))
+    await callback.message.edit_text(text=text, parse_mode='HTML', disable_web_page_preview=True,
+                                     reply_markup=get_to_main_localized(lang))
 
 
 @router.callback_query(F.data == 'subcheck_reactivate')
@@ -330,6 +345,7 @@ async def subcheck_reactivate(callback: CallbackQuery):
         await callback.message.edit_text(
             text=lang.msg_sub_clean_still_not_subscribed,
             parse_mode='HTML',
+            disable_web_page_preview=True,
             reply_markup=kb_retry,
         )
         return
@@ -342,6 +358,7 @@ async def subcheck_reactivate(callback: CallbackQuery):
         await callback.message.edit_text(
             text=lang.msg_sub_clean_reactivation_error,
             parse_mode='HTML',
+            disable_web_page_preview=True,
         )
         return
 
@@ -353,11 +370,13 @@ async def subcheck_reactivate(callback: CallbackQuery):
         await callback.message.edit_text(
             text=lang.msg_sub_clean_reactivated,
             parse_mode='HTML',
+            disable_web_page_preview=True,
         )
     else:
         await callback.message.edit_text(
             text=lang.msg_sub_clean_reactivation_error,
             parse_mode='HTML',
+            disable_web_page_preview=True,
         )
 
 
