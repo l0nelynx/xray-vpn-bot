@@ -29,7 +29,7 @@ async def _resolve_user_uuid(tg: TgUser) -> str:
 
     rem_user = await get_user_from_username(user.username)
     if not rem_user or not rem_user.get("uuid"):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "remnawave user not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "user not found")
     return rem_user["uuid"]
 
 
