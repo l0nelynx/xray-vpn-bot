@@ -96,6 +96,7 @@ export default function BuyMenuPage() {
         days: node.invoice.days,
         tariff_slug: node.invoice.tariff_slug ?? undefined,
         description: node.text,
+        method: node.invoice.method ?? undefined,
       });
       openLink(res.url);
       // Promo is consumed after delivery — refresh state optimistically

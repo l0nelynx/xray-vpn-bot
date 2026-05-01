@@ -28,6 +28,7 @@ def _build_tree(rows: list[dict], parent_id: int | None) -> list[dict]:
                     "provider": r["invoice_provider"],
                     "amount": r["invoice_amount"],
                     "currency": r["invoice_currency"],
+                    "method": r["invoice_method"],
                     "days": r["invoice_days"],
                     "tariff_slug": r["invoice_tariff_slug"],
                 }
@@ -45,7 +46,7 @@ async def get_menu_tree(_: TgUser = Depends(get_tg_user)) -> dict:
     async with async_session() as session:
         result = await session.execute(text(
             "SELECT id, parent_id, text, action, sort_order, is_active, "
-            "invoice_provider, invoice_amount, invoice_currency, "
+            "invoice_provider, invoice_amount, invoice_currency, invoice_method, "
             "invoice_days, invoice_tariff_slug "
             "FROM webapp_menu_nodes WHERE is_active = 1"
         ))

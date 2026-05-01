@@ -91,6 +91,7 @@ async def create_payment_invoice(
         user_tg_id=tg.tg_id,
         username=tg.username,
         description=body.description,
+        method=body.method,
     )
 
     try:

@@ -2,12 +2,16 @@ from pydantic import BaseModel, Field
 
 
 class InvoiceCreateRequest(BaseModel):
-    provider: str = Field(..., description="apay | crystal | crypto")
+    provider: str = Field(..., description="apay | crystal | crypto | platega")
     amount: float = Field(..., gt=0)
     currency: str = Field(..., description="RUB | USD | EUR | USDT | TON | ...")
     days: int = Field(..., gt=0)
     tariff_slug: str | None = None
     description: str | None = None
+    method: str | None = Field(
+        None,
+        description="Optional provider-specific payment method (e.g. Platega method id)",
+    )
 
 
 class InvoiceResponse(BaseModel):

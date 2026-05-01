@@ -21,15 +21,22 @@ interface MenuNode {
   invoice_provider: string | null;
   invoice_amount: number | null;
   invoice_currency: string | null;
+  invoice_method: string | null;
   invoice_days: number | null;
   invoice_tariff_slug: string | null;
   children: MenuNode[];
+}
+
+interface ProviderMethod {
+  value: string;
+  label: string;
 }
 
 interface ProviderInfo {
   name: string;
   payment_method: string;
   currencies: string[];
+  methods: ProviderMethod[];
 }
 
 interface DraftNode {
@@ -38,6 +45,7 @@ interface DraftNode {
   invoice_provider: string | null;
   invoice_amount: number | null;
   invoice_currency: string | null;
+  invoice_method: string | null;
   invoice_days: number | null;
   invoice_squad_id: string;
   invoice_external_squad_id: string;
@@ -68,6 +76,7 @@ function nodeToDraft(n: MenuNode): DraftNode {
     invoice_provider: n.invoice_provider,
     invoice_amount: n.invoice_amount,
     invoice_currency: n.invoice_currency,
+    invoice_method: n.invoice_method,
     invoice_days: n.invoice_days,
     invoice_squad_id: sid,
     invoice_external_squad_id: esid,
@@ -82,6 +91,7 @@ function draftEquals(a: DraftNode, b: DraftNode): boolean {
     a.invoice_provider === b.invoice_provider &&
     a.invoice_amount === b.invoice_amount &&
     a.invoice_currency === b.invoice_currency &&
+    a.invoice_method === b.invoice_method &&
     a.invoice_days === b.invoice_days &&
     a.invoice_squad_id === b.invoice_squad_id &&
     a.invoice_external_squad_id === b.invoice_external_squad_id &&
@@ -109,15 +119,22 @@ function NodeRow({
   const isExpanded = expanded.has(node.id);
   const provider = providers.find((p) => p.name === draft.invoice_provider);
   const currencyOptions = provider?.currencies ?? [];
+  const methodOptions = provider?.methods ?? [];
+  const methodLocked = methodOptions.length <= 1;
 
   const handleProviderChange = (val: string | undefined) => {
     const p = providers.find((pp) => pp.name === val);
+    const methodValues = p?.methods.map((m) => m.value) ?? [];
     setDraft(node.id, {
       invoice_provider: val ?? null,
       invoice_currency:
         draft.invoice_currency && p?.currencies.includes(draft.invoice_currency)
           ? draft.invoice_currency
           : (p?.currencies[0] ?? null),
+      invoice_method:
+        draft.invoice_method && methodValues.includes(draft.invoice_method)
+          ? draft.invoice_method
+          : (p?.methods[0]?.value ?? null),
     });
   };
 
@@ -189,6 +206,15 @@ function NodeRow({
                 style={{ width: 110 }}
                 disabled={!draft.invoice_provider}
                 allowClear
+              />
+              <Select
+                placeholder="Method"
+                value={draft.invoice_method ?? undefined}
+                onChange={(val) => setDraft(node.id, { invoice_method: val ?? null })}
+                options={methodOptions.map((m) => ({ value: m.value, label: m.label }))}
+                style={{ width: 140 }}
+                disabled={!draft.invoice_provider || methodLocked}
+                allowClear={!methodLocked}
               />
               <InputNumber
                 placeholder="Days"
@@ -425,6 +451,7 @@ export default function WebAppTariffsPage() {
         invoice_provider: draft.invoice_provider,
         invoice_amount: draft.invoice_amount,
         invoice_currency: draft.invoice_currency,
+        invoice_method: draft.invoice_method,
         invoice_days: draft.invoice_days,
         invoice_tariff_slug: packSlug(
           draft.invoice_squad_id,

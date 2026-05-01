@@ -13,6 +13,16 @@ from .base import Invoice, InvoiceRequest, PaymentError, PaymentProvider
 logger = logging.getLogger(__name__)
 
 
+def _resolve_method(requested: str | None) -> int:
+    """Use per-button method when set & numeric, else fall back to config default."""
+    if requested and requested.lower() != "default":
+        try:
+            return int(requested)
+        except (TypeError, ValueError):
+            logger.warning("Platega: ignoring non-numeric method %r", requested)
+    return get_platega_payment_method()
+
+
 class PlategaProvider(PaymentProvider):
     """Platega.io payment gateway. Mirrors app/api/platega.py PaymentProcessor."""
 
@@ -32,7 +42,7 @@ class PlategaProvider(PaymentProvider):
         merchant_id = get_platega_merchant_id()
         api_key = get_platega_api_key()
         api_url = get_platega_url()
-        method = get_platega_payment_method()
+        method = _resolve_method(request.method)
 
         if not (merchant_id and api_key and api_url):
             raise PaymentError("Platega is not configured")

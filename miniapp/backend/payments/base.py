@@ -21,6 +21,7 @@ class InvoiceRequest:
     user_tg_id: int
     username: str | None = None
     description: str | None = None
+    method: str | None = None
 
 
 @dataclass(frozen=True)

@@ -137,6 +137,7 @@ export interface InvoiceCreateRequest {
   days: number;
   tariff_slug?: string;
   description?: string;
+  method?: string;
 }
 
 export interface InvoiceResponse {
@@ -163,6 +164,7 @@ export interface MenuInvoice {
   currency: string;
   days: number | null;
   tariff_slug: string | null;
+  method: string | null;
 }
 
 export interface MenuNode {

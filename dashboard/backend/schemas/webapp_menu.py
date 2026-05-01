@@ -16,6 +16,7 @@ class WebAppMenuNodeBase(BaseModel):
     invoice_provider: Optional[str] = None
     invoice_amount: Optional[float] = None
     invoice_currency: Optional[str] = None
+    invoice_method: Optional[str] = None
     invoice_days: Optional[int] = None
     invoice_tariff_slug: Optional[str] = None
 
@@ -33,6 +34,7 @@ class WebAppMenuNodeUpdate(BaseModel):
     invoice_provider: Optional[str] = None
     invoice_amount: Optional[float] = None
     invoice_currency: Optional[str] = None
+    invoice_method: Optional[str] = None
     invoice_days: Optional[int] = None
     invoice_tariff_slug: Optional[str] = None
 

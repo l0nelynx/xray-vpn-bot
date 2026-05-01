@@ -207,6 +207,7 @@ class WebAppMenuNode(Base):
     invoice_provider: Mapped[str] = mapped_column(String(30), nullable=True)
     invoice_amount: Mapped[float] = mapped_column(Float, nullable=True)
     invoice_currency: Mapped[str] = mapped_column(String(10), nullable=True)
+    invoice_method: Mapped[str] = mapped_column(String(30), nullable=True)
     invoice_days: Mapped[int] = mapped_column(Integer, nullable=True)
     invoice_tariff_slug: Mapped[str] = mapped_column(String(50), nullable=True)
 

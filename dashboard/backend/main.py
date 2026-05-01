@@ -117,9 +117,15 @@ async def ensure_support_tables():
             " invoice_provider VARCHAR(30),"
             " invoice_amount FLOAT,"
             " invoice_currency VARCHAR(10),"
+            " invoice_method VARCHAR(30),"
             " invoice_days INTEGER,"
             " invoice_tariff_slug VARCHAR(50))"
         ))
+        if await _table_exists(conn, "webapp_menu_nodes") and \
+                not await _has_column(conn, "webapp_menu_nodes", "invoice_method"):
+            await conn.execute(text(
+                "ALTER TABLE webapp_menu_nodes ADD COLUMN invoice_method VARCHAR(30)"
+            ))
         await conn.execute(text(
             "CREATE INDEX IF NOT EXISTS ix_webapp_menu_nodes_parent_id "
             "ON webapp_menu_nodes(parent_id)"

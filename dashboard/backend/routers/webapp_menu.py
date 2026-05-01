@@ -29,6 +29,7 @@ def _serialize_tree(nodes: list[WebAppMenuNode], parent_id: int | None) -> list[
             "invoice_provider": n.invoice_provider,
             "invoice_amount": n.invoice_amount,
             "invoice_currency": n.invoice_currency,
+            "invoice_method": n.invoice_method,
             "invoice_days": n.invoice_days,
             "invoice_tariff_slug": n.invoice_tariff_slug,
             "children": _serialize_tree(nodes, n.id),
@@ -65,6 +66,7 @@ async def create_node(body: WebAppMenuNodeCreate, _: str = Depends(get_current_u
             invoice_provider=body.invoice_provider,
             invoice_amount=body.invoice_amount,
             invoice_currency=body.invoice_currency,
+            invoice_method=body.invoice_method,
             invoice_days=body.invoice_days,
             invoice_tariff_slug=body.invoice_tariff_slug,
         )
@@ -83,6 +85,7 @@ async def create_node(body: WebAppMenuNodeCreate, _: str = Depends(get_current_u
         invoice_provider=node.invoice_provider,
         invoice_amount=node.invoice_amount,
         invoice_currency=node.invoice_currency,
+        invoice_method=node.invoice_method,
         invoice_days=node.invoice_days,
         invoice_tariff_slug=node.invoice_tariff_slug,
         children=[],
@@ -103,7 +106,7 @@ async def update_node(
         for field in (
             "text", "action", "sort_order", "is_active", "parent_id",
             "invoice_provider", "invoice_amount", "invoice_currency",
-            "invoice_days", "invoice_tariff_slug",
+            "invoice_method", "invoice_days", "invoice_tariff_slug",
         ):
             value = getattr(body, field)
             if value is not None:
@@ -123,6 +126,7 @@ async def update_node(
         invoice_provider=node.invoice_provider,
         invoice_amount=node.invoice_amount,
         invoice_currency=node.invoice_currency,
+        invoice_method=node.invoice_method,
         invoice_days=node.invoice_days,
         invoice_tariff_slug=node.invoice_tariff_slug,
         children=[],
