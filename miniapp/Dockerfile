@@ -1,9 +1,12 @@
+# Build context for this Dockerfile is the repository root.
+# Use:  docker build -f miniapp/Dockerfile .
+
 # Stage 1: Build React frontend
 FROM node:20-alpine AS frontend-build
 WORKDIR /build
-COPY frontend/package.json frontend/package-lock.json* ./
+COPY miniapp/frontend/package.json miniapp/frontend/package-lock.json* ./
 RUN npm ci --ignore-scripts || npm install
-COPY frontend/ .
+COPY miniapp/frontend/ .
 RUN npm run build
 
 # Stage 2: Python runtime
@@ -12,10 +15,13 @@ WORKDIR /app
 
 RUN apk add --no-cache curl
 
-COPY backend/requirements.txt .
+COPY miniapp/backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY backend/ ./backend/
+COPY packages/remnawave_client /tmp/remnawave_client
+RUN pip install --no-cache-dir /tmp/remnawave_client && rm -rf /tmp/remnawave_client
+
+COPY miniapp/backend/ ./backend/
 COPY --from=frontend-build /build/dist ./static/
 
 EXPOSE 8001

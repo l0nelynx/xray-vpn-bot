@@ -53,7 +53,9 @@ services:
   dashboard:
     container_name: dashboard
     image: ghcr.io/l0nelynx/dashboard:${IMAGE_TAG:-staging}
-    build: ./dashboard
+    build:
+      context: .
+      dockerfile: dashboard/Dockerfile
     volumes:
       - ./db:/app/db
       - ./config.yml:/app/config.yml:ro
@@ -78,7 +80,9 @@ services:
   miniapp:
     container_name: miniapp
     image: ghcr.io/l0nelynx/miniapp:${IMAGE_TAG:-staging}
-    build: ./miniapp
+    build:
+      context: .
+      dockerfile: miniapp/Dockerfile
     volumes:
       - ./db:/app/db
       - ./config.yml:/app/config.yml:ro

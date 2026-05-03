@@ -1,9 +1,12 @@
+# Build context for this Dockerfile is the repository root.
+# Use:  docker build -f dashboard/Dockerfile .
+
 # Stage 1: Build React frontend
 FROM node:20-alpine AS frontend-build
 WORKDIR /build
-COPY frontend/package.json frontend/package-lock.json* ./
+COPY dashboard/frontend/package.json dashboard/frontend/package-lock.json* ./
 RUN npm ci --ignore-scripts || npm install
-COPY frontend/ .
+COPY dashboard/frontend/ .
 RUN npm run build
 
 # Stage 2: Python runtime
@@ -12,10 +15,13 @@ WORKDIR /app
 
 RUN apk add --no-cache curl
 
-COPY backend/requirements.txt .
+COPY dashboard/backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY backend/ ./backend/
+COPY packages/remnawave_client /tmp/remnawave_client
+RUN pip install --no-cache-dir /tmp/remnawave_client && rm -rf /tmp/remnawave_client
+
+COPY dashboard/backend/ ./backend/
 COPY --from=frontend-build /build/dist ./static/
 
 EXPOSE 8000
