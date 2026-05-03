@@ -4,8 +4,18 @@ stages:
 
 workflow:
   rules:
+    - if: $CI_COMMIT_MESSAGE =~ /^docs:.*/
+      when: never
     - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - "**/*"
+        - "!docs/**/*"
+        - "!**/*.md"
     - if: $CI_COMMIT_BRANCH == "develop"
+      changes:
+        - "**/*"
+        - "!docs/**/*"
+        - "!**/*.md"
 
 build:
   stage: build
