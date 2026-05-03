@@ -1,0 +1,60 @@
+# VCS
+.git
+.gitignore
+.gitattributes
+
+# IDE / OS
+.idea
+.vscode
+*.iml
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__
+**/__pycache__
+*.py[cod]
+*$py.class
+*.egg-info
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.venv
+venv
+env
+ENV
+
+# Local env
+.env
+.env.*
+!.env.example
+
+# Project: local databases & backups
+db
+*.sqlite3
+*.sqlite3-*
+db.sqlite3*
+
+# Project: build artifacts shouldn't be in build context
+miniapp/frontend/node_modules
+miniapp/frontend/dist
+miniapp/static
+dashboard/frontend/node_modules
+dashboard/frontend/dist
+dashboard/static
+node_modules
+
+# Logs / runtime junk
+*.log
+logs
+*.pid
+
+# Docker
+docker-compose*.yml
+Dockerfile*
+
+# Tests / docs we don't ship
+tests
+docs
+*.md
+!README.md
