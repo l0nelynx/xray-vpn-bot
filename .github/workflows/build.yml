@@ -24,10 +24,10 @@ jobs:
             context: ./
             file: ./Dockerfile_support
           - name: dashboard
-            context: ./dashboard
+            context: ./
             file: ./dashboard/Dockerfile
           - name: miniapp
-            context: ./miniapp
+            context: ./
             file: ./miniapp/Dockerfile
 
     steps:

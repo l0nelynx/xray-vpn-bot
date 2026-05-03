@@ -24,8 +24,11 @@ build:
         CONTEXT: ./
         DOCKERFILE: ./Dockerfile_support
       - NAME: dashboard
-        CONTEXT: ./dashboard
+        CONTEXT: ./
         DOCKERFILE: ./dashboard/Dockerfile
+      - NAME: miniapp
+        CONTEXT: ./
+        DOCKERFILE: ./miniapp/Dockerfile
   before_script:
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
   script:

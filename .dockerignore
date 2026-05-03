@@ -49,9 +49,8 @@ node_modules
 logs
 *.pid
 
-# Docker
+# Docker — keep Dockerfiles in context; only ignore compose files
 docker-compose*.yml
-Dockerfile*
 
 # Tests / docs we don't ship
 tests
