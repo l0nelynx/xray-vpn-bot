@@ -17,5 +17,8 @@ RUN touch ./db.sqlite3
 COPY ./app ./app
 COPY ./main.py ./main.py
 COPY ./support.py ./support.py
+COPY ./alembic ./alembic
+COPY ./alembic.ini ./alembic.ini
+COPY ./migrations_runner.py ./migrations_runner.py
 
 CMD ["/bin/sh", "-c", "python main.py"]

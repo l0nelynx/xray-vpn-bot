@@ -54,12 +54,19 @@ async def payment_process_background(order_id: str):
             return
 
         usrid = userdata.get("user_tg_id")
+        android_user_id = userdata.get("android_user_id")
         # Пытаемся получить username из разных возможных полей
         usrname = userdata.get("username") or userdata.get("user_username") or f"user_{usrid}"
         tariff_days = userdata.get("days_ordered")
 
         # Определяем тип транзакции (FREE или PAID)
         is_free_transaction = userdata.get("is_free") or userdata.get("type") == "free" or userdata.get("payment_type") == "free"
+
+        # Android API: paid transaction created via miniapp/backend/android/payments_router.
+        # No tg_id ⇒ skip the Telegram-bound delivery path entirely.
+        if android_user_id and not usrid:
+            await _process_android_payment(order_id, userdata, android_user_id, tariff_days)
+            return
 
         if not usrid or not tariff_days:
             logging.error(f"Missing required data in transaction: user_id={usrid}, days={tariff_days}")
@@ -166,3 +173,64 @@ async def payment_process_background(order_id: str):
             chat_id=secrets.get('admin_id'),
             text=f"❌ Критическая ошибка при обработке платежа {order_id}:\n{str(e)}"
         )
+
+
+async def _process_android_payment(order_id: str, userdata: dict, android_user_id: int, tariff_days: int) -> None:
+    """Deliver a PAID Android-API transaction via Remnawave.
+
+    Differs from the Telegram path: no bot messages, no localized templates,
+    no referral logic (Android doesn't expose promos yet). Admin still gets
+    a notification for visibility.
+    """
+    from app.handlers.android_delivery import deliver_android_paid
+
+    if userdata.get('status') != 'created':
+        logging.warning(
+            f"Android payment {order_id} ignored — status={userdata.get('status')}"
+        )
+        return
+    claimed = await rq.claim_order_for_processing(order_id)
+    if not claimed:
+        logging.warning(f"Android payment {order_id} already claimed; skipping")
+        return
+
+    payment_method_name = userdata.get("payment_method") or order_id
+    tx_amount = userdata.get("amount")
+    email = userdata.get("user_email")
+
+    await send_alert(
+        order_id,
+        usrname=email or f"android_{android_user_id}",
+        usrid=-int(android_user_id),
+        tariff_days=tariff_days,
+        payment_method=payment_method_name,
+        amount=tx_amount,
+        transaction_id=order_id,
+    )
+
+    result = await deliver_android_paid(
+        transaction_id=order_id,
+        android_user_id=android_user_id,
+        email=email,
+        days=tariff_days,
+        tariff_slug=userdata.get("tariff_slug"),
+    )
+
+    if result["status"] != "success":
+        await rq.update_order_status(order_id, 'pending')
+        logging.error(
+            f"Android delivery failed for {order_id}: {result.get('message')}"
+        )
+        await _notify.send_message(
+            chat_id=secrets.get('admin_id'),
+            text=(
+                f"❌ Android delivery failed: {order_id}\n"
+                f"User: {email} (id={android_user_id})\n"
+                f"Error: {result.get('message')}"
+            ),
+        )
+        return
+
+    logging.info(
+        f"✓ Android delivery success: order={order_id}, scenario={result.get('scenario')}"
+    )

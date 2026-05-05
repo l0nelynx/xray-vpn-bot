@@ -15,3 +15,4 @@ orjson>=3.11.2
 magic-filter>=1.0.12
 remnawave>=2.1.13
 slowapi>=0.1.0
+alembic>=1.13.0

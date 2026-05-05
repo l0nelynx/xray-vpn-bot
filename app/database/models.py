@@ -19,7 +19,7 @@ class User(Base):
     __tablename__ = 'users'
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    tg_id = mapped_column(BigInteger, unique=True)
+    tg_id = mapped_column(BigInteger, unique=True, nullable=True)
 
     # Имя пользователя (Telegram username)
     # Примечание: unique=True удален, так как SQLite не поддерживает добавление UNIQUE к существующей таблице
@@ -31,7 +31,7 @@ class User(Base):
     # API провайдер, на котором зарегистрирован пользователь (remnawave)
     api_provider: Mapped[str] = mapped_column(String(50), default="remnawave")
 
-    # Email пользователя (для поиска в RemnaWave)
+    # Email пользователя (для поиска в RemnaWave). Уникален среди ненулевых значений.
     email: Mapped[str] = mapped_column(String(100), nullable=True)
 
     # Флаг бана пользователя
@@ -43,11 +43,17 @@ class User(Base):
     # VIP-флаг (защита от Sub Clean)
     vip: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=True)
 
+    # Android API: argon2id-хеш пароля (NULL для Telegram-only аккаунтов)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=True)
+    password_updated_at: Mapped[str] = mapped_column(String(30), nullable=True)
+    email_verified_at: Mapped[str] = mapped_column(String(30), nullable=True)
+
     # Добавляем отношение один-ко-многим с таблицей transactions
     transactions: Mapped[list["Transaction"]] = relationship(back_populates="user")
 
     __table_args__ = (
         Index('ix_user_username', 'username'),
+        Index('ix_users_email_unique', 'email', unique=True),
     )
 
 
@@ -118,9 +124,15 @@ class Transaction(Base):
     # Отношение многие-к-одному с таблицей users
     user: Mapped["User"] = relationship(back_populates="transactions")
 
+    # Android API: equals users.id when the invoice was created via the
+    # Android API (user has no tg_id). NULL for Telegram-bot invoices —
+    # those keep using user_id (resolved from tg_id at create time).
+    android_user_id: Mapped[int] = mapped_column(Integer, nullable=True)
+
     # Добавляем индекс для user_id для ускорения JOIN-запросов
     __table_args__ = (
         Index('ix_transaction_user_id', 'user_id'),
+        Index('ix_transactions_android_user_id', 'android_user_id'),
     )
 
 
@@ -269,13 +281,122 @@ class SupportMessage(Base):
     )
 
 
+class RefreshToken(Base):
+    __tablename__ = 'refresh_tokens'
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    family_id: Mapped[str] = mapped_column(String(36))
+    token_hash: Mapped[str] = mapped_column(String(128), unique=True)
+    issued_at: Mapped[str] = mapped_column(String(30))
+    expires_at: Mapped[str] = mapped_column(String(30))
+    revoked_at: Mapped[str] = mapped_column(String(30), nullable=True)
+    replaced_by_id: Mapped[int] = mapped_column(Integer, nullable=True)
+    user_agent: Mapped[str] = mapped_column(String(255), nullable=True)
+    ip: Mapped[str] = mapped_column(String(64), nullable=True)
+
+    __table_args__ = (
+        Index('ix_refresh_tokens_user_id', 'user_id'),
+        Index('ix_refresh_tokens_family_id', 'family_id'),
+    )
+
+
+class EmailVerification(Base):
+    __tablename__ = 'email_verifications'
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    purpose: Mapped[str] = mapped_column(String(20))
+    code_hash: Mapped[str] = mapped_column(String(128))
+    payload: Mapped[str] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[str] = mapped_column(String(30))
+    expires_at: Mapped[str] = mapped_column(String(30))
+    used_at: Mapped[str] = mapped_column(String(30), nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+
+    __table_args__ = (
+        Index('ix_email_verifications_user_id_purpose', 'user_id', 'purpose'),
+    )
+
+
+class GooglePlayPurchase(Base):
+    __tablename__ = 'google_play_purchases'
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    product_id: Mapped[str] = mapped_column(String(100))
+    purchase_token: Mapped[str] = mapped_column(String(512), unique=True)
+    order_id: Mapped[str] = mapped_column(String(100), nullable=True)
+    expiry_time: Mapped[str] = mapped_column(String(30), nullable=True)
+    acknowledged: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    raw_payload: Mapped[str] = mapped_column(Text, nullable=True)
+    created_at: Mapped[str] = mapped_column(String(30))
+    updated_at: Mapped[str] = mapped_column(String(30))
+
+    # Subscription fields (Stage 5).
+    subscription_id: Mapped[str] = mapped_column(String(100), nullable=True)
+    linked_purchase_token: Mapped[str] = mapped_column(String(512), nullable=True)
+    state: Mapped[str] = mapped_column(String(32), nullable=True)
+    auto_renewing: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    start_time: Mapped[str] = mapped_column(String(30), nullable=True)
+    latest_notification_type: Mapped[int] = mapped_column(Integer, nullable=True)
+
+    __table_args__ = (
+        Index('ix_google_play_purchases_user_id', 'user_id'),
+        Index('ix_google_play_purchases_state', 'state'),
+        Index('ix_google_play_purchases_linked_token', 'linked_purchase_token'),
+    )
+
+
+class GooglePlaySku(Base):
+    __tablename__ = 'google_play_skus'
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    product_id: Mapped[str] = mapped_column(String(100), unique=True)
+    days: Mapped[int] = mapped_column(Integer)
+    squad_id: Mapped[str] = mapped_column(String(100))
+    external_squad_id: Mapped[str] = mapped_column(String(100))
+    display_name: Mapped[str] = mapped_column(String(200), nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
+    created_at: Mapped[str] = mapped_column(String(30), nullable=True)
+    updated_at: Mapped[str] = mapped_column(String(30), nullable=True)
+
+
+class TelegramLinkCode(Base):
+    __tablename__ = 'telegram_link_codes'
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    code_hash: Mapped[str] = mapped_column(String(128), unique=True)
+    created_at: Mapped[str] = mapped_column(String(30))
+    expires_at: Mapped[str] = mapped_column(String(30))
+    used_at: Mapped[str] = mapped_column(String(30), nullable=True)
+    used_by_tg_id: Mapped[int] = mapped_column(BigInteger, nullable=True)
+
+    __table_args__ = (
+        Index('ix_telegram_link_codes_user_id', 'user_id'),
+    )
+
+
 async def async_main():
+    """Apply Alembic migrations and seed default rows.
+
+    Schema management lives entirely in alembic/. The legacy ad-hoc ALTER
+    block below remains as a one-shot safety net for deployments that have
+    not yet been stamped — once `alembic stamp 0001_baseline && alembic
+    upgrade head` is run there, every branch is a no-op.
+    """
+    from migrations_runner import upgrade_to_head
+
     async with engine.begin() as conn:
         await conn.execute(text("PRAGMA journal_mode=WAL"))
         await conn.execute(text("PRAGMA busy_timeout=5000"))
-        await conn.run_sync(Base.metadata.create_all)
 
-        # Миграция: добавляем is_banned если колонки ещё нет
+    upgrade_to_head()
+
+    async with engine.begin() as conn:
+        # Belt-and-braces: keep the legacy idempotent ALTERs running once more
+        # so a partially-migrated DB heals itself if Alembic was skipped.
         def _check_and_migrate(sync_conn):
             insp = inspect(sync_conn)
             columns = [col['name'] for col in insp.get_columns('users')]

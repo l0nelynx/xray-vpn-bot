@@ -24,6 +24,45 @@ import random
 router = Router()
 
 
+_ANDROID_LINK_MESSAGES = {
+    "ok": {
+        "ru": "✅ Ваш аккаунт Android-приложения связан с этим Telegram.",
+        "en": "✅ Your Android-app account is now linked to this Telegram.",
+    },
+    "invalid": {
+        "ru": "❌ Код связывания недействителен. Откройте приложение и попробуйте снова.",
+        "en": "❌ Invalid link code. Open the app and try again.",
+    },
+    "expired": {
+        "ru": "⌛ Срок действия кода истёк. Запросите новый в приложении.",
+        "en": "⌛ Link code expired. Request a new one from the app.",
+    },
+    "exhausted": {
+        "ru": "🚫 Слишком много попыток. Запросите новый код в приложении.",
+        "en": "🚫 Too many attempts. Request a new code from the app.",
+    },
+    "tg_already_linked": {
+        "ru": (
+            "⚠️ Этот Telegram уже привязан к другому Android-аккаунту. "
+            "Сначала отвяжите его в приложении (Настройки → Telegram)."
+        ),
+        "en": (
+            "⚠️ This Telegram is already bound to a different Android account. "
+            "Unlink it first in the app (Settings → Telegram)."
+        ),
+    },
+    "user_already_linked": {
+        "ru": "⚠️ Этот аккаунт приложения уже связан с Telegram.",
+        "en": "⚠️ This app account is already linked to a Telegram.",
+    },
+}
+
+
+def _android_link_reply(result: str, lang_code: str) -> str:
+    bucket = _ANDROID_LINK_MESSAGES.get(result, _ANDROID_LINK_MESSAGES["invalid"])
+    return bucket.get(lang_code) or bucket["en"]
+
+
 @router.message(Command("start"))  # Start command handler
 async def cmd_start(message: Message, command: CommandObject = None):
     if await rq.is_user_banned(message.from_user.id):
@@ -45,8 +84,23 @@ async def cmd_start(message: Message, command: CommandObject = None):
         )
         return
 
-    # Deep-link payloads from MiniApp (?start=buy|extend|trial)
-    payload = (command.args or "").strip().lower() if command else ""
+    # Deep-link payloads from MiniApp (?start=buy|extend|trial) and
+    # Android link flow (?start=link_<code>). Keep `link_<code>` as the
+    # original-case payload — base64url codes are case-sensitive.
+    raw_payload = (command.args or "").strip() if command else ""
+    if raw_payload.startswith("link_"):
+        from app.handlers.android_link import consume_android_link_code
+        code = raw_payload[5:].strip()
+        result = await consume_android_link_code(message.from_user.id, code)
+        lang_code = (await rq.get_user_language(message.from_user.id)) or "en"
+        await message.answer(
+            _android_link_reply(result, lang_code),
+            parse_mode="HTML",
+            disable_web_page_preview=True,
+        )
+        return
+
+    payload = raw_payload.lower()
     if payload in ("buy", "extend", "trial"):
         lang = await get_user_lang(message.from_user.id)
         if payload == "trial":

@@ -3,19 +3,34 @@ import os
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
-from sqlalchemy import text
+from slowapi.errors import RateLimitExceeded
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from .database.session import engine
+from .android import auth_router as android_auth_router
+from .android import data_router as android_data_router
+from .android import email_router as android_email_router
+from .android import iap_router as android_iap_router
+from .android import link_router as android_link_router
+from .android import payments_router as android_payments_router
 from .routers import devices, free, me, menu, payments, promo, support
 
 BASE_PATH = "/bot/miniapp"
+
+# Reuse the auth router's limiter so per-route decorators on it take effect.
+limiter = android_auth_router.limiter
 
 app = FastAPI(
     title="XRAY-VPN MiniApp",
     docs_url=f"{BASE_PATH}/api/docs",
     redoc_url=None,
 )
+app.state.limiter = limiter
+
+
+@app.exception_handler(RateLimitExceeded)
+async def _rate_limit_handler(request, exc):
+    return JSONResponse(status_code=429, content={"detail": {"code": "rate_limited"}})
+
 
 app.include_router(me.router, prefix=BASE_PATH)
 app.include_router(support.router, prefix=BASE_PATH)
@@ -24,121 +39,28 @@ app.include_router(payments.router, prefix=BASE_PATH)
 app.include_router(menu.router, prefix=BASE_PATH)
 app.include_router(promo.router, prefix=BASE_PATH)
 app.include_router(free.router, prefix=BASE_PATH)
-
-
-async def _has_column(conn, table: str, column: str) -> bool:
-    rows = (await conn.execute(text(f"PRAGMA table_info({table})"))).all()
-    return any(r[1] == column for r in rows)
-
-
-async def _table_exists(conn, table: str) -> bool:
-    row = (await conn.execute(
-        text("SELECT name FROM sqlite_master WHERE type='table' AND name=:n"),
-        {"n": table},
-    )).first()
-    return row is not None
+app.include_router(android_auth_router.router, prefix=BASE_PATH)
+app.include_router(android_email_router.router, prefix=BASE_PATH)
+app.include_router(android_payments_router.router, prefix=BASE_PATH)
+app.include_router(android_iap_router.router, prefix=BASE_PATH)
+app.include_router(android_data_router.router, prefix=BASE_PATH)
+app.include_router(android_link_router.router, prefix=BASE_PATH)
 
 
 @app.on_event("startup")
 async def ensure_support_tables():
-    async with engine.begin() as conn:
-        if await _table_exists(conn, "transactions") and \
-                not await _has_column(conn, "transactions", "tariff_slug"):
-            await conn.execute(text(
-                "ALTER TABLE transactions ADD COLUMN tariff_slug VARCHAR(200)"
-            ))
-        if await _table_exists(conn, "promos"):
-            if not await _has_column(conn, "promos", "discount_percent"):
-                await conn.execute(text(
-                    "ALTER TABLE promos ADD COLUMN discount_percent INTEGER"
-                ))
-            if not await _has_column(conn, "promos", "used_promo_consumed"):
-                await conn.execute(text(
-                    "ALTER TABLE promos ADD COLUMN used_promo_consumed BOOLEAN DEFAULT 0"
-                ))
-        await conn.execute(text(
-            "CREATE TABLE IF NOT EXISTS promo_settings ("
-            " id INTEGER PRIMARY KEY AUTOINCREMENT,"
-            " default_discount_percent INTEGER NOT NULL DEFAULT 20)"
-        ))
-        row = (await conn.execute(text("SELECT id FROM promo_settings WHERE id=1"))).first()
-        if not row:
-            await conn.execute(text(
-                "INSERT INTO promo_settings (id, default_discount_percent) VALUES (1, 20)"
-            ))
-        if await _table_exists(conn, "support_tickets"):
-            required = ["user_id", "username", "subject", "message", "status",
-                        "created_at", "updated_at"]
-            if not all([await _has_column(conn, "support_tickets", c) for c in required]):
-                await conn.execute(text("DROP TABLE IF EXISTS support_messages"))
-                await conn.execute(text("DROP TABLE support_tickets"))
-        if await _table_exists(conn, "support_messages") and \
-                not await _has_column(conn, "support_messages", "ticket_id"):
-            await conn.execute(text("DROP TABLE support_messages"))
+    """Run Alembic migrations.
 
-        await conn.execute(text(
-            "CREATE TABLE IF NOT EXISTS support_tickets ("
-            " id INTEGER PRIMARY KEY AUTOINCREMENT,"
-            " user_id INTEGER NOT NULL REFERENCES users(id),"
-            " username VARCHAR(100),"
-            " subject VARCHAR(200) NOT NULL,"
-            " message TEXT NOT NULL,"
-            " status VARCHAR(20) NOT NULL DEFAULT 'open',"
-            " created_at VARCHAR(30) NOT NULL,"
-            " updated_at VARCHAR(30) NOT NULL)"
-        ))
-        await conn.execute(text(
-            "CREATE INDEX IF NOT EXISTS ix_support_tickets_user_id ON support_tickets(user_id)"
-        ))
-        await conn.execute(text(
-            "CREATE INDEX IF NOT EXISTS ix_support_tickets_status ON support_tickets(status)"
-        ))
-        await conn.execute(text(
-            "CREATE TABLE IF NOT EXISTS support_messages ("
-            " id INTEGER PRIMARY KEY AUTOINCREMENT,"
-            " ticket_id INTEGER NOT NULL REFERENCES support_tickets(id) ON DELETE CASCADE,"
-            " sender VARCHAR(20) NOT NULL,"
-            " text TEXT NOT NULL,"
-            " created_at VARCHAR(30) NOT NULL)"
-        ))
-        await conn.execute(text(
-            "CREATE INDEX IF NOT EXISTS ix_support_messages_ticket_id ON support_messages(ticket_id)"
-        ))
-
-        await conn.execute(text(
-            "CREATE TABLE IF NOT EXISTS telmt_free_params ("
-            " id INTEGER PRIMARY KEY AUTOINCREMENT,"
-            " max_tcp_conns INTEGER,"
-            " max_unique_ips INTEGER,"
-            " data_quota_bytes BIGINT,"
-            " expire_days INTEGER DEFAULT 30)"
-        ))
-
-        # Webapp menu tree (authored in dashboard tariff constructor)
-        await conn.execute(text(
-            "CREATE TABLE IF NOT EXISTS webapp_menu_nodes ("
-            " id INTEGER PRIMARY KEY AUTOINCREMENT,"
-            " parent_id INTEGER REFERENCES webapp_menu_nodes(id) ON DELETE CASCADE,"
-            " text VARCHAR(200) NOT NULL,"
-            " action VARCHAR(20) NOT NULL DEFAULT 'buttons',"
-            " sort_order INTEGER NOT NULL DEFAULT 0,"
-            " is_active BOOLEAN NOT NULL DEFAULT 1,"
-            " invoice_provider VARCHAR(30),"
-            " invoice_amount FLOAT,"
-            " invoice_currency VARCHAR(10),"
-            " invoice_method VARCHAR(30),"
-            " invoice_days INTEGER,"
-            " invoice_tariff_slug VARCHAR(50))"
-        ))
-        if await _table_exists(conn, "webapp_menu_nodes") and \
-                not await _has_column(conn, "webapp_menu_nodes", "invoice_method"):
-            await conn.execute(text(
-                "ALTER TABLE webapp_menu_nodes ADD COLUMN invoice_method VARCHAR(30)"
-            ))
-        await conn.execute(text(
-            "CREATE INDEX IF NOT EXISTS ix_webapp_menu_nodes_parent_id "
-            "ON webapp_menu_nodes(parent_id)"
-        ))
+    Schema management lives in alembic/. Any service that boots first will
+    bring the shared SQLite forward; subsequent boots are no-ops.
+    """
+    try:
+        from migrations_runner import upgrade_to_head
+    except ImportError:
+        # If alembic config is not bundled in this image, the bot or dashboard
+        # service is responsible for migrations.
+        return
+    upgrade_to_head()
 
 
 @app.get("/health")

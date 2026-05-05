@@ -57,6 +57,7 @@ class Transaction(Base):
     expire_date: Mapped[str] = mapped_column(String(30), nullable=True)
     tariff_slug: Mapped[str] = mapped_column(String(200), nullable=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    android_user_id: Mapped[int] = mapped_column(Integer, nullable=True)
 
 
 class SupportTicket(Base):

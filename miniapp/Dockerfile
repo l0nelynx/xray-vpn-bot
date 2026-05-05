@@ -22,6 +22,9 @@ COPY packages/remnawave_client /tmp/remnawave_client
 RUN pip install --no-cache-dir /tmp/remnawave_client && rm -rf /tmp/remnawave_client
 
 COPY miniapp/backend/ ./backend/
+COPY alembic ./alembic
+COPY alembic.ini ./alembic.ini
+COPY migrations_runner.py ./migrations_runner.py
 COPY --from=frontend-build /build/dist ./static/
 
 EXPOSE 8001

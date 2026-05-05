@@ -151,3 +151,98 @@ def get_telemt_server() -> str:
 
 def get_telemt_header() -> str:
     return get_config().get("telemt_header", "") or ""
+
+
+# --- Android API ---
+
+def get_android_jwt_secret() -> str:
+    """HS256 signing key for Android-API JWTs.
+
+    Read from config.yml `android_jwt_secret` or env `ANDROID_JWT_SECRET`.
+    The service refuses to issue tokens if neither is set.
+    """
+    return (
+        get_config().get("android_jwt_secret")
+        or os.environ.get("ANDROID_JWT_SECRET")
+        or ""
+    )
+
+
+def get_android_access_ttl_seconds() -> int:
+    return int(get_config().get("android_access_ttl", 15 * 60) or 15 * 60)
+
+
+def get_android_refresh_ttl_seconds() -> int:
+    return int(get_config().get("android_refresh_ttl", 60 * 24 * 3600) or 60 * 24 * 3600)
+
+
+def get_android_jwt_issuer() -> str:
+    return get_config().get("android_jwt_issuer", "xray-vpn-bot") or "xray-vpn-bot"
+
+
+# --- SMTP (Android API email codes) ---
+
+def get_smtp_host() -> str:
+    return get_config().get("smtp_host", "") or ""
+
+
+def get_smtp_port() -> int:
+    return int(get_config().get("smtp_port", 587) or 587)
+
+
+def get_smtp_user() -> str:
+    return get_config().get("smtp_user", "") or ""
+
+
+def get_smtp_password() -> str:
+    return get_config().get("smtp_password", "") or ""
+
+
+def get_smtp_from() -> str:
+    """Sender address. Falls back to smtp_user."""
+    return get_config().get("smtp_from") or get_smtp_user()
+
+
+def get_smtp_use_tls() -> bool:
+    """Implicit TLS (port 465). STARTTLS is auto-detected on 587/25."""
+    value = get_config().get("smtp_use_tls")
+    if value is None:
+        return get_smtp_port() == 465
+    return bool(value)
+
+
+def get_email_code_ttl_seconds() -> int:
+    return int(get_config().get("email_code_ttl", 15 * 60) or 15 * 60)
+
+
+def get_email_code_max_attempts() -> int:
+    return int(get_config().get("email_code_max_attempts", 5) or 5)
+
+
+# --- Google Play IAP -------------------------------------------------------
+
+def get_google_play_package_name() -> str:
+    """Application ID, e.g. `com.example.xrayvpn`. Required for the
+    Google Play Developer API path. Empty string disables IAP entirely."""
+    return get_config().get("google_play_package_name", "") or ""
+
+
+def get_google_play_service_account_path() -> str:
+    """Filesystem path to the service-account JSON granted access to the
+    Play Developer API for our package. Mounted into the container."""
+    return (
+        get_config().get("google_play_service_account_path")
+        or os.environ.get("GOOGLE_PLAY_SERVICE_ACCOUNT_PATH")
+        or ""
+    )
+
+
+def get_google_play_rtdn_token() -> str:
+    """Shared secret appended as a query string `?token=...` on the Pub/Sub
+    push subscription, so the RTDN endpoint can refuse unauthenticated
+    notifications. Optional but strongly recommended."""
+    return (
+        get_config().get("google_play_rtdn_token")
+        or os.environ.get("GOOGLE_PLAY_RTDN_TOKEN")
+        or ""
+    )

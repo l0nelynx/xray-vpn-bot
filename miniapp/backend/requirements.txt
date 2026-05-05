@@ -8,3 +8,11 @@ httpx
 aiohttp>=3.13.3
 aiosend>=3.0.5
 remnawave>=2.1.13
+alembic>=1.13.0
+argon2-cffi>=23.1.0
+pyjwt>=2.9.0
+email-validator>=2.2.0
+slowapi>=0.1.9
+aiosmtplib>=3.0.0
+google-auth>=2.32.0
+google-api-python-client>=2.140.0
