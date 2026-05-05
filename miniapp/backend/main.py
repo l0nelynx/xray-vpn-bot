@@ -22,6 +22,7 @@ limiter = android_auth_router.limiter
 app = FastAPI(
     title="XRAY-VPN MiniApp",
     docs_url=f"{BASE_PATH}/api/docs",
+    openapi_url=f"{BASE_PATH}/openapi.json",
     redoc_url=None,
 )
 app.state.limiter = limiter
