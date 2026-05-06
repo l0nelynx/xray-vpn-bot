@@ -91,6 +91,7 @@ services:
     environment:
       - DB_PATH=/app/db/db.sqlite3
       - CONFIG_PATH=/app/config.yml
+      - LOG_LEVEL=DEBUG
     restart: unless-stopped
     depends_on:
       - seller-bot
