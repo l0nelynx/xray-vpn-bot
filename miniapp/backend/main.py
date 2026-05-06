@@ -1,6 +1,17 @@
+import logging
 import os
 
 from fastapi import FastAPI
+
+# Uvicorn по умолчанию вешает хэндлеры только на свои логгеры
+# (`uvicorn`, `uvicorn.access`). Наши `logging.getLogger(__name__)` ходят
+# на корневой и без этого вызова молчат — поэтому ставим минимальный
+# stdout-handler здесь, до импорта роутеров. LOG_LEVEL читается из env,
+# дефолт INFO; для отладки SMTP можно поставить DEBUG.
+logging.basicConfig(
+    level=os.environ.get("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+)
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from slowapi.errors import RateLimitExceeded
