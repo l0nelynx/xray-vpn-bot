@@ -46,8 +46,16 @@ async def send_email(*, to: str, subject: str, text: str, html: str | None = Non
 
     port = get_smtp_port()
     use_tls = get_smtp_use_tls()
+    start_tls = not use_tls and port in (587, 25)
     user = get_smtp_user()
     password = get_smtp_password()
+
+    logger.info(
+        "SMTP send: to=%s from=%s host=%s port=%s use_tls=%s start_tls=%s "
+        "user=%s password_set=%s subject=%r",
+        to, sender, host, port, use_tls, start_tls,
+        user or "<empty>", bool(password), subject,
+    )
 
     try:
         await aiosmtplib.send(
@@ -57,15 +65,31 @@ async def send_email(*, to: str, subject: str, text: str, html: str | None = Non
             username=user or None,
             password=password or None,
             use_tls=use_tls,
-            start_tls=not use_tls and port in (587, 25),
+            start_tls=start_tls,
             timeout=20,
         )
+    except aiosmtplib.SMTPResponseException as exc:
+        # Сервер ответил числовым кодом — это самый информативный класс
+        # ошибок (auth fail / sender rejected / quota / spam policy).
+        logger.error(
+            "SMTP send to %s failed: %s code=%s message=%r",
+            to, type(exc).__name__, exc.code, exc.message,
+        )
+        raise MailerError(f"{exc.code} {exc.message}") from exc
     except aiosmtplib.SMTPException as exc:
-        logger.error("SMTP send to %s failed: %s", to, exc)
-        raise MailerError(str(exc)) from exc
+        logger.error(
+            "SMTP send to %s failed: %s: %s",
+            to, type(exc).__name__, exc, exc_info=True,
+        )
+        raise MailerError(str(exc) or type(exc).__name__) from exc
     except (OSError, TimeoutError) as exc:
-        logger.error("SMTP transport to %s failed: %s", to, exc)
-        raise MailerError("smtp transport error") from exc
+        logger.error(
+            "SMTP transport to %s failed: %s: %s (host=%s port=%s)",
+            to, type(exc).__name__, exc, host, port, exc_info=True,
+        )
+        raise MailerError(f"transport: {type(exc).__name__}: {exc}") from exc
+
+    logger.info("SMTP send to %s succeeded", to)
 
 
 # --- Templates -------------------------------------------------------------
