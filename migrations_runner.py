@@ -59,7 +59,12 @@ def upgrade_to_head() -> None:
         logger.warning("alembic not installed — skipping migrations")
         return
 
-    cfg = Config(str(_ALEMBIC_INI))
+    # Alembic при `Config(ini_path)` дёргает logging.config.fileConfig()
+    # с дефолтным `disable_existing_loggers=True`, который ВЫРУБАЕТ все
+    # ранее созданные логгеры (включая `backend.*`). Создаём Config БЕЗ
+    # ini-файла — секция script_location всё, что нам нужно из него,
+    # а sqlalchemy.url alembic/env.py строит сам из DB_PATH.
+    cfg = Config()
     cfg.set_main_option("script_location", str(_ALEMBIC_DIR))
 
     db_path = _resolve_db_path()

@@ -73,6 +73,19 @@ async def ensure_support_tables():
         # service is responsible for migrations.
         return
     upgrade_to_head()
+    # Страховка: если что-то по дороге всё-таки дёрнуло fileConfig() и
+    # выключило ранее заведённые логгеры — реактивируем их и заново
+    # ставим хэндлер на корне. force=True гарантирует, что повторный
+    # basicConfig не будет проигнорирован.
+    for name in list(logging.Logger.manager.loggerDict):
+        lg = logging.getLogger(name)
+        if isinstance(lg, logging.Logger):
+            lg.disabled = False
+    logging.basicConfig(
+        level=os.environ.get("LOG_LEVEL", "INFO").upper(),
+        format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+        force=True,
+    )
 
 
 @app.get("/health")
