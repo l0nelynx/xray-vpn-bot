@@ -113,5 +113,5 @@ networks:
     external: true
   mail-net:
       name: mail-net
-      driver: true
+      driver: bridge
       external: true
