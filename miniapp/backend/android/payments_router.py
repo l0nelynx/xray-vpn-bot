@@ -1,14 +1,15 @@
 """External payment endpoints for the Android API.
 
-Reuses miniapp's provider abstractions (`payments/apay.py`, `payments/platega.py`)
-and the shared `transactions` table. Android transactions are tagged with
-`android_user_id` so the bot's webhook delivery can locate the user without a
-Telegram id.
+Tariff source of truth: `webapp_menu_nodes` (Tariff Constructor in dashboard,
+already consumed by miniapp via /api/menu/tree). Android клиент:
 
-Tariff selection mirrors miniapp's tariff constructor: the client passes
-`amount`, `days`, `squad_id`, `external_squad_id` and we encode them into
-`tariff_slug = "sid:<squad>:esid:<external>"` — the same format
-`subscription_service._parse_squad_slug` already understands.
+  1. GET  /menu      — получает дерево узлов (только апрувленные провайдеры)
+  2. POST /invoice   — указывает только `node_id`; provider/amount/currency/
+                       method/days/tariff_slug сервер достаёт из узла меню.
+
+Клиент не знает и не передаёт ни цену, ни провайдера, ни slug — это критично
+для безопасности: на мобильном клиенте всё, что приходит «снаружи», подменяемо.
+Единственный source of truth — БД, редактируется в дашборде.
 """
 from __future__ import annotations
 
@@ -54,16 +55,34 @@ class AndroidProvidersResponse(BaseModel):
 
 
 class AndroidInvoiceRequest(BaseModel):
-    provider: str = Field(..., description="apay | platega")
-    amount: float = Field(..., gt=0)
-    currency: str = Field("RUB", description="Provider-supported currency")
-    days: int = Field(..., gt=0)
-    squad_id: str = Field(..., min_length=1, max_length=100)
-    external_squad_id: str = Field(..., min_length=1, max_length=100)
+    """Android-клиент передаёт только id узла меню — provider/amount/
+    currency/method/days/tariff_slug сервер достаёт сам из webapp_menu_nodes.
+    Никакие тарифные параметры со стороны клиента не принимаются: всё, что
+    хранится у клиента, подменяемо."""
+    node_id: int = Field(..., ge=1)
     description: str | None = None
-    method: str | None = Field(
-        None, description="Optional provider-specific method id (Platega)"
-    )
+
+
+class AndroidMenuInvoice(BaseModel):
+    provider: str
+    amount: float
+    currency: str
+    method: str | None
+    days: int
+    tariff_slug: str
+
+
+class AndroidMenuNode(BaseModel):
+    id: int
+    parent_id: int | None
+    text: str
+    action: str | None
+    invoice: AndroidMenuInvoice | None
+    children: list["AndroidMenuNode"]
+
+
+class AndroidMenuResponse(BaseModel):
+    tree: list[AndroidMenuNode]
 
 
 class AndroidInvoiceResponse(BaseModel):
@@ -83,11 +102,101 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def _build_tariff_slug(squad_id: str, external_squad_id: str) -> str:
-    return f"sid:{squad_id}:esid:{external_squad_id}"
+async def _load_menu_rows() -> list[dict]:
+    """Прочитать активные узлы меню из общей таблицы Tariff Constructor.
+    Та же таблица, что используется miniapp `/api/menu/tree`."""
+    async with async_session() as session:
+        result = await session.execute(text(
+            "SELECT id, parent_id, text, action, sort_order, "
+            "invoice_provider, invoice_amount, invoice_currency, "
+            "invoice_method, invoice_days, invoice_tariff_slug "
+            "FROM webapp_menu_nodes WHERE is_active = 1"
+        ))
+        return [dict(r._mapping) for r in result.all()]
+
+
+def _node_payload(row: dict) -> dict | None:
+    """Превращает row из БД в AndroidMenuInvoice-словарь.
+    Возвращает None, если у узла нет валидного invoice (не invoice action,
+    или провайдер не разрешён для Android, или нет slug-а)."""
+    if row["action"] != "invoice":
+        return None
+    provider = (row["invoice_provider"] or "").lower()
+    if provider not in _ANDROID_PROVIDERS:
+        return None
+    slug = row["invoice_tariff_slug"]
+    if not slug:
+        return None
+    return {
+        "provider": provider,
+        "amount": float(row["invoice_amount"] or 0),
+        "currency": (row["invoice_currency"] or "RUB").upper(),
+        "method": row["invoice_method"],
+        "days": int(row["invoice_days"] or 0),
+        "tariff_slug": slug,
+    }
+
+
+def _build_tree(rows: list[dict], parent_id: int | None) -> list[dict]:
+    """Рекурсивный билд дерева. Узлы с action=invoice оставляем только если
+    провайдер разрешён. Не-invoice узлы оставляем, только если у них есть
+    хотя бы один валидный потомок (иначе пустые группы засоряли бы UI)."""
+    items = sorted(
+        [r for r in rows if r["parent_id"] == parent_id],
+        key=lambda r: (r["sort_order"], r["id"]),
+    )
+    out: list[dict] = []
+    for r in items:
+        invoice = _node_payload(r)
+        children = _build_tree(rows, r["id"])
+        if r["action"] == "invoice" and invoice is None:
+            continue  # инвойс с не-Android провайдером — режем целиком
+        if r["action"] != "invoice" and not children and invoice is None:
+            continue  # пустая ветка после фильтрации
+        out.append({
+            "id": r["id"],
+            "parent_id": r["parent_id"],
+            "text": r["text"],
+            "action": r["action"],
+            "invoice": invoice,
+            "children": children,
+        })
+    return out
+
+
+async def _load_node(node_id: int) -> dict | None:
+    """Прочитать один активный узел меню по id."""
+    async with async_session() as session:
+        result = await session.execute(
+            text(
+                "SELECT id, parent_id, text, action, sort_order, "
+                "invoice_provider, invoice_amount, invoice_currency, "
+                "invoice_method, invoice_days, invoice_tariff_slug "
+                "FROM webapp_menu_nodes WHERE id = :id AND is_active = 1"
+            ),
+            {"id": node_id},
+        )
+        row = result.first()
+    return dict(row._mapping) if row is not None else None
 
 
 # --- Endpoints -------------------------------------------------------------
+
+
+@router.get("/menu", response_model=AndroidMenuResponse)
+async def get_payments_menu(
+    user: repo.UserRow = Depends(deps.get_current_user),
+) -> AndroidMenuResponse:
+    """Вернуть дерево тарифного меню из Tariff Constructor.
+
+    Источник — таблица `webapp_menu_nodes` (та же, что для miniapp). Узлы
+    с invoice-провайдерами не из `_ANDROID_PROVIDERS` отфильтровываются,
+    как и пустые после фильтрации ветки. Аутентификация — стандартный
+    Bearer (без verified-email-гейта, чтобы клиент мог показать тарифы
+    до подтверждения email)."""
+    rows = await _load_menu_rows()
+    tree = _build_tree(rows, None)
+    return AndroidMenuResponse(tree=[AndroidMenuNode(**n) for n in tree])
 
 
 @router.get("/providers", response_model=AndroidProvidersResponse)
@@ -115,45 +224,62 @@ async def create_payment_invoice(
     request: Request,
     user: repo.UserRow = Depends(deps.require_verified_email),
 ) -> AndroidInvoiceResponse:
-    if body.provider not in _ANDROID_PROVIDERS:
+    node = await _load_node(body.node_id)
+    if node is None:
         raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            detail={"code": "provider_not_allowed"},
+            status.HTTP_404_NOT_FOUND, detail={"code": "node_not_found"}
+        )
+
+    invoice_data = _node_payload(node)
+    if invoice_data is None:
+        # Узел существует, но это либо группа (action != invoice), либо
+        # invoice с провайдером не из Android-набора.
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, detail={"code": "node_not_invoice"}
         )
 
     try:
-        provider = get_provider(body.provider)
+        provider = get_provider(invoice_data["provider"])
     except PaymentError as exc:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, detail={"code": "provider_unavailable"}
         ) from exc
 
-    if not provider.supports(body.currency):
+    if not provider.supports(invoice_data["currency"]):
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             detail={"code": "currency_unsupported"},
         )
 
+    if invoice_data["amount"] <= 0 or invoice_data["days"] <= 0:
+        # Tariff Constructor может временно содержать незаполненные узлы
+        # (черновик в дашборде). Лучше явный 400, чем мутный 502 от провайдера.
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail={"code": "node_misconfigured"},
+        )
+
     transaction_id = str(uuid.uuid4())
     invoice_req = InvoiceRequest(
         transaction_id=transaction_id,
-        amount=body.amount,
-        currency=body.currency.upper(),
-        days=body.days,
-        # Providers expect an int. We don't have a tg_id for Android users —
-        # pass user.id (negated to keep collisions impossible against real
-        # tg_ids); only used for description/payload tagging by Platega.
+        amount=invoice_data["amount"],
+        currency=invoice_data["currency"],
+        days=invoice_data["days"],
+        # У Android-юзеров нет tg_id. Передаём -user.id, чтобы не пересечься
+        # с настоящими tg_id; провайдеры используют это поле только для
+        # описания/payload-тэга.
         user_tg_id=-int(user.id),
         username=user.email,
         description=body.description or f"AndroidUser:{user.id}",
-        method=body.method,
+        method=invoice_data["method"],
     )
 
     try:
         invoice = await create_invoice(provider.name, invoice_req)
     except PaymentError as exc:
         logger.warning(
-            "android invoice creation failed (provider=%s): %s", provider.name, exc
+            "android invoice creation failed (provider=%s node=%s slug=%s): %s",
+            provider.name, body.node_id, invoice_data["tariff_slug"], exc,
         )
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY, detail={"code": "invoice_failed"}
@@ -164,11 +290,10 @@ async def create_payment_invoice(
             status.HTTP_502_BAD_GATEWAY, detail={"code": "invoice_failed"}
         ) from exc
 
-    # Persist into the shared transactions table. Use the provider-issued id
-    # for Platega so its webhook (keyed by transactionId) matches; APay echoes
-    # the merchant order id back, so we keep our uuid.
+    # Платежные провайдеры используют разные ключи в вебхуках:
+    #  • Platega → transactionId, выданный самим Platega → используем его.
+    #  • APay → отправляет мерчанту наш transaction_id обратно → наш uuid.
     persisted_id = invoice.invoice_id if provider.name == "platega" else transaction_id
-    tariff_slug = _build_tariff_slug(body.squad_id, body.external_squad_id)
 
     async with async_session() as session:
         await session.execute(
@@ -187,12 +312,12 @@ async def create_payment_invoice(
                 "vu": "None",
                 "uname": user.email or f"android_{user.id}",
                 "pm": provider.payment_method,
-                "amt": float(body.amount),
+                "amt": float(invoice_data["amount"]),
                 "ts": _now_iso(),
-                "days": body.days,
-                "slug": tariff_slug,
-                # Bot's transactions schema requires user_id NOT NULL; reuse the
-                # same row id since users.id is the unified identity.
+                "days": invoice_data["days"],
+                # Кладём настоящий slug из узла Tariff Constructor — Android-
+                # доставка резолвит squad через get_squad_for_tariff_slug.
+                "slug": invoice_data["tariff_slug"],
                 "uid": user.id,
                 "aid": user.id,
             },

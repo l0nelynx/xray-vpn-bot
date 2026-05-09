@@ -142,27 +142,71 @@ Remnawave (`provisioning.ensure_free_subscription`) — клиент сразу 
 
 Внешние провайдеры (A-Pay, Platega). Для IAP — раздел 4.
 
+Источник тарифов — **Tariff Constructor** в дашборде (таблица `webapp_menu_nodes`,
+тот же источник, что у miniapp `/api/menu/tree`). Клиент получает дерево через
+`/menu` и передаёт в `/invoice` только `node_id` выбранного узла. Provider/
+amount/currency/method/days/tariff_slug сервер достаёт сам — клиент **не
+передаёт** никаких ценовых параметров (на мобильном клиенте всё подменяемо).
+Для Android фильтруем только узлы с провайдерами `apay` и `platega`.
+
 | Метод | Путь | Auth | Rate | Назначение |
 |---|---|---|---|---|
-| GET | `/providers` | — | — | Список доступных провайдеров |
-| POST | `/invoice` | Bearer + verified | 10/min | Создать счёт, получить URL для оплаты |
+| GET | `/menu` | Bearer | — | Дерево тарифов из Tariff Constructor (Android-фильтр) |
+| GET | `/providers` | — | — | Список доступных провайдеров (apay, platega) |
+| POST | `/invoice` | Bearer + verified | 10/min | Создать счёт по `node_id`, получить URL |
 | GET | `/transactions` | Bearer | — | Последние 50 транзакций пользователя |
 | GET | `/transactions/{id}` | Bearer | — | Состояние конкретной транзакции |
+
+### GET /menu
+
+**200**:
+```jsonc
+{
+  "tree": [
+    {
+      "id": 1,
+      "parent_id": null,
+      "text": "Premium",
+      "action": "buttons",            // группа — раскрывает children
+      "invoice": null,
+      "children": [
+        {
+          "id": 7,
+          "parent_id": 1,
+          "text": "30 дней — 199 ₽",
+          "action": "invoice",
+          "invoice": {
+            "provider": "apay",       // только для отображения цены/способа
+            "amount": 199.0,          // в UI; в /invoice ничего из этого
+            "currency": "RUB",        // не передаётся
+            "method": null,
+            "days": 30,
+            "tariff_slug": "premium_30"
+          },
+          "children": []
+        }
+      ]
+    }
+  ]
+}
+```
+
+Узлы с invoice-провайдерами не из `(apay, platega)` отрезаются на сервере, как
+и пустые ветки после фильтрации. Клиент рендерит дерево как есть; для покупки
+ему нужен только `node.id`.
 
 ### POST /invoice
 
 ```jsonc
 {
-  "provider": "apay",                  // apay | platega
-  "amount": 199.0,
-  "currency": "RUB",
-  "days": 30,
-  "squad_id": "<remnawave squad uuid>",
-  "external_squad_id": "<remnawave external squad uuid>",
-  "description": "30 days Premium",    // опционально
-  "method": null                        // опционально, нужен только для Platega
+  "node_id": 7,                       // id узла из /menu (action=invoice)
+  "description": "30 дней Premium"    // опционально, для отображения в банке
 }
 ```
+
+Сервер берёт provider/amount/currency/method/days/tariff_slug из узла. Никаких
+тарифных параметров от клиента не принимается — это защита от подмены цены и
+сквада на стороне приложения.
 
 **200**:
 ```jsonc
@@ -176,8 +220,15 @@ Remnawave (`provisioning.ensure_free_subscription`) — клиент сразу 
   "payment_method": "card"
 }
 ```
-Ошибки: `provider_not_allowed`, `provider_unavailable`, `currency_unsupported`,
-`invoice_failed` (502).
+
+Ошибки:
+- **404 `node_not_found`** — узла с таким id нет или он деактивирован.
+- **400 `node_not_invoice`** — узел существует, но это группа (`action != invoice`)
+  или его провайдер не из Android-набора.
+- **400 `node_misconfigured`** — узел инвойсный, но `amount` или `days` не
+  заполнены (черновик в дашборде).
+- **400 `provider_unavailable`**, **400 `currency_unsupported`**,
+  **502 `invoice_failed`** — ошибки на стороне платёжного провайдера.
 
 ### GET /transactions/{id}
 
@@ -352,8 +403,10 @@ UX: открыть `deep_link` системным интентом → бот в
 
 - **Время** — ISO-8601 UTC (`...Z` или `+00:00`).
 - **Деньги** — `float` + ISO-код валюты, без копеек/центов.
-- **Идентификаторы Remnawave** (`squad_id`, `external_squad_id`) — UUID-строки,
-  передаются как есть. Сервер сам клеит `tariff_slug = sid:<squad>:esid:<external>`.
+- **`node_id`** в `/payments/invoice` — id узла из `/payments/menu`. Это
+  единственное, что клиент шлёт для покупки: цена, валюта, дни и slug тарифа
+  определяются на сервере по узлу. Подмена цены/сквада со стороны приложения
+  невозможна.
 - **Bearer-токен** в `Authorization: Bearer <jwt>`. На 401 с любым `code` —
   выкинуть access, дёрнуть `/refresh`. На 401 после refresh — разлогинить.
 - **Rate limits** возвращают **429** с `{"detail": {"code": "rate_limited"}}`.

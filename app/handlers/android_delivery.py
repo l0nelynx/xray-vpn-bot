@@ -67,7 +67,13 @@ async def deliver_android_paid(
     if not email:
         return {"status": "error", "message": "android_user_missing_email"}
 
+    # Android invoice writes either:
+    #   1) "sid:<squad>:esid:<external>"  — старый формат (deprecated)
+    #   2) обычный tariff_slug из webapp_menu_nodes — тогда squad ищем в боте.
     squad = _parse_squad_slug(tariff_slug)
+    if not squad and tariff_slug:
+        from app.database.tariff_repository import get_squad_for_tariff_slug
+        squad = await get_squad_for_tariff_slug(tariff_slug)
     if not squad:
         return {"status": "error", "message": f"bad tariff_slug: {tariff_slug!r}"}
 
