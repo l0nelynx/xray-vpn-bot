@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 from email.message import EmailMessage
+from email.utils import formatdate, make_msgid, parseaddr
 
 import aiosmtplib
 
@@ -27,6 +28,15 @@ class MailerError(Exception):
     pass
 
 
+def _addr_domain(value: str) -> str | None:
+    """Достать домен из адреса вида `Name <user@host>` или `user@host`.
+    Возвращает host часть или None, если адрес невалидный."""
+    _, addr = parseaddr(value)
+    if not addr or "@" not in addr:
+        return None
+    return addr.rsplit("@", 1)[-1].strip().lower() or None
+
+
 async def send_email(*, to: str, subject: str, text: str, html: str | None = None) -> None:
     host = get_smtp_host()
     if not host:
@@ -36,10 +46,24 @@ async def send_email(*, to: str, subject: str, text: str, html: str | None = Non
     if not sender:
         raise MailerError("smtp_from / smtp_user not configured")
 
+    sender_domain = _addr_domain(sender) or "localhost"
+
     msg = EmailMessage()
     msg["From"] = sender
     msg["To"] = to
     msg["Subject"] = subject
+    # SpamAssassin: MISSING_DATE / MISSING_MID. Без Date/Message-ID письмо
+    # выглядит как генерируемый ботом спам — добавляем оба заголовка по
+    # RFC 5322. make_msgid ставит угловые скобки и FQDN автоматически.
+    msg["Date"] = formatdate(localtime=True)
+    msg["Message-ID"] = make_msgid(domain=sender_domain)
+    # SpamAssassin: одноклавишная отписка (RFC 2369 + 8058). Для
+    # транзакционных писем достаточно mailto — реальный почтовый клиент
+    # просто пошлёт пустое письмо на этот адрес. List-Unsubscribe-Post
+    # маркирует письмо как «отписка не требует подтверждения», что
+    # требуется большинством антиспам-фильтров с 2024 года.
+    msg["List-Unsubscribe"] = f"<mailto:unsubscribe@{sender_domain}>"
+    msg["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
     msg.set_content(text)
     if html:
         msg.add_alternative(html, subtype="html")
