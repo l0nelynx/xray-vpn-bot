@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 
 from ..database.session import async_session
+from ..notify_log import esc, notify_log
 from ..payments import (
     InvoiceRequest,
     PaymentError,
@@ -323,6 +324,16 @@ async def create_payment_invoice(
             },
         )
         await session.commit()
+
+    await notify_log(
+        f"🧾 <b>Invoice created (Android)</b>\n"
+        f"user: <code>{user.id}</code> {esc(user.email or '')}\n"
+        f"provider: <code>{esc(provider.name)}</code>\n"
+        f"amount: <code>{invoice_data['amount']} {esc(invoice_data['currency'])}</code>\n"
+        f"days: <code>{invoice_data['days']}</code>\n"
+        f"slug: <code>{esc(invoice_data['tariff_slug'])}</code>\n"
+        f"tx: <code>{esc(persisted_id)}</code>"
+    )
 
     return AndroidInvoiceResponse(
         provider=provider.name,

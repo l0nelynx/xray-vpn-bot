@@ -439,3 +439,24 @@ google_play_rtdn_token: "<random>"
 
 Без Android-секции `/api/android/*` отвечает 500 на auth-ручках. Без SMTP —
 `/email/send-code` возвращает **503 `email_send_failed`**.
+
+## Event-log в Telegram
+
+Если в `config.yml` заданы `admin_bot_token` и `logs_id` — сервер шлёт короткие
+HTML-уведомления в указанный чат на ключевые события:
+
+- 🆕 регистрация Android-пользователя
+- ✅ подтверждение email (после `/email/verify`)
+- 🧾 создание инвойса — для всех источников (Android, miniapp, бот)
+- 📦 успешная доставка подписки в Remnawave
+- ❌ неуспешная доставка (с краткой причиной)
+- 🔗 привязка Telegram-аккаунта к Android
+
+Уведомления не блокирующие: отвал Telegram не влияет на платежи и регистрацию,
+ошибки логируются как `notify_log: send failed`. Если `logs_id` пустой или
+`admin_bot_token` не задан — это silent no-op.
+
+```yaml
+admin_bot_token: "<token>"
+logs_id: -1001234567890     # numeric chat id (channel/group/private)
+```

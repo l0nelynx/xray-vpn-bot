@@ -27,6 +27,16 @@ def get_admin_id() -> int | None:
     return int(value) if value is not None else None
 
 
+def get_logs_id() -> int | None:
+    """Chat ID for event log notifications (Android API events, invoices,
+    deliveries, etc.). When unset → notifications are silently skipped."""
+    value = get_config().get("logs_id")
+    try:
+        return int(value) if value is not None and str(value).strip() != "" else None
+    except (TypeError, ValueError):
+        return None
+
+
 def get_bot_url() -> str:
     return get_config().get("bot_url", "")
 

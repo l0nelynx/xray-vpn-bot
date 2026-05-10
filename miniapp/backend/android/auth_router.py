@@ -12,6 +12,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy.exc import IntegrityError
 
+from ..notify_log import esc, notify_log
 from . import deps, repo, security
 
 # Module-level limiter shared with main.app.state.limiter via singleton.
@@ -79,6 +80,14 @@ async def register(req: RegisterRequest, request: Request) -> AuthResponse:
     user = await repo.find_user_by_id(user_id)
     assert user is not None
     tokens = await _issue_pair(user_id, request)
+    ua, ip = deps.client_meta(request)
+    await notify_log(
+        f"🆕 <b>Android registration</b>\n"
+        f"ID: <code>{user_id}</code>\n"
+        f"email: <code>{esc(user.email)}</code>\n"
+        f"IP: <code>{esc(ip or '—')}</code>\n"
+        f"UA: <code>{esc((ua or '—')[:120])}</code>"
+    )
     return AuthResponse(tokens=tokens, user=_user_summary(user))
 
 

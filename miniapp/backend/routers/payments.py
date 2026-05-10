@@ -7,6 +7,7 @@ from sqlalchemy import select
 
 from ..database.models import Promo, PromoSettings, Transaction, User
 from ..database.session import async_session
+from ..notify_log import esc, notify_log
 from ..payments import (
     InvoiceRequest,
     PaymentError,
@@ -127,6 +128,16 @@ async def create_payment_invoice(
             )
         )
         await session.commit()
+
+    await notify_log(
+        f"🧾 <b>Invoice created (miniapp)</b>\n"
+        f"user: <code>{tg.tg_id}</code> @{esc(tg.username or '—')}\n"
+        f"provider: <code>{esc(provider.name)}</code>\n"
+        f"amount: <code>{invoice_amount} {esc(body.currency.upper())}</code>\n"
+        f"days: <code>{body.days}</code>\n"
+        f"slug: <code>{esc(body.tariff_slug or '—')}</code>\n"
+        f"tx: <code>{esc(persisted_id)}</code>"
+    )
 
     return InvoiceResponse(
         provider=provider.name,

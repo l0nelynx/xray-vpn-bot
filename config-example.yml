@@ -18,9 +18,10 @@ uvicorn_port: 5000                                 # Webhook server port
 # ===== BOTS =====
 token: "yourbottoken"                              # Main user-facing bot token
 support_token: "yoursupportbottoken"               # Support bot token
-admin_bot_token: "youradminbottoken"               # Admin bot token (admin panel / broadcasts)
+admin_bot_token: "youradminbottoken"               # Admin bot token (admin panel / broadcasts / log notifications)
 admin_id: 123456789                                # Admin Telegram user ID
 news_id: -1001234567890                            # News channel ID (numeric, for broadcasts)
+logs_id: -1001234567890                            # Chat ID for event log notifications (registrations, invoices, deliveries, email-verify, tg-link). Empty/missing → notifications off.
 
 # ===== REMNAWAVE =====
 remnawave_url: "https://panel.example.com"         # Remnawave panel URL

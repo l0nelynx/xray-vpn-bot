@@ -12,6 +12,7 @@ import app.keyboards as kb
 # import app.marzban.templates as templates  # DISABLED: Marzban removed
 from app.locale.lang_ru import admin_transaction_message, admin_migration_message
 from app.locale.utils import get_user_lang
+from app.notify_log import esc, notify_log
 from app.settings import bot, admin_bot, secrets
 
 from remnawave_client import (
@@ -246,10 +247,28 @@ async def deliver_subscription(
         if transaction_id:
             await rq.update_delivery_status(transaction_id, 1)
 
+        await notify_log(
+            f"📦 <b>Subscription delivered</b>\n"
+            f"user: <code>{user_id}</code> @{esc(username or '—')}\n"
+            f"type: <code>{esc(subscription_type.value)}</code>\n"
+            f"days: <code>{days}</code>\n"
+            f"method: <code>{esc(payment_method)}</code>\n"
+            f"slug: <code>{esc(tariff_slug or '—')}</code>\n"
+            f"tx: <code>{esc(transaction_id or '—')}</code>"
+        )
+
         return {"status": "success", "scenario": scenario.value, **result}
 
     except Exception as e:
         logging.error(f"Error delivering subscription: {e}")
+        await notify_log(
+            f"❌ <b>Subscription delivery FAILED</b>\n"
+            f"user: <code>{user_id}</code> @{esc(username or '—')}\n"
+            f"days: <code>{days}</code>\n"
+            f"method: <code>{esc(payment_method)}</code>\n"
+            f"tx: <code>{esc(transaction_id or '—')}</code>\n"
+            f"error: <code>{esc(str(e)[:300])}</code>"
+        )
         return {"status": "error", "message": str(e)}
 
 

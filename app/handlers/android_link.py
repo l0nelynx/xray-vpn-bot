@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 from sqlalchemy import text
 
 from app.database.models import async_session
+from app.notify_log import esc, notify_log
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +110,19 @@ async def consume_android_link_code(tg_id: int, code: str) -> str:
             text("UPDATE email_verifications SET used_at = :n WHERE id = :i"),
             {"n": now, "i": code_id},
         )
+        # Read email for the notification (best-effort; bind already happened
+        # in the same transaction so we want it in the same DB session).
+        email_row = (await s.execute(
+            text("SELECT email FROM users WHERE id = :i LIMIT 1"),
+            {"i": user_id},
+        )).first()
         await s.commit()
 
+    user_email = email_row[0] if email_row else None
     logger.info("Android link applied: android_user_id=%s tg_id=%s", user_id, tg_id)
+    await notify_log(
+        f"🔗 <b>Telegram linked to Android account</b>\n"
+        f"android user: <code>{user_id}</code> {esc(user_email or '—')}\n"
+        f"tg_id: <code>{tg_id}</code>"
+    )
     return "ok"

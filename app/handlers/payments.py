@@ -15,6 +15,7 @@ from app.api.a_pay import create_sbp_link as apays_create_sbp_link
 from app.api.crystal_pay import crystal_create_link
 from app.handlers.tools import success_payment_handler
 from app.handlers.subscription_service import deliver_subscription, SubscriptionType
+from app.notify_log import esc, notify_log
 from app.database.tariff_repository import get_tariff_slug_by_days
 from app.locale.utils import get_user_lang
 from app.keyboards.localized import get_pay_methods_localized, get_to_main_localized
@@ -198,6 +199,17 @@ async def invoice_handler(callback: CallbackQuery, callback_data: kb.PaymentCall
     tariff_slug = await get_tariff_slug_by_days(method, days)
     await state.update_data(PaymentDays=days, PaymentMethod=method, TariffSlug=tariff_slug)
     await state.set_state(PaymentState.PaymentInvoice)
+
+    if method in {'stars', 'crypto', 'SBP_APAY', 'CRYSTAL'}:
+        await notify_log(
+            f"🧾 <b>Invoice created (bot)</b>\n"
+            f"user: <code>{callback.from_user.id}</code> "
+            f"@{esc(callback.from_user.username or '—')}\n"
+            f"method: <code>{esc(PAYMENT_METHOD_NAMES.get(method, method))}</code>\n"
+            f"amount: <code>{callback_data.amount}</code>\n"
+            f"days: <code>{days}</code>\n"
+            f"slug: <code>{esc(tariff_slug or '—')}</code>"
+        )
 
 
 @cp.invoice_paid()

@@ -14,6 +14,7 @@ import re
 from typing import Optional
 
 import app.database.requests as rq
+from app.notify_log import esc, notify_log
 from remnawave_client import (
     SubscriptionScenario,
     SubscriptionType,
@@ -51,6 +52,31 @@ def _parse_squad_slug(slug: Optional[str]) -> Optional[dict]:
     return {"squad_id": sid, "external_squad_id": esid}
 
 
+async def _notify_android_delivery(
+    *,
+    ok: bool,
+    transaction_id: str,
+    android_user_id: int,
+    email: Optional[str],
+    days: int,
+    tariff_slug: Optional[str],
+    reason: Optional[str] = None,
+) -> None:
+    icon = "📦" if ok else "❌"
+    title = "Android subscription delivered" if ok else "Android delivery FAILED"
+    extra = ""
+    if not ok and reason:
+        extra = f"\nerror: <code>{esc(reason[:300])}</code>"
+    await notify_log(
+        f"{icon} <b>{title}</b>\n"
+        f"user: <code>{android_user_id}</code> {esc(email or '—')}\n"
+        f"days: <code>{days}</code>\n"
+        f"slug: <code>{esc(tariff_slug or '—')}</code>\n"
+        f"tx: <code>{esc(transaction_id)}</code>"
+        f"{extra}"
+    )
+
+
 async def deliver_android_paid(
     *,
     transaction_id: str,
@@ -65,6 +91,11 @@ async def deliver_android_paid(
     on success, or {"status": "error", "message": ...} on failure.
     """
     if not email:
+        await _notify_android_delivery(
+            ok=False, transaction_id=transaction_id,
+            android_user_id=android_user_id, email=email, days=days,
+            tariff_slug=tariff_slug, reason="android_user_missing_email",
+        )
         return {"status": "error", "message": "android_user_missing_email"}
 
     # Android invoice writes either:
@@ -75,6 +106,11 @@ async def deliver_android_paid(
         from app.database.tariff_repository import get_squad_for_tariff_slug
         squad = await get_squad_for_tariff_slug(tariff_slug)
     if not squad:
+        await _notify_android_delivery(
+            ok=False, transaction_id=transaction_id,
+            android_user_id=android_user_id, email=email, days=days,
+            tariff_slug=tariff_slug, reason=f"bad tariff_slug: {tariff_slug!r}",
+        )
         return {"status": "error", "message": f"bad tariff_slug: {tariff_slug!r}"}
 
     username = _email_to_username(email)
@@ -101,6 +137,11 @@ async def deliver_android_paid(
         elif scenario == SubscriptionScenario.EXTEND:
             uuid = (info or {}).get("uuid")
             if not uuid:
+                await _notify_android_delivery(
+                    ok=False, transaction_id=transaction_id,
+                    android_user_id=android_user_id, email=email, days=days,
+                    tariff_slug=tariff_slug, reason="extend without uuid",
+                )
                 return {"status": "error", "message": "extend without uuid"}
             from app.handlers.tools import get_user_days
             current_days = await get_user_days(info) or 0
@@ -116,6 +157,12 @@ async def deliver_android_paid(
         else:  # UPDATE / LIMITED / ALREADY_ACTIVE all fall through to update.
             uuid = (info or {}).get("uuid")
             if not uuid:
+                await _notify_android_delivery(
+                    ok=False, transaction_id=transaction_id,
+                    android_user_id=android_user_id, email=email, days=days,
+                    tariff_slug=tariff_slug,
+                    reason=f"{scenario.value} without uuid",
+                )
                 return {"status": "error", "message": f"{scenario.value} without uuid"}
             result = await apply_update(
                 user_uuid=uuid,
@@ -129,9 +176,19 @@ async def deliver_android_paid(
             )
     except Exception as exc:
         logger.error("android delivery for tx=%s failed: %s", transaction_id, exc)
+        await _notify_android_delivery(
+            ok=False, transaction_id=transaction_id,
+            android_user_id=android_user_id, email=email, days=days,
+            tariff_slug=tariff_slug, reason=str(exc),
+        )
         return {"status": "error", "message": str(exc)}
 
     if not result:
+        await _notify_android_delivery(
+            ok=False, transaction_id=transaction_id,
+            android_user_id=android_user_id, email=email, days=days,
+            tariff_slug=tariff_slug, reason="remnawave_apply_returned_none",
+        )
         return {"status": "error", "message": "remnawave_apply_returned_none"}
 
     rw_uuid = result.get("uuid") or (info or {}).get("uuid")
@@ -144,6 +201,11 @@ async def deliver_android_paid(
             logger.warning("Failed to save vless_uuid for user %s: %s", android_user_id, exc)
 
     await rq.update_delivery_status(transaction_id, 1)
+    await _notify_android_delivery(
+        ok=True, transaction_id=transaction_id,
+        android_user_id=android_user_id, email=email, days=days,
+        tariff_slug=tariff_slug,
+    )
     return {
         "status": "success",
         "scenario": scenario.value,

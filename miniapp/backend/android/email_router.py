@@ -22,6 +22,7 @@ from ..config import (
     get_email_code_max_attempts,
     get_email_code_ttl_seconds,
 )
+from ..notify_log import esc, notify_log
 from . import deps, mailer, provisioning, repo, security
 from .auth_router import limiter
 from .schemas import SimpleStatus
@@ -170,6 +171,11 @@ async def email_verify(
         presented_code=req.code,
     )
     await repo.mark_email_verified(user.id)
+    await notify_log(
+        f"✅ <b>Email verified</b>\n"
+        f"ID: <code>{user.id}</code>\n"
+        f"email: <code>{esc(user.email)}</code>"
+    )
 
     # Eagerly hand the user a FREE Remnawave subscription. Failures here
     # don't block verification — the client can retry via /me later.
