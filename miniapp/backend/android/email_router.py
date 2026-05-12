@@ -179,10 +179,14 @@ async def email_verify(
 
     # Eagerly hand the user a FREE Remnawave subscription. Failures here
     # don't block verification — the client can retry via /me later.
-    try:
-        await provisioning.ensure_free_subscription(user.id, user.email)
-    except Exception as exc:
-        logger.warning("Free provisioning for user %s failed: %s", user.id, exc)
+    # Skip when the user already owns a Remnawave subscription (the
+    # `/migrate` flow pre-fills `vless_uuid`) so we don't overwrite a
+    # paid plan with the free tier.
+    if not user.vless_uuid:
+        try:
+            await provisioning.ensure_free_subscription(user.id, user.email)
+        except Exception as exc:
+            logger.warning("Free provisioning for user %s failed: %s", user.id, exc)
 
     return SimpleStatus()
 

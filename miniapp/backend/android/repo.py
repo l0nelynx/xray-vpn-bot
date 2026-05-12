@@ -75,6 +75,36 @@ async def find_user_by_id(user_id: int) -> UserRow | None:
     return _row_to_user(row)
 
 
+async def find_user_by_vless_uuid(vless_uuid: str) -> UserRow | None:
+    async with async_session() as s:
+        row = (await s.execute(
+            text(f"SELECT {_USER_COLS} FROM users WHERE vless_uuid = :u LIMIT 1"),
+            {"u": vless_uuid},
+        )).first()
+    return _row_to_user(row)
+
+
+async def find_user_by_remnawave_username(username: str) -> UserRow | None:
+    """Lookup a user by the deterministic Remnawave username derived from
+    their email (see `provisioning.email_to_username`). The DB has no
+    dedicated column for it — Telegram users get a numeric username
+    instead — so we re-derive it from `email` for every row that has one
+    and compare in Python. The user table is small (single-digit thousands
+    in practice) so the full scan is fine; if it ever isn't, materialize
+    the username into a column."""
+    from .provisioning import email_to_username
+
+    async with async_session() as s:
+        rows = (await s.execute(
+            text(f"SELECT {_USER_COLS} FROM users WHERE email IS NOT NULL")
+        )).all()
+    for row in rows:
+        email = row[1]
+        if email and email_to_username(email) == username:
+            return _row_to_user(row)
+    return None
+
+
 async def create_user_with_password(email: str, password_hash: str) -> int:
     """Create a Telegram-less user row. Returns the new user id.
 
@@ -94,6 +124,61 @@ async def create_user_with_password(email: str, password_hash: str) -> int:
         )
         await s.commit()
         return int(result.lastrowid)
+
+
+async def create_user_with_password_and_vless(
+    email: str, password_hash: str, vless_uuid: str
+) -> int:
+    """Create a new Android-only user pre-bound to an existing Remnawave
+    `vless_uuid`. Used by the migration flow when a Remnawave subscription
+    exists but no `users` row references it yet.
+
+    Raises sqlalchemy.exc.IntegrityError on email collision (the caller
+    should check for collision in advance, since the migrate flow has
+    branching logic for "email exists but no password")."""
+    normalized = email.strip().lower()
+    now = _utcnow_iso()
+    async with async_session() as s:
+        result = await s.execute(
+            text(
+                "INSERT INTO users (tg_id, email, password_hash, password_updated_at, "
+                "vless_uuid, api_provider, is_banned, vip) "
+                "VALUES (NULL, :e, :p, :n, :v, 'remnawave', 0, 0)"
+            ),
+            {"e": normalized, "p": password_hash, "n": now, "v": vless_uuid},
+        )
+        await s.commit()
+        return int(result.lastrowid)
+
+
+async def adopt_user_for_migration(
+    user_id: int,
+    email: str,
+    password_hash: str,
+    vless_uuid: str,
+) -> None:
+    """Fill `password_hash`, `email`, and `vless_uuid` on an existing row.
+    Used when a user record exists (matched by vless_uuid/username/email)
+    but is missing the credentials needed for Android login. Won't touch
+    `email_verified_at` — that's still gated through `/email/verify`."""
+    normalized = email.strip().lower()
+    now = _utcnow_iso()
+    async with async_session() as s:
+        await s.execute(
+            text(
+                "UPDATE users SET email = :e, password_hash = :p, "
+                "password_updated_at = :n, vless_uuid = :v "
+                "WHERE id = :i"
+            ),
+            {
+                "e": normalized,
+                "p": password_hash,
+                "n": now,
+                "v": vless_uuid,
+                "i": user_id,
+            },
+        )
+        await s.commit()
 
 
 async def set_password(user_id: int, password_hash: str) -> None:

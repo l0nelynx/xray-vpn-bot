@@ -22,7 +22,8 @@
 
 | Метод | Путь | Auth | Rate | Назначение |
 |---|---|---|---|---|
-| POST | `/check-uuid` | — | 10/min | Получить полный SDK-DTO Remnawave-пользователя по short_uuid |
+| POST | `/check-uuid` | — | 10/min | Проверить short_uuid+identifier → полный SDK-DTO Remnawave |
+| POST | `/migrate` | — | 5/min | Привязать Android-учётку к существующей Remnawave-подписке |
 | POST | `/register` | — | 5/min | Создать пользователя по email + password |
 | POST | `/login` | — | 10/min | Получить пару токенов |
 | POST | `/refresh` | — | 60/min | Ротация refresh-семейства |
@@ -33,23 +34,82 @@
 ### POST /check-uuid
 
 Доступен до регистрации (без Bearer-токена). Используется для онбординга:
-клиент извлекает `short_uuid` из subscription-ссылки Remnawave и проверяет,
-существует ли соответствующий пользователь.
+клиент извлекает `short_uuid` из subscription-ссылки Remnawave и
+**подтверждает владение** этой подпиской, передавая в `identifier` либо
+email (содержит `@`), либо username, прописанные в Remnawave.
 
 ```jsonc
 // request
-{ "short_uuid": "<remnawave short uuid>" }
+{
+  "short_uuid": "<remnawave short uuid>",
+  "identifier": "user@example.com"   // или "user_at_example_com" (username)
+}
 ```
 
-**200** — возвращается **сырой DTO** из `RemnawaveSDK.users.get_user_by_short_uuid`,
-сериализованный через `model_dump(mode="json", by_alias=True)`. Бекенд **ничего
-не интерпретирует** и не вырезает поля — клиент видит весь набор атрибутов,
-который отдаёт upstream-API (uuid, expire_at, subscription_url, status,
-traffic_limit_bytes, used_traffic_bytes, active_internal_squads, hwid_devices,
-email и т.д.).
+**200** — `identifier` совпал с email/username в Remnawave. Возвращается
+**сырой DTO** из `RemnawaveSDK.users.get_user_by_short_uuid`,
+сериализованный через `model_dump(mode="json", by_alias=True)`. Бекенд
+**ничего не интерпретирует** и не вырезает поля — клиент видит весь
+набор атрибутов, который отдаёт upstream-API (uuid, expire_at,
+subscription_url, status, traffic_limit_bytes, used_traffic_bytes,
+active_internal_squads, hwid_devices, email и т.д.).
 
-**400 `bad_short_uuid`** — формат не похож на slug (только `[A-Za-z0-9_-]{6,64}`).
+Правила сравнения: при наличии `@` сравнивается с `email` Remnawave
+(case-insensitive); иначе — с `username` (точное совпадение).
+
+**400 `bad_short_uuid`** — формат не похож на slug (`[A-Za-z0-9_-]{6,64}`).
+**403 `identifier_mismatch`** — short_uuid существует, но identifier не
+совпал с email/username владельца.
 **404 `not_found`** — Remnawave не знает такого пользователя.
+
+### POST /migrate
+
+Создаёт Android-учётку поверх **уже существующей** Remnawave-подписки.
+Используется, когда пользователь пришёл с готовым `short_uuid` (например,
+бот выдал подписку до появления Android-приложения) и хочет завести
+email/password для входа.
+
+Доказательство владения — то же, что в `/check-uuid`: пара
+`short_uuid` + `identifier` должна совпасть с данными Remnawave.
+
+```jsonc
+// request
+{
+  "short_uuid": "<remnawave short uuid>",
+  "identifier": "user@example.com",   // существующий email/username в Remnawave
+  "acc_email":  "new@example.com",    // email для логина в Android (может отличаться)
+  "password":   "min8chars"
+}
+```
+
+**201** → `AuthResponse { tokens, user }`. Полностью эквивалентен ответу
+`/register`. Сразу можно использовать access-токен.
+
+`email_verified_at` **не выставляется** — клиент должен дальше пройти
+`/email/send-code` + `/email/verify`. При этом верификация email на
+аккаунте с уже заполненным `vless_uuid` **не перезаписывает** подписку
+бесплатной (free-provisioning пропускается).
+
+Логика выбора локальной строки `users`:
+1. `vless_uuid == rw.vlessUuid`
+2. `users.email`-derived username совпал с `rw.username`
+3. `users.email == rw.email`
+
+Если строка найдена и у неё уже есть **и** email, **и** password —
+аккаунт считается полностью зарегистрированным, возвращается `409`.
+Иначе строка догружается: записывается `acc_email`, `password_hash`,
+`vless_uuid`. Если ни одной строки не найдено — создаётся новая,
+сразу привязанная к `vless_uuid`.
+
+Ошибки:
+- **400 `bad_short_uuid`** — формат slug невалиден.
+- **403 `identifier_mismatch`** — identifier не совпал с DTO Remnawave.
+- **404 `not_found`** — Remnawave не знает `short_uuid`.
+- **409 `already_registered`** — нашли локальную строку с уже заполненной
+  парой email+password (вход через `/login`).
+- **409 `email_taken`** — `acc_email` принадлежит другому пользователю.
+- **502 `upstream_invalid`** — DTO Remnawave без `vlessUuid` (не должно
+  случаться, защитный код).
 
 ### POST /register
 
@@ -124,7 +184,7 @@ Refresh — opaque, TTL по умолчанию 60 дней (`android_refresh_tt
 | Метод | Путь | Auth | Rate | Назначение |
 |---|---|---|---|---|
 | POST | `/email/send-code` | Bearer | 3/min | Отправить код подтверждения текущего email |
-| POST | `/email/verify` | Bearer | 10/min | Подтвердить код → выдаётся бесплатная подписка |
+| POST | `/email/verify` | Bearer | 10/min | Подтвердить код → выдаётся бесплатная подписка (если ещё нет) |
 | POST | `/password/reset-request` | — | 3/min | Запросить код сброса пароля |
 | POST | `/password/reset-confirm` | — | 10/min | Сбросить пароль по коду |
 | POST | `/email/change-request` | Bearer + verified | 3/min | Запросить код смены email |
@@ -157,6 +217,10 @@ Refresh — opaque, TTL по умолчанию 60 дней (`android_refresh_tt
 После успешного `/email/verify` сервер автоматически создаёт FREE-подписку в
 Remnawave (`provisioning.ensure_free_subscription`) — клиент сразу может звать
 `/api/android/me` и видеть `tariff: "Free"`.
+
+**Исключение:** если у пользователя уже заполнен `vless_uuid` (например, после
+`/migrate` или ручной привязки), FREE-provisioning **пропускается**, чтобы не
+затереть существующую подписку.
 
 ---
 
