@@ -44,6 +44,16 @@ async def get_user_from_username(username: str) -> dict | None:
     return await _client().get_user_by_username(username)
 
 
+async def get_user_by_short_uuid_raw(short_uuid: str) -> dict | None:
+    """Return the raw Remnawave SDK DTO for the user owning `short_uuid`.
+
+    Unlike `get_user_from_username`, this preserves every field the SDK
+    exposes — the Android client expects the full payload so it can
+    decide locally whether to offer account-recovery flows.
+    """
+    return await _client().get_user_by_short_uuid_raw(short_uuid)
+
+
 async def create_user(
     username: str,
     days: int = 30,

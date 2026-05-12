@@ -127,6 +127,20 @@ class RemnawaveClient:
             logger.error("Remnawave get_user_by_email(%s) failed: %s", email, e)
             return None
 
+    async def get_user_by_short_uuid_raw(self, short_uuid: str) -> dict | None:
+        """Lookup user by Remnawave short_uuid and return the SDK DTO
+        serialized as-is (no normalization). Used by the Android
+        /check-uuid endpoint to verify ownership of an existing subscription
+        before account registration."""
+        try:
+            response = await self.sdk.users.get_user_by_short_uuid(short_uuid)
+            if not response:
+                return None
+            return response.model_dump(mode="json", by_alias=True, exclude_none=False)
+        except Exception as e:
+            logger.error("Remnawave get_user_by_short_uuid(%s) failed: %s", short_uuid, e)
+            return None
+
     async def get_subscription_link(self, user_uuid: str) -> str | None:
         try:
             response: UserResponseDto = await self.sdk.users.get_user_by_uuid(user_uuid)

@@ -22,12 +22,34 @@
 
 | Метод | Путь | Auth | Rate | Назначение |
 |---|---|---|---|---|
+| POST | `/check-uuid` | — | 10/min | Получить полный SDK-DTO Remnawave-пользователя по short_uuid |
 | POST | `/register` | — | 5/min | Создать пользователя по email + password |
 | POST | `/login` | — | 10/min | Получить пару токенов |
 | POST | `/refresh` | — | 60/min | Ротация refresh-семейства |
 | POST | `/logout` | — | — | Отозвать одно семейство по refresh-токену |
 | POST | `/logout-all` | Bearer | — | Отозвать все семейства пользователя |
 | POST | `/password/change` | Bearer | — | Сменить пароль (нужен текущий) |
+
+### POST /check-uuid
+
+Доступен до регистрации (без Bearer-токена). Используется для онбординга:
+клиент извлекает `short_uuid` из subscription-ссылки Remnawave и проверяет,
+существует ли соответствующий пользователь.
+
+```jsonc
+// request
+{ "short_uuid": "<remnawave short uuid>" }
+```
+
+**200** — возвращается **сырой DTO** из `RemnawaveSDK.users.get_user_by_short_uuid`,
+сериализованный через `model_dump(mode="json", by_alias=True)`. Бекенд **ничего
+не интерпретирует** и не вырезает поля — клиент видит весь набор атрибутов,
+который отдаёт upstream-API (uuid, expire_at, subscription_url, status,
+traffic_limit_bytes, used_traffic_bytes, active_internal_squads, hwid_devices,
+email и т.д.).
+
+**400 `bad_short_uuid`** — формат не похож на slug (только `[A-Za-z0-9_-]{6,64}`).
+**404 `not_found`** — Remnawave не знает такого пользователя.
 
 ### POST /register
 
