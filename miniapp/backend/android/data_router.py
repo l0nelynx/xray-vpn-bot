@@ -28,8 +28,8 @@ from ..config import (
 from ..remnawave_client import (
     delete_user_hwid_device,
     get_user_devices_count,
-    get_user_from_username,
     get_user_hwid_devices,
+    resolve_remnawave_user,
 )
 from . import deps, iap_repo, repo
 from .provisioning import email_to_username
@@ -95,15 +95,18 @@ def _user_summary(user: repo.UserRow) -> AndroidUserSummary:
 
 
 async def _resolve_remnawave_uuid(user: repo.UserRow) -> str | None:
-    """Cheap path first: cached vless_uuid. Otherwise look up by derived
-    username — falling back is important because the cached uuid may be
-    stale if the operator manually deletes the Remnawave user."""
-    if not user.email:
+    """Resolve the Remnawave UUID via the fallback chain
+    (vless_uuid → email → username-from-email). Going through
+    `resolve_remnawave_user` guarantees the same lookup priority as
+    `/me` so /devices doesn't disagree with what the user sees on the
+    account screen."""
+    if not (user.vless_uuid or user.email):
         return None
-    if user.vless_uuid:
-        return user.vless_uuid
-    username = email_to_username(user.email)
-    rem_user = await get_user_from_username(username)
+    rem_user = await resolve_remnawave_user(
+        vless_uuid=user.vless_uuid,
+        email=user.email,
+        username=email_to_username(user.email) if user.email else None,
+    )
     if not rem_user:
         return None
     return rem_user.get("uuid")
@@ -116,11 +119,14 @@ async def get_me(
     links = _links()
     summary = _user_summary(user)
 
-    if not user.email:
+    if not (user.vless_uuid or user.email):
         return AndroidMeResponse(user=summary, subscription=None, links=links)
 
-    username = email_to_username(user.email)
-    rem_user = await get_user_from_username(username)
+    rem_user = await resolve_remnawave_user(
+        vless_uuid=user.vless_uuid,
+        email=user.email,
+        username=email_to_username(user.email) if user.email else None,
+    )
 
     if not rem_user:
         return AndroidMeResponse(user=summary, subscription=None, links=links)

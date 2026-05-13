@@ -7,8 +7,8 @@ from ..database.models import User
 from ..database.session import async_session
 from ..remnawave_client import (
     delete_user_hwid_device,
-    get_user_from_username,
     get_user_hwid_devices,
+    resolve_remnawave_user,
 )
 from ..schemas.devices import DeviceItem, DevicesResponse
 from ..tg_auth import TgUser, get_tg_user
@@ -24,10 +24,14 @@ async def _resolve_user_uuid(tg: TgUser) -> str:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "user not registered")
     if user.is_banned:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "user is banned")
-    if not user.username:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "username required")
+    if not (user.vless_uuid or user.email or user.username):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "no identifier")
 
-    rem_user = await get_user_from_username(user.username)
+    rem_user = await resolve_remnawave_user(
+        vless_uuid=user.vless_uuid,
+        email=user.email,
+        username=user.username,
+    )
     if not rem_user or not rem_user.get("uuid"):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "user not found")
     return rem_user["uuid"]

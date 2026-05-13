@@ -127,6 +127,16 @@ class RemnawaveClient:
             logger.error("Remnawave get_user_by_email(%s) failed: %s", email, e)
             return None
 
+    async def get_user_by_uuid(self, user_uuid: str) -> dict | None:
+        try:
+            response = await self.sdk.users.get_user_by_uuid(user_uuid)
+            if not response:
+                return None
+            return _normalize_user(response)
+        except Exception as e:
+            logger.error("Remnawave get_user_by_uuid(%s) failed: %s", user_uuid, e)
+            return None
+
     async def get_user_by_short_uuid_raw(self, short_uuid: str) -> dict | None:
         """Lookup user by Remnawave short_uuid and return the SDK DTO
         serialized as-is (no normalization). Used by the Android

@@ -15,7 +15,7 @@ from ..config import (
 )
 from ..database.models import User
 from ..database.session import async_session
-from ..remnawave_client import get_user_devices_count, get_user_from_username
+from ..remnawave_client import get_user_devices_count, resolve_remnawave_user
 from ..schemas.me import LinksInfo, MeResponse, SubscriptionInfo, UserInfo
 from ..tg_auth import TgUser, get_tg_user
 
@@ -77,7 +77,11 @@ async def get_me(tg: TgUser = Depends(get_tg_user)) -> MeResponse:
     if user.is_banned:
         return MeResponse(registered=True, user=user_info, links=links)
 
-    rem_user = await get_user_from_username(user.username) if user.username else None
+    rem_user = await resolve_remnawave_user(
+        vless_uuid=user.vless_uuid,
+        email=user.email,
+        username=user.username,
+    )
 
     if not rem_user:
         return MeResponse(registered=True, user=user_info, links=links)

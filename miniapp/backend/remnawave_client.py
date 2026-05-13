@@ -44,6 +44,47 @@ async def get_user_from_username(username: str) -> dict | None:
     return await _client().get_user_by_username(username)
 
 
+async def get_user_from_email(email: str) -> dict | None:
+    return await _client().get_user_by_email(email)
+
+
+async def get_user_from_uuid(user_uuid: str) -> dict | None:
+    return await _client().get_user_by_uuid(user_uuid)
+
+
+async def resolve_remnawave_user(
+    *,
+    vless_uuid: str | None = None,
+    email: str | None = None,
+    username: str | None = None,
+) -> dict | None:
+    """Look up a Remnawave user via the strongest identifier available,
+    falling back to weaker ones.
+
+    Priority: vless_uuid → email → username. The cached `vless_uuid` in
+    our local `users` row is authoritative — Remnawave can't rename a
+    user's UUID — so try it first. Only fall back when it's missing or
+    the upstream record was deleted/recreated out of band.
+
+    All arguments are optional so callers can pass whatever they have on
+    hand. Returns the normalized user dict, or None when every identifier
+    we were given missed.
+    """
+    if vless_uuid:
+        user = await get_user_from_uuid(vless_uuid)
+        if user:
+            return user
+    if email:
+        user = await get_user_from_email(email)
+        if user:
+            return user
+    if username:
+        user = await get_user_from_username(username)
+        if user:
+            return user
+    return None
+
+
 async def get_user_by_short_uuid_raw(short_uuid: str) -> dict | None:
     """Return the raw Remnawave SDK DTO for the user owning `short_uuid`.
 
