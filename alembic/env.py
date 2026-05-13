@@ -26,6 +26,14 @@ def _resolve_db_url() -> str:
     x_args = context.get_x_argument(as_dictionary=True)
     if "dburl" in x_args:
         return x_args["dburl"]
+    url = os.environ.get("DATABASE_URL")
+    if url:
+        # alembic uses sync drivers — coerce asyncpg → psycopg2
+        if url.startswith("postgresql+asyncpg://"):
+            return "postgresql+psycopg2://" + url[len("postgresql+asyncpg://"):]
+        if url.startswith("sqlite+aiosqlite:///"):
+            return "sqlite:///" + url[len("sqlite+aiosqlite:///"):]
+        return url
     db_path = os.environ.get("DB_PATH", str(ROOT / "db.sqlite3"))
     return f"sqlite:///{db_path}"
 
@@ -47,7 +55,7 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
-        render_as_batch=True,
+        render_as_batch=_resolve_db_url().startswith("sqlite"),
     )
     with context.begin_transaction():
         context.run_migrations()
@@ -65,7 +73,7 @@ def run_migrations_online() -> None:
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
-            render_as_batch=True,
+            render_as_batch=_resolve_db_url().startswith("sqlite"),
         )
         with context.begin_transaction():
             context.run_migrations()
