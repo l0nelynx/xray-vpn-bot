@@ -1,12 +1,13 @@
 import logging
-import os
 
 from sqlalchemy import BigInteger, String, ForeignKey, Index, Integer, Boolean, Float, Text, UniqueConstraint, text, inspect
 from sqlalchemy.ext.asyncio import AsyncAttrs, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
-DB_PATH = os.environ.get('DB_PATH', 'db.sqlite3')
-engine = create_async_engine(url=f'sqlite+aiosqlite:///{DB_PATH}')
+from app.database.url import async_db_url
+
+DB_URL = async_db_url(default_sqlite_path='db.sqlite3')
+engine = create_async_engine(url=DB_URL, pool_pre_ping=True)
 
 async_session = async_sessionmaker(engine)
 
@@ -387,10 +388,6 @@ async def async_main():
     upgrade head` is run there, every branch is a no-op.
     """
     from migrations_runner import upgrade_to_head
-
-    async with engine.begin() as conn:
-        await conn.execute(text("PRAGMA journal_mode=WAL"))
-        await conn.execute(text("PRAGMA busy_timeout=5000"))
 
     upgrade_to_head()
 
