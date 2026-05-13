@@ -16,4 +16,7 @@ dig_data.json
 data.json
 support.db
 test.py
+package.json
+package-lock.json
+pyproject.toml
 ./tests/run_sec.py
