@@ -88,7 +88,7 @@ def upgrade() -> None:
             sa.Column("id", sa.BigInteger(), primary_key=True, autoincrement=True),
             sa.Column(
                 "ticket_id",
-                sa.Integer(),
+                sa.BigInteger(),
                 sa.ForeignKey("support_tickets.id", ondelete="CASCADE"),
                 nullable=False,
             ),

@@ -46,6 +46,11 @@ def upgrade() -> None:
                     type_=sa.BigInteger(),
                     existing_nullable=False)
 
+    op.alter_column("support_users", "user_id",
+                    existing_type=sa.Integer(),
+                    type_=sa.BigInteger(),
+                    existing_nullable=False)
+
     # 4. Таблица tariff_plans: если есть FK на внешние профили
     # Проверяем наличие колонки перед изменением (согласно вашему стилю)
     bind = op.get_bind()
@@ -57,6 +62,7 @@ def upgrade() -> None:
                         existing_type=sa.Integer(),
                         type_=sa.BigInteger(),
                         existing_nullable=True)
+
 
 
 def downgrade() -> None:
@@ -85,3 +91,7 @@ def downgrade() -> None:
                     type_=sa.Integer(),
                     existing_nullable=False,
                     autoincrement=True)
+    op.alter_column("support_users", "user_id",
+                    existing_type=sa.BigInteger(),
+                    type_=sa.Integer(),
+                    existing_nullable=False)
