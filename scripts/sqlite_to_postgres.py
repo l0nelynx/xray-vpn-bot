@@ -35,7 +35,13 @@ DATABASE_URL = os.environ["DATABASE_URL"]
 if "asyncpg" in DATABASE_URL:
     sys.exit("Use a sync DATABASE_URL (postgresql+psycopg2://...), not asyncpg.")
 
-src = sa.create_engine(f"sqlite:///{SQLITE_PATH}")
+#src = sa.create_engine(f"sqlite:///{SQLITE_PATH}")
+# Вместо простого sa.create_engine(f"sqlite:///{SQLITE_PATH}")
+src = sa.create_engine(
+    f"sqlite:///{SQLITE_PATH}",
+    # Отключаем сложную обработку Decimal для SQLite, так как он все равно хранит их как попало
+    native_datetime=True
+)
 dst = sa.create_engine(DATABASE_URL)
 
 src_meta = sa.MetaData()
