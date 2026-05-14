@@ -118,12 +118,14 @@ async def create_user_with_password(email: str, password_hash: str) -> int:
             text(
                 "INSERT INTO users (tg_id, email, password_hash, password_updated_at, "
                 "api_provider, is_banned, vip) "
-                "VALUES (NULL, :e, :p, :n, 'remnawave', 0, 0)"
+                "VALUES (NULL, :e, :p, :n, 'remnawave', 0, 0) "
+                "RETURNING id"
             ),
             {"e": normalized, "p": password_hash, "n": now},
         )
+        new_id = result.scalar_one()
         await s.commit()
-        return int(result.lastrowid)
+        return int(new_id)
 
 
 async def create_user_with_password_and_vless(
@@ -143,12 +145,14 @@ async def create_user_with_password_and_vless(
             text(
                 "INSERT INTO users (tg_id, email, password_hash, password_updated_at, "
                 "vless_uuid, api_provider, is_banned, vip) "
-                "VALUES (NULL, :e, :p, :n, :v, 'remnawave', 0, 0)"
+                "VALUES (NULL, :e, :p, :n, :v, 'remnawave', 0, 0) "
+                "RETURNING id"
             ),
             {"e": normalized, "p": password_hash, "n": now, "v": vless_uuid},
         )
+        new_id = result.scalar_one()
         await s.commit()
-        return int(result.lastrowid)
+        return int(new_id)
 
 
 async def adopt_user_for_migration(
@@ -222,7 +226,8 @@ async def store_refresh_token(
             text(
                 "INSERT INTO refresh_tokens (user_id, family_id, token_hash, "
                 "issued_at, expires_at, user_agent, ip) "
-                "VALUES (:u, :f, :h, :i, :e, :ua, :ip)"
+                "VALUES (:u, :f, :h, :i, :e, :ua, :ip) "
+                "RETURNING id"
             ),
             {
                 "u": user_id,
@@ -234,8 +239,9 @@ async def store_refresh_token(
                 "ip": (ip or "")[:64] or None,
             },
         )
+        new_id = result.scalar_one()
         await s.commit()
-        return int(result.lastrowid)
+        return int(new_id)
 
 
 @dataclass
@@ -288,7 +294,8 @@ async def rotate_refresh_token(
             text(
                 "INSERT INTO refresh_tokens (user_id, family_id, token_hash, "
                 "issued_at, expires_at, user_agent, ip) "
-                "VALUES (:u, :f, :h, :i, :e, :ua, :ip)"
+                "VALUES (:u, :f, :h, :i, :e, :ua, :ip) "
+                "RETURNING id"
             ),
             {
                 "u": user_id,
@@ -300,7 +307,7 @@ async def rotate_refresh_token(
                 "ip": (ip or "")[:64] or None,
             },
         )
-        new_id = int(result.lastrowid)
+        new_id = int(result.scalar_one())
         await s.execute(
             text(
                 "UPDATE refresh_tokens SET revoked_at = :n, replaced_by_id = :nid "
@@ -436,7 +443,8 @@ async def store_verification_code(
             text(
                 "INSERT INTO email_verifications "
                 "(user_id, purpose, code_hash, payload, created_at, expires_at, attempts) "
-                "VALUES (:u, :p, :h, :pl, :c, :e, 0)"
+                "VALUES (:u, :p, :h, :pl, :c, :e, 0) "
+                "RETURNING id"
             ),
             {
                 "u": user_id,
@@ -447,8 +455,9 @@ async def store_verification_code(
                 "e": expires,
             },
         )
+        new_id = result.scalar_one()
         await s.commit()
-        return int(result.lastrowid)
+        return int(new_id)
 
 
 @dataclass
