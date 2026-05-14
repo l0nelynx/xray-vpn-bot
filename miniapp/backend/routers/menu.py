@@ -48,7 +48,7 @@ async def get_menu_tree(_: TgUser = Depends(get_tg_user)) -> dict:
             "SELECT id, parent_id, text, action, sort_order, is_active, "
             "invoice_provider, invoice_amount, invoice_currency, invoice_method, "
             "invoice_days, invoice_tariff_slug "
-            "FROM webapp_menu_nodes WHERE is_active = 1"
+            "FROM webapp_menu_nodes WHERE is_active = TRUE"
         ))
         rows = [dict(r._mapping) for r in result.all()]
 

@@ -111,7 +111,7 @@ async def _load_menu_rows() -> list[dict]:
             "SELECT id, parent_id, text, action, sort_order, "
             "invoice_provider, invoice_amount, invoice_currency, "
             "invoice_method, invoice_days, invoice_tariff_slug "
-            "FROM webapp_menu_nodes WHERE is_active = 1"
+            "FROM webapp_menu_nodes WHERE is_active = TRUE"
         ))
         return [dict(r._mapping) for r in result.all()]
 
@@ -173,7 +173,7 @@ async def _load_node(node_id: int) -> dict | None:
                 "SELECT id, parent_id, text, action, sort_order, "
                 "invoice_provider, invoice_amount, invoice_currency, "
                 "invoice_method, invoice_days, invoice_tariff_slug "
-                "FROM webapp_menu_nodes WHERE id = :id AND is_active = 1"
+                "FROM webapp_menu_nodes WHERE id = :id AND is_active = TRUE"
             ),
             {"id": node_id},
         )

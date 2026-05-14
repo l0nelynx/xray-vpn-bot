@@ -56,7 +56,7 @@ async def list_active_skus() -> list[SkuRow]:
             text(
                 "SELECT product_id, days, squad_id, external_squad_id, "
                 "display_name, active FROM google_play_skus "
-                "WHERE active = 1 ORDER BY days ASC"
+                "WHERE active = TRUE ORDER BY days ASC"
             )
         )).all()
     return [
