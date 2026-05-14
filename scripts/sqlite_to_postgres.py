@@ -11,9 +11,12 @@ Strategy:
 - Reflect table list from Postgres (source of truth for schema).
 - Skip `alembic_version` (already populated by migrations).
 - Migrate in FK-aware order via `sa.MetaData.sorted_tables`.
+- Before insert, TRUNCATE every target table (RESTART IDENTITY CASCADE).
+  This wipes Alembic-seeded rows like `promo_settings(id=1)` that would
+  otherwise collide with the SQLite copy.
 - After every table, advance the sequence for SERIAL PKs to `max(id) + 1`,
   otherwise the next INSERT collides.
-- Idempotency: not supported. Run against an empty Postgres only.
+- Idempotency: re-runs are safe (truncate wipes prior copy).
 """
 from __future__ import annotations
 
@@ -43,6 +46,13 @@ dst_meta.reflect(bind=dst)
 SKIP = {"alembic_version", "sqlite_sequence"}
 
 with src.connect() as src_conn, dst.begin() as dst_conn:
+    if dst.dialect.name == "postgresql":
+        targets = [t.name for t in dst_meta.sorted_tables if t.name not in SKIP]
+        if targets:
+            quoted = ", ".join(f'"{n}"' for n in targets)
+            log.info("truncating %d tables (RESTART IDENTITY CASCADE)", len(targets))
+            dst_conn.execute(sa.text(f"TRUNCATE {quoted} RESTART IDENTITY CASCADE"))
+
     for table in dst_meta.sorted_tables:
         if table.name in SKIP:
             continue
