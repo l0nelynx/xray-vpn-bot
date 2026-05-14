@@ -67,13 +67,29 @@ with src.connect() as src_conn, dst.begin() as dst_conn:
             continue
         log.info("%s: copying %d rows", table.name, len(raw_rows))
 
+        # Определяем колонки, которые требуют преобразования типов
         bool_cols = [c.name for c in table.columns if isinstance(c.type, sa.Boolean)]
+        # Добавляем поиск колонок с плавающей точкой или десятичных дробей
+        num_cols = [c.name for c in table.columns if isinstance(c.type, (sa.Numeric, sa.Float))]
+
         rows: list[dict] = []
         for r in raw_rows:
             row = dict(r)
+
+            # Обработка булевых значений
             for c in bool_cols:
                 if c in row and row[c] is not None:
                     row[c] = bool(row[c])
+
+            # Обработка числовых значений (исправляет ошибку DecimalResultProcessor)
+            for c in num_cols:
+                if c in row and row[c] is not None:
+                    try:
+                        # Если там строка, приводим к float (или Decimal)
+                        row[c] = float(row[c])
+                    except (ValueError, TypeError):
+                        log.warning(f"Could not convert value {row[c]} in col {c} to float")
+
             rows.append(row)
 
         dst_conn.execute(table.insert(), rows)
