@@ -85,7 +85,7 @@ def upgrade() -> None:
     if not _has_table(insp, "support_messages"):
         op.create_table(
             "support_messages",
-            sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
+            sa.Column("id", sa.BigInteger(), primary_key=True, autoincrement=True),
             sa.Column(
                 "ticket_id",
                 sa.Integer(),
