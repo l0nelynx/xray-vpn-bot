@@ -10,8 +10,8 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision = "0008_fix_users_indices_and_types"
-down_revision = "0007_fix_int_sizes"
+revision = "0009_fix_users_id"
+down_revision = "00008_fix_support_users_id"
 branch_labels = None
 depends_on = None
 
