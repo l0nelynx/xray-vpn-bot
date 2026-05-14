@@ -161,7 +161,7 @@ def upgrade() -> None:
 
     op.create_table(
         "support_tickets",
-        sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
+        sa.Column("id", sa.BigInteger(), primary_key=True, autoincrement=True),
         sa.Column(
             "user_id",
             sa.Integer(),
