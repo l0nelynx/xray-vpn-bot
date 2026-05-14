@@ -11,7 +11,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "0009_drop_users_tg_id_unique"
-down_revision = "0008_fix_users_indices_and_types"
+down_revision = "0007_fix_init_sizes"
 branch_labels = None
 depends_on = None
 
