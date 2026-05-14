@@ -1,28 +1,7 @@
-"""One-shot migrator: copy every row from a SQLite snapshot into a fresh
-Postgres database whose schema has already been brought to `head` via
-alembic.
-
-Usage:
-  SQLITE_PATH=/path/to/db.sqlite3 \
-  DATABASE_URL='postgresql+psycopg2://user:pw@host/db' \
-    python scripts/sqlite_to_postgres.py
-
-Strategy:
-- Reflect table list from Postgres (source of truth for schema).
-- Skip `alembic_version` (already populated by migrations).
-- Migrate in FK-aware order via `sa.MetaData.sorted_tables`.
-- Before insert, TRUNCATE every target table (RESTART IDENTITY CASCADE).
-  This wipes Alembic-seeded rows like `promo_settings(id=1)` that would
-  otherwise collide with the SQLite copy.
-- After every table, advance the sequence for SERIAL PKs to `max(id) + 1`,
-  otherwise the next INSERT collides.
-- Idempotency: re-runs are safe (truncate wipes prior copy).
-"""
-from __future__ import annotations
-
 import logging
 import os
 import sys
+from decimal import Decimal # Обязательно добавляем
 
 import sqlalchemy as sa
 
@@ -35,55 +14,26 @@ DATABASE_URL = os.environ["DATABASE_URL"]
 if "asyncpg" in DATABASE_URL:
     sys.exit("Use a sync DATABASE_URL (postgresql+psycopg2://...), not asyncpg.")
 
-#src = sa.create_engine(f"sqlite:///{SQLITE_PATH}")
-# Вместо простого sa.create_engine(f"sqlite:///{SQLITE_PATH}")
-src = sa.create_engine(
-    f"sqlite:///{SQLITE_PATH}",
-    # Отключаем сложную обработку Decimal для SQLite, так как он все равно хранит их как попало
-    native_datetime=True
-)
+src = sa.create_engine(f"sqlite:///{SQLITE_PATH}")
 dst = sa.create_engine(DATABASE_URL)
 
 src_meta = sa.MetaData()
-
+src_meta.reflect(bind=src)
 dst_meta = sa.MetaData()
 dst_meta.reflect(bind=dst)
 
-#dst_meta = sa.MetaData()
-#dst_meta.reflect(bind=dst)
-
 SKIP = {"alembic_version", "sqlite_sequence"}
 
-
-#src_meta.reflect(bind=src)
-
-# Вместо простого src_meta.reflect(bind=src)
-# Мы переопределяем числовые колонки, чтобы они читались как простые строки или Float
-from sqlalchemy.engine import reflection
-insp = reflection.Inspector.from_engine(src)
-
-for table_name in insp.get_table_names():
-    if table_name in SKIP:
-        continue
-    # Рефлексируем таблицу, но подменяем Numeric на Float для SQLite
-    sa.Table(
-        table_name,
-        src_meta,
-        autoload_with=src,
-        # Это заставит SQLite-движок не использовать DecimalResultProcessor
-        type_map={sa.Numeric: sa.Float, sa.Decimal: sa.Float}
-    )
-
-
-
 with src.connect() as src_conn, dst.begin() as dst_conn:
+    # 1. Тракнуем таблицы в Postgres
     if dst.dialect.name == "postgresql":
         targets = [t.name for t in dst_meta.sorted_tables if t.name not in SKIP]
         if targets:
             quoted = ", ".join(f'"{n}"' for n in targets)
-            log.info("truncating %d tables (RESTART IDENTITY CASCADE)", len(targets))
+            log.info("truncating %d tables", len(targets))
             dst_conn.execute(sa.text(f"TRUNCATE {quoted} RESTART IDENTITY CASCADE"))
 
+    # 2. Перенос данных
     for table in dst_meta.sorted_tables:
         if table.name in SKIP:
             continue
@@ -91,40 +41,44 @@ with src.connect() as src_conn, dst.begin() as dst_conn:
             log.warning("table %s not in source — skipping", table.name)
             continue
 
-        src_table = src_meta.tables[table.name]
-        raw_rows = list(src_conn.execute(sa.select(src_table)).mappings())
+        # Читаем через sa.text(), чтобы избежать TypeError: must be real number, not str
+        # Это отключает автоматические процессоры типов SQLAlchemy для источника
+        raw_rows = list(src_conn.execute(sa.text(f"SELECT * FROM {table.name}")).mappings())
+        
         if not raw_rows:
             log.info("%s: empty", table.name)
             continue
+        
         log.info("%s: copying %d rows", table.name, len(raw_rows))
 
-        # Определяем колонки, которые требуют преобразования типов
+        # Определяем типы колонок для ручной коррекции
         bool_cols = [c.name for c in table.columns if isinstance(c.type, sa.Boolean)]
-        # Добавляем поиск колонок с плавающей точкой или десятичных дробей
+        # В SQLAlchemy Numeric и Float покрывают все дробные типы
         num_cols = [c.name for c in table.columns if isinstance(c.type, (sa.Numeric, sa.Float))]
 
         rows: list[dict] = []
         for r in raw_rows:
             row = dict(r)
-
-            # Обработка булевых значений
+            
+            # Чиним Booleans (SQLite 0/1 -> Python True/False)
             for c in bool_cols:
                 if c in row and row[c] is not None:
                     row[c] = bool(row[c])
-
-            # Обработка числовых значений (исправляет ошибку DecimalResultProcessor)
+            
+            # Чиним Decimals (String/Float -> Python Decimal)
             for c in num_cols:
                 if c in row and row[c] is not None:
                     try:
-                        # Если там строка, приводим к float (или Decimal)
-                        row[c] = float(row[c])
-                    except (ValueError, TypeError):
-                        log.warning(f"Could not convert value {row[c]} in col {c} to float")
-
+                        # Принудительно в Decimal через строку для точности
+                        row[c] = Decimal(str(row[c]))
+                    except Exception:
+                        pass
+            
             rows.append(row)
 
         dst_conn.execute(table.insert(), rows)
 
+    # 3. Обновляем сиквенсы
     if dst.dialect.name == "postgresql":
         for table in dst_meta.sorted_tables:
             if table.name in SKIP:
