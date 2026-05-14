@@ -53,8 +53,6 @@ services:
     networks:
       - backend-network
     ports:
-       - '127.0.0.1:5000:5000'
-#      - "5000:5000"
     environment:
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-xray}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-xray_vpn_bot}
     restart: unless-stopped
