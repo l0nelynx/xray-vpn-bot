@@ -1,6 +1,6 @@
 import logging
 
-from sqlalchemy import BigInteger, String, ForeignKey, Index, Integer, Boolean, Float, Text, UniqueConstraint, text, inspect
+from sqlalchemy import BigInteger, String, ForeignKey, Index, Integer, Boolean, Float, Text, UniqueConstraint
 from sqlalchemy.ext.asyncio import AsyncAttrs, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -382,153 +382,12 @@ class TelegramLinkCode(Base):
 async def async_main():
     """Apply Alembic migrations and seed default rows.
 
-    Schema management lives entirely in alembic/. The legacy ad-hoc ALTER
-    block below remains as a one-shot safety net for deployments that have
-    not yet been stamped — once `alembic stamp 0001_baseline && alembic
-    upgrade head` is run there, every branch is a no-op.
+    Schema management lives entirely in alembic/. Legacy idempotent ALTERs
+    have been consolidated into revision 0006_postgres_compat.
     """
     from migrations_runner import upgrade_to_head
 
     upgrade_to_head()
-
-    async with engine.begin() as conn:
-        # Belt-and-braces: keep the legacy idempotent ALTERs running once more
-        # so a partially-migrated DB heals itself if Alembic was skipped.
-        def _check_and_migrate(sync_conn):
-            insp = inspect(sync_conn)
-            columns = [col['name'] for col in insp.get_columns('users')]
-            if 'email' not in columns:
-                sync_conn.execute(text(
-                    "ALTER TABLE users ADD COLUMN email VARCHAR(100)"
-                ))
-                logging.info("Migration: added email column to users table")
-
-            if 'is_banned' not in columns:
-                sync_conn.execute(text(
-                    "ALTER TABLE users ADD COLUMN is_banned BOOLEAN DEFAULT 0"
-                ))
-                logging.info("Migration: added is_banned column to users table")
-
-            if 'language' not in columns:
-                sync_conn.execute(text(
-                    "ALTER TABLE users ADD COLUMN language VARCHAR(5) DEFAULT 'ru'"
-                ))
-                logging.info("Migration: added language column to users table")
-
-            if 'vip' not in columns:
-                sync_conn.execute(text(
-                    "ALTER TABLE users ADD COLUMN vip INTEGER DEFAULT 0"
-                ))
-                logging.info("Migration: added vip column to users table")
-
-            # Миграция: добавляем новые колонки в transactions если таблица существует
-            if 'transactions' in insp.get_table_names():
-                tx_columns = [col['name'] for col in insp.get_columns('transactions')]
-                if 'payment_method' not in tx_columns:
-                    sync_conn.execute(text(
-                        "ALTER TABLE transactions ADD COLUMN payment_method VARCHAR(50)"
-                    ))
-                    logging.info("Migration: added payment_method column to transactions table")
-                if 'amount' not in tx_columns:
-                    sync_conn.execute(text(
-                        "ALTER TABLE transactions ADD COLUMN amount FLOAT"
-                    ))
-                    logging.info("Migration: added amount column to transactions table")
-                if 'created_at' not in tx_columns:
-                    sync_conn.execute(text(
-                        "ALTER TABLE transactions ADD COLUMN created_at VARCHAR(30)"
-                    ))
-                    logging.info("Migration: added created_at column to transactions table")
-                if 'expire_date' not in tx_columns:
-                    sync_conn.execute(text(
-                        "ALTER TABLE transactions ADD COLUMN expire_date VARCHAR(30)"
-                    ))
-                    logging.info("Migration: added expire_date column to transactions table")
-                    # Бэкфилл: рассчитываем expire_date для существующих confirmed/delivered транзакций
-                    sync_conn.execute(text(
-                        "UPDATE transactions "
-                        "SET expire_date = replace(datetime(created_at, '+' || days_ordered || ' days'), ' ', 'T') "
-                        "WHERE expire_date IS NULL "
-                        "AND order_status IN ('confirmed', 'delivered') "
-                        "AND created_at IS NOT NULL "
-                        "AND days_ordered IS NOT NULL"
-                    ))
-                    logging.info("Migration: backfilled expire_date for existing confirmed/delivered transactions")
-                if 'tariff_slug' not in tx_columns:
-                    sync_conn.execute(text(
-                        "ALTER TABLE transactions ADD COLUMN tariff_slug VARCHAR(200)"
-                    ))
-                    logging.info("Migration: added tariff_slug column to transactions table")
-
-            # Миграция: добавляем discount_percent в promos
-            if 'promos' in insp.get_table_names():
-                pr_columns = [col['name'] for col in insp.get_columns('promos')]
-                if 'discount_percent' not in pr_columns:
-                    sync_conn.execute(text(
-                        "ALTER TABLE promos ADD COLUMN discount_percent INTEGER"
-                    ))
-                    logging.info("Migration: added discount_percent column to promos table")
-                if 'used_promo_consumed' not in pr_columns:
-                    sync_conn.execute(text(
-                        "ALTER TABLE promos ADD COLUMN used_promo_consumed BOOLEAN DEFAULT 0"
-                    ))
-                    logging.info("Migration: added used_promo_consumed column to promos table")
-
-            # Миграция: добавляем squad_profile_id в tariff_plans если колонки ещё нет
-            if 'tariff_plans' in insp.get_table_names():
-                tp_columns = [col['name'] for col in insp.get_columns('tariff_plans')]
-                if 'squad_profile_id' not in tp_columns:
-                    sync_conn.execute(text(
-                        "ALTER TABLE tariff_plans ADD COLUMN squad_profile_id INTEGER REFERENCES squad_profiles(id)"
-                    ))
-                    logging.info("Migration: added squad_profile_id column to tariff_plans table")
-
-            # Миграция: добавляем индекс на username если его ещё нет
-            indexes = [idx['name'] for idx in insp.get_indexes('users')]
-            if 'ix_user_username' not in indexes:
-                sync_conn.execute(text(
-                    "CREATE INDEX ix_user_username ON users (username)"
-                ))
-                logging.info("Migration: added ix_user_username index to users table")
-
-            # Миграция: создаём таблицы поддержки (MiniApp)
-            existing_tables = set(insp.get_table_names())
-            if 'support_tickets' not in existing_tables:
-                sync_conn.execute(text(
-                    "CREATE TABLE support_tickets ("
-                    " id INTEGER PRIMARY KEY AUTOINCREMENT,"
-                    " user_id INTEGER NOT NULL REFERENCES users(id),"
-                    " username VARCHAR(100),"
-                    " subject VARCHAR(200) NOT NULL,"
-                    " message TEXT NOT NULL,"
-                    " status VARCHAR(20) NOT NULL DEFAULT 'open',"
-                    " created_at VARCHAR(30) NOT NULL,"
-                    " updated_at VARCHAR(30) NOT NULL"
-                    ")"
-                ))
-                sync_conn.execute(text(
-                    "CREATE INDEX ix_support_tickets_user_id ON support_tickets(user_id)"
-                ))
-                sync_conn.execute(text(
-                    "CREATE INDEX ix_support_tickets_status ON support_tickets(status)"
-                ))
-                logging.info("Migration: created support_tickets table")
-            if 'support_messages' not in existing_tables:
-                sync_conn.execute(text(
-                    "CREATE TABLE support_messages ("
-                    " id INTEGER PRIMARY KEY AUTOINCREMENT,"
-                    " ticket_id INTEGER NOT NULL REFERENCES support_tickets(id) ON DELETE CASCADE,"
-                    " sender VARCHAR(20) NOT NULL,"
-                    " text TEXT NOT NULL,"
-                    " created_at VARCHAR(30) NOT NULL"
-                    ")"
-                ))
-                sync_conn.execute(text(
-                    "CREATE INDEX ix_support_messages_ticket_id ON support_messages(ticket_id)"
-                ))
-                logging.info("Migration: created support_messages table")
-
-        await conn.run_sync(_check_and_migrate)
 
     # Seed cache_version row and tariff/menu data if empty
     await _seed_cache_version()
