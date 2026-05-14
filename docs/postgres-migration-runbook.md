@@ -32,14 +32,18 @@
    docker compose run --rm migrate
    ```
 
-6. **Переносим данные:**
+6. **Переносим данные** (подставь реальное имя снапшота из шага 3):
    ```bash
    docker compose run --rm \
      -v $(pwd)/db:/data \
      -e SQLITE_PATH=/data/db.sqlite3.snapshot-YYYY-MM-DD-HHMM \
-     -e DATABASE_URL='postgresql+psycopg2://xray:${POSTGRES_PASSWORD}@postgres:5432/xray_vpn_bot' \
-     migrate python scripts/sqlite_to_postgres.py
+     -e DATABASE_URL='postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}' \
+     migrate sh -c 'python scripts/sqlite_to_postgres.py'
    ```
+   Одинарные кавычки вокруг `DATABASE_URL` и `sh -c` нужны для того,
+   чтобы `${POSTGRES_USER}` / `${POSTGRES_PASSWORD}` / `${POSTGRES_DB}`
+   подставились **внутри контейнера** (compose пробрасывает их из `.env`),
+   а не в shell на хосте.
 
 7. **Поднимаем сервисы:**
    ```bash

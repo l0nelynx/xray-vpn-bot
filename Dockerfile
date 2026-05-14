@@ -22,5 +22,6 @@ COPY ./support.py ./support.py
 COPY ./alembic ./alembic
 COPY ./alembic.ini ./alembic.ini
 COPY ./migrations_runner.py ./migrations_runner.py
+COPY ./scripts ./scripts
 
 CMD ["/bin/sh", "-c", "python main.py"]
