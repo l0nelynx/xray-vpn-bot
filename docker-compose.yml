@@ -1,4 +1,45 @@
 services:
+  postgres:
+    container_name: xray-postgres
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-xray}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      - POSTGRES_DB=${POSTGRES_DB:-xray_vpn_bot}
+    volumes:
+      - ./pg_data:/var/lib/postgresql/data
+    networks:
+      - backend-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-xray} -d ${POSTGRES_DB:-xray_vpn_bot}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+  migrate:
+    container_name: xray-migrate
+    image: ghcr.io/l0nelynx/seller-bot:${IMAGE_TAG:-staging}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["python", "-c", "from migrations_runner import upgrade_to_head; upgrade_to_head()"]
+    restart: "no"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-xray}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-xray_vpn_bot}
+    networks:
+      - backend-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 256M
   seller-bot:
     container_name: seller-bot
     image: ghcr.io/l0nelynx/seller-bot:${IMAGE_TAG:-staging}
@@ -6,7 +47,6 @@ services:
       context: .
       dockerfile: Dockerfile
     volumes:
-      - ./db:/usr/src/app/db
       - /var/lib/marzban/certs/:/usr/src/app/uvicorn/ssl
       - ./config.yml:/usr/src/app/config.yml
       - ./dig_data.json:/usr/src/app/dig_data.json
@@ -16,8 +56,11 @@ services:
        - '127.0.0.1:5000:5000'
 #      - "5000:5000"
     environment:
-      - DB_PATH=/usr/src/app/db/db.sqlite3
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-xray}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-xray_vpn_bot}
     restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
       interval: 60s
@@ -57,16 +100,18 @@ services:
       context: .
       dockerfile: dashboard/Dockerfile
     volumes:
-      - ./db:/app/db
       - ./config.yml:/app/config.yml:ro
     networks:
       - backend-network
     ports:
       - '127.0.0.1:8080:8000'
     environment:
-      - DB_PATH=/app/db/db.sqlite3
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-xray}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-xray_vpn_bot}
       - CONFIG_PATH=/app/config.yml
     restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 60s
@@ -84,18 +129,20 @@ services:
       context: .
       dockerfile: miniapp/Dockerfile
     volumes:
-      - ./db:/app/db
       - ./config.yml:/app/config.yml:ro
     networks:
       - backend-network
       - mail-net
     environment:
-      - DB_PATH=/app/db/db.sqlite3
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-xray}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-xray_vpn_bot}
       - CONFIG_PATH=/app/config.yml
       - LOG_LEVEL=DEBUG
     restart: unless-stopped
     depends_on:
-      - seller-bot
+      migrate:
+        condition: service_completed_successfully
+      seller-bot:
+        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
       interval: 60s
