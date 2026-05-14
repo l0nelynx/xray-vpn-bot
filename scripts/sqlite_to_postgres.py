@@ -45,11 +45,36 @@ src = sa.create_engine(
 dst = sa.create_engine(DATABASE_URL)
 
 src_meta = sa.MetaData()
-src_meta.reflect(bind=src)
+
 dst_meta = sa.MetaData()
 dst_meta.reflect(bind=dst)
 
+#dst_meta = sa.MetaData()
+#dst_meta.reflect(bind=dst)
+
 SKIP = {"alembic_version", "sqlite_sequence"}
+
+
+#src_meta.reflect(bind=src)
+
+# Вместо простого src_meta.reflect(bind=src)
+# Мы переопределяем числовые колонки, чтобы они читались как простые строки или Float
+from sqlalchemy.engine import reflection
+insp = reflection.Inspector.from_engine(src)
+
+for table_name in insp.get_table_names():
+    if table_name in SKIP:
+        continue
+    # Рефлексируем таблицу, но подменяем Numeric на Float для SQLite
+    sa.Table(
+        table_name,
+        src_meta,
+        autoload_with=src,
+        # Это заставит SQLite-движок не использовать DecimalResultProcessor
+        type_map={sa.Numeric: sa.Float, sa.Decimal: sa.Float}
+    )
+
+
 
 with src.connect() as src_conn, dst.begin() as dst_conn:
     if dst.dialect.name == "postgresql":
