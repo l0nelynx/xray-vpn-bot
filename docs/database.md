@@ -1,6 +1,14 @@
 # Database Schema
 
-The project uses a shared SQLite database (`db.sqlite3`) to store all application data. The schema is managed using SQLAlchemy ORM.
+The project runs against **PostgreSQL 16** in production (separate `postgres` container, data on the `./pg_data` volume), with a **SQLite fallback** for local development when `DATABASE_URL` is not set. Schema is defined via SQLAlchemy ORM and applied through Alembic.
+
+All services (`seller-bot`, `miniapp`, `dashboard`) share the same database. `support-bot` keeps its own SQLite file under `./db/` and is unaffected by the Postgres switch.
+
+The active backend is selected by the `DATABASE_URL` environment variable:
+- `postgresql+asyncpg://user:pw@postgres:5432/xray_vpn_bot` — production, async driver for the apps.
+- unset → `sqlite+aiosqlite:///db/db.sqlite3` — local dev fallback (resolved by `app/db_url.py`).
+
+Sync variants (`postgresql+psycopg2://...`, `sqlite:///...`) are used by Alembic and the one-shot data migrator only.
 
 ## Main Tables
 
@@ -60,4 +68,9 @@ Stores the dynamic menu structure configured in the Dashboard.
 - `action`: Type of action (e.g., "link", "buttons", "invoice").
 
 ## Migration & Initialization
-The database is automatically initialized and migrated on startup in `app/database/models.py` (for the bot) and `miniapp/backend/main.py` (for the miniapp). It checks for missing columns and tables to ensure the schema matches the current version of the code.
+
+Schema is managed exclusively by **Alembic** (`alembic/versions/`). The `migrate` init container in `docker-compose.yml` runs `alembic upgrade head` once on startup; `seller-bot`, `miniapp`, and `dashboard` wait for it via `depends_on: service_completed_successfully` before they boot.
+
+- Online services no longer run ad-hoc DDL — the legacy `_check_and_migrate` (bot) and dashboard startup DDL were folded into Alembic revision `0006_postgres_compat`.
+- For local dev without Docker, run `python -c "from migrations_runner import upgrade_to_head; upgrade_to_head()"` after creating the SQLite file.
+- One-shot SQLite → Postgres data copy lives in `scripts/sqlite_to_postgres.py` (see `docs/postgres-migration-runbook.md`).

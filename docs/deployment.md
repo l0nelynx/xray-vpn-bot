@@ -21,31 +21,52 @@ The XRAY-VPN-BOT is designed for containerized deployment using Docker and Docke
 
 ## Deployment with Docker Compose
 
-The `docker-compose.yml` file defines three services:
+The `docker-compose.yml` file defines six services:
 
-1.  **`seller-bot`**: Runs the main bot and the FastAPI server for payment webhooks.
-    -   **Ports**: Maps internal `5000` to host `5000`.
-2.  **`support-bot`**: Runs the standalone support bot.
-3.  **`dashboard`**: Runs the admin dashboard backend and serves the frontend.
-    -   **Ports**: Maps internal `8000` to host `8080`.
+1.  **`postgres`**: PostgreSQL 16 (alpine). Data lives in `./pg_data`. Healthchecked via `pg_isready`. Not exposed to the host — only reachable on the `backend-network`.
+2.  **`migrate`**: One-shot init container. Runs Alembic `upgrade head` against `DATABASE_URL`, then exits. `restart: "no"`. App services wait on `service_completed_successfully` before starting.
+3.  **`seller-bot`**: Main bot + FastAPI server for payment webhooks. **Ports**: `127.0.0.1:5000 → 5000`.
+4.  **`miniapp`**: Telegram WebApp + Android API backend. Internal port `8001`, exposed through the seller-bot proxy.
+5.  **`support-bot`**: Standalone support bot. Still uses its own SQLite file under `./db/`.
+6.  **`dashboard`**: Admin dashboard backend + bundled frontend. **Ports**: `127.0.0.1:8080 → 8000`.
+
+### Environment variables
+
+Copy `.env.example` to `.env` and fill in:
+
+```dotenv
+POSTGRES_USER=xray
+POSTGRES_PASSWORD=...       # required, compose refuses to start if empty
+POSTGRES_DB=xray_vpn_bot
+IMAGE_TAG=staging
+```
+
+`DATABASE_URL` is composed automatically inside compose:
+`postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}`
 
 ### Initial Setup
 
 ```bash
-# Create the database directory and file
-mkdir -p db
-touch db/db.sqlite3
-
 # Create the external network (if required by your setup)
 docker network create backend-network
+
+# Postgres data volume — first start creates the DB
+mkdir -p pg_data
+
+# Support-bot still uses SQLite
+mkdir -p db
+touch db/db.sqlite3
 ```
 
 ### Launching
 
+Startup order is enforced by `depends_on`: `postgres` (healthy) → `migrate` (completed) → `seller-bot` / `miniapp` / `dashboard`.
+
 ```bash
-# Build and start the containers
 docker compose up -d --build
 ```
+
+For an existing SQLite deployment, follow `docs/postgres-migration-runbook.md` to copy data into Postgres on first cutover.
 
 ## Reverse Proxy
 
