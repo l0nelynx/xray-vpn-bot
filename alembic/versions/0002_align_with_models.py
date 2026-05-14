@@ -67,14 +67,30 @@ def upgrade() -> None:
     if not _has_column(bind, "transactions", "tariff_slug"):
         with op.batch_alter_table("transactions") as batch:
             batch.add_column(sa.Column("tariff_slug", sa.String(200)))
-        op.execute(
-            "UPDATE transactions "
-            "SET expire_date = replace(datetime(created_at, '+' || days_ordered || ' days'), ' ', 'T') "
-            "WHERE expire_date IS NULL "
-            "AND order_status IN ('confirmed', 'delivered') "
-            "AND created_at IS NOT NULL "
-            "AND days_ordered IS NOT NULL"
-        )
+        # Backfill expire_date from created_at + days_ordered. The expression
+        # is dialect-specific; on a fresh Postgres install the table is empty
+        # anyway, so skipping it there is safe.
+        if bind.dialect.name == "sqlite":
+            op.execute(
+                "UPDATE transactions "
+                "SET expire_date = replace(datetime(created_at, '+' || days_ordered || ' days'), ' ', 'T') "
+                "WHERE expire_date IS NULL "
+                "AND order_status IN ('confirmed', 'delivered') "
+                "AND created_at IS NOT NULL "
+                "AND days_ordered IS NOT NULL"
+            )
+        elif bind.dialect.name == "postgresql":
+            op.execute(
+                "UPDATE transactions "
+                "SET expire_date = to_char("
+                "  (created_at::timestamp + (days_ordered || ' days')::interval),"
+                "  'YYYY-MM-DD\"T\"HH24:MI:SS'"
+                ") "
+                "WHERE expire_date IS NULL "
+                "AND order_status IN ('confirmed', 'delivered') "
+                "AND created_at IS NOT NULL "
+                "AND days_ordered IS NOT NULL"
+            )
 
     # webapp_menu_nodes.invoice_method (model has it; production DB may not)
     if _has_table(bind, "webapp_menu_nodes") and not _has_column(
