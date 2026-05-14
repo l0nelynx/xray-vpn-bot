@@ -34,16 +34,17 @@
 
 6. **Переносим данные** (подставь реальное имя снапшота из шага 3):
    ```bash
+   # Загрузить .env в текущий shell — compose НЕ интерполирует ${...}
+   # в значениях, переданных через `-e` у `docker compose run`.
+   set -a; source .env; set +a
    docker compose run --rm \
      -v $(pwd)/db:/data \
      -e SQLITE_PATH=/data/db.sqlite3.snapshot-YYYY-MM-DD-HHMM \
-     -e DATABASE_URL='postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}' \
-     migrate sh -c 'python scripts/sqlite_to_postgres.py'
+     -e DATABASE_URL="postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}" \
+     migrate python scripts/sqlite_to_postgres.py
    ```
-   Одинарные кавычки вокруг `DATABASE_URL` и `sh -c` нужны для того,
-   чтобы `${POSTGRES_USER}` / `${POSTGRES_PASSWORD}` / `${POSTGRES_DB}`
-   подставились **внутри контейнера** (compose пробрасывает их из `.env`),
-   а не в shell на хосте.
+   Двойные кавычки обязательны: bash должен раскрыть `${POSTGRES_*}` на
+   хосте до запуска контейнера.
 
 7. **Поднимаем сервисы:**
    ```bash
