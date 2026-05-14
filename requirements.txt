@@ -16,3 +16,5 @@ magic-filter>=1.0.12
 remnawave>=2.1.13
 slowapi>=0.1.0
 alembic>=1.13.0
+asyncpg>=0.29
+psycopg2-binary>=2.9

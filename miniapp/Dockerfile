@@ -13,10 +13,12 @@ RUN npm run build
 FROM python:3.13-alpine
 WORKDIR /app
 
-RUN apk add --no-cache curl
+RUN apk add --no-cache curl libpq
 
 COPY miniapp/backend/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN apk add --no-cache --virtual .build-deps gcc musl-dev postgresql-dev \
+ && pip install --no-cache-dir -r requirements.txt \
+ && apk del .build-deps
 
 COPY packages/remnawave_client /tmp/remnawave_client
 RUN pip install --no-cache-dir /tmp/remnawave_client && rm -rf /tmp/remnawave_client

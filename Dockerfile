@@ -2,10 +2,12 @@ FROM python:3.13-alpine
 
 WORKDIR /usr/src/app
 
-RUN apk add --no-cache bash curl
+RUN apk add --no-cache bash curl postgresql-client libpq
 
 COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+RUN apk add --no-cache --virtual .build-deps gcc musl-dev postgresql-dev \
+ && pip install --no-cache-dir -r requirements.txt \
+ && apk del .build-deps
 
 # Shared package — installed before app code so Docker layer cache survives
 # changes inside ./app while packages/ stays untouched.
