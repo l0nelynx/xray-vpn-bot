@@ -18,5 +18,5 @@ support.db
 test.py
 package.json
 package-lock.json
-pyproject.toml
+./pyproject.toml
 ./tests/run_sec.py
