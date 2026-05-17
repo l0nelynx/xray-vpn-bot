@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from common_db.models.auth import EmailVerification, RefreshToken
+from common_db.models.users import User
 from sqlalchemy import text
 
 from ..database.session import async_session
@@ -114,16 +116,16 @@ async def create_user_with_password(email: str, password_hash: str) -> int:
     normalized = email.strip().lower()
     now = _utcnow_iso()
     async with async_session() as s:
-        result = await s.execute(
-            text(
-                "INSERT INTO users (tg_id, email, password_hash, password_updated_at, "
-                "api_provider, is_banned, vip) "
-                "VALUES (NULL, :e, :p, :n, 'remnawave', 0, 0) "
-                "RETURNING id"
-            ),
-            {"e": normalized, "p": password_hash, "n": now},
+        user = User(
+            tg_id=None,
+            email=normalized,
+            password_hash=password_hash,
+            password_updated_at=now,
+            api_provider="remnawave",
         )
-        new_id = result.scalar_one()
+        s.add(user)
+        await s.flush()
+        new_id = user.id
         await s.commit()
         return int(new_id)
 
@@ -141,16 +143,17 @@ async def create_user_with_password_and_vless(
     normalized = email.strip().lower()
     now = _utcnow_iso()
     async with async_session() as s:
-        result = await s.execute(
-            text(
-                "INSERT INTO users (tg_id, email, password_hash, password_updated_at, "
-                "vless_uuid, api_provider, is_banned, vip) "
-                "VALUES (NULL, :e, :p, :n, :v, 'remnawave', 0, 0) "
-                "RETURNING id"
-            ),
-            {"e": normalized, "p": password_hash, "n": now, "v": vless_uuid},
+        user = User(
+            tg_id=None,
+            email=normalized,
+            password_hash=password_hash,
+            password_updated_at=now,
+            vless_uuid=vless_uuid,
+            api_provider="remnawave",
         )
-        new_id = result.scalar_one()
+        s.add(user)
+        await s.flush()
+        new_id = user.id
         await s.commit()
         return int(new_id)
 
@@ -222,24 +225,18 @@ async def store_refresh_token(
     now = _utcnow_iso()
     expires = _expiry_iso(security.refresh_ttl_seconds())
     async with async_session() as s:
-        result = await s.execute(
-            text(
-                "INSERT INTO refresh_tokens (user_id, family_id, token_hash, "
-                "issued_at, expires_at, user_agent, ip) "
-                "VALUES (:u, :f, :h, :i, :e, :ua, :ip) "
-                "RETURNING id"
-            ),
-            {
-                "u": user_id,
-                "f": family_id,
-                "h": token_hash,
-                "i": now,
-                "e": expires,
-                "ua": (user_agent or "")[:255] or None,
-                "ip": (ip or "")[:64] or None,
-            },
+        token = RefreshToken(
+            user_id=user_id,
+            family_id=family_id,
+            token_hash=token_hash,
+            issued_at=now,
+            expires_at=expires,
+            user_agent=(user_agent or "")[:255] or None,
+            ip=(ip or "")[:64] or None,
         )
-        new_id = result.scalar_one()
+        s.add(token)
+        await s.flush()
+        new_id = token.id
         await s.commit()
         return int(new_id)
 
@@ -290,24 +287,18 @@ async def rotate_refresh_token(
     now = _utcnow_iso()
     expires = _expiry_iso(security.refresh_ttl_seconds())
     async with async_session() as s:
-        result = await s.execute(
-            text(
-                "INSERT INTO refresh_tokens (user_id, family_id, token_hash, "
-                "issued_at, expires_at, user_agent, ip) "
-                "VALUES (:u, :f, :h, :i, :e, :ua, :ip) "
-                "RETURNING id"
-            ),
-            {
-                "u": user_id,
-                "f": family_id,
-                "h": new_token_hash,
-                "i": now,
-                "e": expires,
-                "ua": (user_agent or "")[:255] or None,
-                "ip": (ip or "")[:64] or None,
-            },
+        token = RefreshToken(
+            user_id=user_id,
+            family_id=family_id,
+            token_hash=new_token_hash,
+            issued_at=now,
+            expires_at=expires,
+            user_agent=(user_agent or "")[:255] or None,
+            ip=(ip or "")[:64] or None,
         )
-        new_id = int(result.scalar_one())
+        s.add(token)
+        await s.flush()
+        new_id = int(token.id)
         await s.execute(
             text(
                 "UPDATE refresh_tokens SET revoked_at = :n, replaced_by_id = :nid "
@@ -439,23 +430,18 @@ async def store_verification_code(
     now = _utcnow_iso()
     expires = _expiry_iso(ttl_seconds)
     async with async_session() as s:
-        result = await s.execute(
-            text(
-                "INSERT INTO email_verifications "
-                "(user_id, purpose, code_hash, payload, created_at, expires_at, attempts) "
-                "VALUES (:u, :p, :h, :pl, :c, :e, 0) "
-                "RETURNING id"
-            ),
-            {
-                "u": user_id,
-                "p": purpose,
-                "h": code_hash,
-                "pl": payload,
-                "c": now,
-                "e": expires,
-            },
+        verification = EmailVerification(
+            user_id=user_id,
+            purpose=purpose,
+            code_hash=code_hash,
+            payload=payload,
+            created_at=now,
+            expires_at=expires,
+            attempts=0,
         )
-        new_id = result.scalar_one()
+        s.add(verification)
+        await s.flush()
+        new_id = verification.id
         await s.commit()
         return int(new_id)
 
