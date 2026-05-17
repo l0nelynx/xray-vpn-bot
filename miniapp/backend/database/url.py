@@ -1,30 +1,9 @@
-"""Resolve DB URL for the seller-bot process.
+"""Backwards-compatible re-export of shared URL helpers.
 
-Reads `DATABASE_URL` first — when set, that's authoritative (Postgres in
-prod, can also be sqlite+aiosqlite:/// for tests). Falls back to the legacy
-`DB_PATH` env var + sqlite, which is how dev/CI currently work.
+Lives in `common_db.url` now. This shim keeps `from .url import async_db_url`
+in miniapp/backend/database/session.py working without code changes.
+New code should import directly from `common_db`.
 """
-from __future__ import annotations
+from common_db.url import async_db_url, sync_db_url
 
-import os
-
-
-def async_db_url(default_sqlite_path: str | None = None) -> str:
-    url = os.environ.get("DATABASE_URL")
-    if url:
-        return url
-    db_path = os.environ.get("DB_PATH") or default_sqlite_path or "db.sqlite3"
-    return f"sqlite+aiosqlite:///{db_path}"
-
-
-def sync_db_url(default_sqlite_path: str | None = None) -> str:
-    """Same resolution, but coerced to a sync driver (Alembic + pg_dump)."""
-    url = os.environ.get("DATABASE_URL")
-    if url:
-        if url.startswith("postgresql+asyncpg://"):
-            return "postgresql+psycopg2://" + url[len("postgresql+asyncpg://"):]
-        if url.startswith("sqlite+aiosqlite:///"):
-            return "sqlite:///" + url[len("sqlite+aiosqlite:///"):]
-        return url
-    db_path = os.environ.get("DB_PATH") or default_sqlite_path or "db.sqlite3"
-    return f"sqlite:///{db_path}"
+__all__ = ["async_db_url", "sync_db_url"]

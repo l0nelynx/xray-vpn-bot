@@ -23,6 +23,11 @@ RUN apk add --no-cache --virtual .build-deps gcc musl-dev postgresql-dev \
 COPY packages/remnawave_client /tmp/remnawave_client
 RUN pip install --no-cache-dir /tmp/remnawave_client && rm -rf /tmp/remnawave_client
 
+# Shared DB layer (Base, models, URL helpers) — single source of truth
+# across app, dashboard and miniapp. See packages/common_db.
+COPY packages/common_db /tmp/common_db
+RUN pip install --no-cache-dir /tmp/common_db && rm -rf /tmp/common_db
+
 COPY dashboard/backend/ ./backend/
 COPY alembic ./alembic
 COPY alembic.ini ./alembic.ini

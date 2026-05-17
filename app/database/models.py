@@ -1,8 +1,51 @@
+"""Seller-bot DB module — runtime + (legacy) model surface.
+
+Model definitions have moved to `common_db.models` (packages/common_db) so
+the seller bot, dashboard and miniapp share a single ORM and a single
+`Base.metadata`. The classes are re-exported here unchanged for backwards
+compatibility — existing imports like
+
+    from app.database.models import User, Transaction, async_session
+
+keep working. Alembic also reads `app.database.models.Base.metadata` for
+autogeneration; after this shim that's `common_db.Base.metadata`, which
+collects every shared model.
+
+What stays in this file:
+- the runtime `engine` / `async_session` (bound to the seller-bot's DB URL)
+- the startup orchestrator `async_main()` and its `_seed_*` helpers
+"""
 import logging
 
-from sqlalchemy import BigInteger, String, ForeignKey, Index, Integer, Boolean, Float, Text, UniqueConstraint
-from sqlalchemy.ext.asyncio import AsyncAttrs, async_sessionmaker, create_async_engine
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+# Re-export the shared Base + every model from common_db. Imports below
+# refer to these names directly (e.g. `CacheVersion`, `TariffPlan`); we
+# also expose them in __all__ so legacy `from app.database.models import X`
+# keeps working for every class.
+from common_db import Base  # noqa: F401
+from common_db.models import (  # noqa: F401
+    CacheVersion,
+    DisabledUser,
+    EmailVerification,
+    GooglePlayPurchase,
+    GooglePlaySku,
+    MenuButton,
+    MenuScreen,
+    Promo,
+    PromoSettings,
+    RefreshToken,
+    SquadProfile,
+    SupportMessage,
+    SupportTicket,
+    TariffPlan,
+    TariffPrice,
+    TelegramLinkCode,
+    TelmtFreeParams,
+    Transaction,
+    User,
+    WebAppMenuNode,
+)
 
 from app.database.url import async_db_url
 
@@ -12,371 +55,35 @@ engine = create_async_engine(url=DB_URL, pool_pre_ping=True)
 async_session = async_sessionmaker(engine)
 
 
-class Base(AsyncAttrs, DeclarativeBase):
-    pass
-
-
-class User(Base):
-    __tablename__ = 'users'
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    tg_id = mapped_column(BigInteger, unique=True, nullable=True)
-
-    # Имя пользователя (Telegram username)
-    # Примечание: unique=True удален, так как SQLite не поддерживает добавление UNIQUE к существующей таблице
-    username: Mapped[str] = mapped_column(String(100), nullable=True)
-
-    # UUID для VLESS конфигурации
-    vless_uuid: Mapped[str] = mapped_column(String(100), nullable=True)
-
-    # API провайдер, на котором зарегистрирован пользователь (remnawave)
-    api_provider: Mapped[str] = mapped_column(String(50), default="remnawave")
-
-    # Email пользователя (для поиска в RemnaWave). Уникален среди ненулевых значений.
-    email: Mapped[str] = mapped_column(String(100), nullable=True)
-
-    # Флаг бана пользователя
-    is_banned: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", nullable=True)
-
-    # Язык интерфейса пользователя (ru/en), None = не выбран
-    language: Mapped[str] = mapped_column(String(5), default=None, nullable=True)
-
-    # VIP-флаг (защита от Sub Clean)
-    vip: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=True)
-
-    # Android API: argon2id-хеш пароля (NULL для Telegram-only аккаунтов)
-    password_hash: Mapped[str] = mapped_column(String(255), nullable=True)
-    password_updated_at: Mapped[str] = mapped_column(String(30), nullable=True)
-    email_verified_at: Mapped[str] = mapped_column(String(30), nullable=True)
-
-    # Добавляем отношение один-ко-многим с таблицей transactions
-    transactions: Mapped[list["Transaction"]] = relationship(back_populates="user")
-
-    __table_args__ = (
-        Index('ix_user_username', 'username'),
-        Index('ix_users_email_unique', 'email', unique=True),
-    )
-
-
-class Promo(Base):
-    __tablename__ = 'promos'
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    tg_id: Mapped[int] = mapped_column(BigInteger, unique=True)
-    promo_code: Mapped[str] = mapped_column(String(20), unique=True)
-    used_promo: Mapped[str] = mapped_column(String(20), nullable=True)
-    days_purchased: Mapped[int] = mapped_column(Integer, default=0)
-    days_rewarded: Mapped[int] = mapped_column(Integer, default=0)
-    # NULL = use PromoSettings.default_discount_percent
-    discount_percent: Mapped[int] = mapped_column(Integer, nullable=True)
-    # True after the user's first paid purchase consumed the activated promo's
-    # discount; user is then allowed to activate a new promo. The original
-    # `used_promo` value is preserved so referral rewards continue to flow.
-    used_promo_consumed: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
-
-
-class PromoSettings(Base):
-    """Single-row settings table for promo defaults."""
-    __tablename__ = 'promo_settings'
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    default_discount_percent: Mapped[int] = mapped_column(Integer, default=20)
-
-
-class Transaction(Base):
-    __tablename__ = 'transactions'
-
-    # Уникальный идентификатор транзакции
-    transaction_id: Mapped[str] = mapped_column(String(100), primary_key=True)
-
-    # Уникальный идентификатор vless
-    vless_uuid: Mapped[str] = mapped_column(String(100))
-
-    # Имя пользователя
-    username: Mapped[str] = mapped_column(String(50), nullable=True)
-
-    # Статус заказа
-    order_status: Mapped[str] = mapped_column(String(50))
-
-    # Количество дней в заказе
-    delivery_status: Mapped[int] = mapped_column(Integer)
-
-    # Способ оплаты
-    payment_method: Mapped[str] = mapped_column(String(50), nullable=True)
-
-    # Сумма платежа
-    amount: Mapped[float] = mapped_column(nullable=True)
-
-    # Дата создания транзакции (ISO формат)
-    created_at: Mapped[str] = mapped_column(String(30), nullable=True)
-
-    # Количество дней в заказе
-    days_ordered: Mapped[int] = mapped_column(BigInteger)
-
-    # Дата истечения подписки (ISO формат, рассчитывается при подтверждении)
-    expire_date: Mapped[str] = mapped_column(String(30), nullable=True)
-
-    # Tariff slug (existing tariff slug OR ad-hoc encoded squad: "sid:<id>:esid:<id>")
-    tariff_slug: Mapped[str] = mapped_column(String(200), nullable=True)
-
-    # Внешний ключ к таблице users
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
-
-    # Отношение многие-к-одному с таблицей users
-    user: Mapped["User"] = relationship(back_populates="transactions")
-
-    # Android API: equals users.id when the invoice was created via the
-    # Android API (user has no tg_id). NULL for Telegram-bot invoices —
-    # those keep using user_id (resolved from tg_id at create time).
-    android_user_id: Mapped[int] = mapped_column(Integer, nullable=True)
-
-    # Добавляем индекс для user_id для ускорения JOIN-запросов
-    __table_args__ = (
-        Index('ix_transaction_user_id', 'user_id'),
-        Index('ix_transactions_android_user_id', 'android_user_id'),
-    )
-
-
-class DisabledUser(Base):
-    __tablename__ = 'disabled_users'
-    id: Mapped[int] = mapped_column(primary_key=True)
-    tg_id = mapped_column(BigInteger, unique=True)
-    original_status: Mapped[str] = mapped_column(String(20))
-    disabled_at: Mapped[str] = mapped_column(String(30))
-
-
-class CacheVersion(Base):
-    __tablename__ = 'cache_version'
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    version: Mapped[int] = mapped_column(Integer, default=0)
-
-
-class SquadProfile(Base):
-    __tablename__ = 'squad_profiles'
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(100))
-    squad_id: Mapped[str] = mapped_column(String(100))
-    external_squad_id: Mapped[str] = mapped_column(String(100))
-
-    tariffs: Mapped[list["TariffPlan"]] = relationship(back_populates="squad_profile")
-
-
-class TariffPlan(Base):
-    __tablename__ = 'tariff_plans'
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    slug: Mapped[str] = mapped_column(String(50), unique=True)
-    name_ru: Mapped[str] = mapped_column(String(100))
-    name_en: Mapped[str] = mapped_column(String(100))
-    days: Mapped[int] = mapped_column(Integer)
-    sort_order: Mapped[int] = mapped_column(Integer, default=0)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    discount_percent: Mapped[int] = mapped_column(Integer, default=0)
-    created_at: Mapped[str] = mapped_column(String(30), nullable=True)
-    squad_profile_id: Mapped[int] = mapped_column(ForeignKey("squad_profiles.id"), nullable=True)
-
-    prices: Mapped[list["TariffPrice"]] = relationship(back_populates="tariff", cascade="all, delete-orphan")
-    squad_profile: Mapped["SquadProfile"] = relationship(back_populates="tariffs")
-
-
-class TariffPrice(Base):
-    __tablename__ = 'tariff_prices'
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    tariff_id: Mapped[int] = mapped_column(ForeignKey("tariff_plans.id", ondelete="CASCADE"))
-    payment_method: Mapped[str] = mapped_column(String(30))
-    price: Mapped[float] = mapped_column(Float)
-    currency: Mapped[str] = mapped_column(String(10))
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-
-    tariff: Mapped["TariffPlan"] = relationship(back_populates="prices")
-
-    __table_args__ = (
-        UniqueConstraint('tariff_id', 'payment_method', name='uq_tariff_payment'),
-    )
-
-
-class MenuScreen(Base):
-    __tablename__ = 'menu_screens'
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    slug: Mapped[str] = mapped_column(String(50), unique=True)
-    name: Mapped[str] = mapped_column(String(100))
-    message_text_ru: Mapped[str] = mapped_column(Text, nullable=True)
-    message_text_en: Mapped[str] = mapped_column(Text, nullable=True)
-    is_system: Mapped[bool] = mapped_column(Boolean, default=False)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-
-    buttons: Mapped[list["MenuButton"]] = relationship(back_populates="screen", cascade="all, delete-orphan")
-
-
-class MenuButton(Base):
-    __tablename__ = 'menu_buttons'
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    screen_id: Mapped[int] = mapped_column(ForeignKey("menu_screens.id", ondelete="CASCADE"))
-    text_ru: Mapped[str] = mapped_column(String(200))
-    text_en: Mapped[str] = mapped_column(String(200))
-    callback_data: Mapped[str] = mapped_column(String(100), nullable=True)
-    url: Mapped[str] = mapped_column(String(500), nullable=True)
-    row: Mapped[int] = mapped_column(Integer, default=0)
-    col: Mapped[int] = mapped_column(Integer, default=0)
-    sort_order: Mapped[int] = mapped_column(Integer, default=0)
-    button_type: Mapped[str] = mapped_column(String(20), default="callback")
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    visibility_condition: Mapped[str] = mapped_column(String(50), default="always")
-
-    screen: Mapped["MenuScreen"] = relationship(back_populates="buttons")
-
-
-class TelmtFreeParams(Base):
-    """Single-row settings table for Telemt free user parameters."""
-    __tablename__ = 'telemt_free_params'
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    max_tcp_conns: Mapped[int] = mapped_column(Integer, nullable=True)
-    max_unique_ips: Mapped[int] = mapped_column(Integer, nullable=True)
-    data_quota_bytes: Mapped[int] = mapped_column(BigInteger, nullable=True)
-    expire_days: Mapped[int] = mapped_column(Integer, default=30)
-
-
-class SupportTicket(Base):
-    __tablename__ = 'support_tickets'
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
-    username: Mapped[str] = mapped_column(String(100), nullable=True)
-    subject: Mapped[str] = mapped_column(String(200))
-    message: Mapped[str] = mapped_column(Text)
-    status: Mapped[str] = mapped_column(String(20), default="open", server_default="open")
-    created_at: Mapped[str] = mapped_column(String(30))
-    updated_at: Mapped[str] = mapped_column(String(30))
-
-    messages: Mapped[list["SupportMessage"]] = relationship(
-        back_populates="ticket", cascade="all, delete-orphan"
-    )
-
-    __table_args__ = (
-        Index('ix_support_tickets_user_id', 'user_id'),
-        Index('ix_support_tickets_status', 'status'),
-    )
-
-
-class SupportMessage(Base):
-    __tablename__ = 'support_messages'
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    ticket_id: Mapped[int] = mapped_column(
-        ForeignKey("support_tickets.id", ondelete="CASCADE")
-    )
-    sender: Mapped[str] = mapped_column(String(20))
-    text: Mapped[str] = mapped_column(Text)
-    created_at: Mapped[str] = mapped_column(String(30))
-
-    ticket: Mapped["SupportTicket"] = relationship(back_populates="messages")
-
-    __table_args__ = (
-        Index('ix_support_messages_ticket_id', 'ticket_id'),
-    )
-
-
-class RefreshToken(Base):
-    __tablename__ = 'refresh_tokens'
-
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
-    family_id: Mapped[str] = mapped_column(String(36))
-    token_hash: Mapped[str] = mapped_column(String(128), unique=True)
-    issued_at: Mapped[str] = mapped_column(String(30))
-    expires_at: Mapped[str] = mapped_column(String(30))
-    revoked_at: Mapped[str] = mapped_column(String(30), nullable=True)
-    replaced_by_id: Mapped[int] = mapped_column(Integer, nullable=True)
-    user_agent: Mapped[str] = mapped_column(String(255), nullable=True)
-    ip: Mapped[str] = mapped_column(String(64), nullable=True)
-
-    __table_args__ = (
-        Index('ix_refresh_tokens_user_id', 'user_id'),
-        Index('ix_refresh_tokens_family_id', 'family_id'),
-    )
-
-
-class EmailVerification(Base):
-    __tablename__ = 'email_verifications'
-
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
-    purpose: Mapped[str] = mapped_column(String(20))
-    code_hash: Mapped[str] = mapped_column(String(128))
-    payload: Mapped[str] = mapped_column(String(255), nullable=True)
-    created_at: Mapped[str] = mapped_column(String(30))
-    expires_at: Mapped[str] = mapped_column(String(30))
-    used_at: Mapped[str] = mapped_column(String(30), nullable=True)
-    attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
-
-    __table_args__ = (
-        Index('ix_email_verifications_user_id_purpose', 'user_id', 'purpose'),
-    )
-
-
-class GooglePlayPurchase(Base):
-    __tablename__ = 'google_play_purchases'
-
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
-    product_id: Mapped[str] = mapped_column(String(100))
-    purchase_token: Mapped[str] = mapped_column(String(512), unique=True)
-    order_id: Mapped[str] = mapped_column(String(100), nullable=True)
-    expiry_time: Mapped[str] = mapped_column(String(30), nullable=True)
-    acknowledged: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
-    raw_payload: Mapped[str] = mapped_column(Text, nullable=True)
-    created_at: Mapped[str] = mapped_column(String(30))
-    updated_at: Mapped[str] = mapped_column(String(30))
-
-    # Subscription fields (Stage 5).
-    subscription_id: Mapped[str] = mapped_column(String(100), nullable=True)
-    linked_purchase_token: Mapped[str] = mapped_column(String(512), nullable=True)
-    state: Mapped[str] = mapped_column(String(32), nullable=True)
-    auto_renewing: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
-    start_time: Mapped[str] = mapped_column(String(30), nullable=True)
-    latest_notification_type: Mapped[int] = mapped_column(Integer, nullable=True)
-
-    __table_args__ = (
-        Index('ix_google_play_purchases_user_id', 'user_id'),
-        Index('ix_google_play_purchases_state', 'state'),
-        Index('ix_google_play_purchases_linked_token', 'linked_purchase_token'),
-    )
-
-
-class GooglePlaySku(Base):
-    __tablename__ = 'google_play_skus'
-
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    product_id: Mapped[str] = mapped_column(String(100), unique=True)
-    days: Mapped[int] = mapped_column(Integer)
-    squad_id: Mapped[str] = mapped_column(String(100))
-    external_squad_id: Mapped[str] = mapped_column(String(100))
-    display_name: Mapped[str] = mapped_column(String(200), nullable=True)
-    active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
-    created_at: Mapped[str] = mapped_column(String(30), nullable=True)
-    updated_at: Mapped[str] = mapped_column(String(30), nullable=True)
-
-
-class TelegramLinkCode(Base):
-    __tablename__ = 'telegram_link_codes'
-
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
-    code_hash: Mapped[str] = mapped_column(String(128), unique=True)
-    created_at: Mapped[str] = mapped_column(String(30))
-    expires_at: Mapped[str] = mapped_column(String(30))
-    used_at: Mapped[str] = mapped_column(String(30), nullable=True)
-    used_by_tg_id: Mapped[int] = mapped_column(BigInteger, nullable=True)
-
-    __table_args__ = (
-        Index('ix_telegram_link_codes_user_id', 'user_id'),
-    )
+__all__ = [
+    # runtime
+    "Base",
+    "DB_URL",
+    "engine",
+    "async_session",
+    "async_main",
+    # models (re-exported from common_db.models)
+    "CacheVersion",
+    "DisabledUser",
+    "EmailVerification",
+    "GooglePlayPurchase",
+    "GooglePlaySku",
+    "MenuButton",
+    "MenuScreen",
+    "Promo",
+    "PromoSettings",
+    "RefreshToken",
+    "SquadProfile",
+    "SupportMessage",
+    "SupportTicket",
+    "TariffPlan",
+    "TariffPrice",
+    "TelegramLinkCode",
+    "TelmtFreeParams",
+    "Transaction",
+    "User",
+    "WebAppMenuNode",
+]
 
 
 async def async_main():

@@ -9,4 +9,16 @@ common_db.egg-info/dependency_links.txt
 common_db.egg-info/requires.txt
 common_db.egg-info/top_level.txt
 common_db/models/__init__.py
+common_db/models/auth.py
+common_db/models/google_play.py
+common_db/models/menus.py
+common_db/models/promos.py
+common_db/models/support.py
+common_db/models/system.py
+common_db/models/tariffs.py
+common_db/models/transactions.py
+common_db/models/users.py
 tests/test_base.py
+tests/test_canon.py
+tests/test_create_all_sqlite.py
+tests/test_relationships.py
