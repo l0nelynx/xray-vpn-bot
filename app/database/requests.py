@@ -7,10 +7,19 @@ import random
 from app.database.models import User, Transaction, Promo, DisabledUser
 from app.database.models import async_session
 
+# Shared query helpers — see packages/common_db/common_db/repo/. These take
+# an explicit session and never commit; the wrappers in this file keep
+# their existing "open a session, maybe commit" shape but delegate the
+# actual SELECT to the canonical helper so the predicate (e.g. "paid
+# user") is defined in exactly one place.
+from common_db.repo import users as _repo_users
+from common_db.repo import promos as _repo_promos
+from common_db.repo import system as _repo_system
+
 
 async def set_user(tg_id, username=None):
     async with async_session() as session:
-        user = await session.scalar(select(User).where(User.tg_id == tg_id))
+        user = await _repo_users.get_user_by_tg_id(session, tg_id)
 
         if not user:
             session.add(User(tg_id=tg_id, username=username))
@@ -25,8 +34,11 @@ async def get_users():
         return await session.scalars(select(User))
 
 async def get_user_by_tg_id(tg_id):
+    # NOTE: this returns a status code (404/200), not a User. Confusing
+    # name — handlers use it as a "does this user exist" probe. For the
+    # actual User row, use common_db.repo.users.get_user_by_tg_id directly.
     async with async_session() as session:
-        user = await session.scalar(select(User).where(User.tg_id == tg_id))
+        user = await _repo_users.get_user_by_tg_id(session, tg_id)
         if not user:
             return 404
         else:
@@ -44,8 +56,7 @@ async def get_user_by_username(username: str):
         User: Объект пользователя или None
     """
     async with async_session() as session:
-        user = await session.scalar(select(User).where(User.username == username))
-        return user
+        return await _repo_users.get_user_by_username(session, username)
 
 
 async def create_user_with_info(tg_id: int, username: str, vless_uuid: str = None, api_provider: str = "remnawave"):
@@ -87,7 +98,7 @@ async def update_user_api_info(tg_id: int = 0, username: str = 0, vless_uuid: st
         bool: True если успешно, False если пользователь не найден
     """
     async with async_session() as session:
-        user = await session.scalar(select(User).where(User.tg_id == tg_id))
+        user = await _repo_users.get_user_by_tg_id(session, tg_id)
 
         if not user:
             return False
@@ -128,7 +139,7 @@ async def get_user_api_provider(username: str) -> str:
         str: Имя API провайдера (marzban/remnawave) или None
     """
     async with async_session() as session:
-        user = await session.scalar(select(User).where(User.username == username))
+        user = await _repo_users.get_user_by_username(session, username)
         return user.api_provider if user else None
 
 
@@ -143,7 +154,7 @@ async def get_full_username_info(username: str) -> dict:
         dict: Словарь с информацией пользователя или None
     """
     async with async_session() as session:
-        user = await session.scalar(select(User).where(User.username == username))
+        user = await _repo_users.get_user_by_username(session, username)
 
         if not user:
             return None
@@ -161,7 +172,7 @@ async def get_full_username_info(username: str) -> dict:
 async def set_user_language(tg_id: int, language: str) -> bool:
     """Устанавливает язык интерфейса пользователя"""
     async with async_session() as session:
-        user = await session.scalar(select(User).where(User.tg_id == tg_id))
+        user = await _repo_users.get_user_by_tg_id(session, tg_id)
         if not user:
             return False
         user.language = language
@@ -172,7 +183,7 @@ async def set_user_language(tg_id: int, language: str) -> bool:
 async def get_user_language(tg_id: int) -> str | None:
     """Получает язык интерфейса пользователя (None если не выбран)"""
     async with async_session() as session:
-        user = await session.scalar(select(User).where(User.tg_id == tg_id))
+        user = await _repo_users.get_user_by_tg_id(session, tg_id)
         if not user:
             return None
         return user.language
@@ -218,9 +229,7 @@ async def create_transaction(user_tg_id: int, user_transaction: str, username: s
                              uuid: str = 'None', payment_method: str = None, amount: float = None):
     async with async_session() as session:
         # Находим пользователя по tg_id
-        user = await session.scalar(
-            select(User).where(User.tg_id == user_tg_id)
-        )
+        user = await _repo_users.get_user_by_tg_id(session, user_tg_id)
 
         if user:
             # Создаем новую транзакцию
@@ -246,9 +255,7 @@ async def create_transaction(user_tg_id: int, user_transaction: str, username: s
 # Пример получения всех транзакций пользователя
 async def get_user_transactions(user_tg_id: int):
     async with async_session() as session:
-        user = await session.scalar(
-            select(User).where(User.tg_id == user_tg_id)
-        )
+        user = await _repo_users.get_user_by_tg_id(session, user_tg_id)
 
         if user:
             # Благодаря отношениям мы можем получить все транзакции пользователя
@@ -451,8 +458,7 @@ async def get_user_transactions_detailed(tg_id: int) -> list[dict]:
 
 async def get_users_count() -> int:
     async with async_session() as session:
-        result = await session.scalar(select(func.count()).select_from(User))
-        return result or 0
+        return await _repo_users.count_users(session)
 
 
 async def get_users_count_by_api() -> dict:
@@ -464,24 +470,15 @@ async def get_users_count_by_api() -> dict:
 
 
 async def get_paid_users_count() -> int:
-    now_iso = datetime.now().isoformat(timespec='seconds')
     async with async_session() as session:
-        result = await session.scalar(
-            select(func.count(func.distinct(Transaction.user_id))).select_from(Transaction).where(
-                Transaction.order_status.in_(["confirmed", "delivered"]),
-                Transaction.expire_date > now_iso,
-            )
-        )
-        return result or 0
+        return await _repo_users.count_paid_users(session)
 
 
 async def get_free_users_count() -> int:
-    now_iso = datetime.now().isoformat(timespec='seconds')
-    active_paid_sq = select(func.distinct(Transaction.user_id)).where(
-        Transaction.order_status.in_(["confirmed", "delivered"]),
-        Transaction.expire_date > now_iso,
-    )
+    # Free = total - paid. We re-use the canonical "paid" subquery so the
+    # predicate stays in one place (see common_db.repo.users).
     async with async_session() as session:
+        active_paid_sq = _repo_users.active_paid_user_ids_subquery()
         result = await session.scalar(
             select(func.count()).select_from(User).where(
                 ~User.id.in_(active_paid_sq)
@@ -492,12 +489,16 @@ async def get_free_users_count() -> int:
 
 async def get_users_paginated(page: int, per_page: int = 10,
                               sort: str = "id", search: str = ""):
-    now_iso = datetime.now().isoformat(timespec='seconds')
+    now = datetime.now()
+    now_iso = now.isoformat(timespec='seconds')
     async with async_session() as session:
+        # The "is_paid" flag and the "paid|free" filter both use the same
+        # canonical predicate (Transaction.order_status IN PAID + not expired).
+        # See common_db.repo.users.PAID_ORDER_STATUSES.
         has_tx = exists(
             select(Transaction.user_id).where(
                 Transaction.user_id == User.id,
-                Transaction.order_status.in_(["confirmed", "delivered"]),
+                Transaction.order_status.in_(_repo_users.PAID_ORDER_STATUSES),
                 Transaction.expire_date > now_iso,
             )
         ).correlate(User).label("is_paid")
@@ -514,10 +515,7 @@ async def get_users_paginated(page: int, per_page: int = 10,
                 base = base.where(User.username.ilike(f"%{search}%"))
 
         # Фильтр по платным/бесплатным
-        active_paid_sq = select(Transaction.user_id).where(
-            Transaction.order_status.in_(["confirmed", "delivered"]),
-            Transaction.expire_date > now_iso,
-        ).distinct()
+        active_paid_sq = _repo_users.active_paid_user_ids_subquery(now)
         if sort == "paid":
             base = base.where(User.id.in_(active_paid_sq))
         elif sort == "free":
@@ -542,7 +540,7 @@ async def get_users_paginated(page: int, per_page: int = 10,
 
 async def get_user_full_info_by_tg_id(tg_id: int) -> dict | None:
     async with async_session() as session:
-        user = await session.scalar(select(User).where(User.tg_id == tg_id))
+        user = await _repo_users.get_user_by_tg_id(session, tg_id)
         if not user:
             return None
         return {
@@ -559,7 +557,7 @@ async def get_user_full_info_by_tg_id(tg_id: int) -> dict | None:
 
 async def ban_user(tg_id: int) -> bool:
     async with async_session() as session:
-        user = await session.scalar(select(User).where(User.tg_id == tg_id))
+        user = await _repo_users.get_user_by_tg_id(session, tg_id)
         if not user:
             return False
         user.is_banned = True
@@ -569,7 +567,7 @@ async def ban_user(tg_id: int) -> bool:
 
 async def unban_user(tg_id: int) -> bool:
     async with async_session() as session:
-        user = await session.scalar(select(User).where(User.tg_id == tg_id))
+        user = await _repo_users.get_user_by_tg_id(session, tg_id)
         if not user:
             return False
         user.is_banned = False
@@ -579,7 +577,7 @@ async def unban_user(tg_id: int) -> bool:
 
 async def delete_user_from_db(tg_id: int) -> bool:
     async with async_session() as session:
-        user = await session.scalar(select(User).where(User.tg_id == tg_id))
+        user = await _repo_users.get_user_by_tg_id(session, tg_id)
         if not user:
             return False
         # Удаляем связанные транзакции
@@ -595,16 +593,19 @@ async def delete_user_from_db(tg_id: int) -> bool:
 
 async def is_user_banned(tg_id: int) -> bool:
     async with async_session() as session:
-        user = await session.scalar(select(User).where(User.tg_id == tg_id))
+        user = await _repo_users.get_user_by_tg_id(session, tg_id)
         if not user:
             return False
         return bool(user.is_banned)
 
 
 async def get_all_user_tg_ids() -> list[int]:
+    # Helper filters out NULL tg_ids (android-only users have no Telegram
+    # account). Broadcast loops always want this — if they tried to send
+    # to None they would crash. Behaviour change vs. pre-unification is
+    # intentional: it removes a latent bug.
     async with async_session() as session:
-        result = await session.execute(select(User.tg_id))
-        return [row[0] for row in result.all()]
+        return await _repo_users.get_all_tg_ids(session)
 
 
 async def delete_users_bulk(tg_ids: list[int]) -> int:
@@ -642,7 +643,7 @@ async def get_users_without_username() -> list[int]:
 
 async def update_user_email(tg_id: int, email: str) -> bool:
     async with async_session() as session:
-        user = await session.scalar(select(User).where(User.tg_id == tg_id))
+        user = await _repo_users.get_user_by_tg_id(session, tg_id)
         if not user:
             return False
         user.email = email
@@ -652,13 +653,13 @@ async def update_user_email(tg_id: int, email: str) -> bool:
 
 async def get_user_email(tg_id: int) -> str | None:
     async with async_session() as session:
-        user = await session.scalar(select(User).where(User.tg_id == tg_id))
+        user = await _repo_users.get_user_by_tg_id(session, tg_id)
         return user.email if user else None
 
 
 async def update_username(tg_id: int, username: str) -> bool:
     async with async_session() as session:
-        user = await session.scalar(select(User).where(User.tg_id == tg_id))
+        user = await _repo_users.get_user_by_tg_id(session, tg_id)
         if not user:
             return False
         user.username = username
@@ -695,13 +696,13 @@ def _promo_to_dict(promo: Promo) -> dict:
 
 async def get_promo_by_tg_id(tg_id: int) -> dict | None:
     async with async_session() as session:
-        promo = await session.scalar(select(Promo).where(Promo.tg_id == tg_id))
+        promo = await _repo_promos.get_promo_by_tg_id(session, tg_id)
         return _promo_to_dict(promo) if promo else None
 
 
 async def get_promo_by_code(promo_code: str) -> dict | None:
     async with async_session() as session:
-        promo = await session.scalar(select(Promo).where(Promo.promo_code == promo_code))
+        promo = await _repo_promos.get_promo_by_code(session, promo_code)
         return _promo_to_dict(promo) if promo else None
 
 
@@ -841,20 +842,21 @@ async def mark_promo_consumed(tg_id: int) -> None:
 
 
 async def get_used_promo_with_discount(tg_id: int) -> dict | None:
-    """If user has an active (non-consumed) promo, return code + effective discount."""
-    from app.database.models import PromoSettings
+    """If user has an active (non-consumed) promo, return code + effective discount.
+
+    Cascade (owner.discount_percent → PromoSettings.default → 20) lives
+    in common_db.repo.promos.get_effective_discount; we wrap the result
+    in the legacy dict shape callers expect.
+    """
     async with async_session() as session:
-        promo = await session.scalar(select(Promo).where(Promo.tg_id == tg_id))
-        if not promo or not promo.used_promo or promo.used_promo_consumed:
+        ed = await _repo_promos.get_effective_discount(session, tg_id)
+        # The helper auto-seeds PromoSettings via get_or_create_singleton,
+        # so on a fresh DB it implicitly inserts a row. Commit it so the
+        # seed survives across processes.
+        await session.commit()
+        if ed is None:
             return None
-        owner = await session.scalar(
-            select(Promo).where(Promo.promo_code == promo.used_promo)
-        )
-        discount = owner.discount_percent if owner and owner.discount_percent is not None else None
-        if discount is None:
-            settings = await session.scalar(select(PromoSettings).where(PromoSettings.id == 1))
-            discount = settings.default_discount_percent if settings else 20
-        return {"promo_code": promo.used_promo, "discount_percent": discount}
+        return {"promo_code": ed.promo_code, "discount_percent": ed.discount_percent}
 
 
 async def get_promo_usage_users(promo_code: str) -> list[dict]:
@@ -941,7 +943,7 @@ async def delete_disabled_user(tg_id: int) -> bool:
 async def set_user_vip(tg_id: int, vip: int) -> bool:
     """Устанавливает/снимает VIP флаг пользователя."""
     async with async_session() as session:
-        user = await session.scalar(select(User).where(User.tg_id == tg_id))
+        user = await _repo_users.get_user_by_tg_id(session, tg_id)
         if not user:
             return False
         user.vip = vip
@@ -950,9 +952,15 @@ async def set_user_vip(tg_id: int, vip: int) -> bool:
 
 
 async def user_has_transactions(tg_id: int) -> bool:
-    """Проверяет, есть ли у пользователя хотя бы одна транзакция (платная подписка)."""
+    """Проверяет, есть ли у пользователя хотя бы одна транзакция (платная подписка).
+
+    NOTE: this is a *different* predicate from
+    common_db.repo.users.user_has_active_paid_transaction — it returns
+    True for any historical transaction, including expired/cancelled ones.
+    Callers checking "is this user currently paid?" should use that helper.
+    """
     async with async_session() as session:
-        user = await session.scalar(select(User).where(User.tg_id == tg_id))
+        user = await _repo_users.get_user_by_tg_id(session, tg_id)
         if not user:
             return False
         from sqlalchemy import exists as sa_exists
@@ -965,13 +973,15 @@ async def user_has_transactions(tg_id: int) -> bool:
 
 
 async def get_telemt_free_params() -> dict:
-    """Возвращает параметры для создания бесплатного пользователя Telemt."""
+    """Возвращает параметры для создания бесплатного пользователя Telemt.
+
+    Auto-seeds the singleton row on a fresh DB so callers always see the
+    canonical defaults (expire_days=30, the rest NULL). See
+    common_db.repo.system.get_telmt_free_params.
+    """
     async with async_session() as session:
-        from app.database.models import TelmtFreeParams
-        row = await session.scalar(select(TelmtFreeParams).where(TelmtFreeParams.id == 1))
-        if not row:
-            return {"max_tcp_conns": None, "max_unique_ips": None,
-                    "data_quota_bytes": None, "expire_days": 30}
+        row = await _repo_system.get_telmt_free_params(session)
+        await session.commit()  # persist any auto-seeded row
         return {
             "max_tcp_conns": row.max_tcp_conns,
             "max_unique_ips": row.max_unique_ips,
@@ -988,11 +998,7 @@ async def update_telemt_free_params(
 ) -> bool:
     """Обновляет параметры для создания бесплатного пользователя Telemt."""
     async with async_session() as session:
-        from app.database.models import TelmtFreeParams
-        row = await session.scalar(select(TelmtFreeParams).where(TelmtFreeParams.id == 1))
-        if not row:
-            row = TelmtFreeParams(id=1)
-            session.add(row)
+        row = await _repo_system.get_telmt_free_params(session)
         row.max_tcp_conns = max_tcp_conns
         row.max_unique_ips = max_unique_ips
         row.data_quota_bytes = data_quota_bytes

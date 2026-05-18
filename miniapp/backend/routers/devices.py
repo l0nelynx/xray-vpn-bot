@@ -5,6 +5,8 @@ from sqlalchemy import select
 
 from ..database.models import User
 from ..database.session import async_session
+
+from common_db.repo import users as _repo_users
 from ..remnawave_client import (
     delete_user_hwid_device,
     get_user_hwid_devices,
@@ -19,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 async def _resolve_user_uuid(tg: TgUser) -> str:
     async with async_session() as session:
-        user = await session.scalar(select(User).where(User.tg_id == tg.tg_id))
+        user = await _repo_users.get_user_by_tg_id(session, tg.tg_id)
     if not user:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "user not registered")
     if user.is_banned:

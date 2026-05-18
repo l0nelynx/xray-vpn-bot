@@ -7,6 +7,9 @@ from sqlalchemy import select
 from ..config import get_free_days, get_free_traffic, get_news_url, get_rw_free_id
 from ..database.models import TelmtFreeParams, User
 from ..database.session import async_session
+
+from common_db.repo import system as _repo_system
+from common_db.repo import users as _repo_users
 from ..remnawave_client import create_user, get_user_from_username, update_user
 from ..telemt_client import create_telemt_user, first_link, get_telemt_user
 from ..tg_auth import TgUser, get_tg_user
@@ -42,7 +45,7 @@ class TelemtClaimResponse(BaseModel):
 
 async def _ensure_user(tg: TgUser) -> User:
     async with async_session() as session:
-        user = await session.scalar(select(User).where(User.tg_id == tg.tg_id))
+        user = await _repo_users.get_user_by_tg_id(session, tg.tg_id)
     if not user:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "user not registered")
     if user.is_banned:
@@ -163,13 +166,16 @@ async def telemt_claim(tg: TgUser = Depends(get_tg_user)) -> TelemtClaimResponse
         link = first_link(existing.get("links"))
         return TelemtClaimResponse(ok=True, link=link, detail="already_active")
 
+    # Singleton auto-seed: get_telmt_free_params creates the row on a
+    # fresh DB so we always have the canonical defaults.
     async with async_session() as session:
-        params = await session.scalar(select(TelmtFreeParams).where(TelmtFreeParams.id == 1))
+        params = await _repo_system.get_telmt_free_params(session)
+        await session.commit()
 
-    expire_days = params.expire_days if params and params.expire_days else 30
-    max_tcp = params.max_tcp_conns if params else None
-    max_ips = params.max_unique_ips if params else None
-    quota = params.data_quota_bytes if params else None
+    expire_days = params.expire_days or 30
+    max_tcp = params.max_tcp_conns
+    max_ips = params.max_unique_ips
+    quota = params.data_quota_bytes
 
     try:
         created = await create_telemt_user(

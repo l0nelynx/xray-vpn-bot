@@ -8,6 +8,12 @@ from sqlalchemy import select
 from ..database.models import Promo, PromoSettings, Transaction, User
 from ..database.session import async_session
 from ..notify_log import esc, notify_log
+
+# The discount cascade (owner_promo.discount_percent → PromoSettings
+# default → 20) used to be inlined here AND fall back to plain 20 with
+# no auto-seed of PromoSettings. The helper does it properly.
+from common_db.repo import promos as _repo_promos
+from common_db.repo import users as _repo_users
 from ..payments import (
     InvoiceRequest,
     PaymentError,
@@ -51,7 +57,7 @@ async def create_payment_invoice(
     tg: TgUser = Depends(get_tg_user),
 ) -> InvoiceResponse:
     async with async_session() as session:
-        user = await session.scalar(select(User).where(User.tg_id == tg.tg_id))
+        user = await _repo_users.get_user_by_tg_id(session, tg.tg_id)
     if not user:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "user not registered")
     if user.is_banned:
@@ -68,20 +74,14 @@ async def create_payment_invoice(
             f"provider '{provider.name}' does not support currency '{body.currency}'",
         )
 
-    # Apply promo discount if user has an unconsumed active promo
+    # Apply promo discount if user has an unconsumed active promo. The
+    # helper handles the whole cascade including PromoSettings auto-seed.
     invoice_amount = body.amount
     async with async_session() as session:
-        user_promo = await session.scalar(select(Promo).where(Promo.tg_id == tg.tg_id))
-        if user_promo and user_promo.used_promo and not user_promo.used_promo_consumed:
-            owner_promo = await session.scalar(
-                select(Promo).where(Promo.promo_code == user_promo.used_promo)
-            )
-            if owner_promo and owner_promo.discount_percent is not None:
-                discount_pct = owner_promo.discount_percent
-            else:
-                ps = await session.scalar(select(PromoSettings).where(PromoSettings.id == 1))
-                discount_pct = ps.default_discount_percent if ps else 20
-            invoice_amount = round(body.amount * (1 - discount_pct / 100), 2)
+        ed = await _repo_promos.get_effective_discount(session, tg.tg_id)
+        await session.commit()  # persist auto-seeded PromoSettings
+        if ed is not None:
+            invoice_amount = round(body.amount * (1 - ed.discount_percent / 100), 2)
 
     transaction_id = str(uuid.uuid4())
     request = InvoiceRequest(

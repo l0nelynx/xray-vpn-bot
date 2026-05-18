@@ -11,6 +11,9 @@ from ..config import get_bot_token
 from ..database.models import SupportTicket, SupportMessage, User
 from ..database.session import async_session
 
+from common_db.repo import support as _repo_support
+from common_db.repo import users as _repo_users
+
 router = APIRouter(prefix="/api/support", tags=["support"])
 
 VALID_STATUSES = {"open", "in_progress", "closed"}
@@ -78,7 +81,7 @@ async def get_ticket(ticket_id: int, _: str = Depends(get_current_user)):
         ticket = await session.scalar(stmt)
         if not ticket:
             raise HTTPException(404, "ticket not found")
-        user = await session.scalar(select(User).where(User.id == ticket.user_id))
+        user = await _repo_users.get_user_by_id(session, ticket.user_id)
         messages = sorted(ticket.messages, key=lambda m: m.id)
         return {
             "id": ticket.id,
@@ -102,10 +105,10 @@ async def reply_ticket(ticket_id: int, body: ReplyBody, _: str = Depends(get_cur
     if not text:
         raise HTTPException(400, "empty text")
     async with async_session() as session:
-        ticket = await session.scalar(select(SupportTicket).where(SupportTicket.id == ticket_id))
+        ticket = await _repo_support.get_ticket_by_id(session, ticket_id)
         if not ticket:
             raise HTTPException(404, "ticket not found")
-        user = await session.scalar(select(User).where(User.id == ticket.user_id))
+        user = await _repo_users.get_user_by_id(session, ticket.user_id)
         now = _now_iso()
         msg = SupportMessage(ticket_id=ticket.id, sender="admin", text=text, created_at=now)
         session.add(msg)
@@ -137,7 +140,7 @@ async def update_status(ticket_id: int, body: StatusBody, _: str = Depends(get_c
     if body.status not in VALID_STATUSES:
         raise HTTPException(400, "invalid status")
     async with async_session() as session:
-        ticket = await session.scalar(select(SupportTicket).where(SupportTicket.id == ticket_id))
+        ticket = await _repo_support.get_ticket_by_id(session, ticket_id)
         if not ticket:
             raise HTTPException(404, "ticket not found")
         ticket.status = body.status

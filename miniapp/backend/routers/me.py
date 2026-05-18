@@ -15,6 +15,8 @@ from ..config import (
 )
 from ..database.models import User
 from ..database.session import async_session
+
+from common_db.repo import users as _repo_users
 from ..remnawave_client import get_user_devices_count, resolve_remnawave_user
 from ..schemas.me import LinksInfo, MeResponse, SubscriptionInfo, UserInfo
 from ..tg_auth import TgUser, get_tg_user
@@ -63,7 +65,7 @@ async def get_me(tg: TgUser = Depends(get_tg_user)) -> MeResponse:
     links = _links()
 
     async with async_session() as session:
-        user = await session.scalar(select(User).where(User.tg_id == tg.tg_id))
+        user = await _repo_users.get_user_by_tg_id(session, tg.tg_id)
 
     if not user:
         return MeResponse(registered=False, links=links)

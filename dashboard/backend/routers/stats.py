@@ -7,6 +7,10 @@ from ..auth import get_current_user
 from ..database.models import User, Transaction
 from ..database.session import async_session
 
+# Canonical "paid" predicate + counts live in common_db.repo.users.
+# Use them to keep the overview endpoint aligned with users.py.
+from common_db.repo import users as _repo_users
+
 router = APIRouter(prefix="/api/stats", tags=["stats"])
 
 
@@ -70,24 +74,19 @@ def _fill_weekly_gaps(data: dict[str, float], date_from: str | None, date_to: st
 
 @router.get("/overview")
 async def overview(_: str = Depends(get_current_user)):
-    now_iso = datetime.now().isoformat(timespec='seconds')
+    now = datetime.now()
     async with async_session() as session:
-        total_users = await session.scalar(select(func.count()).select_from(User)) or 0
-        paid_users = await session.scalar(
-            select(func.count(func.distinct(Transaction.user_id))).select_from(Transaction).where(
-                Transaction.order_status.in_(["confirmed", "delivered"]),
-                Transaction.expire_date > now_iso,
-            )
-        ) or 0
+        total_users = await _repo_users.count_users(session)
+        paid_users = await _repo_users.count_paid_users(session, now=now)
         free_users = total_users - paid_users
         revenue = await session.scalar(
             select(func.sum(Transaction.amount)).where(
-                Transaction.order_status.in_(["confirmed", "delivered"])
+                Transaction.order_status.in_(_repo_users.PAID_ORDER_STATUSES)
             )
         ) or 0
         order_count = await session.scalar(
             select(func.count()).select_from(Transaction).where(
-                Transaction.order_status.in_(["confirmed", "delivered"])
+                Transaction.order_status.in_(_repo_users.PAID_ORDER_STATUSES)
             )
         ) or 0
         avg_order = round(revenue / order_count, 2) if order_count else 0
@@ -124,7 +123,7 @@ async def revenue(
         query = (
             select(date_expr.label("date"), func.sum(Transaction.amount).label("total"))
             .where(
-                Transaction.order_status.in_(["confirmed", "delivered"]),
+                Transaction.order_status.in_(_repo_users.PAID_ORDER_STATUSES),
                 Transaction.created_at != None,
                 Transaction.amount != None,
             )
@@ -225,7 +224,7 @@ async def payment_methods(_: str = Depends(get_current_user)):
                 func.sum(Transaction.amount).label("total"),
             )
             .where(
-                Transaction.order_status.in_(["confirmed", "delivered"]),
+                Transaction.order_status.in_(_repo_users.PAID_ORDER_STATUSES),
                 Transaction.payment_method != None,
             )
             .group_by(Transaction.payment_method)

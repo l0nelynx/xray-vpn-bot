@@ -7,20 +7,21 @@ from ..auth import get_current_user
 from ..database.models import User, Transaction
 from ..database.session import async_session
 
+# Shared "paid user" predicate + count helpers — see
+# packages/common_db/common_db/repo/users.py. Routes still own their
+# sessions; the helpers just centralise the WHERE clause so dashboard
+# and app can never disagree on what "paid" means.
+from common_db.repo import users as _repo_users
+
 router = APIRouter(prefix="/api/users", tags=["users"])
 
 
 @router.get("/count")
 async def users_count(_: str = Depends(get_current_user)):
-    now_iso = datetime.now().isoformat(timespec='seconds')
+    now = datetime.now()
     async with async_session() as session:
-        total = await session.scalar(select(func.count()).select_from(User)) or 0
-        paid = await session.scalar(
-            select(func.count(func.distinct(Transaction.user_id))).select_from(Transaction).where(
-                Transaction.order_status.in_(["confirmed", "delivered"]),
-                Transaction.expire_date > now_iso,
-            )
-        ) or 0
+        total = await _repo_users.count_users(session)
+        paid = await _repo_users.count_paid_users(session, now=now)
         free = total - paid
         banned = await session.scalar(
             select(func.count()).select_from(User).where(User.is_banned == True)
@@ -37,12 +38,16 @@ async def list_users(
     filter: str = Query("all"),
     _: str = Depends(get_current_user),
 ):
-    now_iso = datetime.now().isoformat(timespec='seconds')
+    now = datetime.now()
+    now_iso = now.isoformat(timespec='seconds')
     async with async_session() as session:
+        # The is_paid flag and the paid/free filter both use the canonical
+        # predicate from common_db.repo.users (Transaction.order_status
+        # IN ('confirmed','delivered') AND expire_date > now).
         has_tx = exists(
             select(Transaction.user_id).where(
                 Transaction.user_id == User.id,
-                Transaction.order_status.in_(["confirmed", "delivered"]),
+                Transaction.order_status.in_(_repo_users.PAID_ORDER_STATUSES),
                 Transaction.expire_date > now_iso,
             )
         ).correlate(User).label("is_paid")
@@ -57,10 +62,7 @@ async def list_users(
             else:
                 base = base.where(User.username.ilike(f"%{search}%"))
 
-        active_paid_sq = select(Transaction.user_id).where(
-            Transaction.order_status.in_(["confirmed", "delivered"]),
-            Transaction.expire_date > now_iso,
-        ).distinct()
+        active_paid_sq = _repo_users.active_paid_user_ids_subquery(now)
         if filter == "paid":
             base = base.where(User.id.in_(active_paid_sq))
         elif filter == "free":
@@ -102,7 +104,7 @@ async def list_users(
 @router.get("/{tg_id}")
 async def get_user(tg_id: int, _: str = Depends(get_current_user)):
     async with async_session() as session:
-        user = await session.scalar(select(User).where(User.tg_id == tg_id))
+        user = await _repo_users.get_user_by_tg_id(session, tg_id)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
 
@@ -131,7 +133,7 @@ async def get_user(tg_id: int, _: str = Depends(get_current_user)):
 @router.get("/{tg_id}/transactions")
 async def get_user_transactions(tg_id: int, _: str = Depends(get_current_user)):
     async with async_session() as session:
-        user = await session.scalar(select(User).where(User.tg_id == tg_id))
+        user = await _repo_users.get_user_by_tg_id(session, tg_id)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
 
@@ -160,7 +162,7 @@ async def get_user_transactions(tg_id: int, _: str = Depends(get_current_user)):
 @router.post("/{tg_id}/ban")
 async def ban_user(tg_id: int, _: str = Depends(get_current_user)):
     async with async_session() as session:
-        user = await session.scalar(select(User).where(User.tg_id == tg_id))
+        user = await _repo_users.get_user_by_tg_id(session, tg_id)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
         user.is_banned = True
@@ -171,7 +173,7 @@ async def ban_user(tg_id: int, _: str = Depends(get_current_user)):
 @router.post("/{tg_id}/unban")
 async def unban_user(tg_id: int, _: str = Depends(get_current_user)):
     async with async_session() as session:
-        user = await session.scalar(select(User).where(User.tg_id == tg_id))
+        user = await _repo_users.get_user_by_tg_id(session, tg_id)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
         user.is_banned = False
@@ -182,7 +184,7 @@ async def unban_user(tg_id: int, _: str = Depends(get_current_user)):
 @router.post("/{tg_id}/vip")
 async def set_vip(tg_id: int, _: str = Depends(get_current_user)):
     async with async_session() as session:
-        user = await session.scalar(select(User).where(User.tg_id == tg_id))
+        user = await _repo_users.get_user_by_tg_id(session, tg_id)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
         user.vip = 1
@@ -193,7 +195,7 @@ async def set_vip(tg_id: int, _: str = Depends(get_current_user)):
 @router.post("/{tg_id}/unvip")
 async def unset_vip(tg_id: int, _: str = Depends(get_current_user)):
     async with async_session() as session:
-        user = await session.scalar(select(User).where(User.tg_id == tg_id))
+        user = await _repo_users.get_user_by_tg_id(session, tg_id)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
         user.vip = 0
@@ -204,7 +206,7 @@ async def unset_vip(tg_id: int, _: str = Depends(get_current_user)):
 @router.delete("/{tg_id}")
 async def delete_user(tg_id: int, _: str = Depends(get_current_user)):
     async with async_session() as session:
-        user = await session.scalar(select(User).where(User.tg_id == tg_id))
+        user = await _repo_users.get_user_by_tg_id(session, tg_id)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
         await session.execute(delete(Transaction).where(Transaction.user_id == user.id))

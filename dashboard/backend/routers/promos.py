@@ -7,6 +7,13 @@ from ..auth import get_current_user
 from ..database.models import Promo, PromoSettings, User
 from ..database.session import async_session
 
+# Shared promo lookups + singleton PromoSettings helper. The settings
+# helper auto-seeds the row on first access, so /api/promos/settings GET
+# now returns the configured default (20%) on a fresh DB instead of a
+# silent 0%.
+from common_db.repo import promos as _repo_promos
+from common_db.repo import system as _repo_system
+
 router = APIRouter(prefix="/api/promos", tags=["promos"])
 
 
@@ -71,7 +78,7 @@ async def create_promo(body: PromoCreateRequest, _: str = Depends(get_current_us
         raise HTTPException(400, "promo_code required")
 
     async with async_session() as session:
-        existing = await session.scalar(select(Promo).where(Promo.promo_code == code))
+        existing = await _repo_promos.get_promo_by_code(session, code)
         if existing:
             raise HTTPException(409, "promo code already exists")
 
@@ -82,7 +89,7 @@ async def create_promo(body: PromoCreateRequest, _: str = Depends(get_current_us
             min_tg_id = await session.scalar(select(func.min(Promo.tg_id))) or 0
             owner_tg_id = min(min_tg_id, 0) - 1
         else:
-            taken = await session.scalar(select(Promo).where(Promo.tg_id == owner_tg_id))
+            taken = await _repo_promos.get_promo_by_tg_id(session, owner_tg_id)
             if taken:
                 raise HTTPException(409, f"tg_id {owner_tg_id} already owns a promo")
 
@@ -104,7 +111,7 @@ async def create_promo(body: PromoCreateRequest, _: str = Depends(get_current_us
 @router.delete("/{code}")
 async def delete_promo(code: str, _: str = Depends(get_current_user)):
     async with async_session() as session:
-        promo = await session.scalar(select(Promo).where(Promo.promo_code == code))
+        promo = await _repo_promos.get_promo_by_code(session, code)
         if not promo:
             raise HTTPException(404, "promo not found")
         # Clear used_promo on users who used it
@@ -121,9 +128,11 @@ async def delete_promo(code: str, _: str = Depends(get_current_user)):
 @router.get("/settings")
 async def get_promo_settings(_: str = Depends(get_current_user)):
     async with async_session() as session:
-        settings = await session.scalar(select(PromoSettings).where(PromoSettings.id == 1))
+        # Auto-seeds the singleton on first access — no more silent 0%.
+        settings = await _repo_system.get_promo_settings(session)
+        await session.commit()
         return {
-            "default_discount_percent": settings.default_discount_percent if settings else 20,
+            "default_discount_percent": settings.default_discount_percent,
         }
 
 
@@ -133,12 +142,8 @@ async def update_promo_settings(
     _: str = Depends(get_current_user),
 ):
     async with async_session() as session:
-        settings = await session.scalar(select(PromoSettings).where(PromoSettings.id == 1))
-        if not settings:
-            settings = PromoSettings(id=1, default_discount_percent=body.default_discount_percent)
-            session.add(settings)
-        else:
-            settings.default_discount_percent = body.default_discount_percent
+        settings = await _repo_system.get_promo_settings(session)
+        settings.default_discount_percent = body.default_discount_percent
         await session.commit()
     return {"default_discount_percent": body.default_discount_percent}
 

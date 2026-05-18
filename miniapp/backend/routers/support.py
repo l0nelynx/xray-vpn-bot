@@ -18,6 +18,11 @@ from ..schemas.support import (
 )
 from ..tg_auth import TgUser, get_tg_user
 
+# common_db helpers fix the 1+N round-trips on /tickets and centralise the
+# user-by-tg_id / ticket-by-id lookups.
+from common_db.repo import support as _repo_support
+from common_db.repo import users as _repo_users
+
 router = APIRouter(prefix="/api/support", tags=["support"])
 logger = logging.getLogger(__name__)
 
@@ -50,30 +55,25 @@ async def _notify_admin(ticket_id: int, username: str | None, subject: str) -> N
 @router.get("/tickets", response_model=list[TicketSummary])
 async def list_tickets(tg: TgUser = Depends(get_tg_user)) -> list[TicketSummary]:
     async with async_session() as session:
-        user = await session.scalar(select(User).where(User.tg_id == tg.tg_id))
+        user = await _repo_users.get_user_by_tg_id(session, tg.tg_id)
         if not user:
             return []
-        result = await session.execute(
-            select(SupportTicket)
-            .where(SupportTicket.user_id == user.id)
-            .order_by(desc(SupportTicket.created_at))
+        # 2 queries instead of 1+N: the helper batches the
+        # last-message-per-ticket lookup via ROW_NUMBER PARTITION BY.
+        rows = await _repo_support.list_user_tickets_with_last_message(
+            session, user.id
         )
-        tickets = result.scalars().all()
-        out: list[TicketSummary] = []
-        for t in tickets:
-            last = await session.scalar(
-                select(SupportMessage.text)
-                .where(SupportMessage.ticket_id == t.id)
-                .order_by(desc(SupportMessage.created_at))
-                .limit(1)
+        return [
+            TicketSummary(
+                id=row.ticket.id,
+                subject=row.ticket.subject,
+                status=row.ticket.status,
+                created_at=row.ticket.created_at,
+                updated_at=row.ticket.updated_at,
+                last_message_preview=((row.last_message_text or row.ticket.message)[:120]),
             )
-            preview = (last or t.message)[:120]
-            out.append(TicketSummary(
-                id=t.id, subject=t.subject, status=t.status,
-                created_at=t.created_at, updated_at=t.updated_at,
-                last_message_preview=preview,
-            ))
-        return out
+            for row in rows
+        ]
 
 
 @router.get("/tickets/{ticket_id}", response_model=TicketDetail)
@@ -82,22 +82,16 @@ async def get_ticket(
     tg: TgUser = Depends(get_tg_user),
 ) -> TicketDetail:
     async with async_session() as session:
-        user = await session.scalar(select(User).where(User.tg_id == tg.tg_id))
+        user = await _repo_users.get_user_by_tg_id(session, tg.tg_id)
         if not user:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "user not found")
-        ticket = await session.scalar(
-            select(SupportTicket).where(SupportTicket.id == ticket_id)
-        )
+        ticket = await _repo_support.get_ticket_by_id(session, ticket_id)
         if not ticket or ticket.user_id != user.id:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "ticket not found")
-        result = await session.execute(
-            select(SupportMessage)
-            .where(SupportMessage.ticket_id == ticket.id)
-            .order_by(SupportMessage.created_at)
-        )
+        msgs = await _repo_support.list_messages_for_ticket(session, ticket.id)
         messages = [
             MessageItem(id=m.id, sender=m.sender, text=m.text, created_at=m.created_at)
-            for m in result.scalars().all()
+            for m in msgs
         ]
         return TicketDetail(
             id=ticket.id,
@@ -116,15 +110,13 @@ async def create_ticket(
 ) -> TicketDetail:
     now = _now_iso()
     async with async_session() as session:
-        user = await session.scalar(select(User).where(User.tg_id == tg.tg_id))
+        user = await _repo_users.get_user_by_tg_id(session, tg.tg_id)
         if not user:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "user not registered")
 
-        open_count = await session.scalar(
-            select(func.count())
-            .select_from(SupportTicket)
-            .where(SupportTicket.user_id == user.id, SupportTicket.status == "open")
-        ) or 0
+        open_count = await _repo_support.count_open_tickets_for_user(
+            session, user.id
+        )
         if open_count >= MAX_OPEN_TICKETS:
             raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "too many open tickets")
 
@@ -200,12 +192,10 @@ async def add_user_message(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "empty message")
     now = _now_iso()
     async with async_session() as session:
-        user = await session.scalar(select(User).where(User.tg_id == tg.tg_id))
+        user = await _repo_users.get_user_by_tg_id(session, tg.tg_id)
         if not user:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "user not registered")
-        ticket = await session.scalar(
-            select(SupportTicket).where(SupportTicket.id == ticket_id)
-        )
+        ticket = await _repo_support.get_ticket_by_id(session, ticket_id)
         if not ticket or ticket.user_id != user.id:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "ticket not found")
         if ticket.status == "closed":
