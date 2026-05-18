@@ -230,8 +230,13 @@ class RemnawaveClient:
         try:
             update_data: dict = {"uuid": _uuid.UUID(user_uuid)}
 
-            if status is not None:
-                update_data["status"] = _STATUS_MAP.get(status, UserStatus.ACTIVE)
+            if status is None:
+                update_data["status"] = UserStatus.ACTIVE
+            else:
+                try:
+                    update_data["status"] = _STATUS_MAP[status.lower()]
+                except KeyError:
+                    raise ValueError(f"unknown remnawave status: {status!r}")
             if username:
                 update_data["username"] = username
             if days:
