@@ -10,6 +10,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from sqlalchemy import text
+
 logger = logging.getLogger(__name__)
 
 
@@ -119,6 +121,84 @@ def _decide(
 
     # Both "none"
     return tg_user_id, android_id, None, "ok"
+
+
+_FK_TABLES_USER_ID = (
+    "transactions",
+    "email_verifications",
+    "refresh_tokens",
+    "telegram_link_codes",
+    "support_tickets",
+    "google_play_purchases",
+)
+
+
+async def _apply_merge_db(
+    *,
+    session,
+    survivor_id: int,
+    loser_id: int,
+    tg_id: int,
+    chosen_uuid: str | None,
+) -> None:
+    """Copy loser fields onto survivor, reparent FK rows, then DELETE loser.
+
+    Caller controls commit/rollback. Idempotent against the case where
+    survivor already holds tg_id.
+    """
+    from common_db.models import User
+
+    survivor = await session.get(User, survivor_id)
+    loser = await session.get(User, loser_id)
+    if survivor is None or loser is None:
+        raise RuntimeError(
+            f"merge precondition: survivor={survivor_id} loser={loser_id} "
+            f"not both present"
+        )
+
+    # Clear unique-constrained fields on the loser BEFORE mutating survivor
+    # so autoflush doesn't trip the users.email unique index.
+    loser_email = loser.email
+    if loser_email:
+        loser.email = None
+        await session.flush()
+    survivor_email_was_empty = survivor.email in (None, "")
+    if survivor_email_was_empty and loser_email:
+        survivor.email = loser_email
+
+    _copy_if_empty(survivor, loser, "password_hash")
+    _copy_if_empty(survivor, loser, "password_updated_at")
+    _copy_if_empty(survivor, loser, "email_verified_at")
+    _copy_if_empty(survivor, loser, "username")
+    _copy_if_empty(survivor, loser, "language")
+    _copy_if_empty(survivor, loser, "api_provider")
+
+    survivor.vip = max(survivor.vip or 0, loser.vip or 0)
+
+    survivor.tg_id = tg_id
+    if chosen_uuid is not None:
+        survivor.vless_uuid = chosen_uuid
+
+    for table in _FK_TABLES_USER_ID:
+        await session.execute(
+            text(f"UPDATE {table} SET user_id = :s WHERE user_id = :l"),
+            {"s": survivor_id, "l": loser_id},
+        )
+    await session.execute(
+        text("UPDATE transactions SET android_user_id = :s "
+             "WHERE android_user_id = :l"),
+        {"s": survivor_id, "l": loser_id},
+    )
+
+    await session.delete(loser)
+    await session.flush()
+
+
+def _copy_if_empty(survivor, loser, field: str) -> None:
+    if getattr(survivor, field, None) in (None, ""):
+        loser_val = getattr(loser, field, None)
+        if loser_val not in (None, ""):
+            setattr(survivor, field, loser_val)
 
 
 async def merge_android_and_tg(

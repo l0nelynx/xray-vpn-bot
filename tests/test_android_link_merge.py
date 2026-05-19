@@ -137,3 +137,69 @@ class TestDecide:
         assert (survivor, loser, uuid, code) == (
             self.T_ID, self.A_ID, None, "ok",
         )
+
+
+import asyncio as _asyncio
+
+from sqlalchemy import select
+from common_db.models import User
+from app.handlers.android_link_merge import _apply_merge_db
+
+
+class TestApplyMergeDb:
+    def test_copies_missing_fields_from_loser(self, session_factory):
+        async def go():
+            async with session_factory() as s:
+                s.add(User(id=100, tg_id=None, email="a@x.io",
+                           password_hash="hash-a"))
+                s.add(User(id=200, tg_id=55, username="bob",
+                           language="ru", vip=0))
+                await s.flush()
+                await _apply_merge_db(
+                    session=s, survivor_id=200, loser_id=100,
+                    tg_id=55, chosen_uuid="kept-uuid",
+                )
+                survivor = await s.get(User, 200)
+                loser = await s.get(User, 100)
+                assert loser is None
+                assert survivor.tg_id == 55
+                assert survivor.email == "a@x.io"
+                assert survivor.password_hash == "hash-a"
+                assert survivor.username == "bob"
+                assert survivor.language == "ru"
+                assert survivor.vless_uuid == "kept-uuid"
+
+        _asyncio.run(go())
+
+    def test_reparents_transactions_and_email_verifications(self, session_factory):
+        async def go():
+            from common_db.models import Transaction, EmailVerification
+            async with session_factory() as s:
+                s.add(User(id=100, email="a@x.io"))
+                s.add(User(id=200, tg_id=55))
+                s.add(Transaction(
+                    transaction_id="tx-1", vless_uuid="v", order_status="paid",
+                    delivery_status=1, days_ordered=30, user_id=100,
+                    android_user_id=100,
+                ))
+                s.add(EmailVerification(
+                    user_id=100, purpose="tg_link", code_hash="h",
+                    created_at="2026-05-19T00:00:00",
+                    expires_at="2026-05-19T01:00:00",
+                ))
+                await s.flush()
+                await _apply_merge_db(
+                    session=s, survivor_id=200, loser_id=100,
+                    tg_id=55, chosen_uuid=None,
+                )
+                tx = await s.get(Transaction, "tx-1")
+                assert tx.user_id == 200
+                assert tx.android_user_id == 200
+                ev = (await s.execute(
+                    select(EmailVerification).where(
+                        EmailVerification.purpose == "tg_link"
+                    )
+                )).scalar_one()
+                assert ev.user_id == 200
+
+        _asyncio.run(go())
