@@ -150,20 +150,14 @@ async def _apply_merge_db(
 
     survivor = await session.get(User, survivor_id)
     loser = await session.get(User, loser_id)
-    if survivor is None or loser is None:
-        raise RuntimeError(
-            f"merge precondition: survivor={survivor_id} loser={loser_id} "
-            f"not both present"
-        )
 
-    # Clear unique-constrained fields on the loser BEFORE mutating survivor
-    # so autoflush doesn't trip the users.email unique index.
+    # Clear loser.email BEFORE mutating survivor so autoflush doesn't trip
+    # the users.email unique index while both rows hold the same value.
     loser_email = loser.email
     if loser_email:
         loser.email = None
         await session.flush()
-    survivor_email_was_empty = survivor.email in (None, "")
-    if survivor_email_was_empty and loser_email:
+    if survivor.email in (None, "") and loser_email:
         survivor.email = loser_email
 
     _copy_if_empty(survivor, loser, "password_hash")
