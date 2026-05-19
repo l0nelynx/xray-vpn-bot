@@ -30,6 +30,45 @@ def _classify(info: Any) -> str:
     return "free"
 
 
+async def _lookup_rw(
+    *,
+    email: str | None,
+    vless_uuid: str | None,
+    username: str | None,
+) -> tuple[dict | None, dict | None]:
+    """Concurrently look up Android-side (by email) and TG-side
+    (by uuid → fallback username) in Remnawave.
+
+    Returns (a_info, t_info) where each is the dict from the client or None
+    on miss/error. Errors are logged at WARNING and swallowed — the merge
+    must continue even if Remnawave is temporarily down.
+    """
+    import asyncio
+    import app.api.remnawave.api as rem
+
+    async def safe(coro):
+        try:
+            return await coro
+        except Exception as exc:
+            logger.warning("Remnawave lookup failed: %s", exc)
+            return None
+
+    a_task = safe(rem.get_user_from_email(email)) if email else _none()
+    if vless_uuid:
+        t_task = safe(rem.get_user_from_uuid(vless_uuid))
+    elif username:
+        t_task = safe(rem.get_user_from_username(username))
+    else:
+        t_task = _none()
+
+    a_info, t_info = await asyncio.gather(a_task, t_task)
+    return a_info, t_info
+
+
+async def _none():
+    return None
+
+
 class MergeBlocked(Exception):
     """Raised when both sides hold an active PRO subscription — automatic
     resolution would discard a paid subscription, so the caller must surface
