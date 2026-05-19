@@ -40,6 +40,10 @@ async def get_user_from_email(email: str) -> dict | None:
     return await _client().get_user_by_email(email)
 
 
+async def get_user_from_uuid(user_uuid: str) -> dict | None:
+    return await _client().get_user_by_uuid(user_uuid)
+
+
 async def create_user(
     username: str,
     days: int = 30,
