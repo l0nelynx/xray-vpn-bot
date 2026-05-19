@@ -13,6 +13,23 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
+def _classify(info: Any) -> str:
+    """Return "pro" | "free" | "none" for a Remnawave user dict.
+
+    Matches the project-wide rule used in
+    `remnawave_client.scenarios.resolve_scenario` and
+    `app/handlers/tools.py:377`: PRO iff status == "active" and data_limit
+    is None. 404 sentinel and None map to "none".
+    """
+    if info is None or info == 404:
+        return "none"
+    status = info.get("status")
+    data_limit = info.get("data_limit")
+    if status == "active" and data_limit is None:
+        return "pro"
+    return "free"
+
+
 class MergeBlocked(Exception):
     """Raised when both sides hold an active PRO subscription — automatic
     resolution would discard a paid subscription, so the caller must surface
