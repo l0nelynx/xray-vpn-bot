@@ -72,3 +72,68 @@ class TestLookupRw:
             email="a@x.io", vless_uuid=None, username=None,
         ))
         assert a_info is None
+
+
+from app.handlers.android_link_merge import _decide, MergeBlocked
+
+
+class TestDecide:
+    A_ID, T_ID = 100, 200
+    A_UUID, T_UUID = "a-uuid", "t-uuid"
+
+    def _call(self, a_tier, t_tier, *, a_uuid="a-uuid", t_uuid="t-uuid"):
+        return _decide(
+            a_tier=a_tier, t_tier=t_tier,
+            a_rw_uuid=a_uuid, t_rw_uuid=t_uuid,
+            android_id=self.A_ID, tg_user_id=self.T_ID,
+        )
+
+    def test_pro_vs_pro_blocks(self):
+        with pytest.raises(MergeBlocked):
+            self._call("pro", "pro")
+
+    def test_pro_vs_free_keeps_android(self):
+        survivor, loser, uuid, code = self._call("pro", "free")
+        assert (survivor, loser, uuid, code) == (
+            self.A_ID, self.T_ID, self.A_UUID, "merged_pro",
+        )
+
+    def test_free_vs_pro_keeps_tg(self):
+        survivor, loser, uuid, code = self._call("free", "pro")
+        assert (survivor, loser, uuid, code) == (
+            self.T_ID, self.A_ID, self.T_UUID, "merged_pro",
+        )
+
+    def test_free_vs_free_keeps_tg(self):
+        survivor, loser, uuid, code = self._call("free", "free")
+        assert (survivor, loser, uuid, code) == (
+            self.T_ID, self.A_ID, self.T_UUID, "merged_free",
+        )
+
+    def test_free_vs_free_tg_uuid_none_falls_back_to_android(self):
+        survivor, loser, uuid, code = self._call(
+            "free", "free", t_uuid=None,
+        )
+        assert (survivor, loser, uuid, code) == (
+            self.T_ID, self.A_ID, self.A_UUID, "merged_free",
+        )
+
+    def test_pro_vs_none_keeps_android(self):
+        survivor, loser, uuid, code = self._call("pro", "none", t_uuid=None)
+        assert (survivor, loser, uuid, code) == (
+            self.A_ID, self.T_ID, self.A_UUID, "ok",
+        )
+
+    def test_none_vs_pro_keeps_tg(self):
+        survivor, loser, uuid, code = self._call("none", "pro", a_uuid=None)
+        assert (survivor, loser, uuid, code) == (
+            self.T_ID, self.A_ID, self.T_UUID, "ok",
+        )
+
+    def test_none_vs_none_keeps_tg_no_uuid(self):
+        survivor, loser, uuid, code = self._call(
+            "none", "none", a_uuid=None, t_uuid=None,
+        )
+        assert (survivor, loser, uuid, code) == (
+            self.T_ID, self.A_ID, None, "ok",
+        )

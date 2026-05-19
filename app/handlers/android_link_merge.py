@@ -79,6 +79,48 @@ class MergeBlocked(Exception):
         self.details = details
 
 
+def _decide(
+    *,
+    a_tier: str,
+    t_tier: str,
+    a_rw_uuid: str | None,
+    t_rw_uuid: str | None,
+    android_id: int,
+    tg_user_id: int,
+) -> tuple[int, int, str | None, str]:
+    """Apply the resolution matrix.
+
+    Returns (survivor_id, loser_id, chosen_uuid, result_code).
+    Raises MergeBlocked when both sides are PRO.
+    """
+    if a_tier == "pro" and t_tier == "pro":
+        raise MergeBlocked({
+            "a_tier": "pro", "t_tier": "pro",
+            "a_rw_uuid": a_rw_uuid, "t_rw_uuid": t_rw_uuid,
+        })
+
+    # PRO vs FREE — real merge: PRO wins, code = merged_pro
+    if a_tier == "pro" and t_tier == "free":
+        return android_id, tg_user_id, a_rw_uuid, "merged_pro"
+    if t_tier == "pro" and a_tier == "free":
+        return tg_user_id, android_id, t_rw_uuid, "merged_pro"
+
+    # Both FREE — real merge: TG wins (with android UUID fallback)
+    if a_tier == "free" and t_tier == "free":
+        chosen = t_rw_uuid or a_rw_uuid
+        return tg_user_id, android_id, chosen, "merged_free"
+
+    # One side has an RW user (pro or free), the other is "none" → simple
+    # link, survivor = the side with the RW user, code = ok
+    if a_tier in ("pro", "free") and t_tier == "none":
+        return android_id, tg_user_id, a_rw_uuid, "ok"
+    if t_tier in ("pro", "free") and a_tier == "none":
+        return tg_user_id, android_id, t_rw_uuid, "ok"
+
+    # Both "none"
+    return tg_user_id, android_id, None, "ok"
+
+
 async def merge_android_and_tg(
     session,
     android_user_id: int,
