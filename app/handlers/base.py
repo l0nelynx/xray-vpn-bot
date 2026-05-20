@@ -41,19 +41,27 @@ _ANDROID_LINK_MESSAGES = {
         "ru": "🚫 Слишком много попыток. Запросите новый код в приложении.",
         "en": "🚫 Too many attempts. Request a new code from the app.",
     },
-    "tg_already_linked": {
-        "ru": (
-            "⚠️ Этот Telegram уже привязан к другому Android-аккаунту. "
-            "Сначала отвяжите его в приложении (Настройки → Telegram)."
-        ),
-        "en": (
-            "⚠️ This Telegram is already bound to a different Android account. "
-            "Unlink it first in the app (Settings → Telegram)."
-        ),
-    },
     "user_already_linked": {
         "ru": "⚠️ Этот аккаунт приложения уже связан с Telegram.",
         "en": "⚠️ This app account is already linked to a Telegram.",
+    },
+    "merged_pro": {
+        "ru": "✅ Аккаунты объединены. Сохранена PRO-подписка.",
+        "en": "✅ Accounts merged. PRO subscription preserved.",
+    },
+    "merged_free": {
+        "ru": "✅ Аккаунты объединены.",
+        "en": "✅ Accounts merged.",
+    },
+    "both_pro_support_needed": {
+        "ru": (
+            "⚠️ Обнаружены две активные PRO-подписки на разных аккаунтах. "
+            "Свяжитесь с поддержкой для объединения."
+        ),
+        "en": (
+            "⚠️ Two active PRO subscriptions found on different accounts. "
+            "Contact support to merge."
+        ),
     },
 }
 
