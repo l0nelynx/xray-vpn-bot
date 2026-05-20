@@ -132,6 +132,7 @@ async def get_user_info(username, api: str = "remnawave"):
                     "expire": expire,
                     "subscription_url": user_info.get("subscription_url"),
                     "data_limit": user_info.get("data_limit"),
+                    # "last_updated":
                 }
             return 404
         else:

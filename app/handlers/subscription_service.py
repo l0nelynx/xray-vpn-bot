@@ -245,6 +245,7 @@ async def deliver_subscription(
 
         # Обновляем delivery_status после успешной доставки
         if transaction_id:
+            # user_info = await get_user_info(username) #DELIVERY FIX HERE
             await rq.update_delivery_status(transaction_id, 1)
 
         await notify_log(
