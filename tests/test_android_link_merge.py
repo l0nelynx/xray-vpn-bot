@@ -203,3 +203,110 @@ class TestApplyMergeDb:
                 assert ev.user_id == 200
 
         _asyncio.run(go())
+
+
+from app.handlers.android_link_merge import merge_android_and_tg
+
+
+class TestMergeAndroidAndTg:
+    def _seed(self, s):
+        s.add(User(id=100, email="a@x.io", password_hash="ph",
+                   email_verified_at="2026-05-19T00:00:00"))
+        s.add(User(id=200, tg_id=55, username="bob",
+                   vless_uuid="t-uuid", language="ru"))
+
+    def test_pro_android_free_tg_survivor_android(
+        self, session_factory, fake_remnawave,
+    ):
+        fake_remnawave.add_user(uuid="a-uuid", email="a@x.io",
+                                status="active", data_limit=None)
+        fake_remnawave.add_user(uuid="t-uuid", username="bob",
+                                status="active", data_limit=10 * 1024 ** 3)
+
+        async def go():
+            async with session_factory() as s:
+                self._seed(s)
+                await s.flush()
+                result = await merge_android_and_tg(
+                    s, android_user_id=100, tg_user_id=200, tg_id=55,
+                )
+                await s.commit()
+                return result
+
+        result = _asyncio.run(go())
+        assert result["result"] == "merged_pro"
+        assert result["survivor_id"] == 100
+        assert result["loser_id"] == 200
+        assert result["loser_rw_uuid"] == "t-uuid"
+        assert result["a_tier"] == "pro"
+        assert result["t_tier"] == "free"
+
+    def test_both_pro_raises_merge_blocked(
+        self, session_factory, fake_remnawave,
+    ):
+        fake_remnawave.add_user(uuid="a-uuid", email="a@x.io",
+                                status="active", data_limit=None)
+        fake_remnawave.add_user(uuid="t-uuid", username="bob",
+                                status="active", data_limit=None)
+
+        async def go():
+            async with session_factory() as s:
+                self._seed(s)
+                await s.flush()
+                await merge_android_and_tg(
+                    s, android_user_id=100, tg_user_id=200, tg_id=55,
+                )
+
+        with pytest.raises(MergeBlocked):
+            _asyncio.run(go())
+
+    def test_free_vs_free_keeps_tg(
+        self, session_factory, fake_remnawave,
+    ):
+        fake_remnawave.add_user(uuid="a-uuid", email="a@x.io",
+                                status="active",
+                                data_limit=5 * 1024 ** 3)
+        fake_remnawave.add_user(uuid="t-uuid", username="bob",
+                                status="active",
+                                data_limit=10 * 1024 ** 3)
+
+        async def go():
+            async with session_factory() as s:
+                self._seed(s)
+                await s.flush()
+                result = await merge_android_and_tg(
+                    s, android_user_id=100, tg_user_id=200, tg_id=55,
+                )
+                await s.commit()
+                survivor = await s.get(User, result["survivor_id"])
+                return result, survivor.vless_uuid, survivor.email
+
+        result, vless_uuid, email = _asyncio.run(go())
+        assert result["result"] == "merged_free"
+        assert result["survivor_id"] == 200  # TG side
+        assert vless_uuid == "t-uuid"
+        assert email == "a@x.io"
+
+    def test_pro_android_none_tg_simple_link(
+        self, session_factory, fake_remnawave,
+    ):
+        fake_remnawave.add_user(uuid="a-uuid", email="a@x.io",
+                                status="active", data_limit=None)
+        # TG side: no RW user
+
+        async def go():
+            async with session_factory() as s:
+                self._seed(s)
+                await s.flush()
+                result = await merge_android_and_tg(
+                    s, android_user_id=100, tg_user_id=200, tg_id=55,
+                )
+                await s.commit()
+                survivor = await s.get(User, result["survivor_id"])
+                return result, survivor.vless_uuid, survivor.tg_id
+
+        result, vless_uuid, tg = _asyncio.run(go())
+        assert result["result"] == "ok"
+        assert result["survivor_id"] == 100  # Android side
+        assert vless_uuid == "a-uuid"
+        assert tg == 55

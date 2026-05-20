@@ -201,4 +201,63 @@ async def merge_android_and_tg(
     tg_user_id: int,
     tg_id: int,
 ) -> dict[str, Any]:
-    raise NotImplementedError
+    """Collapse the Android-side and Telegram-side ``users`` rows into one.
+
+    Caller owns the transaction — this function does NOT commit. On
+    :class:`MergeBlocked`, no DB writes have been made.
+    """
+    from common_db.models import User
+
+    a = await session.get(User, android_user_id)
+    t = await session.get(User, tg_user_id)
+    if a is None or t is None:
+        raise RuntimeError(
+            f"merge: rows not found android={android_user_id} "
+            f"tg={tg_user_id}"
+        )
+
+    a_info, t_info = await _lookup_rw(
+        email=a.email, vless_uuid=t.vless_uuid, username=t.username,
+    )
+    a_tier = _classify(a_info)
+    t_tier = _classify(t_info)
+    a_rw_uuid = (a_info or {}).get("uuid")
+    t_rw_uuid = (t_info or {}).get("uuid")
+
+    survivor_id, loser_id, chosen_uuid, result_code = _decide(
+        a_tier=a_tier, t_tier=t_tier,
+        a_rw_uuid=a_rw_uuid, t_rw_uuid=t_rw_uuid,
+        android_id=android_user_id, tg_user_id=tg_user_id,
+    )
+
+    # Loser's RW uuid is the one NOT chosen — caller deactivates it.
+    # None when we kept the loser-side uuid (FREE+FREE with T.uuid missing).
+    if survivor_id == android_user_id:
+        loser_rw_uuid = t_rw_uuid if chosen_uuid != t_rw_uuid else None
+    else:
+        loser_rw_uuid = a_rw_uuid if chosen_uuid != a_rw_uuid else None
+
+    await _apply_merge_db(
+        session=session,
+        survivor_id=survivor_id,
+        loser_id=loser_id,
+        tg_id=tg_id,
+        chosen_uuid=chosen_uuid,
+    )
+
+    logger.info(
+        "merge_android_and_tg: survivor=%s loser=%s code=%s "
+        "a_tier=%s t_tier=%s",
+        survivor_id, loser_id, result_code, a_tier, t_tier,
+    )
+
+    return {
+        "result": result_code,
+        "survivor_id": survivor_id,
+        "loser_id": loser_id,
+        "loser_rw_uuid": loser_rw_uuid,
+        "a_tier": a_tier,
+        "t_tier": t_tier,
+        "a_rw_uuid": a_rw_uuid,
+        "t_rw_uuid": t_rw_uuid,
+    }
