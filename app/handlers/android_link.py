@@ -34,6 +34,54 @@ def _utcnow_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
 
 
+async def _notify_link_attempt(
+    *,
+    result: str,
+    tg_id: int,
+    android_user_id: int | None = None,
+    android_email: str | None = None,
+    tg_user_id: int | None = None,
+    a_rw_uuid: str | None = None,
+    t_rw_uuid: str | None = None,
+    a_tier: str = "?",
+    t_tier: str = "?",
+    survivor_id: int | None = None,
+    loser_id: int | None = None,
+    kept_uuid: str | None = None,
+    disabled_uuid: str | None = None,
+    error: str | None = None,
+) -> None:
+    """Send a unified log-channel notification for any link attempt outcome."""
+    icon = "❌" if error else "🔗"
+    parts = [f"{icon} <b>Android↔TG link: {esc(result)}</b>"]
+    if android_user_id is not None:
+        parts.append(
+            f"android: <code>{android_user_id}</code> "
+            f"{esc(android_email or '—')} "
+            f"rw=<code>{esc(a_rw_uuid or '—')}</code> "
+            f"tier=<code>{esc(a_tier)}</code>"
+        )
+    parts.append(
+        f"tg: <code>{tg_id}</code> "
+        f"existing_user=<code>"
+        f"{esc(tg_user_id if tg_user_id is not None else '—')}</code> "
+        f"rw=<code>{esc(t_rw_uuid or '—')}</code> "
+        f"tier=<code>{esc(t_tier)}</code>"
+    )
+    parts.append(f"result: <code>{esc(result)}</code>")
+    if survivor_id is not None:
+        parts.append(
+            f"survivor=<code>{survivor_id}</code> "
+            f"loser=<code>"
+            f"{esc(loser_id if loser_id is not None else '—')}</code> "
+            f"kept_uuid=<code>{esc(kept_uuid or '—')}</code> "
+            f"disabled_uuid=<code>{esc(disabled_uuid or '—')}</code>"
+        )
+    if error:
+        parts.append(f"error: <code>{esc(error[:300])}</code>")
+    await notify_log("\n".join(parts))
+
+
 async def consume_android_link_code(tg_id: int, code: str) -> str:
     """Bind `tg_id` to the Android user that requested `code`.
 
