@@ -310,3 +310,162 @@ class TestMergeAndroidAndTg:
         assert result["survivor_id"] == 100  # Android side
         assert vless_uuid == "a-uuid"
         assert tg == 55
+
+
+import hashlib
+
+from app.handlers.android_link import consume_android_link_code
+
+
+def _hash(plain: str) -> str:
+    return hashlib.sha256(plain.encode("utf-8")).hexdigest()
+
+
+class TestConsumeCodeIntegration:
+    def test_merged_pro_keeps_android_disables_tg_rw(
+        self, with_app_db, fake_remnawave, notify_spy,
+    ):
+        async def setup():
+            from common_db.models import EmailVerification
+            async with with_app_db() as s:
+                s.add(User(id=100, email="a@x.io"))
+                s.add(User(id=200, tg_id=55, username="bob",
+                           vless_uuid="t-uuid"))
+                s.add(EmailVerification(
+                    user_id=100, purpose="tg_link",
+                    code_hash=_hash("plain-code"),
+                    created_at="2026-05-19T00:00:00",
+                    expires_at="2099-01-01T00:00:00",
+                ))
+                await s.commit()
+        _asyncio.run(setup())
+
+        fake_remnawave.add_user(uuid="a-uuid", email="a@x.io",
+                                status="active", data_limit=None)
+        fake_remnawave.add_user(uuid="t-uuid", username="bob",
+                                status="active",
+                                data_limit=10 * 1024 ** 3)
+
+        result = _asyncio.run(consume_android_link_code(55, "plain-code"))
+
+        assert result == "merged_pro"
+        assert "t-uuid" in fake_remnawave.disabled_calls
+        assert any("merged_pro" in m for m in notify_spy)
+
+        async def verify():
+            async with with_app_db() as s:
+                survivor = await s.get(User, 100)
+                loser = await s.get(User, 200)
+                return survivor, loser
+        survivor, loser = _asyncio.run(verify())
+        assert loser is None
+        assert survivor.tg_id == 55
+        assert survivor.vless_uuid == "a-uuid"
+
+    def test_both_pro_blocked_no_db_changes(
+        self, with_app_db, fake_remnawave, notify_spy,
+    ):
+        async def setup():
+            from common_db.models import EmailVerification
+            async with with_app_db() as s:
+                s.add(User(id=100, email="a@x.io"))
+                s.add(User(id=200, tg_id=55, username="bob",
+                           vless_uuid="t-uuid"))
+                s.add(EmailVerification(
+                    id=42, user_id=100, purpose="tg_link",
+                    code_hash=_hash("plain-code"),
+                    created_at="2026-05-19T00:00:00",
+                    expires_at="2099-01-01T00:00:00",
+                ))
+                await s.commit()
+        _asyncio.run(setup())
+        fake_remnawave.add_user(uuid="a-uuid", email="a@x.io",
+                                status="active", data_limit=None)
+        fake_remnawave.add_user(uuid="t-uuid", username="bob",
+                                status="active", data_limit=None)
+
+        result = _asyncio.run(consume_android_link_code(55, "plain-code"))
+
+        assert result == "both_pro_support_needed"
+        assert fake_remnawave.disabled_calls == []
+        assert any("both_pro_support_needed" in m for m in notify_spy)
+
+        async def verify():
+            from common_db.models import EmailVerification
+            async with with_app_db() as s:
+                a = await s.get(User, 100)
+                t = await s.get(User, 200)
+                ev = await s.get(EmailVerification, 42)
+                return a, t, ev.used_at
+        a, t, used_at = _asyncio.run(verify())
+        assert a is not None and t is not None
+        # NOT marked used — user can retry after support resolves it.
+        assert used_at is None
+
+    def test_simple_link_no_conflict_notifies_ok(
+        self, with_app_db, fake_remnawave, notify_spy,
+    ):
+        async def setup():
+            from common_db.models import EmailVerification
+            async with with_app_db() as s:
+                s.add(User(id=100, email="a@x.io"))
+                s.add(EmailVerification(
+                    user_id=100, purpose="tg_link",
+                    code_hash=_hash("plain-code"),
+                    created_at="2026-05-19T00:00:00",
+                    expires_at="2099-01-01T00:00:00",
+                ))
+                await s.commit()
+        _asyncio.run(setup())
+
+        result = _asyncio.run(consume_android_link_code(55, "plain-code"))
+        assert result == "ok"
+        assert any("Android↔TG link: ok" in m for m in notify_spy)
+
+    def test_user_already_linked_skips_merge(
+        self, with_app_db, fake_remnawave, notify_spy,
+    ):
+        async def setup():
+            from common_db.models import EmailVerification
+            async with with_app_db() as s:
+                s.add(User(id=100, tg_id=999, email="a@x.io"))
+                s.add(EmailVerification(
+                    user_id=100, purpose="tg_link",
+                    code_hash=_hash("plain-code"),
+                    created_at="2026-05-19T00:00:00",
+                    expires_at="2099-01-01T00:00:00",
+                ))
+                await s.commit()
+        _asyncio.run(setup())
+
+        result = _asyncio.run(consume_android_link_code(55, "plain-code"))
+        assert result == "user_already_linked"
+        assert fake_remnawave.disabled_calls == []
+        assert any("user_already_linked" in m for m in notify_spy)
+
+    def test_rw_deactivate_failure_does_not_break_merge(
+        self, with_app_db, fake_remnawave, notify_spy,
+    ):
+        async def setup():
+            from common_db.models import EmailVerification
+            async with with_app_db() as s:
+                s.add(User(id=100, email="a@x.io"))
+                s.add(User(id=200, tg_id=55, vless_uuid="t-uuid"))
+                s.add(EmailVerification(
+                    user_id=100, purpose="tg_link",
+                    code_hash=_hash("plain-code"),
+                    created_at="2026-05-19T00:00:00",
+                    expires_at="2099-01-01T00:00:00",
+                ))
+                await s.commit()
+        _asyncio.run(setup())
+        fake_remnawave.add_user(uuid="a-uuid", email="a@x.io",
+                                status="active", data_limit=None)
+        fake_remnawave.add_user(uuid="t-uuid",
+                                status="active",
+                                data_limit=10 * 1024 ** 3)
+        fake_remnawave.update_should_raise = RuntimeError("rw down")
+
+        result = _asyncio.run(consume_android_link_code(55, "plain-code"))
+        assert result == "merged_pro"
+        assert any("Failed to disable old RW user" in m for m in notify_spy)

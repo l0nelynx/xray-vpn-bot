@@ -106,3 +106,35 @@ def fake_remnawave(monkeypatch) -> FakeRemnawave:
     monkeypatch.setattr(rem, "get_user_from_uuid", fake.get_user_from_uuid,
                         raising=False)
     return fake
+
+
+@pytest.fixture
+def with_app_db(engine, monkeypatch):
+    """Redirect app.database.models.async_session to the in-memory engine.
+
+    `consume_android_link_code` opens its own session via the module-level
+    `async_session` import in `app.handlers.android_link`, so we patch BOTH
+    the source and the alias copy.
+    """
+    from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
+    sm = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+    import app.database.models as models
+    monkeypatch.setattr(models, "async_session", sm)
+    import app.handlers.android_link as al
+    monkeypatch.setattr(al, "async_session", sm)
+    return sm
+
+
+@pytest.fixture
+def notify_spy(monkeypatch):
+    """Capture every `notify_log` call as plain text in a list."""
+    calls: list[str] = []
+
+    async def fake_notify(text, *, parse_mode="HTML"):
+        calls.append(text)
+
+    import app.notify_log as nl
+    monkeypatch.setattr(nl, "notify_log", fake_notify)
+    import app.handlers.android_link as al
+    monkeypatch.setattr(al, "notify_log", fake_notify)
+    return calls
