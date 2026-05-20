@@ -86,17 +86,17 @@ async def consume_android_link_code(tg_id: int, code: str) -> str:
     """Bind `tg_id` to the Android user that requested `code`.
 
     Returns:
-      "ok"               — link applied
-      "invalid"          — no matching active code (or hash mismatch)
-      "expired"          — code found but past expires_at
-      "exhausted"        — too many failed attempts on this code
-      "tg_already_linked" — *the bot's* tg_id is already bound to another
-                            android user → refuse to silently move it
-      "user_already_linked" — the android user that owns this code already
-                              has a tg_id (raced with another link)
+      "ok"                       — link applied (no conflict OR simple link
+                                   where one side had no RW user)
+      "merged_pro"               — link applied via merge, PRO kept
+      "merged_free"              — link applied via merge, both FREE → TG kept
+      "both_pro_support_needed"  — both sides PRO, manual support needed
+      "invalid" / "expired" / "exhausted"  — verification failures
+      "user_already_linked"      — android user already has tg_id
     """
     code = (code or "").strip()
     if not code:
+        await _notify_link_attempt(result="invalid", tg_id=tg_id)
         return "invalid"
 
     code_hash = _hash_code(code)
@@ -114,6 +114,7 @@ async def consume_android_link_code(tg_id: int, code: str) -> str:
         )).first()
 
         if row is None:
+            await _notify_link_attempt(result="invalid", tg_id=tg_id)
             return "invalid"
 
         code_id, user_id, expires_at, used_at, attempts = row
@@ -125,6 +126,9 @@ async def consume_android_link_code(tg_id: int, code: str) -> str:
                 {"n": now, "i": code_id},
             )
             await s.commit()
+            await _notify_link_attempt(
+                result="exhausted", tg_id=tg_id, android_user_id=user_id,
+            )
             return "exhausted"
 
         if expires_at <= now:
@@ -133,23 +137,105 @@ async def consume_android_link_code(tg_id: int, code: str) -> str:
                 {"n": now, "i": code_id},
             )
             await s.commit()
+            await _notify_link_attempt(
+                result="expired", tg_id=tg_id, android_user_id=user_id,
+            )
             return "expired"
 
-        # Refuse to overwrite either side of the binding silently.
         owner_row = (await s.execute(
-            text("SELECT tg_id FROM users WHERE id = :i LIMIT 1"),
+            text("SELECT tg_id, email FROM users WHERE id = :i LIMIT 1"),
             {"i": user_id},
         )).first()
+        android_email = owner_row[1] if owner_row else None
         if owner_row and owner_row[0] is not None:
+            await _notify_link_attempt(
+                result="user_already_linked", tg_id=tg_id,
+                android_user_id=user_id, android_email=android_email,
+            )
             return "user_already_linked"
 
         existing_row = (await s.execute(
             text("SELECT id FROM users WHERE tg_id = :t LIMIT 1"),
             {"t": tg_id},
         )).first()
-        if existing_row and existing_row[0] != user_id:
-            return "tg_already_linked"
 
+        if existing_row and existing_row[0] != user_id:
+            # Conflict path — merge the two rows.
+            from app.handlers.android_link_merge import (
+                MergeBlocked, merge_android_and_tg,
+            )
+            try:
+                merge = await merge_android_and_tg(
+                    s, android_user_id=user_id,
+                    tg_user_id=existing_row[0], tg_id=tg_id,
+                )
+            except MergeBlocked as blocked:
+                await s.rollback()
+                await _notify_link_attempt(
+                    result="both_pro_support_needed", tg_id=tg_id,
+                    android_user_id=user_id, android_email=android_email,
+                    tg_user_id=existing_row[0],
+                    a_rw_uuid=blocked.details.get("a_rw_uuid"),
+                    t_rw_uuid=blocked.details.get("t_rw_uuid"),
+                    a_tier="pro", t_tier="pro",
+                )
+                return "both_pro_support_needed"
+            except Exception as exc:
+                await s.rollback()
+                logger.error(
+                    "Android link merge failed: %s", exc, exc_info=True,
+                )
+                await _notify_link_attempt(
+                    result="invalid", tg_id=tg_id,
+                    android_user_id=user_id, android_email=android_email,
+                    tg_user_id=existing_row[0], error=str(exc),
+                )
+                return "invalid"
+
+            await s.execute(
+                text("UPDATE email_verifications SET used_at = :n "
+                     "WHERE id = :i"),
+                {"n": now, "i": code_id},
+            )
+            await s.commit()
+            logger.info(
+                "Android link merged: android=%s tg_user=%s tg_id=%s code=%s",
+                user_id, existing_row[0], tg_id, merge["result"],
+            )
+            # Best-effort RW deactivate. Errors don't roll back the merge.
+            if merge["loser_rw_uuid"]:
+                try:
+                    import app.api.remnawave.api as rem
+                    await rem.update_user(
+                        user_uuid=merge["loser_rw_uuid"], status="disabled",
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "Failed to disable old RW user %s: %s",
+                        merge["loser_rw_uuid"], exc,
+                    )
+                    await notify_log(
+                        f"⚠️ <b>Failed to disable old RW user</b>\n"
+                        f"uuid: <code>{esc(merge['loser_rw_uuid'])}</code>\n"
+                        f"error: <code>{esc(str(exc)[:300])}</code>"
+                    )
+            kept_uuid = (
+                merge["a_rw_uuid"] if merge["survivor_id"] == user_id
+                else merge["t_rw_uuid"]
+            )
+            await _notify_link_attempt(
+                result=merge["result"], tg_id=tg_id,
+                android_user_id=user_id, android_email=android_email,
+                tg_user_id=existing_row[0],
+                a_rw_uuid=merge["a_rw_uuid"], t_rw_uuid=merge["t_rw_uuid"],
+                a_tier=merge["a_tier"], t_tier=merge["t_tier"],
+                survivor_id=merge["survivor_id"], loser_id=merge["loser_id"],
+                kept_uuid=kept_uuid,
+                disabled_uuid=merge["loser_rw_uuid"],
+            )
+            return merge["result"]
+
+        # No conflict — simple bind.
         await s.execute(
             text("UPDATE users SET tg_id = :t WHERE id = :i"),
             {"t": tg_id, "i": user_id},
@@ -158,19 +244,13 @@ async def consume_android_link_code(tg_id: int, code: str) -> str:
             text("UPDATE email_verifications SET used_at = :n WHERE id = :i"),
             {"n": now, "i": code_id},
         )
-        # Read email for the notification (best-effort; bind already happened
-        # in the same transaction so we want it in the same DB session).
-        email_row = (await s.execute(
-            text("SELECT email FROM users WHERE id = :i LIMIT 1"),
-            {"i": user_id},
-        )).first()
         await s.commit()
 
-    user_email = email_row[0] if email_row else None
-    logger.info("Android link applied: android_user_id=%s tg_id=%s", user_id, tg_id)
-    await notify_log(
-        f"🔗 <b>Telegram linked to Android account</b>\n"
-        f"android user: <code>{user_id}</code> {esc(user_email or '—')}\n"
-        f"tg_id: <code>{tg_id}</code>"
+    logger.info(
+        "Android link applied: android_user_id=%s tg_id=%s", user_id, tg_id,
+    )
+    await _notify_link_attempt(
+        result="ok", tg_id=tg_id, android_user_id=user_id,
+        android_email=android_email,
     )
     return "ok"
