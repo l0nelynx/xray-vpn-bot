@@ -44,6 +44,16 @@ async def get_user_from_uuid(user_uuid: str) -> dict | None:
     return await _client().get_user_by_uuid(user_uuid)
 
 
+async def get_user_by_short_uuid_raw(short_uuid: str) -> dict | None:
+    """Return the raw Remnawave SDK DTO for the user owning `short_uuid`.
+
+    Mirrors `miniapp/backend/remnawave_client.py:get_user_by_short_uuid_raw`.
+    The Android subscription-URL import flow calls this from
+    `app.handlers.android_link_merge.import_subscription_by_uuid`.
+    """
+    return await _client().get_user_by_short_uuid_raw(short_uuid)
+
+
 async def create_user(
     username: str,
     days: int = 30,
