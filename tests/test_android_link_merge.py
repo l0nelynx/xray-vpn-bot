@@ -541,3 +541,247 @@ class TestFakeRemnawaveShortUuid:
         import app.api.remnawave.api as rem
         rec = _asyncio.run(rem.get_user_by_short_uuid_raw("missing"))
         assert rec is None
+
+
+from app.handlers.android_link_merge import import_subscription_by_uuid
+
+
+class TestImportSubscriptionByUuid:
+    """End-to-end matrix coverage for the by_url import flow."""
+
+    SHORT = "sN_RHMk6BGv-RJ8g"
+
+    def _run(self, session_factory, *, current_user_id, short_uuid):
+        async def go():
+            async with session_factory() as s:
+                result = await import_subscription_by_uuid(
+                    s,
+                    current_user_id=current_user_id,
+                    b_rw_short_uuid=short_uuid,
+                )
+                await s.commit()
+                survivor = await s.get(User, current_user_id)
+                return result, survivor.vless_uuid
+
+        return _asyncio.run(go())
+
+    def test_pro_a_free_b_keeps_a_disables_b(
+        self, session_factory, fake_remnawave,
+    ):
+        fake_remnawave.add_user(uuid="a-uuid", email="a@x.io",
+                                status="active", data_limit=None)
+        fake_remnawave.add_user(uuid="b-uuid", short_uuid=self.SHORT,
+                                status="active",
+                                data_limit=10 * 1024 ** 3)
+
+        async def seed():
+            async with session_factory() as s:
+                s.add(User(id=100, email="a@x.io", vless_uuid="a-uuid"))
+                await s.commit()
+        _asyncio.run(seed())
+
+        result, vless = self._run(
+            session_factory, current_user_id=100, short_uuid=self.SHORT,
+        )
+        assert result["result"] == "merged_pro"
+        assert result["a_tier"] == "pro"
+        assert result["b_tier"] == "free"
+        assert result["chosen_uuid"] == "a-uuid"
+        assert result["loser_rw_uuid"] == "b-uuid"
+        assert vless == "a-uuid"
+
+    def test_free_a_pro_b_keeps_b_disables_a(
+        self, session_factory, fake_remnawave,
+    ):
+        fake_remnawave.add_user(uuid="a-uuid", email="a@x.io",
+                                status="active",
+                                data_limit=5 * 1024 ** 3)
+        fake_remnawave.add_user(uuid="b-uuid", short_uuid=self.SHORT,
+                                status="active", data_limit=None)
+
+        async def seed():
+            async with session_factory() as s:
+                s.add(User(id=100, email="a@x.io", vless_uuid="a-uuid"))
+                await s.commit()
+        _asyncio.run(seed())
+
+        result, vless = self._run(
+            session_factory, current_user_id=100, short_uuid=self.SHORT,
+        )
+        assert result["result"] == "merged_pro"
+        assert result["a_tier"] == "free"
+        assert result["b_tier"] == "pro"
+        assert result["chosen_uuid"] == "b-uuid"
+        assert result["loser_rw_uuid"] == "a-uuid"
+        assert vless == "b-uuid"
+
+    def test_free_a_free_b_keeps_b_disables_a(
+        self, session_factory, fake_remnawave,
+    ):
+        fake_remnawave.add_user(uuid="a-uuid", email="a@x.io",
+                                status="active",
+                                data_limit=5 * 1024 ** 3)
+        fake_remnawave.add_user(uuid="b-uuid", short_uuid=self.SHORT,
+                                status="active",
+                                data_limit=10 * 1024 ** 3)
+
+        async def seed():
+            async with session_factory() as s:
+                s.add(User(id=100, email="a@x.io", vless_uuid="a-uuid"))
+                await s.commit()
+        _asyncio.run(seed())
+
+        result, vless = self._run(
+            session_factory, current_user_id=100, short_uuid=self.SHORT,
+        )
+        assert result["result"] == "merged_free"
+        assert result["chosen_uuid"] == "b-uuid"
+        assert result["loser_rw_uuid"] == "a-uuid"
+        assert vless == "b-uuid"
+
+    def test_pro_a_pro_b_raises_merge_blocked_no_writes(
+        self, session_factory, fake_remnawave,
+    ):
+        fake_remnawave.add_user(uuid="a-uuid", email="a@x.io",
+                                status="active", data_limit=None)
+        fake_remnawave.add_user(uuid="b-uuid", short_uuid=self.SHORT,
+                                status="active", data_limit=None)
+
+        async def seed():
+            async with session_factory() as s:
+                s.add(User(id=100, email="a@x.io", vless_uuid="a-uuid"))
+                await s.commit()
+        _asyncio.run(seed())
+
+        async def go():
+            async with session_factory() as s:
+                with pytest.raises(MergeBlocked):
+                    await import_subscription_by_uuid(
+                        s, current_user_id=100, b_rw_short_uuid=self.SHORT,
+                    )
+                # Verify nothing changed.
+                survivor = await s.get(User, 100)
+                return survivor.vless_uuid
+
+        vless = _asyncio.run(go())
+        assert vless == "a-uuid"
+        assert fake_remnawave.disabled_calls == []
+
+    def test_a_none_b_free_simple_takeover(
+        self, session_factory, fake_remnawave,
+    ):
+        # A has no email and no vless_uuid → tier "none".
+        fake_remnawave.add_user(uuid="b-uuid", short_uuid=self.SHORT,
+                                status="active",
+                                data_limit=10 * 1024 ** 3)
+
+        async def seed():
+            async with session_factory() as s:
+                s.add(User(id=100, tg_id=55))
+                await s.commit()
+        _asyncio.run(seed())
+
+        result, vless = self._run(
+            session_factory, current_user_id=100, short_uuid=self.SHORT,
+        )
+        assert result["result"] == "ok"
+        assert result["a_tier"] == "none"
+        assert result["b_tier"] == "free"
+        assert result["chosen_uuid"] == "b-uuid"
+        assert result["loser_rw_uuid"] is None
+        assert vless == "b-uuid"
+
+    def test_a_none_b_pro_simple_takeover(
+        self, session_factory, fake_remnawave,
+    ):
+        fake_remnawave.add_user(uuid="b-uuid", short_uuid=self.SHORT,
+                                status="active", data_limit=None)
+
+        async def seed():
+            async with session_factory() as s:
+                s.add(User(id=100, tg_id=55))
+                await s.commit()
+        _asyncio.run(seed())
+
+        result, vless = self._run(
+            session_factory, current_user_id=100, short_uuid=self.SHORT,
+        )
+        assert result["result"] == "ok"
+        assert result["a_tier"] == "none"
+        assert result["b_tier"] == "pro"
+        assert result["chosen_uuid"] == "b-uuid"
+        assert result["loser_rw_uuid"] is None
+        assert vless == "b-uuid"
+
+    def test_self_import_short_circuits(
+        self, session_factory, fake_remnawave,
+    ):
+        fake_remnawave.add_user(uuid="a-uuid", short_uuid=self.SHORT,
+                                email="a@x.io",
+                                status="active", data_limit=None)
+
+        async def seed():
+            async with session_factory() as s:
+                s.add(User(id=100, email="a@x.io", vless_uuid="a-uuid"))
+                await s.commit()
+        _asyncio.run(seed())
+
+        result, vless = self._run(
+            session_factory, current_user_id=100, short_uuid=self.SHORT,
+        )
+        assert result["result"] == "already_owned"
+        assert result["chosen_uuid"] == "a-uuid"
+        assert result["loser_rw_uuid"] is None
+        # A.vless_uuid unchanged.
+        assert vless == "a-uuid"
+        # No disable calls executed by the function itself.
+        assert fake_remnawave.disabled_calls == []
+
+    def test_b_not_found_raises_lookup_not_found(
+        self, session_factory, fake_remnawave,
+    ):
+        async def seed():
+            async with session_factory() as s:
+                s.add(User(id=100, email="a@x.io", vless_uuid="a-uuid"))
+                await s.commit()
+        _asyncio.run(seed())
+
+        async def go():
+            async with session_factory() as s:
+                with pytest.raises(LookupNotFound):
+                    await import_subscription_by_uuid(
+                        s, current_user_id=100, b_rw_short_uuid="nope",
+                    )
+                survivor = await s.get(User, 100)
+                return survivor.vless_uuid
+
+        vless = _asyncio.run(go())
+        assert vless == "a-uuid"
+
+    def test_a_email_fallback_when_vless_uuid_missing(
+        self, session_factory, fake_remnawave,
+    ):
+        """A.vless_uuid is None but A.email resolves to PRO in RW.
+
+        Verifies the A-side email-fallback branch of _lookup_a_side_rw.
+        Expected outcome: PRO A + FREE B → merged_pro, chosen_uuid=A.uuid.
+        """
+        fake_remnawave.add_user(uuid="a-uuid", email="a@x.io",
+                                status="active", data_limit=None)
+        fake_remnawave.add_user(uuid="b-uuid", short_uuid=self.SHORT,
+                                status="active",
+                                data_limit=10 * 1024 ** 3)
+
+        async def seed():
+            async with session_factory() as s:
+                s.add(User(id=100, email="a@x.io"))  # no vless_uuid
+                await s.commit()
+        _asyncio.run(seed())
+
+        result, vless = self._run(
+            session_factory, current_user_id=100, short_uuid=self.SHORT,
+        )
+        assert result["result"] == "merged_pro"
+        assert result["chosen_uuid"] == "a-uuid"
+        assert result["loser_rw_uuid"] == "b-uuid"
+        assert vless == "a-uuid"

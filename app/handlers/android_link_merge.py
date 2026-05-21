@@ -303,3 +303,108 @@ async def merge_android_and_tg(
         "a_rw_uuid": a_rw_uuid,
         "t_rw_uuid": t_rw_uuid,
     }
+
+
+async def import_subscription_by_uuid(
+    session,
+    *,
+    current_user_id: int,
+    b_rw_short_uuid: str,
+) -> dict[str, Any]:
+    """Import a Remnawave subscription URL into the current user's account.
+
+    A = current user (must exist in DB).
+    B = subscription owner identified by Remnawave short_uuid (may not exist
+        in our DB — only RW is consulted for B).
+
+    Reuses the PRO/FREE matrix from `_decide` by mapping
+    A → "android-side" and B → "tg-side". `survivor_id`/`loser_id` outputs
+    of `_decide` are ignored here (only one DB row exists).
+
+    Returns:
+      {
+        "result": "merged_pro" | "merged_free" | "ok" | "already_owned",
+        "a_tier": "pro" | "free" | "none",
+        "b_tier": "pro" | "free",
+        "a_rw_uuid": str | None,
+        "b_rw_uuid": str,
+        "chosen_uuid": str,
+        "loser_rw_uuid": str | None,
+      }
+
+    Raises:
+      MergeBlocked    — both A and B are PRO. No writes performed.
+      LookupNotFound  — RW returned no user for the short_uuid.
+
+    The caller commits the session. RW-side deactivation of the loser
+    uuid (if any) is the caller's responsibility too — this function
+    does not touch the Remnawave API beyond read lookups.
+    """
+    import app.api.remnawave.api as rem
+    from common_db.models import User
+
+    a = await session.get(User, current_user_id)
+    if a is None:
+        raise RuntimeError(f"a_user_not_found: {current_user_id}")
+
+    b_info = await rem.get_user_by_short_uuid_raw(b_rw_short_uuid)
+    if b_info is None:
+        raise LookupNotFound(b_rw_short_uuid)
+
+    b_rw_uuid = b_info["uuid"]
+
+    # Self-import: pasted own URL → no-op.
+    if a.vless_uuid is not None and a.vless_uuid == b_rw_uuid:
+        tier = _classify(b_info)
+        return {
+            "result": "already_owned",
+            "a_tier": tier,
+            "b_tier": tier,
+            "a_rw_uuid": b_rw_uuid,
+            "b_rw_uuid": b_rw_uuid,
+            "chosen_uuid": b_rw_uuid,
+            "loser_rw_uuid": None,
+        }
+
+    a_info = await _lookup_a_side_rw(
+        vless_uuid=a.vless_uuid, email=a.email,
+    )
+    a_tier = _classify(a_info)
+    b_tier = _classify(b_info)
+    a_rw_uuid = (a_info or {}).get("uuid")
+
+    # Map A → android-side, B → tg-side. survivor/loser ids are
+    # meaningless (only one DB row); we use the caller's id for both
+    # slots so _decide doesn't see None and stays consistent.
+    _survivor, _loser, chosen_uuid, result_code = _decide(
+        a_tier=a_tier, t_tier=b_tier,
+        a_rw_uuid=a_rw_uuid, t_rw_uuid=b_rw_uuid,
+        android_id=current_user_id, tg_user_id=current_user_id,
+    )
+
+    if chosen_uuid == a_rw_uuid:
+        loser_rw_uuid = b_rw_uuid
+    elif chosen_uuid == b_rw_uuid:
+        loser_rw_uuid = a_rw_uuid  # may be None when A had no RW user
+    else:
+        loser_rw_uuid = None  # defensive — chosen should always match one
+
+    a.vless_uuid = chosen_uuid
+    await session.flush()
+
+    logger.info(
+        "import_subscription_by_uuid: user=%s a_tier=%s b_tier=%s "
+        "chosen=%s loser=%s code=%s",
+        current_user_id, a_tier, b_tier, chosen_uuid, loser_rw_uuid,
+        result_code,
+    )
+
+    return {
+        "result": result_code,
+        "a_tier": a_tier,
+        "b_tier": b_tier,
+        "a_rw_uuid": a_rw_uuid,
+        "b_rw_uuid": b_rw_uuid,
+        "chosen_uuid": chosen_uuid,
+        "loser_rw_uuid": loser_rw_uuid,
+    }
