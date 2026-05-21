@@ -81,3 +81,15 @@ class LinkStartResponse(BaseModel):
     code: str
     expires_in: int
     deep_link: str
+
+
+class LinkByUrlRequest(BaseModel):
+    url: str  # Validated by _parse_short_uuid in the router; plain str
+              # avoids Pydantic HttpUrl's strict percent-encoding edge
+              # cases (some clients send raw `:` in path).
+
+
+class LinkByUrlResponse(BaseModel):
+    result: str    # merged_pro | merged_free | ok | already_owned | both_pro_support_needed
+    a_tier: str    # pro | free | none
+    b_tier: str    # pro | free
