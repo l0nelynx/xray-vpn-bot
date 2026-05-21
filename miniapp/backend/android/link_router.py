@@ -12,7 +12,10 @@ Telegram account.
 from __future__ import annotations
 
 import logging
+import os
+import re
 import secrets
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
@@ -28,6 +31,42 @@ logger = logging.getLogger(__name__)
 limiter = auth_router.limiter
 
 _LINK_CODE_TTL_SECONDS = 600
+
+_SUBSCRIPTION_HOST = os.environ.get(
+    "SUBSCRIPTION_HOST", "user.spicycheeze.xyz",
+)
+_SHORT_UUID_RE = re.compile(r"^[A-Za-z0-9_-]{8,32}$")
+
+
+def _parse_short_uuid(url: str) -> str:
+    """Extract the short_uuid from a subscription URL.
+
+    Strict: https only, exact host match against $SUBSCRIPTION_HOST
+    (default ``user.spicycheeze.xyz``), single path segment matching
+    ``[A-Za-z0-9_-]{8,32}``. Query string and fragment are ignored.
+
+    Raises ``HTTPException(422, {"code": "invalid_url"})`` on any failure.
+    """
+    try:
+        parsed = urlparse(url)
+    except Exception as exc:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={"code": "invalid_url"},
+        ) from exc
+
+    if parsed.scheme != "https" or parsed.netloc != _SUBSCRIPTION_HOST:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={"code": "invalid_url"},
+        )
+    parts = [p for p in parsed.path.split("/") if p]
+    if len(parts) != 1 or not _SHORT_UUID_RE.match(parts[0]):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={"code": "invalid_url"},
+        )
+    return parts[0]
 
 
 def _build_deep_link(bot_url: str, code: str) -> str:
