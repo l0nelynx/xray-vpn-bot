@@ -74,6 +74,57 @@ class TestLookupRw:
         assert a_info is None
 
 
+from app.handlers.android_link_merge import (
+    LookupNotFound,
+    _lookup_a_side_rw,
+)
+
+
+class TestLookupASideRw:
+    """A-side-only lookup helper used by import_subscription_by_uuid."""
+
+    def test_returns_none_when_both_identifiers_missing(self, fake_remnawave):
+        result = asyncio.run(_lookup_a_side_rw(vless_uuid=None, email=None))
+        assert result is None
+
+    def test_finds_by_vless_uuid_first(self, fake_remnawave):
+        fake_remnawave.add_user(uuid="a-uuid", email="a@x.io",
+                                status="active", data_limit=None)
+        result = asyncio.run(_lookup_a_side_rw(
+            vless_uuid="a-uuid", email="a@x.io",
+        ))
+        assert result is not None
+        assert result["uuid"] == "a-uuid"
+
+    def test_falls_back_to_email_when_uuid_missing(self, fake_remnawave):
+        fake_remnawave.add_user(uuid="a-uuid", email="a@x.io",
+                                status="active", data_limit=None)
+        result = asyncio.run(_lookup_a_side_rw(
+            vless_uuid=None, email="a@x.io",
+        ))
+        assert result is not None
+        assert result["uuid"] == "a-uuid"
+
+    def test_swallows_exceptions_returns_none(self, fake_remnawave, monkeypatch):
+        async def boom(*a, **kw):
+            raise RuntimeError("network down")
+        import app.api.remnawave.api as rem
+        monkeypatch.setattr(rem, "get_user_from_uuid", boom)
+        result = asyncio.run(_lookup_a_side_rw(
+            vless_uuid="a-uuid", email=None,
+        ))
+        assert result is None
+
+
+class TestLookupNotFound:
+    def test_is_an_exception(self):
+        assert issubclass(LookupNotFound, Exception)
+
+    def test_carries_short_uuid_detail(self):
+        exc = LookupNotFound("missing-short")
+        assert "missing-short" in str(exc)
+
+
 from app.handlers.android_link_merge import _decide, MergeBlocked
 
 

@@ -71,6 +71,48 @@ async def _none():
     return None
 
 
+class LookupNotFound(Exception):
+    """Raised when get_user_by_short_uuid_raw returns None — the imported
+    subscription URL pointed at a non-existent Remnawave user. The router
+    maps this to HTTP 404 with code=rw_not_found.
+    """
+
+    def __init__(self, short_uuid: str):
+        super().__init__(f"rw_not_found: {short_uuid}")
+        self.short_uuid = short_uuid
+
+
+async def _lookup_a_side_rw(
+    *,
+    vless_uuid: str | None,
+    email: str | None,
+) -> dict | None:
+    """Look up the current user (A-side) in Remnawave.
+
+    Tries vless_uuid first (authoritative when set), falls back to email.
+    Returns the Remnawave dict or None on miss/error. Mirrors the A-side
+    branch of `_lookup_rw` but without the TG-side concurrent fetch — the
+    by_url flow already has B-side loaded via short_uuid.
+    """
+    import app.api.remnawave.api as rem
+
+    if vless_uuid:
+        try:
+            info = await rem.get_user_from_uuid(vless_uuid)
+        except Exception as exc:
+            logger.warning("Remnawave A-side uuid lookup failed: %s", exc)
+            info = None
+        if info:
+            return info
+    if email:
+        try:
+            return await rem.get_user_from_email(email)
+        except Exception as exc:
+            logger.warning("Remnawave A-side email lookup failed: %s", exc)
+            return None
+    return None
+
+
 class MergeBlocked(Exception):
     """Raised when both sides hold an active PRO subscription — automatic
     resolution would discard a paid subscription, so the caller must surface
