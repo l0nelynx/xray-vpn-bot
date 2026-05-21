@@ -310,12 +310,20 @@ async def import_subscription_by_uuid(
     *,
     current_user_id: int,
     b_rw_short_uuid: str,
+    claimed_email: str,
 ) -> dict[str, Any]:
     """Import a Remnawave subscription URL into the current user's account.
 
     A = current user (must exist in DB).
     B = subscription owner identified by Remnawave short_uuid (may not exist
         in our DB — only RW is consulted for B).
+
+    `claimed_email` is the email the requester claims belongs to B. It is
+    compared case- and whitespace-insensitively to B's RW-side email
+    immediately after the RW lookup; a mismatch (or an empty RW email)
+    raises `LookupNotFound` — the same opaque failure used when the
+    short_uuid resolves to nothing. See
+    docs/superpowers/specs/2026-05-21-android-link-by-url-email-design.md.
 
     Reuses the PRO/FREE matrix from `_decide` by mapping
     A → "android-side" and B → "tg-side". `survivor_id`/`loser_id` outputs

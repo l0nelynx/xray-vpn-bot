@@ -551,13 +551,15 @@ class TestImportSubscriptionByUuid:
 
     SHORT = "sN_RHMk6BGv-RJ8g"
 
-    def _run(self, session_factory, *, current_user_id, short_uuid):
+    def _run(self, session_factory, *, current_user_id, short_uuid,
+             claimed_email):
         async def go():
             async with session_factory() as s:
                 result = await import_subscription_by_uuid(
                     s,
                     current_user_id=current_user_id,
                     b_rw_short_uuid=short_uuid,
+                    claimed_email=claimed_email,
                 )
                 await s.commit()
                 survivor = await s.get(User, current_user_id)
@@ -571,6 +573,7 @@ class TestImportSubscriptionByUuid:
         fake_remnawave.add_user(uuid="a-uuid", email="a@x.io",
                                 status="active", data_limit=None)
         fake_remnawave.add_user(uuid="b-uuid", short_uuid=self.SHORT,
+                                email="b@x.io",
                                 status="active",
                                 data_limit=10 * 1024 ** 3)
 
@@ -582,6 +585,7 @@ class TestImportSubscriptionByUuid:
 
         result, vless = self._run(
             session_factory, current_user_id=100, short_uuid=self.SHORT,
+            claimed_email="b@x.io",
         )
         assert result["result"] == "merged_pro"
         assert result["a_tier"] == "pro"
@@ -597,6 +601,7 @@ class TestImportSubscriptionByUuid:
                                 status="active",
                                 data_limit=5 * 1024 ** 3)
         fake_remnawave.add_user(uuid="b-uuid", short_uuid=self.SHORT,
+                                email="b@x.io",
                                 status="active", data_limit=None)
 
         async def seed():
@@ -607,6 +612,7 @@ class TestImportSubscriptionByUuid:
 
         result, vless = self._run(
             session_factory, current_user_id=100, short_uuid=self.SHORT,
+            claimed_email="b@x.io",
         )
         assert result["result"] == "merged_pro"
         assert result["a_tier"] == "free"
@@ -622,6 +628,7 @@ class TestImportSubscriptionByUuid:
                                 status="active",
                                 data_limit=5 * 1024 ** 3)
         fake_remnawave.add_user(uuid="b-uuid", short_uuid=self.SHORT,
+                                email="b@x.io",
                                 status="active",
                                 data_limit=10 * 1024 ** 3)
 
@@ -633,6 +640,7 @@ class TestImportSubscriptionByUuid:
 
         result, vless = self._run(
             session_factory, current_user_id=100, short_uuid=self.SHORT,
+            claimed_email="b@x.io",
         )
         assert result["result"] == "merged_free"
         assert result["chosen_uuid"] == "b-uuid"
@@ -645,6 +653,7 @@ class TestImportSubscriptionByUuid:
         fake_remnawave.add_user(uuid="a-uuid", email="a@x.io",
                                 status="active", data_limit=None)
         fake_remnawave.add_user(uuid="b-uuid", short_uuid=self.SHORT,
+                                email="b@x.io",
                                 status="active", data_limit=None)
 
         async def seed():
@@ -658,6 +667,7 @@ class TestImportSubscriptionByUuid:
                 with pytest.raises(MergeBlocked):
                     await import_subscription_by_uuid(
                         s, current_user_id=100, b_rw_short_uuid=self.SHORT,
+                        claimed_email="b@x.io",
                     )
                 # Verify nothing changed.
                 survivor = await s.get(User, 100)
@@ -672,6 +682,7 @@ class TestImportSubscriptionByUuid:
     ):
         # A has no email and no vless_uuid → tier "none".
         fake_remnawave.add_user(uuid="b-uuid", short_uuid=self.SHORT,
+                                email="b@x.io",
                                 status="active",
                                 data_limit=10 * 1024 ** 3)
 
@@ -683,6 +694,7 @@ class TestImportSubscriptionByUuid:
 
         result, vless = self._run(
             session_factory, current_user_id=100, short_uuid=self.SHORT,
+            claimed_email="b@x.io",
         )
         assert result["result"] == "ok"
         assert result["a_tier"] == "none"
@@ -695,6 +707,7 @@ class TestImportSubscriptionByUuid:
         self, session_factory, fake_remnawave,
     ):
         fake_remnawave.add_user(uuid="b-uuid", short_uuid=self.SHORT,
+                                email="b@x.io",
                                 status="active", data_limit=None)
 
         async def seed():
@@ -705,6 +718,7 @@ class TestImportSubscriptionByUuid:
 
         result, vless = self._run(
             session_factory, current_user_id=100, short_uuid=self.SHORT,
+            claimed_email="b@x.io",
         )
         assert result["result"] == "ok"
         assert result["a_tier"] == "none"
@@ -728,6 +742,7 @@ class TestImportSubscriptionByUuid:
 
         result, vless = self._run(
             session_factory, current_user_id=100, short_uuid=self.SHORT,
+            claimed_email="a@x.io",
         )
         assert result["result"] == "already_owned"
         assert result["chosen_uuid"] == "a-uuid"
@@ -751,6 +766,7 @@ class TestImportSubscriptionByUuid:
                 with pytest.raises(LookupNotFound):
                     await import_subscription_by_uuid(
                         s, current_user_id=100, b_rw_short_uuid="nope",
+                        claimed_email="b@x.io",
                     )
                 survivor = await s.get(User, 100)
                 return survivor.vless_uuid
@@ -769,6 +785,7 @@ class TestImportSubscriptionByUuid:
         fake_remnawave.add_user(uuid="a-uuid", email="a@x.io",
                                 status="active", data_limit=None)
         fake_remnawave.add_user(uuid="b-uuid", short_uuid=self.SHORT,
+                                email="b@x.io",
                                 status="active",
                                 data_limit=10 * 1024 ** 3)
 
@@ -780,6 +797,7 @@ class TestImportSubscriptionByUuid:
 
         result, vless = self._run(
             session_factory, current_user_id=100, short_uuid=self.SHORT,
+            claimed_email="b@x.io",
         )
         assert result["result"] == "merged_pro"
         assert result["chosen_uuid"] == "a-uuid"
