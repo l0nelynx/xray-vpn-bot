@@ -469,3 +469,24 @@ class TestConsumeCodeIntegration:
         result = _asyncio.run(consume_android_link_code(55, "plain-code"))
         assert result == "merged_pro"
         assert any("Failed to disable old RW user" in m for m in notify_spy)
+
+
+class TestFakeRemnawaveShortUuid:
+    """Sanity-check the FakeRemnawave short_uuid extension before the
+    real import_subscription_by_uuid tests rely on it."""
+
+    def test_short_uuid_lookup_returns_full_record(self, fake_remnawave):
+        fake_remnawave.add_user(
+            uuid="b-uuid", short_uuid="sN_xxxxxxxxxxxx",
+            status="active", data_limit=None, email="b@x.io",
+        )
+        import app.api.remnawave.api as rem
+        rec = _asyncio.run(rem.get_user_by_short_uuid_raw("sN_xxxxxxxxxxxx"))
+        assert rec is not None
+        assert rec["uuid"] == "b-uuid"
+        assert rec["status"] == "active"
+
+    def test_short_uuid_lookup_returns_none_for_unknown(self, fake_remnawave):
+        import app.api.remnawave.api as rem
+        rec = _asyncio.run(rem.get_user_by_short_uuid_raw("missing"))
+        assert rec is None

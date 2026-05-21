@@ -43,7 +43,8 @@ class FakeRemnawave:
 
     State: a dict {uuid: {"status": str, "data_limit": int | None,
                           "email": str | None, "username": str | None,
-                          "subscription_url": str | None}}.
+                          "subscription_url": str | None,
+                          "short_uuid": str | None}}.
     `update_user(uuid, status=...)` records the call in `disabled_calls`
     when status == "disabled".
     """
@@ -52,13 +53,15 @@ class FakeRemnawave:
         self.by_uuid: dict[str, dict] = {}
         self.by_email: dict[str, str] = {}
         self.by_username: dict[str, str] = {}
+        self.by_short_uuid: dict[str, str] = {}
         self.disabled_calls: list[str] = []
         self.update_should_raise: Exception | None = None
 
     def add_user(self, *, uuid: str, status: str = "active",
                  data_limit=None, email: str | None = None,
                  username: str | None = None,
-                 subscription_url: str | None = None) -> None:
+                 subscription_url: str | None = None,
+                 short_uuid: str | None = None) -> None:
         rec = {
             "uuid": uuid,
             "status": status,
@@ -66,12 +69,15 @@ class FakeRemnawave:
             "email": email,
             "username": username,
             "subscription_url": subscription_url,
+            "short_uuid": short_uuid,
         }
         self.by_uuid[uuid] = rec
         if email:
             self.by_email[email] = uuid
         if username:
             self.by_username[username] = uuid
+        if short_uuid:
+            self.by_short_uuid[short_uuid] = uuid
 
     async def get_user_from_email(self, email: str):
         uuid = self.by_email.get(email)
@@ -83,6 +89,10 @@ class FakeRemnawave:
 
     async def get_user_from_uuid(self, uuid: str):
         return self.by_uuid.get(uuid)
+
+    async def get_user_by_short_uuid_raw(self, short_uuid: str):
+        uuid = self.by_short_uuid.get(short_uuid)
+        return self.by_uuid.get(uuid) if uuid else None
 
     async def update_user(self, *, user_uuid: str, status: str | None = None,
                           **_ignored):
@@ -105,6 +115,23 @@ def fake_remnawave(monkeypatch) -> FakeRemnawave:
     # get_user_from_uuid не существует в api shim — добавляем атрибут.
     monkeypatch.setattr(rem, "get_user_from_uuid", fake.get_user_from_uuid,
                         raising=False)
+    monkeypatch.setattr(rem, "get_user_by_short_uuid_raw",
+                        fake.get_user_by_short_uuid_raw, raising=False)
+    # Mirror onto the miniapp shim so router tests that import
+    # `..remnawave_client as rem` see the same fake.
+    try:
+        import miniapp.backend.remnawave_client as mrem
+        monkeypatch.setattr(mrem, "get_user_from_email",
+                            fake.get_user_from_email)
+        monkeypatch.setattr(mrem, "get_user_from_username",
+                            fake.get_user_from_username)
+        monkeypatch.setattr(mrem, "get_user_from_uuid",
+                            fake.get_user_from_uuid, raising=False)
+        monkeypatch.setattr(mrem, "get_user_by_short_uuid_raw",
+                            fake.get_user_by_short_uuid_raw, raising=False)
+        monkeypatch.setattr(mrem, "update_user", fake.update_user)
+    except ImportError:
+        pass
     return fake
 
 
