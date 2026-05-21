@@ -6,7 +6,7 @@ can diverge from the Telegram-only miniapp schemas.
 """
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 
 
 class AndroidUserSummary(BaseModel):
@@ -87,6 +87,9 @@ class LinkByUrlRequest(BaseModel):
     url: str  # Validated by _parse_short_uuid in the router; plain str
               # avoids Pydantic HttpUrl's strict percent-encoding edge
               # cases (some clients send raw `:` in path).
+    email: EmailStr  # Subscription owner's email — must match the email
+                     # Remnawave has on file for the URL's owner. See
+                     # docs/superpowers/specs/2026-05-21-android-link-by-url-email-design.md.
 
 
 class LinkByUrlResponse(BaseModel):
