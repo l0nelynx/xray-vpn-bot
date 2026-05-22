@@ -348,3 +348,66 @@ class TestLinkByUrlEndpoint:
             "merged_pro" in m and "disabled_uuid=<code>—</code>" in m
             for m in link_by_url_app.state.notify_calls
         )
+
+    def test_missing_email_returns_422(
+        self, link_by_url_client,
+    ):
+        """Pydantic rejects body without 'email' field."""
+        resp = link_by_url_client.post(
+            "/api/android/link/by_url", json={"url": URL},
+        )
+        assert resp.status_code == 422
+
+    def test_malformed_email_returns_422(
+        self, link_by_url_client,
+    ):
+        """Pydantic EmailStr rejects 'not-an-email'."""
+        resp = link_by_url_client.post(
+            "/api/android/link/by_url",
+            json={"url": URL, "email": "not-an-email"},
+        )
+        assert resp.status_code == 422
+
+    def test_email_mismatch_returns_404_rw_not_found(
+        self, link_by_url_client, link_by_url_app, with_app_db,
+        fake_remnawave,
+    ):
+        """RW has B with email=b@x.io; client claims other@x.io.
+        Response is identical to test_rw_lookup_miss_returns_404 — by
+        design (no oracle).
+        """
+        fake_remnawave.add_user(uuid="b-uuid", short_uuid=SHORT,
+                                email="b@x.io",
+                                status="active",
+                                data_limit=10 * 1024 ** 3)
+        self._seed_a(with_app_db)
+
+        resp = link_by_url_client.post(
+            "/api/android/link/by_url",
+            json={"url": URL, "email": "other@x.io"},
+        )
+        assert resp.status_code == 404
+        assert resp.json() == {"detail": {"code": "rw_not_found"}}
+
+    def test_email_mismatch_notify_carries_claimed_email(
+        self, link_by_url_client, link_by_url_app, with_app_db,
+        fake_remnawave,
+    ):
+        """Admin notify_log on rw_not_found carries the claimed_email so
+        ops can grep for patterns. (logger.info inside the merge function
+        carries the actual rw_email too, but we don't inspect logs here.)
+        """
+        fake_remnawave.add_user(uuid="b-uuid", short_uuid=SHORT,
+                                email="b@x.io",
+                                status="active",
+                                data_limit=10 * 1024 ** 3)
+        self._seed_a(with_app_db)
+
+        link_by_url_client.post(
+            "/api/android/link/by_url",
+            json={"url": URL, "email": "other@x.io"},
+        )
+        assert any(
+            "rw_not_found" in m and "other@x.io" in m
+            for m in link_by_url_app.state.notify_calls
+        )
