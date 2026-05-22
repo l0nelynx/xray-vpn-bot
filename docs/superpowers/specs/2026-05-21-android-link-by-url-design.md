@@ -131,7 +131,7 @@ Flow:
 import re
 from urllib.parse import urlparse
 
-_SUBSCRIPTION_HOST = os.environ.get("SUBSCRIPTION_HOST", "user.spicycheeze.xyz")
+_SUBSCRIPTION_HOST = os.environ.get("SUBSCRIPTION_HOST", "sub.domain.com")
 _SHORT_UUID_RE = re.compile(r"^[A-Za-z0-9_-]{8,32}$")
 
 

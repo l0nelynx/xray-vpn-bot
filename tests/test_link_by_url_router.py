@@ -15,10 +15,22 @@ from fastapi import HTTPException
 from miniapp.backend.android.link_router import _parse_short_uuid
 
 
+@pytest.fixture(autouse=True)
+def _stub_subscription_host(monkeypatch):
+    """Pin the parser's subscription host to ``sub.domain.com`` so
+    tests don't require a real config.yml. The router reads the host via
+    ``get_subscription_host`` (imported at module load); replace it with a
+    constant function for the duration of every test in this file.
+    """
+    import miniapp.backend.android.link_router as lr
+    monkeypatch.setattr(lr, "get_subscription_host",
+                        lambda: "sub.domain.com")
+
+
 class TestParseShortUuid:
     """Pure URL → short_uuid parser, no FastAPI involvement."""
 
-    GOOD_URL = "https://user.spicycheeze.xyz/sN_RHMk6BGv-RJ8g"
+    GOOD_URL = "https://sub.domain.com/sN_RHMk6BGv-RJ8g"
     GOOD_SHORT = "sN_RHMk6BGv-RJ8g"
 
     def test_valid_https_returns_short_uuid(self):
@@ -47,23 +59,23 @@ class TestParseShortUuid:
     def test_multi_segment_path_rejected(self):
         with pytest.raises(HTTPException) as exc:
             _parse_short_uuid(
-                "https://user.spicycheeze.xyz/api/sN_xxxxxxxxxxxx"
+                "https://sub.domain.com/api/sN_xxxxxxxxxxxx"
             )
         assert exc.value.status_code == 422
 
     def test_empty_path_rejected(self):
         with pytest.raises(HTTPException):
-            _parse_short_uuid("https://user.spicycheeze.xyz/")
+            _parse_short_uuid("https://sub.domain.com/")
 
     def test_too_short_path_rejected(self):
         # Less than 8 chars fails the regex.
         with pytest.raises(HTTPException):
-            _parse_short_uuid("https://user.spicycheeze.xyz/short")
+            _parse_short_uuid("https://sub.domain.com/short")
 
     def test_invalid_characters_rejected(self):
         with pytest.raises(HTTPException):
             _parse_short_uuid(
-                "https://user.spicycheeze.xyz/has spaces here!"
+                "https://sub.domain.com/has spaces here!"
             )
 
     def test_malformed_url_rejected(self):
@@ -144,7 +156,7 @@ def link_by_url_client(link_by_url_app):
 
 
 SHORT = "sN_RHMk6BGv-RJ8g"
-URL = f"https://user.spicycheeze.xyz/{SHORT}"
+URL = f"https://sub.domain.com/{SHORT}"
 
 
 class TestLinkByUrlEndpoint:
@@ -206,7 +218,7 @@ class TestLinkByUrlEndpoint:
     ):
         resp = link_by_url_client.post(
             "/api/android/link/by_url",
-            json={"url": f"https://user.spicycheeze.xyz/api/{SHORT}", "email": "b@x.io"},
+            json={"url": f"https://sub.domain.com/api/{SHORT}", "email": "b@x.io"},
         )
         assert resp.status_code == 422
 

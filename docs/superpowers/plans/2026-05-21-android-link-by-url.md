@@ -870,7 +870,7 @@ from miniapp.backend.android.link_router import _parse_short_uuid
 class TestParseShortUuid:
     """Pure URL → short_uuid parser, no FastAPI involvement."""
 
-    GOOD_URL = "https://user.spicycheeze.xyz/sN_RHMk6BGv-RJ8g"
+    GOOD_URL = "https://sub.domain.com/sN_RHMk6BGv-RJ8g"
     GOOD_SHORT = "sN_RHMk6BGv-RJ8g"
 
     def test_valid_https_returns_short_uuid(self):
@@ -899,23 +899,23 @@ class TestParseShortUuid:
     def test_multi_segment_path_rejected(self):
         with pytest.raises(HTTPException) as exc:
             _parse_short_uuid(
-                "https://user.spicycheeze.xyz/api/sN_xxxxxxxxxxxx"
+                "https://sub.domain.com/api/sN_xxxxxxxxxxxx"
             )
         assert exc.value.status_code == 422
 
     def test_empty_path_rejected(self):
         with pytest.raises(HTTPException):
-            _parse_short_uuid("https://user.spicycheeze.xyz/")
+            _parse_short_uuid("https://sub.domain.com/")
 
     def test_too_short_path_rejected(self):
         # Less than 8 chars fails the regex.
         with pytest.raises(HTTPException):
-            _parse_short_uuid("https://user.spicycheeze.xyz/short")
+            _parse_short_uuid("https://sub.domain.com/short")
 
     def test_invalid_characters_rejected(self):
         with pytest.raises(HTTPException):
             _parse_short_uuid(
-                "https://user.spicycheeze.xyz/has spaces here!"
+                "https://sub.domain.com/has spaces here!"
             )
 
     def test_malformed_url_rejected(self):
@@ -945,7 +945,7 @@ Add the module-level constants and helper after `_LINK_CODE_TTL_SECONDS` (around
 
 ```python
 _SUBSCRIPTION_HOST = os.environ.get(
-    "SUBSCRIPTION_HOST", "user.spicycheeze.xyz",
+    "SUBSCRIPTION_HOST", "sub.domain.com",
 )
 _SHORT_UUID_RE = re.compile(r"^[A-Za-z0-9_-]{8,32}$")
 
@@ -954,7 +954,7 @@ def _parse_short_uuid(url: str) -> str:
     """Extract the short_uuid from a subscription URL.
 
     Strict: https only, exact host match against $SUBSCRIPTION_HOST
-    (default ``user.spicycheeze.xyz``), single path segment matching
+    (default ``sub.domain.com``), single path segment matching
     ``[A-Za-z0-9_-]{8,32}``. Query string and fragment are ignored.
 
     Raises ``HTTPException(422, {"code": "invalid_url"})`` on any failure.
@@ -1087,7 +1087,7 @@ def link_by_url_client(link_by_url_app):
 
 
 SHORT = "sN_RHMk6BGv-RJ8g"
-URL = f"https://user.spicycheeze.xyz/{SHORT}"
+URL = f"https://sub.domain.com/{SHORT}"
 
 
 class TestLinkByUrlEndpoint:
@@ -1148,7 +1148,7 @@ class TestLinkByUrlEndpoint:
     ):
         resp = link_by_url_client.post(
             "/api/android/link/by_url",
-            json={"url": f"https://user.spicycheeze.xyz/api/{SHORT}"},
+            json={"url": f"https://sub.domain.com/api/{SHORT}"},
         )
         assert resp.status_code == 422
 

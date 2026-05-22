@@ -66,6 +66,15 @@ def get_remnawave_url() -> str:
     return get_config().get("remnawave_url", "")
 
 
+def get_subscription_host() -> str:
+    """Host portion of the Remnawave subscription URL (no scheme, no path).
+
+    Read from config.yml `subscription_url`. Used by android-link `by_url` to
+    validate that incoming URLs point at our own subscription host.
+    """
+    return (get_config().get("subscription_url") or "").strip()
+
+
 def get_remnawave_token() -> str:
     return get_config().get("remnawave_token", "")
 

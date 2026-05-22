@@ -12,14 +12,13 @@ Telegram account.
 from __future__ import annotations
 
 import logging
-import os
 import re
 import secrets
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
-from ..config import get_bot_url
+from ..config import get_bot_url, get_subscription_host
 from ..database.session import async_session
 from ..notify_log import esc, notify_log
 from ..remnawave_client import update_user
@@ -35,18 +34,15 @@ limiter = auth_router.limiter
 
 _LINK_CODE_TTL_SECONDS = 600
 
-_SUBSCRIPTION_HOST = os.environ.get(
-    "SUBSCRIPTION_HOST", "user.spicycheeze.xyz",
-)
 _SHORT_UUID_RE = re.compile(r"^[A-Za-z0-9_-]{8,32}$")
 
 
 def _parse_short_uuid(url: str) -> str:
     """Extract the short_uuid from a subscription URL.
 
-    Strict: https only, exact host match against $SUBSCRIPTION_HOST
-    (default ``user.spicycheeze.xyz``), single path segment matching
-    ``[A-Za-z0-9_-]{8,32}``. Query string and fragment are ignored.
+    Strict: https only, exact host match against ``subscription_url`` from
+    config.yml, single path segment matching ``[A-Za-z0-9_-]{8,32}``. Query
+    string and fragment are ignored.
 
     Raises ``HTTPException(422, {"code": "invalid_url"})`` on any failure.
     """
@@ -58,7 +54,7 @@ def _parse_short_uuid(url: str) -> str:
             detail={"code": "invalid_url"},
         ) from exc
 
-    if parsed.scheme != "https" or parsed.netloc != _SUBSCRIPTION_HOST:
+    if parsed.scheme != "https" or parsed.netloc != get_subscription_host():
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail={"code": "invalid_url"},
