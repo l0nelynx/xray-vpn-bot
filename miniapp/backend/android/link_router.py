@@ -136,7 +136,7 @@ async def link_by_url(
     subscription. require_verified_email gates this, the rate limit
     slows credential-stuffing against random short_uuids.
     """
-    from miniapp.backend.android.android_link_merge import (
+    from android.android_link_merge import (
         LookupNotFound, MergeBlocked, import_subscription_by_uuid,
     )
 

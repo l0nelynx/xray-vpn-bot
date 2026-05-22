@@ -46,8 +46,7 @@ async def _lookup_rw(
     must continue even if Remnawave is temporarily down.
     """
     import asyncio
-    import miniapp.backend.remnawave_client as rem
-
+    from ..remnawave_client import get_user_from_email, get_user_from_uuid, get_user_from_username
     async def safe(coro):
         try:
             return await coro
@@ -55,11 +54,11 @@ async def _lookup_rw(
             logger.warning("Remnawave lookup failed: %s", exc)
             return None
 
-    a_task = safe(rem.get_user_from_email(email)) if email else _none()
+    a_task = safe(get_user_from_email(email)) if email else _none()
     if vless_uuid:
-        t_task = safe(rem.get_user_from_uuid(vless_uuid))
+        t_task = safe(get_user_from_uuid(vless_uuid))
     elif username:
-        t_task = safe(rem.get_user_from_username(username))
+        t_task = safe(get_user_from_username(username))
     else:
         t_task = _none()
 
@@ -94,11 +93,10 @@ async def _lookup_a_side_rw(
     branch of `_lookup_rw` but without the TG-side concurrent fetch — the
     by_url flow already has B-side loaded via short_uuid.
     """
-    import miniapp.backend.remnawave_client as rem
-
+    from ..remnawave_client import get_user_from_uuid, get_user_from_email
     if vless_uuid:
         try:
-            info = await rem.get_user_from_uuid(vless_uuid)
+            info = await get_user_from_uuid(vless_uuid)
         except Exception as exc:
             logger.warning("Remnawave A-side uuid lookup failed: %s", exc)
             info = None
@@ -106,7 +104,7 @@ async def _lookup_a_side_rw(
             return info
     if email:
         try:
-            return await rem.get_user_from_email(email)
+            return await get_user_from_email(email)
         except Exception as exc:
             logger.warning("Remnawave A-side email lookup failed: %s", exc)
             return None
@@ -348,14 +346,14 @@ async def import_subscription_by_uuid(
     uuid (if any) is the caller's responsibility too — this function
     does not touch the Remnawave API beyond read lookups.
     """
-    import miniapp.backend.remnawave_client as rem
+    from ..remnawave_client import get_user_by_short_uuid_raw
     from common_db.models import User
 
     a = await session.get(User, current_user_id)
     if a is None:
         raise RuntimeError(f"a_user_not_found: {current_user_id}")
 
-    b_info = await rem.get_user_by_short_uuid_raw(b_rw_short_uuid)
+    b_info = await get_user_by_short_uuid_raw(b_rw_short_uuid)
     if b_info is None:
         raise LookupNotFound(b_rw_short_uuid)
 
