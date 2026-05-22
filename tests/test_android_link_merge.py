@@ -803,3 +803,146 @@ class TestImportSubscriptionByUuid:
         assert result["chosen_uuid"] == "a-uuid"
         assert result["loser_rw_uuid"] == "b-uuid"
         assert vless == "a-uuid"
+
+    def test_email_mismatch_raises_lookup_not_found(
+        self, session_factory, fake_remnawave,
+    ):
+        """B exists in RW with email b@x.io; client claims other@x.io.
+        Must raise LookupNotFound BEFORE any A-side RW lookup or DB write.
+        """
+        fake_remnawave.add_user(uuid="a-uuid", email="a@x.io",
+                                status="active", data_limit=None)
+        fake_remnawave.add_user(uuid="b-uuid", short_uuid=self.SHORT,
+                                email="b@x.io",
+                                status="active",
+                                data_limit=10 * 1024 ** 3)
+
+        async def seed():
+            async with session_factory() as s:
+                s.add(User(id=100, email="a@x.io", vless_uuid="a-uuid"))
+                await s.commit()
+        _asyncio.run(seed())
+
+        async def go():
+            async with session_factory() as s:
+                with pytest.raises(LookupNotFound):
+                    await import_subscription_by_uuid(
+                        s,
+                        current_user_id=100,
+                        b_rw_short_uuid=self.SHORT,
+                        claimed_email="other@x.io",
+                    )
+                survivor = await s.get(User, 100)
+                return survivor.vless_uuid
+
+        vless = _asyncio.run(go())
+        assert vless == "a-uuid"  # A.vless_uuid unchanged
+        assert fake_remnawave.disabled_calls == []  # no RW deactivate
+
+    def test_rw_email_missing_raises_lookup_not_found(
+        self, session_factory, fake_remnawave,
+    ):
+        """B exists in RW but with email=None. No claimed_email can match.
+        Must raise LookupNotFound.
+        """
+        fake_remnawave.add_user(uuid="b-uuid", short_uuid=self.SHORT,
+                                email=None,
+                                status="active",
+                                data_limit=10 * 1024 ** 3)
+
+        async def seed():
+            async with session_factory() as s:
+                s.add(User(id=100, email="a@x.io", vless_uuid="a-uuid"))
+                await s.commit()
+        _asyncio.run(seed())
+
+        async def go():
+            async with session_factory() as s:
+                with pytest.raises(LookupNotFound):
+                    await import_subscription_by_uuid(
+                        s,
+                        current_user_id=100,
+                        b_rw_short_uuid=self.SHORT,
+                        claimed_email="anything@x.io",
+                    )
+
+        _asyncio.run(go())
+
+    def test_email_match_case_and_whitespace_insensitive(
+        self, session_factory, fake_remnawave,
+    ):
+        """B's RW email is 'Alice@X.IO'; client sends '  alice@x.io  '.
+        Must succeed.
+        """
+        fake_remnawave.add_user(uuid="b-uuid", short_uuid=self.SHORT,
+                                email="Alice@X.IO",
+                                status="active",
+                                data_limit=10 * 1024 ** 3)
+
+        async def seed():
+            async with session_factory() as s:
+                s.add(User(id=100, tg_id=55))  # A is "none" tier
+                await s.commit()
+        _asyncio.run(seed())
+
+        result, vless = self._run(
+            session_factory,
+            current_user_id=100,
+            short_uuid=self.SHORT,
+            claimed_email="  alice@x.io  ",
+        )
+        assert result["result"] == "ok"
+        assert result["chosen_uuid"] == "b-uuid"
+        assert vless == "b-uuid"
+
+    def test_self_import_with_wrong_email_raises_lookup_not_found(
+        self, session_factory, fake_remnawave,
+    ):
+        """A.vless_uuid == B.uuid (would short-circuit to already_owned),
+        but claimed_email doesn't match B's RW email. Email check must run
+        BEFORE the self-import short-circuit, so this raises LookupNotFound.
+        """
+        fake_remnawave.add_user(uuid="a-uuid", short_uuid=self.SHORT,
+                                email="a@x.io",
+                                status="active", data_limit=None)
+
+        async def seed():
+            async with session_factory() as s:
+                s.add(User(id=100, email="a@x.io", vless_uuid="a-uuid"))
+                await s.commit()
+        _asyncio.run(seed())
+
+        async def go():
+            async with session_factory() as s:
+                with pytest.raises(LookupNotFound):
+                    await import_subscription_by_uuid(
+                        s,
+                        current_user_id=100,
+                        b_rw_short_uuid=self.SHORT,
+                        claimed_email="wrong@x.io",
+                    )
+
+        _asyncio.run(go())
+
+    def test_self_import_with_right_email_returns_already_owned(
+        self, session_factory, fake_remnawave,
+    ):
+        """Self-import with matching email proceeds normally to already_owned."""
+        fake_remnawave.add_user(uuid="a-uuid", short_uuid=self.SHORT,
+                                email="a@x.io",
+                                status="active", data_limit=None)
+
+        async def seed():
+            async with session_factory() as s:
+                s.add(User(id=100, email="a@x.io", vless_uuid="a-uuid"))
+                await s.commit()
+        _asyncio.run(seed())
+
+        result, vless = self._run(
+            session_factory,
+            current_user_id=100,
+            short_uuid=self.SHORT,
+            claimed_email="a@x.io",
+        )
+        assert result["result"] == "already_owned"
+        assert vless == "a-uuid"

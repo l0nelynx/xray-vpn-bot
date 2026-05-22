@@ -359,6 +359,19 @@ async def import_subscription_by_uuid(
     if b_info is None:
         raise LookupNotFound(b_rw_short_uuid)
 
+    # Email confirmation gate — wire response is uniform with "short_uuid
+    # not found" so the endpoint cannot be used as an oracle.
+    rw_email = (b_info.get("email") or "").strip().lower()
+    claimed = claimed_email.strip().lower()
+    if not rw_email or rw_email != claimed:
+        logger.info(
+            "import_subscription_by_uuid: email_mismatch user=%s short=%s "
+            "rw_email=%s claimed=%s",
+            current_user_id, b_rw_short_uuid,
+            rw_email or "<none>", claimed_email,
+        )
+        raise LookupNotFound(b_rw_short_uuid)
+
     b_rw_uuid = b_info["uuid"]
 
     # Self-import: pasted own URL → no-op.
