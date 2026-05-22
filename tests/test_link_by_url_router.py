@@ -164,12 +164,13 @@ class TestLinkByUrlEndpoint:
         fake_remnawave.add_user(uuid="a-uuid", email="a@x.io",
                                 status="active", data_limit=None)
         fake_remnawave.add_user(uuid="b-uuid", short_uuid=SHORT,
+                                email="b@x.io",
                                 status="active",
                                 data_limit=10 * 1024 ** 3)
         self._seed_a(with_app_db)
 
         resp = link_by_url_client.post(
-            "/api/android/link/by_url", json={"url": URL},
+            "/api/android/link/by_url", json={"url": URL, "email": "b@x.io"},
         )
         assert resp.status_code == 200, resp.text
         body = resp.json()
@@ -195,7 +196,7 @@ class TestLinkByUrlEndpoint:
     ):
         resp = link_by_url_client.post(
             "/api/android/link/by_url",
-            json={"url": "https://attacker.example.com/sN_xxxxxxxxxxxx"},
+            json={"url": "https://attacker.example.com/sN_xxxxxxxxxxxx", "email": "b@x.io"},
         )
         assert resp.status_code == 422
         assert resp.json() == {"detail": {"code": "invalid_url"}}
@@ -205,7 +206,7 @@ class TestLinkByUrlEndpoint:
     ):
         resp = link_by_url_client.post(
             "/api/android/link/by_url",
-            json={"url": f"https://user.spicycheeze.xyz/api/{SHORT}"},
+            json={"url": f"https://user.spicycheeze.xyz/api/{SHORT}", "email": "b@x.io"},
         )
         assert resp.status_code == 422
 
@@ -214,7 +215,7 @@ class TestLinkByUrlEndpoint:
     ):
         resp = link_by_url_client.post(
             "/api/android/link/by_url",
-            json={"url": URL.replace("https://", "http://")},
+            json={"url": URL.replace("https://", "http://"), "email": "b@x.io"},
         )
         assert resp.status_code == 422
 
@@ -224,7 +225,7 @@ class TestLinkByUrlEndpoint:
         # B short_uuid not registered → LookupNotFound.
         self._seed_a(with_app_db)
         resp = link_by_url_client.post(
-            "/api/android/link/by_url", json={"url": URL},
+            "/api/android/link/by_url", json={"url": URL, "email": "b@x.io"},
         )
         assert resp.status_code == 404
         assert resp.json() == {"detail": {"code": "rw_not_found"}}
@@ -236,11 +237,12 @@ class TestLinkByUrlEndpoint:
         fake_remnawave.add_user(uuid="a-uuid", email="a@x.io",
                                 status="active", data_limit=None)
         fake_remnawave.add_user(uuid="b-uuid", short_uuid=SHORT,
+                                email="b@x.io",
                                 status="active", data_limit=None)
         self._seed_a(with_app_db)
 
         resp = link_by_url_client.post(
-            "/api/android/link/by_url", json={"url": URL},
+            "/api/android/link/by_url", json={"url": URL, "email": "b@x.io"},
         )
         assert resp.status_code == 200
         body = resp.json()
@@ -268,7 +270,7 @@ class TestLinkByUrlEndpoint:
         self._seed_a(with_app_db)
 
         resp = link_by_url_client.post(
-            "/api/android/link/by_url", json={"url": URL},
+            "/api/android/link/by_url", json={"url": URL, "email": "a@x.io"},
         )
         assert resp.status_code == 200
         body = resp.json()
@@ -293,7 +295,7 @@ class TestLinkByUrlEndpoint:
         ] = reject
 
         resp = link_by_url_client.post(
-            "/api/android/link/by_url", json={"url": URL},
+            "/api/android/link/by_url", json={"url": URL, "email": "b@x.io"},
         )
         assert resp.status_code == 403
 
@@ -314,7 +316,7 @@ class TestLinkByUrlEndpoint:
         ] = reject
 
         resp = link_by_url_client.post(
-            "/api/android/link/by_url", json={"url": URL},
+            "/api/android/link/by_url", json={"url": URL, "email": "b@x.io"},
         )
         assert resp.status_code == 401
 
@@ -325,13 +327,14 @@ class TestLinkByUrlEndpoint:
         fake_remnawave.add_user(uuid="a-uuid", email="a@x.io",
                                 status="active", data_limit=None)
         fake_remnawave.add_user(uuid="b-uuid", short_uuid=SHORT,
+                                email="b@x.io",
                                 status="active",
                                 data_limit=10 * 1024 ** 3)
         fake_remnawave.update_should_raise = RuntimeError("rw down")
         self._seed_a(with_app_db)
 
         resp = link_by_url_client.post(
-            "/api/android/link/by_url", json={"url": URL},
+            "/api/android/link/by_url", json={"url": URL, "email": "b@x.io"},
         )
         assert resp.status_code == 200
         assert resp.json()["result"] == "merged_pro"

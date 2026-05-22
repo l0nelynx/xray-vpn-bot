@@ -160,13 +160,15 @@ async def link_by_url(
                 s,
                 current_user_id=user.id,
                 b_rw_short_uuid=short_uuid,
+                claimed_email=payload.email,
             )
         except LookupNotFound:
             await s.rollback()
             pending_notify = (
                 f"❌ <b>Android sub-URL import: rw_not_found</b>\n"
                 f"user=<code>{user.id}</code> "
-                f"short_uuid=<code>{esc(short_uuid)}</code>"
+                f"short_uuid=<code>{esc(short_uuid)}</code>\n"
+                f"claimed_email=<code>{esc(payload.email)}</code>"
             )
             pending_404 = True
         except MergeBlocked as blocked:
