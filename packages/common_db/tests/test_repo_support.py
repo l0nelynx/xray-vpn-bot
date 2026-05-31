@@ -427,3 +427,129 @@ def test_count_tickets_by_status_filtered_and_unfiltered() -> None:
             await engine.dispose()
 
     _run(go())
+
+
+# --- delete_admin_message -------------------------------------------------
+
+
+def test_delete_admin_message_removes_admin_row() -> None:
+    async def go() -> None:
+        engine = _make_engine()
+        try:
+            await _setup(engine)
+            Session = async_sessionmaker(engine, expire_on_commit=False)
+            now = datetime(2026, 5, 18, 12, 0, 0)
+            async with Session() as session:
+                await _seed_user(session)
+                await _seed_ticket(session, ticket_id=1, user_id=1, created=now)
+                await _seed_message(
+                    session, ticket_id=1, sender="user",
+                    text="u-msg", created=now, message_id=100,
+                )
+                await _seed_message(
+                    session, ticket_id=1, sender="admin",
+                    text="a-msg", created=now + timedelta(minutes=1),
+                    message_id=101,
+                )
+                await session.commit()
+            async with Session() as session:
+                ok = await repo_support.delete_admin_message(
+                    session, ticket_id=1, message_id=101
+                )
+                await session.commit()
+                assert ok is True
+            async with Session() as session:
+                msgs = await repo_support.list_messages_for_ticket(session, 1)
+                assert [m.text for m in msgs] == ["u-msg"]
+        finally:
+            await engine.dispose()
+
+    _run(go())
+
+
+def test_delete_admin_message_refuses_user_message() -> None:
+    async def go() -> None:
+        engine = _make_engine()
+        try:
+            await _setup(engine)
+            Session = async_sessionmaker(engine, expire_on_commit=False)
+            now = datetime(2026, 5, 18, 12, 0, 0)
+            async with Session() as session:
+                await _seed_user(session)
+                await _seed_ticket(session, ticket_id=1, user_id=1, created=now)
+                await _seed_message(
+                    session, ticket_id=1, sender="user",
+                    text="u-msg", created=now, message_id=200,
+                )
+                await _seed_message(
+                    session, ticket_id=1, sender="admin",
+                    text="a-msg", created=now + timedelta(minutes=1),
+                    message_id=201,
+                )
+                await session.commit()
+            async with Session() as session:
+                ok = await repo_support.delete_admin_message(
+                    session, ticket_id=1, message_id=200
+                )
+                await session.commit()
+                assert ok is False
+            async with Session() as session:
+                msgs = await repo_support.list_messages_for_ticket(session, 1)
+                assert {m.text for m in msgs} == {"u-msg", "a-msg"}
+        finally:
+            await engine.dispose()
+
+    _run(go())
+
+
+def test_delete_admin_message_refuses_wrong_ticket() -> None:
+    async def go() -> None:
+        engine = _make_engine()
+        try:
+            await _setup(engine)
+            Session = async_sessionmaker(engine, expire_on_commit=False)
+            now = datetime(2026, 5, 18, 12, 0, 0)
+            async with Session() as session:
+                await _seed_user(session)
+                await _seed_ticket(session, ticket_id=1, user_id=1, created=now)
+                await _seed_ticket(session, ticket_id=2, user_id=1, created=now)
+                await _seed_message(
+                    session, ticket_id=2, sender="admin",
+                    text="a-on-2", created=now, message_id=300,
+                )
+                await session.commit()
+            async with Session() as session:
+                ok = await repo_support.delete_admin_message(
+                    session, ticket_id=1, message_id=300
+                )
+                await session.commit()
+                assert ok is False
+            async with Session() as session:
+                msgs = await repo_support.list_messages_for_ticket(session, 2)
+                assert [m.text for m in msgs] == ["a-on-2"]
+        finally:
+            await engine.dispose()
+
+    _run(go())
+
+
+def test_delete_admin_message_missing_id_returns_false() -> None:
+    async def go() -> None:
+        engine = _make_engine()
+        try:
+            await _setup(engine)
+            Session = async_sessionmaker(engine, expire_on_commit=False)
+            now = datetime(2026, 5, 18, 12, 0, 0)
+            async with Session() as session:
+                await _seed_user(session)
+                await _seed_ticket(session, ticket_id=1, user_id=1, created=now)
+                await session.commit()
+            async with Session() as session:
+                ok = await repo_support.delete_admin_message(
+                    session, ticket_id=1, message_id=999999
+                )
+                assert ok is False
+        finally:
+            await engine.dispose()
+
+    _run(go())
