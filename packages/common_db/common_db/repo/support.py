@@ -15,7 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable
 
-from sqlalchemy import desc, func, select
+from sqlalchemy import delete, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import SupportMessage, SupportTicket
@@ -159,10 +159,35 @@ async def count_tickets_by_status(
     return (await session.scalar(stmt)) or 0
 
 
+# --- mutations ------------------------------------------------------------
+
+
+async def delete_admin_message(
+    session: AsyncSession, ticket_id: int, message_id: int
+) -> bool:
+    """Hard-delete an admin-authored message from a ticket.
+
+    Filters on (id, ticket_id, sender='admin') in a single statement so
+    you can't delete a user message, a message that belongs to a
+    different ticket, or a non-existent row by guessing ids. Caller
+    commits.
+
+    Returns True iff exactly one row was deleted.
+    """
+    stmt = delete(SupportMessage).where(
+        SupportMessage.id == message_id,
+        SupportMessage.ticket_id == ticket_id,
+        SupportMessage.sender == "admin",
+    )
+    result = await session.execute(stmt)
+    return (result.rowcount or 0) > 0
+
+
 __all__ = [
     "TicketWithLastMessage",
     "count_open_tickets_for_user",
     "count_tickets_by_status",
+    "delete_admin_message",
     "get_ticket_by_id",
     "list_messages_for_ticket",
     "list_user_tickets",
