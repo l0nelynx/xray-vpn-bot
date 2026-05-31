@@ -147,3 +147,30 @@ async def update_status(ticket_id: int, body: StatusBody, _: str = Depends(get_c
         ticket.updated_at = _now_iso()
         await session.commit()
     return {"ok": True}
+
+
+@router.delete("/tickets/{ticket_id}/messages/{message_id}")
+async def delete_admin_message(
+    ticket_id: int,
+    message_id: int,
+    _: str = Depends(get_current_user),
+):
+    """Delete an admin-authored reply from a ticket.
+
+    Only messages with sender='admin' can be removed. The repo helper
+    enforces this at the SQL level; the endpoint translates "nothing
+    deleted" into a 404 (covers: wrong message_id, wrong ticket_id,
+    or a user-authored message).
+    """
+    async with async_session() as session:
+        ticket = await _repo_support.get_ticket_by_id(session, ticket_id)
+        if not ticket:
+            raise HTTPException(404, "ticket not found")
+        deleted = await _repo_support.delete_admin_message(
+            session, ticket_id=ticket_id, message_id=message_id
+        )
+        if not deleted:
+            raise HTTPException(404, "message not found")
+        ticket.updated_at = _now_iso()
+        await session.commit()
+    return {"ok": True}
