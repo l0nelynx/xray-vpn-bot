@@ -10,7 +10,9 @@ import {
   Button,
   message,
   Spin,
+  Popconfirm,
 } from "antd";
+import { DeleteOutlined } from "@ant-design/icons";
 import { api } from "../api/client";
 import {
   PaginatedResponse,
@@ -114,6 +116,18 @@ export default function SupportPage() {
       message.error(e?.message || "Failed to send reply");
     } finally {
       setSending(false);
+    }
+  };
+
+  const deleteMessage = async (messageId: number) => {
+    if (!openId) return;
+    try {
+      await api.delete(`/support/tickets/${openId}/messages/${messageId}`);
+      message.success("Message deleted");
+      await loadDetail(openId);
+      await load();
+    } catch (e: any) {
+      message.error(e?.message || "Failed to delete message");
     }
   };
 
@@ -257,12 +271,34 @@ export default function SupportPage() {
                 >
                   <div
                     style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
                       fontSize: 12,
                       color: "rgba(255,255,255,0.5)",
                       marginBottom: 4,
                     }}
                   >
-                    {m.sender === "admin" ? "Admin" : "User"} · {m.created_at}
+                    <span>
+                      {m.sender === "admin" ? "Admin" : "User"} · {m.created_at}
+                    </span>
+                    {m.sender === "admin" && (
+                      <Popconfirm
+                        title="Delete this reply?"
+                        description="This cannot be undone."
+                        okText="Delete"
+                        okButtonProps={{ danger: true }}
+                        cancelText="Cancel"
+                        onConfirm={() => deleteMessage(m.id)}
+                      >
+                        <Button
+                          type="text"
+                          size="small"
+                          icon={<DeleteOutlined />}
+                          aria-label="Delete reply"
+                        />
+                      </Popconfirm>
+                    )}
                   </div>
                   <div style={{ whiteSpace: "pre-wrap" }}>{m.text}</div>
                 </div>
