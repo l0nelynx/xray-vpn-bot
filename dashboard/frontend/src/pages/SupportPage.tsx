@@ -5,12 +5,12 @@ import {
   Tag,
   Input,
   Select,
-  Space,
   Drawer,
   Button,
   message,
   Spin,
   Popconfirm,
+  Card,
 } from "antd";
 import { DeleteOutlined } from "@ant-design/icons";
 import { api } from "../api/client";
@@ -19,6 +19,7 @@ import {
   SupportTicketDetail,
   SupportTicketSummary,
 } from "../api/types";
+import useIsMobile from "../hooks/useIsMobile";
 
 const STATUS_COLOR: Record<string, string> = {
   open: "blue",
@@ -40,6 +41,7 @@ const STATUS_OPTIONS = [
 ];
 
 export default function SupportPage() {
+  const isMobile = useIsMobile();
   const [items, setItems] = useState<SupportTicketSummary[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -148,9 +150,6 @@ export default function SupportPage() {
       title: "Subject",
       dataIndex: "subject",
       ellipsis: true,
-      render: (v: string, r: SupportTicketSummary) => (
-        <a onClick={() => openTicket(r.id)}>{v}</a>
-      ),
     },
     {
       title: "User",
@@ -171,6 +170,45 @@ export default function SupportPage() {
     { title: "Updated", dataIndex: "updated_at", width: 170 },
   ];
 
+  const renderMobileCard = (t: SupportTicketSummary) => {
+    const who = t.username ? `@${t.username}` : t.tg_id ? String(t.tg_id) : "—";
+    return (
+      <Card
+        key={t.id}
+        size="small"
+        hoverable
+        onClick={() => openTicket(t.id)}
+        style={{ marginBottom: 8 }}
+        styles={{ body: { padding: 12 } }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div
+              style={{
+                fontWeight: 600,
+                color: "rgba(255,255,255,0.88)",
+                marginBottom: 4,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                display: "-webkit-box",
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: "vertical",
+              }}
+            >
+              #{t.id} · {t.subject}
+            </div>
+            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.45)", marginBottom: 6 }}>
+              {who} · {t.updated_at}
+            </div>
+          </div>
+          <Tag color={STATUS_COLOR[t.status] || "default"} style={{ margin: 0, flexShrink: 0 }}>
+            {STATUS_LABEL[t.status] || t.status}
+          </Tag>
+        </div>
+      </Card>
+    );
+  };
+
   return (
     <div>
       <Typography.Title
@@ -180,7 +218,14 @@ export default function SupportPage() {
         Support
       </Typography.Title>
 
-      <Space style={{ marginBottom: 16 }} wrap>
+      <div
+        style={{
+          marginBottom: 16,
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 8,
+        }}
+      >
         <Select
           value={status}
           options={STATUS_OPTIONS}
@@ -188,7 +233,7 @@ export default function SupportPage() {
             setPage(1);
             setStatus(v);
           }}
-          style={{ width: 160 }}
+          style={{ width: isMobile ? "100%" : 160 }}
         />
         <Input.Search
           placeholder="Search by subject"
@@ -198,38 +243,85 @@ export default function SupportPage() {
             setPage(1);
             load();
           }}
-          style={{ width: 280 }}
+          style={{
+            flex: isMobile ? "1 1 100%" : "0 0 280px",
+            width: isMobile ? "100%" : 280,
+          }}
         />
-        <Button onClick={load}>Refresh</Button>
-      </Space>
+        <Button onClick={load} style={{ width: isMobile ? "100%" : undefined }}>
+          Refresh
+        </Button>
+      </div>
 
-      <Table
-        rowKey="id"
-        columns={columns as any}
-        dataSource={items}
-        loading={loading}
-        pagination={{
-          current: page,
-          pageSize: perPage,
-          total,
-          showSizeChanger: true,
-          onChange: (p, ps) => {
-            setPage(p);
-            setPerPage(ps);
-          },
-        }}
-      />
+      {isMobile ? (
+        <>
+          {loading ? (
+            <div style={{ textAlign: "center", padding: 40, color: "rgba(255,255,255,0.4)" }}>
+              Loading…
+            </div>
+          ) : items.length === 0 ? (
+            <div style={{ textAlign: "center", padding: 40, color: "rgba(255,255,255,0.4)" }}>
+              No tickets
+            </div>
+          ) : (
+            items.map(renderMobileCard)
+          )}
+          <div
+            style={{
+              textAlign: "center",
+              padding: "12px 0",
+              color: "rgba(255,255,255,0.45)",
+              fontSize: 12,
+            }}
+          >
+            Page {page} · Total: {total}
+          </div>
+          <div style={{ display: "flex", justifyContent: "center", gap: 8 }}>
+            <Button size="small" disabled={page <= 1} onClick={() => setPage(page - 1)}>
+              Prev
+            </Button>
+            <Button
+              size="small"
+              disabled={page * perPage >= total}
+              onClick={() => setPage(page + 1)}
+            >
+              Next
+            </Button>
+          </div>
+        </>
+      ) : (
+        <Table
+          rowKey="id"
+          columns={columns as any}
+          dataSource={items}
+          loading={loading}
+          onRow={(record) => ({
+            onClick: () => openTicket(record.id),
+            style: { cursor: "pointer" },
+          })}
+          pagination={{
+            current: page,
+            pageSize: perPage,
+            total,
+            showSizeChanger: true,
+            onChange: (p, ps) => {
+              setPage(p);
+              setPerPage(ps);
+            },
+          }}
+        />
+      )}
 
       <Drawer
         title={detail ? `#${detail.id} — ${detail.subject}` : "Loading…"}
         open={openId !== null}
         onClose={closeDrawer}
-        width={560}
+        width={isMobile ? "100%" : 560}
         extra={
           detail && (
             <Select
               value={detail.status}
-              style={{ width: 160 }}
+              style={{ width: isMobile ? 140 : 160 }}
               onChange={changeStatus}
               options={[
                 { value: "open", label: "Open" },
@@ -317,6 +409,7 @@ export default function SupportPage() {
               loading={sending}
               disabled={!reply.trim()}
               onClick={sendReply}
+              block={isMobile}
               style={{ marginTop: 12 }}
             >
               Send reply
