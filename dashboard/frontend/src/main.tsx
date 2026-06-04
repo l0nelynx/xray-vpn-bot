@@ -1,7 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
-import { ConfigProvider, theme } from "antd";
+import { ConfigProvider, theme, App as AntApp } from "antd";
 import App from "./App";
 import ErrorBoundary from "./components/ErrorBoundary";
 
@@ -71,9 +71,11 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           },
         }}
       >
-        <ErrorBoundary>
-          <App />
-        </ErrorBoundary>
+        <AntApp>
+          <ErrorBoundary>
+            <App />
+          </ErrorBoundary>
+        </AntApp>
       </ConfigProvider>
     </BrowserRouter>
   </React.StrictMode>

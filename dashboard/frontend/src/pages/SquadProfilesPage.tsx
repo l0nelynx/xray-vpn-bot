@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import {
-  Typography, Table, Button, Space, Modal, Form, Input, message, Popconfirm,
+  Typography, Table, Button, Space, Modal, Form, Input, App, Popconfirm,
 } from "antd";
 import { PlusOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons";
 import { api } from "../api/client";
@@ -14,6 +14,7 @@ export default function SquadProfilesPage() {
   const [editing, setEditing] = useState<SquadProfile | null>(null);
   const [form] = Form.useForm();
   const isMobile = useIsMobile();
+  const { message } = App.useApp();
 
   const load = useCallback(async () => {
     setLoading(true);

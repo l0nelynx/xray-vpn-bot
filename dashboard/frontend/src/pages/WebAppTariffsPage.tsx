@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Typography, Card, Button, Input, InputNumber, Select, Space, Empty,
-  message, Popconfirm, Spin, Tag,
+  App, Popconfirm, Spin, Tag,
 } from "antd";
 import {
   PlusOutlined, DeleteOutlined, SaveOutlined, CaretRightOutlined,
@@ -343,6 +343,7 @@ export default function WebAppTariffsPage() {
   const [drafts, setDrafts] = useState<Record<number, DraftNode>>({});
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(true);
+  const { message } = App.useApp();
 
   const flatten = useMemo(() => {
     const out: MenuNode[] = [];

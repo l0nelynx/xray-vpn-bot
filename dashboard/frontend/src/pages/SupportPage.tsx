@@ -7,7 +7,7 @@ import {
   Select,
   Drawer,
   Button,
-  message,
+  App,
   Spin,
   Popconfirm,
   Card,
@@ -42,6 +42,7 @@ const STATUS_OPTIONS = [
 
 export default function SupportPage() {
   const isMobile = useIsMobile();
+  const { message } = App.useApp();
   const [items, setItems] = useState<SupportTicketSummary[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
