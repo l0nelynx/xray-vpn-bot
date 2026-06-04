@@ -1,4 +1,4 @@
-import { Table, Tag, Button, Space, Popconfirm, Input, Select, Drawer, Descriptions, List, Card, message } from "antd";
+import { Table, Tag, Button, Space, Popconfirm, Input, Select, Drawer, Descriptions, List, Card, App } from "antd";
 import { SearchOutlined, StopOutlined, CheckOutlined, DeleteOutlined, EyeOutlined, CrownOutlined } from "@ant-design/icons";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "../api/client";
@@ -20,6 +20,7 @@ export default function UsersTable() {
   const isMobile = useIsMobile();
   const debouncedSearch = useDebounce(search, 400);
   const abortRef = useRef<AbortController | null>(null);
+  const { message } = App.useApp();
 
   const fetchUsers = useCallback(async () => {
     abortRef.current?.abort();

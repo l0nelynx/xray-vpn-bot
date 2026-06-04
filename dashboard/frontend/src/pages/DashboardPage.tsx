@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Row, Col, Card, Table, Tag, Typography, Select, Space, message } from "antd";
+import { Row, Col, Card, Table, Tag, Typography, Select, App } from "antd";
 import {
   UserOutlined,
   DollarOutlined,
@@ -20,6 +20,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState("month");
   const isMobile = useIsMobile();
+  const { message } = App.useApp();
 
   useEffect(() => {
     Promise.all([

@@ -13,7 +13,7 @@ import {
   Tabs,
   Tag,
   Typography,
-  message,
+  App,
 } from "antd";
 import {
   DeleteOutlined,
@@ -48,6 +48,7 @@ interface PromoSettings {
 
 function PromosTab() {
   const isMobile = useIsMobile();
+  const { message } = App.useApp();
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<PromoItem[]>([]);
   const [total, setTotal] = useState(0);
@@ -257,6 +258,7 @@ function SettingsTab() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [form] = Form.useForm();
+  const { message } = App.useApp();
 
   const load = useCallback(async () => {
     setLoading(true);
