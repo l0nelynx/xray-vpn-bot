@@ -88,7 +88,10 @@ async def deliver_subscription(
     """
     try:
         # Lazy import to avoid circular dependency
-        from app.handlers.tools import get_user_info, detect_user_api_provider, get_user_days, add_new_user_info
+        from app.handlers.tools import (
+            get_user_info, detect_user_api_provider, get_user_days,
+            add_new_user_info, resolve_remnawave_account,
+        )
         import app.database.requests as rq
 
         # Get user's language for localized messages
@@ -117,8 +120,13 @@ async def deliver_subscription(
         #         else:
         #             logging.error(f"Auto-migration failed for {username}")
 
-        # Стандартная логика — RemnaWave is the only API
-        user_info = await get_user_info(username)
+        # Стандартная логика — RemnaWave is the only API.
+        # Resolve account by uuid (DB) -> email -> username so that scenario
+        # detection and the subsequent Remnawave update target the same
+        # account. See app.handlers.tools.resolve_remnawave_account.
+        account_uuid, user_info = await resolve_remnawave_account(user_id, username)
+        if user_info is None:
+            user_info = 404
 
         scenario = await get_subscription_scenario(
             user_id, user_info, username, subscription_type, days
@@ -155,12 +163,12 @@ async def deliver_subscription(
         elif scenario == SubscriptionScenario.EXTEND:
             result = await _handle_extend_subscription(
                 message, username, user_id, days, subscription_type, lang, user_info=user_info,
-                tariff_squad=tariff_squad,
+                tariff_squad=tariff_squad, account_uuid=account_uuid,
             )
         elif scenario == SubscriptionScenario.UPDATE:
             result = await _handle_update_subscription(
                 message, username, user_id, days, data_limit, reset_strategy, subscription_type, lang,
-                tariff_squad=tariff_squad,
+                tariff_squad=tariff_squad, account_uuid=account_uuid,
             )
         elif scenario == SubscriptionScenario.LIMITED:
             result = await _handle_limited(message, username, subscription_type, lang, user_info=user_info)
@@ -337,6 +345,7 @@ async def _handle_extend_subscription(
     lang=None,
     user_info: dict = None,
     tariff_squad: Optional[dict] = None,
+    account_uuid: Optional[str] = None,
 ) -> dict:
     """Handle existing subscription extension"""
     # Lazy import to avoid circular dependency
@@ -359,14 +368,20 @@ async def _handle_extend_subscription(
         new_expire_days = current_days_left + days
         days_for_apply = days
 
-    db_user = await rq_extend.get_full_username_info(username)
-    if not db_user or not db_user.get("vless_uuid"):
+    # Prefer the resolved account_uuid (uuid -> email -> username) over a
+    # bare DB lookup so we update the same Remnawave account the scenario
+    # was resolved against.
+    target_uuid = account_uuid
+    if not target_uuid:
+        db_user = await rq_extend.get_full_username_info(username)
+        target_uuid = (db_user or {}).get("vless_uuid")
+    if not target_uuid:
         logging.warning(f"User {username} not found in DB for extend")
         return {"days": expire_day, "link": sub_link}
 
     if subscription_type == SubscriptionType.FREE:
         buyer_info = await apply_update(
-            user_uuid=db_user["vless_uuid"],
+            user_uuid=target_uuid,
             username=username,
             days=new_expire_days,
             limit_gb=0,
@@ -376,7 +391,7 @@ async def _handle_extend_subscription(
         )
     else:
         buyer_info = await apply_extend(
-            user_uuid=db_user["vless_uuid"],
+            user_uuid=target_uuid,
             username=username,
             days=days_for_apply,
             current_days_left=current_days_left,
@@ -411,6 +426,7 @@ async def _handle_update_subscription(
     subscription_type: SubscriptionType,
     lang=None,
     tariff_squad: Optional[dict] = None,
+    account_uuid: Optional[str] = None,
 ) -> dict:
     """Handle subscription update (replacement)"""
     # Lazy import to avoid circular dependency
@@ -426,21 +442,24 @@ async def _handle_update_subscription(
         squad_id = secrets.get("rw_free_id")
         external_squad_id = secrets.get("rw_ext_free_id")
 
-    db_user = await rq_update.get_full_username_info(username)
-    if not db_user or not db_user.get("vless_uuid"):
+    target_uuid = account_uuid
+    if not target_uuid:
+        db_user = await rq_update.get_full_username_info(username)
+        target_uuid = (db_user or {}).get("vless_uuid")
+    if not target_uuid:
         logging.warning(f"User {username} not found in DB for update")
         return {"days": 0, "link": None}
 
     # Сброс трафика при выдаче FREE подписки (чтобы limited пользователь мог снова пользоваться)
     if subscription_type == SubscriptionType.FREE and data_limit > 0:
         try:
-            await reset_user_traffic(db_user["vless_uuid"])
+            await reset_user_traffic(target_uuid)
             logging.info(f"Reset traffic for {username} before FREE subscription update")
         except Exception as e:
             logging.warning(f"Failed to reset traffic for {username}: {e}")
 
     buyer_info = await apply_update(
-        user_uuid=db_user["vless_uuid"],
+        user_uuid=target_uuid,
         username=username,
         days=days,
         limit_gb=data_limit,

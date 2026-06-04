@@ -262,7 +262,29 @@ class RemnawaveClient:
             response: UserResponseDto = await self.sdk.users.update_user(request)
 
             expire_ts = int(response.expire_at.timestamp()) if response.expire_at else None
+            resp_squads: list[str] = []
+            for s in (getattr(response, "active_internal_squads", None) or []):
+                v = (s.get("uuid") if isinstance(s, dict)
+                     else getattr(s, "uuid", None))
+                if v:
+                    resp_squads.append(str(v))
+            logger.info(
+                "Remnawave update_user OK uuid=%s "
+                "sent{status=%s expire_at=%s traffic_limit_bytes=%s squads=%s ext_squad=%s} "
+                "resp{status=%s expire_at=%s traffic_limit_bytes=%s squads=%s}",
+                user_uuid,
+                update_data.get("status"),
+                update_data.get("expire_at"),
+                update_data.get("traffic_limit_bytes"),
+                update_data.get("active_internal_squads"),
+                update_data.get("external_squad_uuid"),
+                response.status,
+                response.expire_at,
+                response.traffic_limit_bytes,
+                resp_squads,
+            )
             return {
+                "uuid": str(response.uuid) if response.uuid else None,
                 "expire": expire_ts,
                 "subscription_url": response.subscription_url,
                 "status": response.status.value.lower() if response.status else None,
