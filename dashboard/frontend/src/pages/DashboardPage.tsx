@@ -108,7 +108,7 @@ export default function DashboardPage() {
             value={stats?.total_users ?? 0}
             prefix={<TeamOutlined />}
             loading={loading}
-            color="#4f8cff"
+            color="#7C9CFF"
           />
         </Col>
         <Col xs={12} sm={12} lg={6}>

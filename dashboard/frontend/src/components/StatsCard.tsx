@@ -11,7 +11,7 @@ interface Props {
   color?: string;
 }
 
-export default function StatsCard({ title, value, prefix, suffix, loading, color = "#4f8cff" }: Props) {
+export default function StatsCard({ title, value, prefix, suffix, loading, color = "#7C9CFF" }: Props) {
   const isMobile = useIsMobile();
 
   return (
@@ -29,6 +29,11 @@ export default function StatsCard({ title, value, prefix, suffix, loading, color
         prefix={isMobile ? null : <span style={{ color }}>{prefix}</span>}
         suffix={suffix}
         loading={loading}
+        formatter={
+          typeof value === "number"
+            ? (v) => Math.round(Number(v)).toLocaleString("en-US")
+            : undefined
+        }
         valueStyle={{
           color: "rgba(255,255,255,0.95)",
           fontWeight: 600,

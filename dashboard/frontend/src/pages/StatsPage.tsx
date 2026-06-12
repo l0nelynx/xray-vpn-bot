@@ -68,7 +68,7 @@ export default function StatsPage() {
           <StatsCard title="Conversion" value={`${conversionRate}%`} loading={loading} color="#36cfc9" />
         </Col>
         <Col xs={12} sm={8}>
-          <StatsCard title="Total Orders" value={totalOrders} loading={loading} color="#4f8cff" />
+          <StatsCard title="Total Orders" value={totalOrders} loading={loading} color="#7C9CFF" />
         </Col>
       </Row>
 

@@ -357,7 +357,7 @@ export default function SupportPage() {
                     borderRadius: 8,
                     background:
                       m.sender === "admin"
-                        ? "rgba(24,144,255,0.12)"
+                        ? "rgba(124, 156, 255, 0.16)"
                         : "rgba(255,255,255,0.04)",
                     border: "1px solid rgba(255,255,255,0.06)",
                   }}

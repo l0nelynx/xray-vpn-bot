@@ -30,16 +30,14 @@ export default function LoginPage() {
         alignItems: "center",
         justifyContent: "center",
         padding: 16,
-        background: "linear-gradient(135deg, #0a0a0f 0%, #0f0f1e 50%, #0a0a0f 100%)",
+        background: "linear-gradient(135deg, #0B0B14 0%, #14142a 50%, #0B0B14 100%)",
       }}
     >
       <Card
         style={{
           width: "100%",
           maxWidth: 400,
-          background: "#13131d",
-          border: "1px solid rgba(255,255,255,0.06)",
-          borderTop: "2px solid #4f8cff",
+          borderTop: "2px solid #7C9CFF",
         }}
         styles={{
           body: { padding: "32px 24px 24px" },

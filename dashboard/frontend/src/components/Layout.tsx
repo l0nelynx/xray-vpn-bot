@@ -82,7 +82,7 @@ export default function Layout() {
           borderBottom: "1px solid rgba(255,255,255,0.04)",
         }}
       >
-        {!isMobile && collapsed ? "VP" : "XRAY VPN"}
+        {!isMobile && collapsed ? "VP" : "Dashboard"}
       </div>
       <Menu
         mode="inline"
@@ -112,7 +112,7 @@ export default function Layout() {
   );
 
   return (
-    <AntLayout style={{ minHeight: "100vh", background: "#0a0a0f" }}>
+    <AntLayout style={{ minHeight: "100vh", background: "#0B0B14" }}>
       {/* Desktop sidebar */}
       {!isMobile && (
         <Sider
@@ -123,14 +123,16 @@ export default function Layout() {
           width={240}
           collapsedWidth={64}
           style={{
-            background: "#0f0f18",
-            borderRight: "1px solid rgba(255,255,255,0.04)",
+            background: "rgba(20, 20, 30, 0.55)",
+            backdropFilter: "blur(24px) saturate(1.6)",
+            WebkitBackdropFilter: "blur(24px) saturate(1.6)",
+            borderRight: "1px solid rgba(255,255,255,0.08)",
             overflow: "auto",
             height: "100vh",
             position: "sticky",
             top: 0,
             left: 0,
-          }}
+          } as React.CSSProperties}
         >
           {sidebarContent}
         </Sider>
@@ -148,7 +150,7 @@ export default function Layout() {
             header: { display: "none" },
             body: {
               padding: 0,
-              background: "#0f0f18",
+              background: "transparent",
               display: "flex",
               flexDirection: "column",
             },
@@ -159,16 +161,17 @@ export default function Layout() {
         </Drawer>
       )}
 
-      <AntLayout style={{ background: "#0a0a0f" }}>
+      <AntLayout style={{ background: "#0B0B14" }}>
         <Header
           style={{
             padding: isMobile ? "0 12px" : "0 24px",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            background: "rgba(15,15,24,0.8)",
-            backdropFilter: "blur(12px)",
-            borderBottom: "1px solid rgba(255,255,255,0.04)",
+            background: "rgba(20, 20, 30, 0.55)",
+            backdropFilter: "blur(24px) saturate(1.6)",
+            WebkitBackdropFilter: "blur(24px) saturate(1.6)",
+            borderBottom: "1px solid rgba(255,255,255,0.08)",
             height: 56,
             lineHeight: "56px",
             position: "sticky",
@@ -200,7 +203,7 @@ export default function Layout() {
                 letterSpacing: 1,
               }}
             >
-              XRAY VPN
+              DASHBOARD
             </span>
           ) : null}
           {!isMobile ? (

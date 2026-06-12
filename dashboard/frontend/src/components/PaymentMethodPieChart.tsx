@@ -5,7 +5,7 @@ import { api } from "../api/client";
 import type { PaymentMethodStat } from "../api/types";
 import useIsMobile from "../hooks/useIsMobile";
 
-const COLORS = ["#4f8cff", "#36cfc9", "#ff7a45", "#ffc53d", "#b37feb", "#ff85c0"];
+const COLORS = ["#7C9CFF", "#36cfc9", "#ff7a45", "#ffc53d", "#b37feb", "#ff85c0"];
 
 export default function PaymentMethodPieChart() {
   const [data, setData] = useState<PaymentMethodStat[]>([]);

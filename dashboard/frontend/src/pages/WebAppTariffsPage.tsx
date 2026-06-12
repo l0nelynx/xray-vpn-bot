@@ -153,10 +153,10 @@ function NodeRow({
         size="small"
         style={{
           marginBottom: 8,
-          background: depth === 0 ? "#161622" : "#1a1a28",
-          borderColor: dirty ? "#faad14" : "rgba(255,255,255,0.08)",
+          background: depth === 0 ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.03)",
+          borderColor: dirty ? "#FFD479" : "rgba(255,255,255,0.10)",
         }}
-        bodyStyle={{ padding: 12 }}
+        styles={{ body: { padding: 12 } }}
       >
         <Space wrap size="small" style={{ width: "100%" }} align="start">
           {node.action === "buttons" ? (

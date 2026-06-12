@@ -119,7 +119,7 @@ function ServerTab() {
             title="Connections"
             value={summary?.connections_total ?? 0}
             loading={loading}
-            color="#4f8cff"
+            color="#7C9CFF"
           />
         </Col>
         <Col xs={12} sm={12} lg={6}>

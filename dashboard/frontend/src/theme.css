@@ -1,0 +1,325 @@
+* {
+  box-sizing: border-box;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+}
+
+body {
+  background: #0B0B14;
+  color: rgba(255, 255, 255, 0.92);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
+    Roboto, Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+/* Glass cards */
+.ant-card {
+  background: rgba(255, 255, 255, 0.06) !important;
+  backdrop-filter: blur(24px) saturate(1.6);
+  -webkit-backdrop-filter: blur(24px) saturate(1.6);
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 18px !important;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.10) !important;
+}
+
+/* Modal — strong glass */
+.ant-modal-content {
+  background: rgba(28, 28, 38, 0.78) !important;
+  backdrop-filter: blur(40px) saturate(1.8);
+  -webkit-backdrop-filter: blur(40px) saturate(1.8);
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  border-radius: 22px !important;
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16) !important;
+}
+
+.ant-modal-header {
+  background: transparent !important;
+}
+
+/* Drawer — glass panel */
+.ant-drawer-content {
+  background: rgba(20, 20, 30, 0.88) !important;
+  backdrop-filter: blur(40px) saturate(1.8);
+  -webkit-backdrop-filter: blur(40px) saturate(1.8);
+}
+
+.ant-drawer-header {
+  background: transparent !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Buttons */
+.ant-btn {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: 12px !important;
+  font-weight: 500;
+  transition: transform 0.15s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.ant-btn:active {
+  transform: scale(0.97);
+}
+
+.ant-btn-primary {
+  background: linear-gradient(135deg, #7C9CFF 0%, #B47CFF 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.20) !important;
+  box-shadow:
+    0 6px 20px rgba(124, 156, 255, 0.30),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25) !important;
+  color: #FFFFFF !important;
+}
+
+.ant-btn-primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #8FACFF 0%, #C28EFF 100%) !important;
+  box-shadow:
+    0 8px 26px rgba(124, 156, 255, 0.40),
+    inset 0 1px 0 rgba(255, 255, 255, 0.30) !important;
+}
+
+.ant-btn-primary:disabled {
+  opacity: 0.45;
+  background: rgba(255, 255, 255, 0.10) !important;
+  color: rgba(255, 255, 255, 0.5) !important;
+  box-shadow: none !important;
+}
+
+.ant-btn-default {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  color: rgba(255, 255, 255, 0.92) !important;
+}
+
+.ant-btn-default:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.14) !important;
+  border-color: rgba(255, 255, 255, 0.28) !important;
+  color: #FFFFFF !important;
+}
+
+.ant-btn-dashed {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px dashed rgba(255, 255, 255, 0.30) !important;
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+
+.ant-btn-text {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+.ant-btn-text:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06) !important;
+}
+
+/* Inputs */
+.ant-input,
+.ant-input-affix-wrapper,
+textarea.ant-input,
+.ant-input-number,
+.ant-input-number-input,
+.ant-picker {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  color: rgba(255, 255, 255, 0.92) !important;
+  border-radius: 12px !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.ant-input::placeholder,
+textarea.ant-input::placeholder {
+  color: rgba(255, 255, 255, 0.40) !important;
+}
+
+.ant-input:focus,
+.ant-input-affix-wrapper-focused,
+textarea.ant-input:focus,
+.ant-picker-focused {
+  border-color: rgba(124, 156, 255, 0.65) !important;
+  box-shadow: 0 0 0 3px rgba(124, 156, 255, 0.18) !important;
+}
+
+/* Select */
+.ant-select .ant-select-selector {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  border-radius: 12px !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.ant-select-focused .ant-select-selector {
+  border-color: rgba(124, 156, 255, 0.65) !important;
+  box-shadow: 0 0 0 3px rgba(124, 156, 255, 0.18) !important;
+}
+
+.ant-select-dropdown {
+  background: rgba(28, 28, 38, 0.92) !important;
+  backdrop-filter: blur(28px) saturate(1.6);
+  -webkit-backdrop-filter: blur(28px) saturate(1.6);
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 14px !important;
+}
+
+/* Tags as glass pills */
+.ant-tag {
+  background: rgba(255, 255, 255, 0.10) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  border-radius: 999px !important;
+  padding: 2px 10px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.ant-tag-success {
+  background: rgba(93, 211, 168, 0.18) !important;
+  border-color: rgba(93, 211, 168, 0.40) !important;
+  color: #5DD3A8 !important;
+}
+
+.ant-tag-error {
+  background: rgba(255, 138, 138, 0.18) !important;
+  border-color: rgba(255, 138, 138, 0.40) !important;
+  color: #FF8A8A !important;
+}
+
+.ant-tag-warning {
+  background: rgba(255, 212, 121, 0.18) !important;
+  border-color: rgba(255, 212, 121, 0.40) !important;
+  color: #FFD479 !important;
+}
+
+.ant-tag-processing {
+  background: rgba(125, 156, 255, 0.18) !important;
+  border-color: rgba(125, 156, 255, 0.40) !important;
+  color: #9DB8FF !important;
+}
+
+/* Alert — translucent + blur */
+.ant-alert {
+  border-radius: 14px !important;
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+}
+
+/* Table — transparent rows so card glass shows through */
+.ant-table {
+  background: transparent !important;
+}
+
+.ant-table-thead > tr > th {
+  background: rgba(255, 255, 255, 0.04) !important;
+  color: rgba(255, 255, 255, 0.65) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+.ant-table-tbody > tr > td {
+  background: transparent !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+}
+
+.ant-table-tbody > tr:hover > td {
+  background: rgba(124, 156, 255, 0.06) !important;
+}
+
+.ant-pagination .ant-pagination-item {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.ant-pagination .ant-pagination-item-active {
+  background: rgba(124, 156, 255, 0.18);
+  border-color: rgba(124, 156, 255, 0.45);
+}
+
+/* Typography tone tweaks */
+.ant-typography {
+  color: rgba(255, 255, 255, 0.92);
+}
+
+h1.ant-typography,
+h2.ant-typography,
+h3.ant-typography,
+h4.ant-typography,
+h5.ant-typography,
+.ant-typography h1,
+.ant-typography h2,
+.ant-typography h3,
+.ant-typography h4,
+.ant-typography h5 {
+  color: #FFFFFF !important;
+  letter-spacing: -0.01em;
+}
+
+.ant-typography-secondary {
+  color: rgba(255, 255, 255, 0.55) !important;
+}
+
+/* Descriptions */
+.ant-descriptions-item-label {
+  color: rgba(255, 255, 255, 0.55) !important;
+}
+
+.ant-descriptions-item-content {
+  color: rgba(255, 255, 255, 0.92) !important;
+}
+
+/* Empty / Result */
+.ant-empty-description,
+.ant-result-subtitle {
+  color: rgba(255, 255, 255, 0.55) !important;
+}
+
+/* Progress rail tone */
+.ant-progress-bg {
+  background: linear-gradient(90deg, #7C9CFF, #B47CFF) !important;
+}
+
+/* Collapse */
+.ant-collapse {
+  background: transparent !important;
+  border: 0 !important;
+}
+
+.ant-collapse > .ant-collapse-item {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 14px !important;
+  margin-bottom: 8px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.ant-collapse > .ant-collapse-item > .ant-collapse-header {
+  color: rgba(255, 255, 255, 0.88) !important;
+}
+
+/* Tabs */
+.ant-tabs-tab {
+  color: rgba(255, 255, 255, 0.55) !important;
+}
+
+.ant-tabs-tab-active .ant-tabs-tab-btn {
+  color: #9DB8FF !important;
+}
+
+.ant-tabs-ink-bar {
+  background: linear-gradient(90deg, #7C9CFF, #B47CFF) !important;
+}
