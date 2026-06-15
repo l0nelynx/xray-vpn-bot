@@ -29,11 +29,20 @@ async def users_count(_: str = Depends(get_current_user)):
     return {"total": total, "paid": paid, "free": free, "banned": banned}
 
 
+_USER_SORT_COLUMNS = {
+    "id": User.id,
+    "tg_id": User.tg_id,
+    "username": User.username,
+    "api_provider": User.api_provider,
+}
+
+
 @router.get("")
 async def list_users(
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
     sort: str = Query("id"),
+    order: str = Query("desc"),
     search: str = Query(""),
     filter: str = Query("all"),
     _: str = Depends(get_current_user),
@@ -75,10 +84,13 @@ async def list_users(
         count_q = select(func.count()).select_from(base.subquery())
         total = await session.scalar(count_q) or 0
 
-        if sort == "username":
-            base = base.order_by(User.username.asc())
+        if sort == "is_paid":
+            sort_col = has_tx
         else:
-            base = base.order_by(User.id.desc())
+            sort_col = _USER_SORT_COLUMNS.get(sort, User.id)
+        base = base.order_by(
+            sort_col.asc() if order == "asc" else sort_col.desc()
+        )
 
         offset = (page - 1) * per_page
         result = await session.execute(base.offset(offset).limit(per_page))

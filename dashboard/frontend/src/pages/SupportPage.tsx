@@ -12,6 +12,7 @@ import {
   Popconfirm,
   Card,
 } from "antd";
+import type { TableProps } from "antd";
 import { DeleteOutlined } from "@ant-design/icons";
 import { api } from "../api/client";
 import {
@@ -20,6 +21,16 @@ import {
   SupportTicketSummary,
 } from "../api/types";
 import useIsMobile from "../hooks/useIsMobile";
+import MobileSortControl, { SortOrder } from "../components/MobileSortControl";
+
+const SORT_OPTIONS = [
+  { value: "updated_at", label: "Updated" },
+  { value: "created_at", label: "Created" },
+  { value: "id", label: "ID" },
+  { value: "subject", label: "Subject" },
+  { value: "username", label: "User" },
+  { value: "status", label: "Status" },
+];
 
 const STATUS_COLOR: Record<string, string> = {
   open: "blue",
@@ -49,6 +60,8 @@ export default function SupportPage() {
   const [perPage, setPerPage] = useState(20);
   const [status, setStatus] = useState("all");
   const [search, setSearch] = useState("");
+  const [sort, setSort] = useState("updated_at");
+  const [order, setOrder] = useState<SortOrder>("desc");
   const [loading, setLoading] = useState(false);
 
   const [openId, setOpenId] = useState<number | null>(null);
@@ -65,6 +78,8 @@ export default function SupportPage() {
         per_page: String(perPage),
         status,
         search,
+        sort,
+        order,
       });
       const data = await api.get<PaginatedResponse<SupportTicketSummary>>(
         `/support/tickets?${params}`
@@ -80,7 +95,7 @@ export default function SupportPage() {
 
   useEffect(() => {
     load();
-  }, [page, perPage, status]);
+  }, [page, perPage, status, sort, order]);
 
   const loadDetail = async (id: number) => {
     setDetailLoading(true);
@@ -145,31 +160,52 @@ export default function SupportPage() {
     }
   };
 
-  const columns = [
-    { title: "ID", dataIndex: "id", width: 70 },
+  const sortOrderFor = (key: string) =>
+    sort === key ? (order === "asc" ? "ascend" : "descend") : null;
+
+  const columns: TableProps<SupportTicketSummary>["columns"] = [
+    { title: "ID", dataIndex: "id", key: "id", width: 70, sorter: true, sortOrder: sortOrderFor("id") },
     {
       title: "Subject",
       dataIndex: "subject",
+      key: "subject",
       ellipsis: true,
+      sorter: true,
+      sortOrder: sortOrderFor("subject"),
     },
     {
       title: "User",
       dataIndex: "username",
+      key: "username",
       width: 180,
+      sorter: true,
+      sortOrder: sortOrderFor("username"),
       render: (v: string | null, r: SupportTicketSummary) =>
         v ? `@${v}` : r.tg_id ? String(r.tg_id) : "—",
     },
     {
       title: "Status",
       dataIndex: "status",
+      key: "status",
       width: 130,
+      sorter: true,
+      sortOrder: sortOrderFor("status"),
       render: (v: string) => (
         <Tag color={STATUS_COLOR[v] || "default"}>{STATUS_LABEL[v] || v}</Tag>
       ),
     },
-    { title: "Created", dataIndex: "created_at", width: 170 },
-    { title: "Updated", dataIndex: "updated_at", width: 170 },
+    { title: "Created", dataIndex: "created_at", key: "created_at", width: 170, sorter: true, sortOrder: sortOrderFor("created_at") },
+    { title: "Updated", dataIndex: "updated_at", key: "updated_at", width: 170, sorter: true, sortOrder: sortOrderFor("updated_at") },
   ];
+
+  const handleTableChange: TableProps<SupportTicketSummary>["onChange"] = (_p, _f, sorter) => {
+    const s = Array.isArray(sorter) ? sorter[0] : sorter;
+    if (s && s.order) {
+      setSort(String(s.columnKey));
+      setOrder(s.order === "ascend" ? "asc" : "desc");
+    }
+    setPage(1);
+  };
 
   const renderMobileCard = (t: SupportTicketSummary) => {
     const who = t.username ? `@${t.username}` : t.tg_id ? String(t.tg_id) : "—";
@@ -256,6 +292,16 @@ export default function SupportPage() {
 
       {isMobile ? (
         <>
+          <MobileSortControl
+            options={SORT_OPTIONS}
+            sort={sort}
+            order={order}
+            onChange={(s, o) => {
+              setSort(s);
+              setOrder(o);
+              setPage(1);
+            }}
+          />
           {loading ? (
             <div style={{ textAlign: "center", padding: 40, color: "rgba(255,255,255,0.4)" }}>
               Loading…
@@ -293,9 +339,10 @@ export default function SupportPage() {
       ) : (
         <Table
           rowKey="id"
-          columns={columns as any}
+          columns={columns}
           dataSource={items}
           loading={loading}
+          onChange={handleTableChange}
           onRow={(record) => ({
             onClick: () => openTicket(record.id),
             style: { cursor: "pointer" },

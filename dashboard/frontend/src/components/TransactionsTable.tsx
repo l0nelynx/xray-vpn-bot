@@ -1,12 +1,24 @@
-import { Table, Space, Select, DatePicker, Tag, Card, Button } from "antd";
+import { Table, Select, DatePicker, Tag, Card, Button } from "antd";
+import type { TableProps } from "antd";
 import { useState, useEffect, useCallback, useRef } from "react";
-import dayjs from "dayjs";
 import { api } from "../api/client";
 import type { TransactionItem, PaginatedResponse } from "../api/types";
 import useIsMobile from "../hooks/useIsMobile";
+import MobileSortControl, { SortOrder } from "./MobileSortControl";
 import { STATUS_COLORS } from "../utils/constants";
 
 const { RangePicker } = DatePicker;
+
+const SORT_OPTIONS = [
+  { value: "created_at", label: "Date" },
+  { value: "amount", label: "Amount" },
+  { value: "username", label: "Username" },
+  { value: "user_tg_id", label: "TG ID" },
+  { value: "payment_method", label: "Method" },
+  { value: "order_status", label: "Status" },
+  { value: "days_ordered", label: "Days" },
+  { value: "expire_date", label: "Expires" },
+];
 
 export default function TransactionsTable() {
   const [data, setData] = useState<TransactionItem[]>([]);
@@ -16,6 +28,8 @@ export default function TransactionsTable() {
   const [status, setStatus] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("");
   const [dateRange, setDateRange] = useState<[string, string]>(["", ""]);
+  const [sort, setSort] = useState("created_at");
+  const [order, setOrder] = useState<SortOrder>("desc");
   const [loading, setLoading] = useState(false);
   const isMobile = useIsMobile();
   const abortRef = useRef<AbortController | null>(null);
@@ -27,7 +41,7 @@ export default function TransactionsTable() {
 
     setLoading(true);
     try {
-      let url = `/transactions?page=${page}&per_page=${perPage}`;
+      let url = `/transactions?page=${page}&per_page=${perPage}&sort=${sort}&order=${order}`;
       if (status) url += `&status=${status}`;
       if (paymentMethod) url += `&payment_method=${encodeURIComponent(paymentMethod)}`;
       if (dateRange[0]) url += `&date_from=${dateRange[0]}`;
@@ -42,23 +56,28 @@ export default function TransactionsTable() {
     } finally {
       setLoading(false);
     }
-  }, [page, perPage, status, paymentMethod, dateRange]);
+  }, [page, perPage, status, paymentMethod, dateRange, sort, order]);
 
   useEffect(() => {
     fetchData();
     return () => abortRef.current?.abort();
   }, [fetchData]);
 
-  const columns = [
-    { title: "ID", dataIndex: "transaction_id", key: "transaction_id", width: 140, ellipsis: true },
-    { title: "Username", dataIndex: "username", key: "username", width: 120 },
-    { title: "TG ID", dataIndex: "user_tg_id", key: "user_tg_id", width: 120 },
-    { title: "Method", dataIndex: "payment_method", key: "payment_method", width: 100 },
+  const sortOrderFor = (key: string) =>
+    sort === key ? (order === "asc" ? "ascend" : "descend") : null;
+
+  const columns: TableProps<TransactionItem>["columns"] = [
+    { title: "ID", dataIndex: "transaction_id", key: "transaction_id", width: 140, ellipsis: true, sorter: true, sortOrder: sortOrderFor("transaction_id") },
+    { title: "Username", dataIndex: "username", key: "username", width: 120, sorter: true, sortOrder: sortOrderFor("username") },
+    { title: "TG ID", dataIndex: "user_tg_id", key: "user_tg_id", width: 120, sorter: true, sortOrder: sortOrderFor("user_tg_id") },
+    { title: "Method", dataIndex: "payment_method", key: "payment_method", width: 100, sorter: true, sortOrder: sortOrderFor("payment_method") },
     {
       title: "Amount",
       dataIndex: "amount",
       key: "amount",
       width: 90,
+      sorter: true,
+      sortOrder: sortOrderFor("amount"),
       render: (v: number | null) => v ?? "—",
     },
     {
@@ -66,18 +85,31 @@ export default function TransactionsTable() {
       dataIndex: "order_status",
       key: "order_status",
       width: 100,
+      sorter: true,
+      sortOrder: sortOrderFor("order_status"),
       render: (s: string) => <Tag color={STATUS_COLORS[s] || "default"}>{s}</Tag>,
     },
-    { title: "Days", dataIndex: "days_ordered", key: "days_ordered", width: 60 },
-    { title: "Date", dataIndex: "created_at", key: "created_at", width: 160 },
+    { title: "Days", dataIndex: "days_ordered", key: "days_ordered", width: 60, sorter: true, sortOrder: sortOrderFor("days_ordered") },
+    { title: "Date", dataIndex: "created_at", key: "created_at", width: 160, sorter: true, sortOrder: sortOrderFor("created_at") },
     {
       title: "Expires",
       dataIndex: "expire_date",
       key: "expire_date",
       width: 160,
+      sorter: true,
+      sortOrder: sortOrderFor("expire_date"),
       render: (v: string | null) => v ?? "—",
     },
   ];
+
+  const handleTableChange: TableProps<TransactionItem>["onChange"] = (_p, _f, sorter) => {
+    const s = Array.isArray(sorter) ? sorter[0] : sorter;
+    if (s && s.order) {
+      setSort(String(s.field));
+      setOrder(s.order === "ascend" ? "asc" : "desc");
+    }
+    setPage(1);
+  };
 
   const renderMobileCard = (tx: TransactionItem) => (
     <Card
@@ -151,12 +183,12 @@ export default function TransactionsTable() {
           placeholder="Payment method"
           options={[
             { value: "", label: "All methods" },
-            { value: "stars", label: "Stars" },
-            { value: "cryptobot", label: "CryptoBot" },
-            { value: "crystal", label: "Crystal Pay" },
-            { value: "apay", label: "A-Pays" },
-            { value: "platega", label: "Platega" },
-            { value: "free", label: "Free" },
+            { value: "TG_STARS", label: "Telegram Stars" },
+            { value: "CRYPTOPAY", label: "CryptoPay" },
+            { value: "CRYSTAL_PAY", label: "Crystal Pay" },
+            { value: "SBP_APAY", label: "SBP (A-Pay)" },
+            { value: "PLATEGA", label: "Platega" },
+            { value: "FREE", label: "Free" },
           ]}
         />
         <RangePicker
@@ -177,6 +209,16 @@ export default function TransactionsTable() {
 
       {isMobile ? (
         <>
+          <MobileSortControl
+            options={SORT_OPTIONS}
+            sort={sort}
+            order={order}
+            onChange={(s, o) => {
+              setSort(s);
+              setOrder(o);
+              setPage(1);
+            }}
+          />
           {loading ? (
             <div style={{ textAlign: "center", padding: 40, color: "rgba(255,255,255,0.4)" }}>Loading...</div>
           ) : (
@@ -200,6 +242,7 @@ export default function TransactionsTable() {
           columns={columns}
           dataSource={data}
           loading={loading}
+          onChange={handleTableChange}
           pagination={{
             current: page,
             pageSize: perPage,

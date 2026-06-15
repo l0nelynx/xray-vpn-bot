@@ -1,10 +1,20 @@
 import { Table, Tag, Button, Space, Popconfirm, Input, Select, Drawer, Descriptions, List, Card, App } from "antd";
+import type { TableProps } from "antd";
 import { SearchOutlined, StopOutlined, CheckOutlined, DeleteOutlined, EyeOutlined, CrownOutlined } from "@ant-design/icons";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "../api/client";
 import type { UserItem, UserDetail, PaginatedResponse, TransactionItem } from "../api/types";
 import useIsMobile from "../hooks/useIsMobile";
 import useDebounce from "../hooks/useDebounce";
+import MobileSortControl, { SortOrder } from "./MobileSortControl";
+
+const SORT_OPTIONS = [
+  { value: "id", label: "ID" },
+  { value: "tg_id", label: "TG ID" },
+  { value: "username", label: "Username" },
+  { value: "api_provider", label: "Provider" },
+  { value: "is_paid", label: "Paid status" },
+];
 
 export default function UsersTable() {
   const [data, setData] = useState<UserItem[]>([]);
@@ -13,6 +23,8 @@ export default function UsersTable() {
   const [perPage] = useState(20);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
+  const [sort, setSort] = useState("id");
+  const [order, setOrder] = useState<SortOrder>("desc");
   const [loading, setLoading] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserDetail | null>(null);
@@ -30,7 +42,7 @@ export default function UsersTable() {
     setLoading(true);
     try {
       const res = await api.get<PaginatedResponse<UserItem>>(
-        `/users?page=${page}&per_page=${perPage}&search=${encodeURIComponent(debouncedSearch)}&filter=${filter}`,
+        `/users?page=${page}&per_page=${perPage}&search=${encodeURIComponent(debouncedSearch)}&filter=${filter}&sort=${sort}&order=${order}`,
         controller.signal
       );
       setData(res.items);
@@ -41,7 +53,7 @@ export default function UsersTable() {
     } finally {
       setLoading(false);
     }
-  }, [page, perPage, debouncedSearch, filter]);
+  }, [page, perPage, debouncedSearch, filter, sort, order]);
 
   useEffect(() => {
     fetchUsers();
@@ -92,15 +104,20 @@ export default function UsersTable() {
     setDrawerOpen(true);
   };
 
-  const columns = [
-    { title: "ID", dataIndex: "id", key: "id", width: 60 },
-    { title: "TG ID", dataIndex: "tg_id", key: "tg_id", width: 140 },
-    { title: "Username", dataIndex: "username", key: "username" },
-    { title: "Provider", dataIndex: "api_provider", key: "api_provider", width: 100 },
+  const sortOrderFor = (key: string) =>
+    sort === key ? (order === "asc" ? "ascend" : "descend") : null;
+
+  const columns: TableProps<UserItem>["columns"] = [
+    { title: "ID", dataIndex: "id", key: "id", width: 60, sorter: true, sortOrder: sortOrderFor("id") },
+    { title: "TG ID", dataIndex: "tg_id", key: "tg_id", width: 140, sorter: true, sortOrder: sortOrderFor("tg_id") },
+    { title: "Username", dataIndex: "username", key: "username", sorter: true, sortOrder: sortOrderFor("username") },
+    { title: "Provider", dataIndex: "api_provider", key: "api_provider", width: 100, sorter: true, sortOrder: sortOrderFor("api_provider") },
     {
       title: "Status",
-      key: "status",
+      key: "is_paid",
       width: 120,
+      sorter: true,
+      sortOrder: sortOrderFor("is_paid"),
       render: (_: unknown, r: UserItem) => (
         <Space>
           {r.vip && <Tag color="gold">VIP</Tag>}
@@ -137,6 +154,15 @@ export default function UsersTable() {
       ),
     },
   ];
+
+  const handleTableChange: TableProps<UserItem>["onChange"] = (_p, _f, sorter) => {
+    const s = Array.isArray(sorter) ? sorter[0] : sorter;
+    if (s && s.order) {
+      setSort(String(s.columnKey));
+      setOrder(s.order === "ascend" ? "asc" : "desc");
+    }
+    setPage(1);
+  };
 
   const renderMobileCard = (user: UserItem) => (
     <Card
@@ -209,6 +235,16 @@ export default function UsersTable() {
 
       {isMobile ? (
         <>
+          <MobileSortControl
+            options={SORT_OPTIONS}
+            sort={sort}
+            order={order}
+            onChange={(s, o) => {
+              setSort(s);
+              setOrder(o);
+              setPage(1);
+            }}
+          />
           {loading ? (
             <div style={{ textAlign: "center", padding: 40, color: "rgba(255,255,255,0.4)" }}>Loading...</div>
           ) : (
@@ -232,6 +268,7 @@ export default function UsersTable() {
           columns={columns}
           dataSource={data}
           loading={loading}
+          onChange={handleTableChange}
           pagination={{
             current: page,
             pageSize: perPage,

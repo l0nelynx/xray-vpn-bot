@@ -128,12 +128,13 @@ body {
   background: rgba(255, 255, 255, 0.06) !important;
 }
 
-/* Inputs */
+/* Inputs — style only the outer control so wrappers with an icon/affix
+   (.ant-input-affix-wrapper, .ant-input-number) don't show a second
+   "field inside a field". The inner element is made transparent below. */
 .ant-input,
 .ant-input-affix-wrapper,
 textarea.ant-input,
 .ant-input-number,
-.ant-input-number-input,
 .ant-picker {
   background: rgba(255, 255, 255, 0.06) !important;
   border: 1px solid rgba(255, 255, 255, 0.14) !important;
@@ -143,17 +144,36 @@ textarea.ant-input,
   -webkit-backdrop-filter: blur(12px);
 }
 
+/* Inner inputs inside a wrapper: no own background/border/blur */
+.ant-input-affix-wrapper > .ant-input,
+.ant-input-number .ant-input-number-input {
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
 .ant-input::placeholder,
-textarea.ant-input::placeholder {
+textarea.ant-input::placeholder,
+.ant-input-number-input::placeholder {
   color: rgba(255, 255, 255, 0.40) !important;
 }
 
 .ant-input:focus,
 .ant-input-affix-wrapper-focused,
 textarea.ant-input:focus,
+.ant-input-number-focused,
 .ant-picker-focused {
   border-color: rgba(124, 156, 255, 0.65) !important;
   box-shadow: 0 0 0 3px rgba(124, 156, 255, 0.18) !important;
+}
+
+/* A focused inner input must not re-add its own glow */
+.ant-input-affix-wrapper-focused > .ant-input,
+.ant-input-number-focused .ant-input-number-input {
+  box-shadow: none !important;
 }
 
 /* Select */

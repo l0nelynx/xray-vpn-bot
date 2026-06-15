@@ -3,7 +3,7 @@ from datetime import datetime
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import select, desc, func
+from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 
 from ..auth import get_current_user
@@ -31,12 +31,24 @@ def _now_iso() -> str:
     return datetime.now().isoformat(timespec="seconds")
 
 
+_TICKET_SORT_COLUMNS = {
+    "id": SupportTicket.id,
+    "subject": SupportTicket.subject,
+    "username": SupportTicket.username,
+    "status": SupportTicket.status,
+    "created_at": SupportTicket.created_at,
+    "updated_at": SupportTicket.updated_at,
+}
+
+
 @router.get("/tickets")
 async def list_tickets(
     status: str = Query("all"),
     search: str = Query(""),
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
+    sort: str = Query("updated_at"),
+    order: str = Query("desc"),
     _: str = Depends(get_current_user),
 ):
     async with async_session() as session:
@@ -52,7 +64,9 @@ async def list_tickets(
             stmt = stmt.where(SupportTicket.subject.ilike(like))
             count_stmt = count_stmt.where(SupportTicket.subject.ilike(like))
         total = await session.scalar(count_stmt) or 0
-        stmt = stmt.order_by(desc(SupportTicket.updated_at)).offset((page - 1) * per_page).limit(per_page)
+        sort_col = _TICKET_SORT_COLUMNS.get(sort, SupportTicket.updated_at)
+        sort_clause = sort_col.asc() if order == "asc" else sort_col.desc()
+        stmt = stmt.order_by(sort_clause).offset((page - 1) * per_page).limit(per_page)
         rows = (await session.execute(stmt)).all()
         items = [
             {
