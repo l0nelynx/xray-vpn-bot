@@ -10,6 +10,7 @@ import AgreementPage from "./pages/AgreementPage";
 import HomePage from "./pages/HomePage";
 import InvitePage from "./pages/InvitePage";
 import PolicyPage from "./pages/PolicyPage";
+import ReferralRulesPage from "./pages/ReferralRulesPage";
 import SettingsPage from "./pages/SettingsPage";
 import SupportCreatePage from "./pages/SupportCreatePage";
 import SupportPage from "./pages/SupportPage";
@@ -74,6 +75,7 @@ function AppInner() {
         />
         <Route path="/invite" element={<InvitePage />} />
         <Route path="/policy" element={<PolicyPage links={data.links} />} />
+        <Route path="/referral-rules" element={<ReferralRulesPage />} />
         <Route path="/agreement" element={<AgreementPage links={data.links} />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
