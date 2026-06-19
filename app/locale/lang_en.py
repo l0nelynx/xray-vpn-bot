@@ -389,7 +389,13 @@ promo_invalid_text = "Invalid promo code — please check and try again."
 
 promo_own_code_text = "You cannot use your own promo code."
 
-promo_already_used_text = "You have already used a promo code."
+promo_already_used_text = "You have already used this promo code."
+
+promo_active_exists_text = "You already have an active promo code. Use it at checkout before activating a new one."
+
+promo_referral_new_only_text = "This promo code is for new users only — you already have purchases."
+
+promo_deeplink_applied_text = "🎁 Promo code activated! A <b>{discount}%</b> discount will be applied to your subscription payment."
 
 free_traffic_exhausted = """<b>FREE subscription traffic exhausted</b>
 

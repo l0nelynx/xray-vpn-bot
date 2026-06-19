@@ -4,7 +4,7 @@ from sqlalchemy import select, update, func, delete, exists
 from sqlalchemy.orm import aliased
 import string
 import random
-from app.database.models import User, Transaction, Promo, DisabledUser
+from app.database.models import User, Transaction, Promo, PromoRedemption, DisabledUser
 from app.database.models import async_session
 
 # Shared query helpers — see packages/common_db/common_db/repo/. These take
@@ -706,31 +706,48 @@ async def get_promo_by_code(promo_code: str) -> dict | None:
         return _promo_to_dict(promo) if promo else None
 
 
-async def create_promo(tg_id: int, promo_code: str) -> Promo:
+async def get_or_create_referral_code(tg_id: int) -> str:
+    """Return the user's own referral code, creating the promo row if absent."""
     async with async_session() as session:
-        promo = Promo(tg_id=tg_id, promo_code=promo_code)
-        session.add(promo)
+        code = await _repo_promos.get_or_create_referral_code(session, tg_id)
         await session.commit()
-        return promo
+        return code
 
 
-async def use_promo(tg_id: int, promo_code: str) -> bool:
+async def redeem_promo_for_user(tg_id: int, promo_code: str):
+    """Validate + record a promo redemption. Returns the repo RedeemResult
+    (``.ok`` + ``.reason`` + resolved ``.discount_percent`` on success).
+
+    Single entry point for both deeplink auto-activation and manual entry —
+    enforces all rules (referral-new-only, one-active, no-duplicate) via
+    common_db.repo.promos.
+    """
     async with async_session() as session:
-        promo = await session.scalar(select(Promo).where(Promo.tg_id == tg_id))
-        if promo:
-            promo.used_promo = promo_code
-            promo.used_promo_consumed = False
-        else:
-            # User hasn't created their own promo yet — create a record to store used_promo
-            while True:
-                code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
-                existing = await get_promo_by_code(code)
-                if not existing:
-                    break
-            promo = Promo(tg_id=tg_id, promo_code=code, used_promo=promo_code)
-            session.add(promo)
+        result = await _repo_promos.redeem_promo(session, tg_id, promo_code)
         await session.commit()
-        return True
+        return result
+
+
+async def get_default_promo_discount() -> int:
+    """The default discount % a referral/promotional code grants when it has
+    no per-code override. Reads promo_settings (auto-seeded)."""
+    async with async_session() as session:
+        pct = await _repo_system.get_default_discount_percent(session)
+        await session.commit()
+        return pct
+
+
+async def get_promo_reward_settings() -> tuple[int, int]:
+    """Return (days_reward_per_30, reward_cap_days) from promo_settings.
+
+    Single source of truth for referral reward tunables — replaces the
+    config.yml ``promo_days_reward`` constant. Auto-seeds the singleton.
+    """
+    async with async_session() as session:
+        per_30 = await _repo_system.get_days_reward_per_30(session)
+        cap = await _repo_system.get_reward_cap_days(session)
+        await session.commit()  # persist auto-seeded PromoSettings
+        return per_30, cap
 
 
 async def add_referral_days(promo_code: str, days: int) -> dict | None:
@@ -762,68 +779,64 @@ async def update_promo_days_rewarded(tg_id: int, days_rewarded: int) -> bool:
 
 
 async def can_use_promo(tg_id: int) -> bool:
-    """Возвращает True если пользователь имеет право активировать (новый) промокод.
+    """True if the user may activate a (new) promo code right now.
 
-    Активный неиспользованный промокод блокирует активацию. После списания скидки
-    (used_promo_consumed=True) пользователь снова может ввести новый промокод.
+    An active (unconsumed) redemption blocks activating another. After the
+    discount is consumed on a paid delivery the user can redeem again
+    (subject to per-code and referral-once rules enforced at redeem time).
     """
     async with async_session() as session:
-        promo = await session.scalar(select(Promo).where(Promo.tg_id == tg_id))
-        if not promo:
-            return True
-        if promo.used_promo is None:
-            return True
-        return bool(promo.used_promo_consumed)
+        active = await _repo_promos.get_active_redemption(session, tg_id)
+        return active is None
+
+
+async def consume_promo_redemption(tg_id: int):
+    """Mark the user's active redemption consumed (after first paid delivery).
+
+    Returns the consumed redemption (so the caller can read its promo_code
+    for referral-reward routing) or None.
+    """
+    async with async_session() as session:
+        redemption = await _repo_promos.consume_active_redemption(session, tg_id)
+        await session.commit()
+        if redemption is None:
+            return None
+        # Detach-safe snapshot — session closes on return.
+        return {
+            "promo_code": redemption.promo_code,
+            "promo_type": redemption.promo_type,
+            "discount_percent": redemption.discount_percent,
+        }
+
+
+async def get_active_redemption(tg_id: int) -> dict | None:
+    """The user's current unconsumed redemption as a dict, or None."""
+    async with async_session() as session:
+        r = await _repo_promos.get_active_redemption(session, tg_id)
+        if r is None:
+            return None
+        return {
+            "promo_code": r.promo_code,
+            "promo_type": r.promo_type,
+            "discount_percent": r.discount_percent,
+        }
 
 
 async def get_promos_paginated(page: int, per_page: int = 10):
+    """Paginated promo catalog (bot admin). Delegates to the shared repo
+    query. NOTE: page is now 1-based to match the dashboard."""
     async with async_session() as session:
-        # Subquery: кол-во использований промокода
-        UsedPromo = aliased(Promo)
-        usage_sq = (
-            select(func.count())
-            .where(UsedPromo.used_promo == Promo.promo_code)
-            .correlate(Promo)
-            .scalar_subquery()
-            .label("usage_count")
-        )
-
-        base = (
-            select(Promo, User.username, usage_sq)
-            .outerjoin(User, Promo.tg_id == User.tg_id)
-        )
-
-        count_q = select(func.count()).select_from(Promo)
-        total = await session.scalar(count_q) or 0
-
-        result = await session.execute(
-            base.order_by(Promo.id).offset(page * per_page).limit(per_page)
-        )
-        rows = result.all()
-
-        promos = []
-        for promo, owner_username, usage_count in rows:
-            promos.append({
-                "promo_code": promo.promo_code,
-                "owner_username": owner_username,
-                "owner_tg_id": promo.tg_id,
-                "usage_count": usage_count or 0,
-                "days_purchased": promo.days_purchased,
-                "days_rewarded": promo.days_rewarded,
-            })
-
-        return promos, total
+        return await _repo_promos.list_promos_paginated(session, page, per_page)
 
 
 async def delete_promo(promo_code: str) -> bool:
-    """Удаляет промокод и очищает used_promo у пользователей, которые его использовали."""
+    """Delete a promo code and its redemptions."""
     async with async_session() as session:
-        promo = await session.scalar(select(Promo).where(Promo.promo_code == promo_code))
+        promo = await _repo_promos.get_promo_by_code(session, promo_code)
         if not promo:
             return False
-        # Очищаем used_promo у тех, кто использовал этот промокод
         await session.execute(
-            update(Promo).where(Promo.used_promo == promo_code).values(used_promo=None)
+            delete(PromoRedemption).where(PromoRedemption.promo_code == promo_code)
         )
         await session.execute(
             delete(Promo).where(Promo.promo_code == promo_code)
@@ -832,41 +845,19 @@ async def delete_promo(promo_code: str) -> bool:
         return True
 
 
-async def mark_promo_consumed(tg_id: int) -> None:
-    """Mark the user's activated promo as consumed (after first paid delivery)."""
-    async with async_session() as session:
-        promo = await session.scalar(select(Promo).where(Promo.tg_id == tg_id))
-        if promo and promo.used_promo and not promo.used_promo_consumed:
-            promo.used_promo_consumed = True
-            await session.commit()
-
-
 async def get_used_promo_with_discount(tg_id: int) -> dict | None:
-    """If user has an active (non-consumed) promo, return code + effective discount.
-
-    Cascade (owner.discount_percent → PromoSettings.default → 20) lives
-    in common_db.repo.promos.get_effective_discount; we wrap the result
-    in the legacy dict shape callers expect.
-    """
+    """If the user has an active redemption, return code + discount snapshot."""
     async with async_session() as session:
         ed = await _repo_promos.get_effective_discount(session, tg_id)
-        # The helper auto-seeds PromoSettings via get_or_create_singleton,
-        # so on a fresh DB it implicitly inserts a row. Commit it so the
-        # seed survives across processes.
-        await session.commit()
         if ed is None:
             return None
         return {"promo_code": ed.promo_code, "discount_percent": ed.discount_percent}
 
 
 async def get_promo_usage_users(promo_code: str) -> list[dict]:
+    """Users who redeemed ``promo_code`` (tg_id + username)."""
     async with async_session() as session:
-        result = await session.execute(
-            select(Promo.tg_id, User.username)
-            .outerjoin(User, Promo.tg_id == User.tg_id)
-            .where(Promo.used_promo == promo_code)
-        )
-        return [{"tg_id": row[0], "username": row[1]} for row in result.all()]
+        return await _repo_promos.get_promo_redeemers(session, promo_code)
 
 
 # ==================== Sub Clean / VIP functions ====================

@@ -41,8 +41,13 @@ telemt_server: "https://telemt.example.com"        # Telemt API base URL (host m
 telemt_header: "your-telemt-auth-header"           # Authorization header value for Telemt
 
 # ===== PROMO =====
-promo_discount: 20                                 # Discount (%) granted by a promo code
-promo_days_reward: 3                               # Extra days granted by a promo code
+# DEPRECATED: promo discount / reward tunables now live in the DB
+# (promo_settings table) and are edited from the Dashboard → Promocodes →
+# Settings. These keys are no longer read at runtime; manage them in the
+# Dashboard instead (default_discount_percent, days_reward_per_30,
+# reward_cap_days). Kept here only for reference / legacy installs.
+# promo_discount: 20                               # (deprecated) → promo_settings.default_discount_percent
+# promo_days_reward: 3                             # (deprecated) → promo_settings.days_reward_per_30
 admin_logs_length: 20                              # Number of recent ERROR rows shown in admin logs panel
 
 # ===== PAYMENT GATEWAY: CRYPTOBOT =====

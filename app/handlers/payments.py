@@ -23,9 +23,23 @@ from app.keyboards.tools import create_tariff_keyboard, OptimizedTariffKeyboard,
 from app.tariffs import get_tariffs_stars, get_tariffs_crypto, get_tariffs_sbp
 from app.settings import bot, cp, secrets
 import app.database.requests as rq
+from common_db.repo import promos as rq_promos
 
 
 router = Router()
+
+
+def _promo_reason_text(lang, reason: str) -> str:
+    """Map a repo can_redeem reason code to a localized message."""
+    mapping = {
+        rq_promos.REASON_INVALID: lang.promo_invalid_text,
+        rq_promos.REASON_OWN_CODE: lang.promo_own_code_text,
+        rq_promos.REASON_ALREADY_USED: lang.promo_already_used_text,
+        rq_promos.REASON_ACTIVE_EXISTS: lang.promo_active_exists_text,
+        rq_promos.REASON_REFERRAL_ONLY_ONE: lang.promo_already_used_text,
+        rq_promos.REASON_REFERRAL_NOT_NEW: lang.promo_referral_new_only_text,
+    }
+    return mapping.get(reason, lang.promo_invalid_text)
 
 # Маппинг методов оплаты на названия для логирования
 PAYMENT_METHOD_NAMES = {
@@ -79,32 +93,25 @@ async def process_promo_input(message: Message, state: FSMContext):
     promo_code = message.text.strip().upper()
     tg_id = message.from_user.id
 
-    # Check if user can still use a promo
-    can_use = await rq.can_use_promo(tg_id)
-    if not can_use:
-        await message.answer(text=lang.promo_already_used_text, parse_mode='HTML',
-                             reply_markup=get_pay_methods_localized(lang, show_promo=False))
+    # Single unified path — repo enforces all rules (invalid / own / already
+    # used / one-active / referral-new-only) and snapshots the discount.
+    result = await rq.redeem_promo_for_user(tg_id, promo_code)
+    if not result.ok:
+        reason_text = _promo_reason_text(lang, result.reason)
+        # Keep the promo button unless the block is "another promo already
+        # active" or "already used this one" (re-entry won't help).
+        show_promo = result.reason not in (
+            rq_promos.REASON_ACTIVE_EXISTS,
+            rq_promos.REASON_ALREADY_USED,
+            rq_promos.REASON_REFERRAL_ONLY_ONE,
+        )
+        await message.answer(text=reason_text, parse_mode='HTML',
+                             reply_markup=get_pay_methods_localized(lang, show_promo=show_promo))
         await state.set_state(PaymentState.PaymentMethod)
         return
 
-    # Check if promo exists
-    promo = await rq.get_promo_by_code(promo_code)
-    if not promo:
-        await message.answer(text=lang.promo_invalid_text, parse_mode='HTML',
-                             reply_markup=get_pay_methods_localized(lang, show_promo=True))
-        await state.set_state(PaymentState.PaymentMethod)
-        return
-
-    # Check if user tries to use their own promo
-    if promo['tg_id'] == tg_id:
-        await message.answer(text=lang.promo_own_code_text, parse_mode='HTML',
-                             reply_markup=get_pay_methods_localized(lang, show_promo=True))
-        await state.set_state(PaymentState.PaymentMethod)
-        return
-
-    # Apply promo
-    promo_discount = secrets.get('promo_discount', 20)
-    await rq.use_promo(tg_id, promo_code)
+    # Store the DB-resolved discount (not a flat config constant).
+    promo_discount = result.discount_percent
     await state.update_data(PromoDiscount=promo_discount, PromoCode=promo_code)
 
     await message.answer(

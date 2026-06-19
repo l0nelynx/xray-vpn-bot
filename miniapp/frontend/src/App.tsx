@@ -8,6 +8,7 @@ import DevicesPage from "./pages/DevicesPage";
 import FreeTrialPage from "./pages/FreeTrialPage";
 import AgreementPage from "./pages/AgreementPage";
 import HomePage from "./pages/HomePage";
+import InvitePage from "./pages/InvitePage";
 import PolicyPage from "./pages/PolicyPage";
 import SettingsPage from "./pages/SettingsPage";
 import SupportCreatePage from "./pages/SupportCreatePage";
@@ -71,6 +72,7 @@ function AppInner() {
           path="/settings"
           element={<SettingsPage username={data.user?.username || ""} />}
         />
+        <Route path="/invite" element={<InvitePage />} />
         <Route path="/policy" element={<PolicyPage links={data.links} />} />
         <Route path="/agreement" element={<AgreementPage links={data.links} />} />
         <Route path="*" element={<Navigate to="/" replace />} />

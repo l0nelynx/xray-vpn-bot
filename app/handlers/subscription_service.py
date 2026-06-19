@@ -175,17 +175,27 @@ async def deliver_subscription(
         elif scenario == SubscriptionScenario.ALREADY_ACTIVE:
             result = await _handle_already_active(message, username, subscription_type, lang, user_info=user_info)
 
-        # Referral reward: check if buyer used a promo code
+        # Referral reward + promo consume. Consume the buyer's active
+        # redemption first (so the discount applies only once), which returns
+        # the snapshotted promo_code used to route the referral reward — no
+        # reliance on the legacy used_promo column.
         if subscription_type == SubscriptionType.PAID:
+            consumed = None
             try:
-                buyer_promo = await rq.get_promo_by_tg_id(user_id)
-                if buyer_promo and buyer_promo['used_promo']:
-                    referral_data = await rq.add_referral_days(buyer_promo['used_promo'], days)
+                consumed = await rq.consume_promo_redemption(user_id)
+            except Exception as consume_err:
+                logging.warning(f"Failed to consume promo redemption: {consume_err}")
+
+            try:
+                if consumed and consumed.get('promo_code'):
+                    referral_data = await rq.add_referral_days(consumed['promo_code'], days)
                     if referral_data:
-                        promo_days_reward = secrets.get('promo_days_reward', 3)
+                        days_reward_per_30, reward_cap_days = await rq.get_promo_reward_settings()
                         total_purchased = referral_data['days_purchased']
                         already_rewarded = referral_data['days_rewarded']
-                        reward_days = (total_purchased // 30) * promo_days_reward - already_rewarded
+                        reward_days = (total_purchased // 30) * days_reward_per_30 - already_rewarded
+                        # Cap cumulative reward per owner (req: max 180 days).
+                        reward_days = max(0, min(reward_days, reward_cap_days - already_rewarded))
 
                         if reward_days > 0:
                             owner_tg_id = referral_data['tg_id']
@@ -241,15 +251,6 @@ async def deliver_subscription(
                                 logging.warning(f"Failed to notify promo owner {owner_tg_id}: {notify_err}")
             except Exception as promo_err:
                 logging.error(f"Error processing referral reward: {promo_err}")
-
-            # Mark the buyer's activated promo as consumed so the discount only
-            # applies once. Referral chain above already used `used_promo`, so
-            # we keep that field and only flip the consumed flag.
-            try:
-                if buyer_promo and buyer_promo.get('used_promo') and not buyer_promo.get('used_promo_consumed'):
-                    await rq.mark_promo_consumed(user_id)
-            except Exception as consume_err:
-                logging.warning(f"Failed to mark promo consumed: {consume_err}")
 
         # Обновляем delivery_status после успешной доставки
         if transaction_id:

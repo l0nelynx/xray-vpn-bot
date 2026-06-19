@@ -110,6 +110,27 @@ async def user_has_active_paid_transaction(
     return bool(await session.scalar(stmt))
 
 
+async def user_has_any_transaction(
+    session: AsyncSession, tg_id: int
+) -> bool:
+    """True if the user has *ever* had any transaction (paid, expired,
+    cancelled — anything). This is the "is this a brand-new user?" predicate
+    used to gate referral promo codes to first-time users.
+
+    Distinct from ``user_has_active_paid_transaction`` (currently-active
+    paid only). Mirrors app/database/requests.py::user_has_transactions but
+    lives here so miniapp can share it.
+    """
+    stmt = select(
+        exists(
+            select(Transaction.transaction_id)
+            .join(User, User.id == Transaction.user_id)
+            .where(User.tg_id == tg_id)
+        )
+    )
+    return bool(await session.scalar(stmt))
+
+
 async def count_paid_users(
     session: AsyncSession, *, now: datetime | None = None
 ) -> int:
@@ -186,4 +207,5 @@ __all__ = [
     "get_user_by_username",
     "get_users_by_tg_ids",
     "user_has_active_paid_transaction",
+    "user_has_any_transaction",
 ]

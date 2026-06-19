@@ -3,11 +3,18 @@ import {
   GiftOutlined,
   KeyOutlined,
   SafetyOutlined,
+  TeamOutlined,
+  UsergroupAddOutlined,
 } from "@ant-design/icons";
 import { Button, Card, Input, Modal, Space, Tag, Typography, message } from "antd";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { PromoState, promo as promoApi } from "../api/client";
+import {
+  PromoState,
+  ReferralState,
+  promo as promoApi,
+  referral as referralApi,
+} from "../api/client";
 import { showAlert } from "../tg/webapp";
 
 interface Props {
@@ -17,13 +24,16 @@ interface Props {
 export default function SettingsPage({ username }: Props) {
   const navigate = useNavigate();
   const [promoState, setPromoState] = useState<PromoState | null>(null);
+  const [referralState, setReferralState] = useState<ReferralState | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(false);
   const [inputCode, setInputCode] = useState("");
   const [activating, setActivating] = useState(false);
   const [messageApi, contextHolder] = message.useMessage();
 
   useEffect(() => {
     promoApi.getState().then(setPromoState).catch(() => {});
+    referralApi.getState().then(setReferralState).catch(() => {});
   }, []);
 
   const handleActivate = async () => {
@@ -54,6 +64,18 @@ export default function SettingsPage({ username }: Props) {
   };
 
   const items = [
+    {
+      key: "invite",
+      icon: <UsergroupAddOutlined />,
+      title: "Пригласить друзей",
+      onClick: () => navigate("/invite"),
+    },
+    {
+      key: "rules",
+      icon: <TeamOutlined />,
+      title: "Правила реферальной программы",
+      onClick: () => setRulesOpen(true),
+    },
     {
       key: "policy",
       icon: <SafetyOutlined />,
@@ -168,6 +190,61 @@ export default function SettingsPage({ username }: Props) {
           >
             Применить
           </Button>
+        </Space>
+      </Modal>
+
+      <Modal
+        title="Правила реферальной программы"
+        open={rulesOpen}
+        onCancel={() => setRulesOpen(false)}
+        footer={null}
+        centered
+      >
+        <Space direction="vertical" size={12} style={{ width: "100%" }}>
+          <Typography.Paragraph style={{ marginBottom: 0 }}>
+            <b>Реферальные промокоды</b>
+            <ul style={{ marginTop: 6, marginBottom: 0, paddingLeft: 18 }}>
+              <li>
+                У каждого пользователя есть личный промокод — поделитесь им с
+                друзьями.
+              </li>
+              <li>
+                Друг получает скидку{" "}
+                <b>{referralState?.discount_percent ?? 0}%</b> на первую покупку.
+              </li>
+              <li>
+                Реферальный промокод доступен только новым пользователям — у кого
+                ещё не было покупок.
+              </li>
+              <li>Активировать реферальный промокод можно только один раз.</li>
+            </ul>
+          </Typography.Paragraph>
+
+          <Typography.Paragraph style={{ marginBottom: 0 }}>
+            <b>Бонусы за приглашения</b>
+            <ul style={{ marginTop: 6, marginBottom: 0, paddingLeft: 18 }}>
+              <li>
+                За каждые 30 дней, купленных по вашему коду, вы получаете{" "}
+                <b>{referralState?.days_reward_per_30 ?? 0}</b> бонусных дней.
+              </li>
+              <li>
+                Всего можно получить до{" "}
+                <b>{referralState?.reward_cap_days ?? 0}</b> бонусных дней.
+              </li>
+            </ul>
+          </Typography.Paragraph>
+
+          <Typography.Paragraph style={{ marginBottom: 0 }}>
+            <b>Обычные промокоды</b>
+            <ul style={{ marginTop: 6, marginBottom: 0, paddingLeft: 18 }}>
+              <li>Доступны всем пользователям.</li>
+              <li>Каждый конкретный промокод можно использовать только один раз.</li>
+              <li>
+                Одновременно может быть активен только один промокод — используйте
+                его при оплате перед активацией следующего.
+              </li>
+            </ul>
+          </Typography.Paragraph>
         </Space>
       </Modal>
     </div>

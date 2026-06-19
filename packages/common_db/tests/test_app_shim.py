@@ -29,6 +29,7 @@ SHIMMED_MODEL_NAMES = [
     "MenuButton",
     "MenuScreen",
     "Promo",
+    "PromoRedemption",
     "PromoSettings",
     "RefreshToken",
     "SquadProfile",

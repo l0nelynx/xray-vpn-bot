@@ -7,6 +7,7 @@ import {
   InputNumber,
   Modal,
   Popconfirm,
+  Select,
   Space,
   Spin,
   Table,
@@ -25,8 +26,11 @@ import {
 import { api } from "../api/client";
 import useIsMobile from "../hooks/useIsMobile";
 
+type PromoType = "referral" | "promotional";
+
 interface PromoItem {
   promo_code: string;
+  promo_type: PromoType;
   owner_username: string | null;
   owner_tg_id: number;
   usage_count: number;
@@ -44,6 +48,8 @@ interface PromosListResponse {
 
 interface PromoSettings {
   default_discount_percent: number;
+  days_reward_per_30: number;
+  reward_cap_days: number;
 }
 
 function PromosTab() {
@@ -76,12 +82,14 @@ function PromosTab() {
     promo_code: string;
     discount_percent?: number;
     owner_tg_id?: number;
+    promo_type?: PromoType;
   }) => {
     try {
       await api.post("/promos", {
         promo_code: values.promo_code.trim().toUpperCase(),
         discount_percent: values.discount_percent ?? null,
         owner_tg_id: values.owner_tg_id ?? null,
+        promo_type: values.promo_type ?? "promotional",
       });
       message.success("Promo created");
       setCreateOpen(false);
@@ -108,6 +116,18 @@ function PromosTab() {
       dataIndex: "promo_code",
       key: "promo_code",
       render: (v: string) => <Typography.Text strong>{v}</Typography.Text>,
+    },
+    {
+      title: "Type",
+      dataIndex: "promo_type",
+      key: "promo_type",
+      width: 120,
+      render: (v: PromoType) =>
+        v === "referral" ? (
+          <Tag color="purple">Referral</Tag>
+        ) : (
+          <Tag color="blue">Promotional</Tag>
+        ),
     },
     {
       title: "Owner",
@@ -219,7 +239,12 @@ function PromosTab() {
         onOk={() => form.submit()}
         okText="Create"
       >
-        <Form form={form} layout="vertical" onFinish={handleCreate}>
+        <Form
+          form={form}
+          layout="vertical"
+          onFinish={handleCreate}
+          initialValues={{ promo_type: "promotional" }}
+        >
           <Form.Item
             name="promo_code"
             label="Code"
@@ -233,6 +258,18 @@ function PromosTab() {
             ]}
           >
             <Input placeholder="SUMMER25" autoFocus />
+          </Form.Item>
+          <Form.Item
+            name="promo_type"
+            label="Type"
+            tooltip="Promotional: anyone, each code once per user. Referral: new users only, one referral code ever per user."
+          >
+            <Select
+              options={[
+                { value: "promotional", label: "Promotional" },
+                { value: "referral", label: "Referral" },
+              ]}
+            />
           </Form.Item>
           <Form.Item
             name="discount_percent"
@@ -264,7 +301,11 @@ function SettingsTab() {
     setLoading(true);
     try {
       const r = await api.get<PromoSettings>("/promos/settings");
-      form.setFieldsValue({ default_discount_percent: r.default_discount_percent });
+      form.setFieldsValue({
+        default_discount_percent: r.default_discount_percent,
+        days_reward_per_30: r.days_reward_per_30,
+        reward_cap_days: r.reward_cap_days,
+      });
     } catch (e) {
       message.error((e as Error).message || "Failed to load settings");
     } finally {
@@ -282,6 +323,8 @@ function SettingsTab() {
       setSaving(true);
       await api.put("/promos/settings", {
         default_discount_percent: values.default_discount_percent,
+        days_reward_per_30: values.days_reward_per_30,
+        reward_cap_days: values.reward_cap_days,
       });
       message.success("Settings saved");
     } catch (e) {
@@ -304,7 +347,9 @@ function SettingsTab() {
       >
         <Typography.Paragraph type="secondary">
           Default discount % is applied to promo codes that don't have a specific
-          discount value set.
+          discount value set. Reward settings control how many bonus days a
+          referral owner earns per 30 days purchased with their code, and the
+          cumulative cap on that reward.
         </Typography.Paragraph>
         <Form form={form} layout="vertical">
           <Form.Item
@@ -313,6 +358,21 @@ function SettingsTab() {
             rules={[{ required: true, message: "Required" }]}
           >
             <InputNumber min={0} max={100} style={{ width: "100%" }} />
+          </Form.Item>
+          <Form.Item
+            name="days_reward_per_30"
+            label="Reward days per 30 days purchased"
+            rules={[{ required: true, message: "Required" }]}
+          >
+            <InputNumber min={0} max={365} style={{ width: "100%" }} />
+          </Form.Item>
+          <Form.Item
+            name="reward_cap_days"
+            label="Reward cap (days)"
+            tooltip="Maximum cumulative bonus days a single referral owner can ever earn."
+            rules={[{ required: true, message: "Required" }]}
+          >
+            <InputNumber min={0} max={3650} style={{ width: "100%" }} />
           </Form.Item>
         </Form>
       </Card>

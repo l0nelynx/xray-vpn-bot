@@ -203,6 +203,20 @@ export const promo = {
     api.post<PromoActivateResponse>("/promo", { promo_code }),
 };
 
+export interface ReferralState {
+  code: string;
+  deeplink: string;
+  discount_percent: number;
+  days_reward_per_30: number;
+  reward_cap_days: number;
+  days_purchased: number;
+  days_rewarded: number;
+}
+
+export const referral = {
+  getState: () => api.get<ReferralState>("/promo/referral"),
+};
+
 export interface FreeCheckResponse {
   subscribed: boolean;
   news_url: string;

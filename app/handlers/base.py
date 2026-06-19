@@ -18,6 +18,7 @@ from app.handlers.tools import startup_user_dialog, free_sub_handler, subscripti
     get_user_days
 
 from app.settings import secrets, bot, admin_bot
+from common_db.repo import promos as rq_promos
 import string
 import random
 
@@ -126,6 +127,27 @@ async def cmd_start(message: Message, command: CommandObject = None):
             disable_web_page_preview=True,
             reply_markup=get_pay_methods_localized(lang, show_promo=show_promo),
         )
+        return
+
+    # Referral/promo deeplink: t.me/<bot>?start=<CODE>. Auto-activate it; rules
+    # are enforced in the repo (referral codes only for users with no
+    # transactions, one active promo at a time, no re-use). A bad deeplink must
+    # not block /start — on failure we fall through to the main menu, only
+    # surfacing the "referral is for new users" case which is worth explaining.
+    if raw_payload and raw_payload.isalnum():
+        lang = await get_user_lang(message.from_user.id)
+        result = await rq.redeem_promo_for_user(message.from_user.id, raw_payload.upper())
+        if result.ok:
+            await message.answer(
+                text=lang.promo_deeplink_applied_text.format(discount=result.discount_percent),
+                parse_mode='HTML', disable_web_page_preview=True,
+            )
+        elif result.reason == rq_promos.REASON_REFERRAL_NOT_NEW:
+            await message.answer(
+                text=lang.promo_referral_new_only_text,
+                parse_mode='HTML', disable_web_page_preview=True,
+            )
+        await startup_user_dialog(message)
         return
 
     # Language already chosen — go straight to main menu
@@ -355,26 +377,21 @@ async def invite_friends(callback: CallbackQuery):
     lang = await get_user_lang(callback.from_user.id)
 
     tg_id = callback.from_user.id
+    # Ensure the user has a referral code (creates one on first open).
+    code = await rq.get_or_create_referral_code(tg_id)
     promo = await rq.get_promo_by_tg_id(tg_id)
 
-    if not promo:
-        while True:
-            code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
-            existing = await rq.get_promo_by_code(code)
-            if not existing:
-                break
-        await rq.create_promo(tg_id, code)
-        promo = await rq.get_promo_by_tg_id(tg_id)
-
-    promo_discount = secrets.get('promo_discount', 20)
-    promo_days_reward = secrets.get('promo_days_reward', 3)
+    # Discount + reward tunables now come from promo_settings (single source
+    # of truth) rather than config.yml.
+    promo_discount = await rq.get_default_promo_discount()
+    promo_days_reward, _reward_cap = await rq.get_promo_reward_settings()
 
     text = lang.promo_invite_text.format(
-        promo_code=promo['promo_code'],
+        promo_code=code,
         discount=promo_discount,
         reward_days=promo_days_reward,
-        days_purchased=promo['days_purchased'],
-        days_rewarded=promo['days_rewarded'],
+        days_purchased=promo['days_purchased'] if promo else 0,
+        days_rewarded=promo['days_rewarded'] if promo else 0,
     )
 
     await callback.message.edit_text(text=text, parse_mode='HTML', disable_web_page_preview=True,

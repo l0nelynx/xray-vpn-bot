@@ -14,6 +14,7 @@ from common_db.models import (
     GooglePlaySku,
     MenuButton,
     Promo,
+    PromoRedemption,
     PromoSettings,
     SupportMessage,
     SupportTicket,
@@ -147,9 +148,55 @@ class TestPromoCanon:
         assert col.default is not None and col.default.arg is False
         assert _server_default(col) == "0"
 
+    def test_promo_type_defaults(self) -> None:
+        col = _col(Promo, "promo_type")
+        assert isinstance(col.type, String)
+        assert col.type.length == 20
+        assert col.default is not None and col.default.arg == "referral"
+        assert _server_default(col) == "referral"
+
     def test_promo_settings_default_discount_percent(self) -> None:
         col = _col(PromoSettings, "default_discount_percent")
         assert col.default is not None and col.default.arg == 20
+
+    def test_promo_settings_days_reward_per_30(self) -> None:
+        col = _col(PromoSettings, "days_reward_per_30")
+        assert isinstance(col.type, Integer)
+        assert col.default is not None and col.default.arg == 3
+        assert _server_default(col) == "3"
+
+    def test_promo_settings_reward_cap_days(self) -> None:
+        col = _col(PromoSettings, "reward_cap_days")
+        assert isinstance(col.type, Integer)
+        assert col.default is not None and col.default.arg == 180
+        assert _server_default(col) == "180"
+
+
+# ------------------------------------------------- PromoRedemption ----------
+class TestPromoRedemptionCanon:
+    def test_id_is_integer_pk(self) -> None:
+        col = _col(PromoRedemption, "id")
+        assert isinstance(col.type, Integer)
+        assert col.primary_key is True
+
+    def test_tg_id_is_big_integer(self) -> None:
+        assert isinstance(_col(PromoRedemption, "tg_id").type, BigInteger)
+
+    def test_status_defaults_active(self) -> None:
+        col = _col(PromoRedemption, "status")
+        assert col.default is not None and col.default.arg == "active"
+        assert _server_default(col) == "active"
+
+    def test_promo_code_and_type_widths(self) -> None:
+        assert _col(PromoRedemption, "promo_code").type.length == 20
+        assert _col(PromoRedemption, "promo_type").type.length == 20
+
+    def test_discount_percent_is_integer(self) -> None:
+        assert isinstance(_col(PromoRedemption, "discount_percent").type, Integer)
+
+    def test_indexes_present(self) -> None:
+        assert _has_index(PromoRedemption, "ix_promo_redemptions_tg_id")
+        assert _has_index(PromoRedemption, "ix_promo_redemptions_promo_code")
 
 
 # ---------------------------------------------------------- Transaction ----
@@ -241,6 +288,7 @@ class TestMetadataSanity:
             "disabled_users",
             "promos",
             "promo_settings",
+            "promo_redemptions",
             "transactions",
             "support_tickets",
             "support_messages",

@@ -29,6 +29,7 @@ CANONICAL_TABLES = frozenset({
     "google_play_skus",
     "menu_buttons",
     "menu_screens",
+    "promo_redemptions",
     "promo_settings",
     "promos",
     "refresh_tokens",

@@ -9,6 +9,7 @@ Import any class you need from here:
 from .auth import EmailVerification, RefreshToken, TelegramLinkCode
 from .google_play import GooglePlayPurchase, GooglePlaySku
 from .menus import MenuButton, MenuScreen, WebAppMenuNode
+from .promo_redemptions import PromoRedemption
 from .promos import Promo, PromoSettings
 from .support import SupportMessage, SupportTicket
 from .system import CacheVersion, TelmtFreeParams
@@ -23,6 +24,7 @@ __all__ = [
     # promos
     "Promo",
     "PromoSettings",
+    "PromoRedemption",
     # transactions
     "Transaction",
     # support
