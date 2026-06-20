@@ -4,9 +4,7 @@ import { BrowserRouter } from "react-router-dom";
 import { AuthProvider } from "./auth/AuthContext";
 import WebApp from "./App";
 
-declare global {
-  interface Window { __WEB_BASE__?: string; }
-}
+import "./branding"; // ensures Window augmentation is loaded first
 const webBase: string = window.__WEB_BASE__ ?? "/";
 
 // Minimal global reset for the web portal

@@ -240,6 +240,16 @@ def get_email_code_max_attempts() -> int:
 
 # --- Web portal ------------------------------------------------------------
 
+def get_web_brand_name() -> str:
+    """Display name shown in the web portal. Defaults to empty string (frontend uses its built-in default)."""
+    return (get_config().get("web_brand_name") or "").strip()
+
+
+def get_web_brand_logo() -> str:
+    """URL to an SVG logo for the web portal. Defaults to empty string (frontend uses built-in logo)."""
+    return (get_config().get("web_brand_logo") or "").strip()
+
+
 def get_web_base_path() -> str:
     """Base URL path for the web portal SPA.
 

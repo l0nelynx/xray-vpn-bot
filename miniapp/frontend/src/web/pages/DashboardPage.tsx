@@ -6,7 +6,8 @@ import {
   ShoppingCartOutlined,
   WifiOutlined,
 } from "@ant-design/icons";
-import CheezyLogo from "../components/CheezyLogo";
+import BrandLogo from "../components/BrandLogo";
+import { BRAND_NAME } from "../branding";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
@@ -78,10 +79,10 @@ export default function DashboardPage() {
               transition: "padding 0.2s",
             }}
           >
-            <CheezyLogo size={32} style={{ flexShrink: 0 }} />
+            <BrandLogo size={32} style={{ flexShrink: 0 }} />
             {!collapsed && (
               <Text strong style={{ color: "#fff", fontSize: 15, whiteSpace: "nowrap" }}>
-                Cheeze
+                {BRAND_NAME.split(" ")[0]}
               </Text>
             )}
           </div>

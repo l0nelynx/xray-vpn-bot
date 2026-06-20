@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from slowapi.errors import RateLimitExceeded
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from .config import get_web_base_path
+from .config import get_web_base_path, get_web_brand_name, get_web_brand_logo
 from .android import auth_router as android_auth_router
 from .android import data_router as android_data_router
 from .android import email_router as android_email_router
@@ -30,7 +30,9 @@ from .routers import devices, free, me, menu, payments, promo, support
 from .web import web_router
 
 BASE_PATH = "/bot/miniapp"
-WEB_BASE = get_web_base_path()  # from config.yml: web_base_path, default "/"
+WEB_BASE = get_web_base_path()        # config.yml: web_base_path, default "/"
+WEB_BRAND_NAME = get_web_brand_name() # config.yml: web_brand_name, empty = frontend default
+WEB_BRAND_LOGO = get_web_brand_logo() # config.yml: web_brand_logo, empty = frontend default
 
 # Reuse the auth router's limiter so per-route decorators on it take effect.
 limiter = android_auth_router.limiter
@@ -112,11 +114,17 @@ if os.path.isdir(STATIC_DIR):
     _web_html = os.path.join(STATIC_DIR, "web.html")
 
     def _web_html_response():
-        """Serve web.html with __WEB_BASE__ injected so React Router picks it up."""
+        """Serve web.html with runtime config injected into <head>."""
         from fastapi.responses import HTMLResponse
         with open(_web_html, encoding="utf-8") as f:
             html = f.read()
-        snippet = f'<script>window.__WEB_BASE__={json.dumps(WEB_BASE)};</script>'
+        snippet = (
+            f"<script>"
+            f"window.__WEB_BASE__={json.dumps(WEB_BASE)};"
+            f"window.__WEB_BRAND_NAME__={json.dumps(WEB_BRAND_NAME)};"
+            f"window.__WEB_BRAND_LOGO__={json.dumps(WEB_BRAND_LOGO)};"
+            f"</script>"
+        )
         html = html.replace("</head>", f"{snippet}</head>", 1)
         return HTMLResponse(content=html)
 

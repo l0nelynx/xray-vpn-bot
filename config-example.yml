@@ -15,6 +15,7 @@ uvicorn_port: 5000                                 # Webhook server port
 # uvicorn_ssl_key: "./uvicorn/ssl/key.pem"         # (disabled: SSL is terminated upstream, see app/settings.py)
 # uvicorn_ssl_cert: "./uvicorn/ssl/fullchain.pem"  # (disabled)
 web_base_path: /bot/web
+web_brand_name: "Cheezy Networks"
 
 # ===== BOTS =====
 token: "yourbottoken"                              # Main user-facing bot token

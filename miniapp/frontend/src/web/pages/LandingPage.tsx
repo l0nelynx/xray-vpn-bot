@@ -8,7 +8,8 @@ import {
   GlobalOutlined,
 } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
-import CheezyLogo from "../components/CheezyLogo";
+import BrandLogo from "../components/BrandLogo";
+import { BRAND_NAME } from "../branding";
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -73,9 +74,9 @@ export default function LandingPage() {
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <CheezyLogo size={34} />
+          <BrandLogo size={34} />
           <Text strong style={{ fontSize: 18, color: "#fff", letterSpacing: "-0.3px" }}>
-            Cheeze Networks
+            {BRAND_NAME}
           </Text>
         </div>
 
@@ -340,9 +341,9 @@ export default function LandingPage() {
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <CheezyLogo size={26} />
+          <BrandLogo size={26} />
           <Text style={{ color: "rgba(255,255,255,0.4)", fontSize: 13 }}>
-            © {new Date().getFullYear()} Cheeze Networks. All rights reserved.
+            © {new Date().getFullYear()} {BRAND_NAME}. All rights reserved.
           </Text>
         </div>
         <Text style={{ color: "rgba(255,255,255,0.25)", fontSize: 12 }}>

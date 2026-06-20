@@ -17,7 +17,8 @@ import {
   MailOutlined,
   KeyOutlined,
 } from "@ant-design/icons";
-import CheezyLogo from "../components/CheezyLogo";
+import BrandLogo from "../components/BrandLogo";
+import { BRAND_NAME } from "../branding";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ApiError, auth, invite, ValidateInviteResponse } from "../api/client";
@@ -141,9 +142,9 @@ export default function RegisterPage() {
         <div style={{ textAlign: "center", marginBottom: 32 }}>
           <Link to="/" style={{ textDecoration: "none" }}>
             <div style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
-              <CheezyLogo size={38} />
+              <BrandLogo size={38} />
               <Text strong style={{ fontSize: 20, color: "#fff" }}>
-                Cheeze Networks
+                {BRAND_NAME}
               </Text>
             </div>
           </Link>
