@@ -25,8 +25,10 @@ from .android import link_router as android_link_router
 from .android import payments_router as android_payments_router
 from .android import subscription_router as android_subscription_router
 from .routers import devices, free, me, menu, payments, promo, support
+from .web import web_router
 
 BASE_PATH = "/bot/miniapp"
+WEB_BASE = "/bot/web"
 
 # Reuse the auth router's limiter so per-route decorators on it take effect.
 limiter = android_auth_router.limiter
@@ -59,6 +61,7 @@ app.include_router(android_iap_router.router, prefix=BASE_PATH)
 app.include_router(android_data_router.router, prefix=BASE_PATH)
 app.include_router(android_link_router.router, prefix=BASE_PATH)
 app.include_router(android_subscription_router.router, prefix=BASE_PATH)
+app.include_router(web_router.router, prefix=BASE_PATH)
 
 
 @app.on_event("startup")
@@ -103,13 +106,29 @@ if os.path.isdir(STATIC_DIR):
     if os.path.isdir(assets_dir):
         app.mount(f"{BASE_PATH}/assets", StaticFiles(directory=assets_dir), name="assets")
 
+    _miniapp_html = os.path.join(STATIC_DIR, "index.html")
+    _web_html = os.path.join(STATIC_DIR, "web.html")
+
     @app.exception_handler(StarletteHTTPException)
     async def spa_handler(request, exc):
-        if exc.status_code == 404 and not request.url.path.startswith(f"{BASE_PATH}/api"):
-            return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+        if exc.status_code == 404:
+            path = request.url.path
+            if path.startswith(WEB_BASE) and not path.startswith(f"{WEB_BASE}/api"):
+                if os.path.isfile(_web_html):
+                    return FileResponse(_web_html)
+            elif path.startswith(BASE_PATH) and not path.startswith(f"{BASE_PATH}/api"):
+                if os.path.isfile(_miniapp_html):
+                    return FileResponse(_miniapp_html)
         return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
+    @app.get(WEB_BASE)
+    @app.get(f"{WEB_BASE}/{{rest:path}}")
+    async def web_root(rest: str = ""):
+        if os.path.isfile(_web_html):
+            return FileResponse(_web_html)
+        return JSONResponse(status_code=404, content={"detail": "web app not built"})
 
     @app.get(BASE_PATH)
     @app.get(f"{BASE_PATH}/{{rest:path}}")
     async def root(rest: str = ""):
-        return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+        return FileResponse(_miniapp_html)
