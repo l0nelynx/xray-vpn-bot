@@ -1,13 +1,14 @@
 import { Button, Col, Row, Space, Typography } from "antd";
 import {
-  GlobalOutlined,
   LockOutlined,
   RocketOutlined,
   TeamOutlined,
   ThunderboltOutlined,
   SafetyCertificateOutlined,
+  GlobalOutlined,
 } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
+import CheezyLogo from "../components/CheezyLogo";
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -72,21 +73,9 @@ export default function LandingPage() {
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div
-            style={{
-              width: 34,
-              height: 34,
-              borderRadius: 8,
-              background: "linear-gradient(135deg, #06D6A0, #0096C7)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <GlobalOutlined style={{ color: "#fff", fontSize: 18 }} />
-          </div>
+          <CheezyLogo size={34} />
           <Text strong style={{ fontSize: 18, color: "#fff", letterSpacing: "-0.3px" }}>
-            Nexora Networks
+            Cheeze Networks
           </Text>
         </div>
 
@@ -351,21 +340,9 @@ export default function LandingPage() {
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div
-            style={{
-              width: 26,
-              height: 26,
-              borderRadius: 6,
-              background: "linear-gradient(135deg, #06D6A0, #0096C7)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <GlobalOutlined style={{ color: "#fff", fontSize: 14 }} />
-          </div>
+          <CheezyLogo size={26} />
           <Text style={{ color: "rgba(255,255,255,0.4)", fontSize: 13 }}>
-            © {new Date().getFullYear()} Nexora Networks. All rights reserved.
+            © {new Date().getFullYear()} Cheeze Networks. All rights reserved.
           </Text>
         </div>
         <Text style={{ color: "rgba(255,255,255,0.25)", fontSize: 12 }}>

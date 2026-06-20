@@ -1,5 +1,6 @@
 import { Alert, Button, Card, Form, Input, Typography } from "antd";
-import { LockOutlined, MailOutlined, GlobalOutlined } from "@ant-design/icons";
+import { LockOutlined, MailOutlined } from "@ant-design/icons";
+import CheezyLogo from "../components/CheezyLogo";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ApiError } from "../api/client";
@@ -65,28 +66,10 @@ export default function LoginPage() {
         {/* Logo */}
         <div style={{ textAlign: "center", marginBottom: 32 }}>
           <Link to="/" style={{ textDecoration: "none" }}>
-            <div
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 10,
-              }}
-            >
-              <div
-                style={{
-                  width: 38,
-                  height: 38,
-                  borderRadius: 10,
-                  background: "linear-gradient(135deg, #06D6A0, #0096C7)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <GlobalOutlined style={{ color: "#fff", fontSize: 20 }} />
-              </div>
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+              <CheezyLogo size={38} />
               <Text strong style={{ fontSize: 20, color: "#fff" }}>
-                Nexora Networks
+                Cheeze Networks
               </Text>
             </div>
           </Link>
@@ -111,7 +94,7 @@ export default function LoginPage() {
               marginBottom: 28,
             }}
           >
-            Клиентский портал Nexora Networks
+            Клиентский портал Cheeze Networks
           </Text>
 
           {error && (

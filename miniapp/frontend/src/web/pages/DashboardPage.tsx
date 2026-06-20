@@ -1,12 +1,12 @@
 import { App, Avatar, Button, Layout, Menu, Typography } from "antd";
 import {
-  GlobalOutlined,
   LaptopOutlined,
   LogoutOutlined,
   SafetyCertificateOutlined,
   ShoppingCartOutlined,
   WifiOutlined,
 } from "@ant-design/icons";
+import CheezyLogo from "../components/CheezyLogo";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
@@ -78,23 +78,10 @@ export default function DashboardPage() {
               transition: "padding 0.2s",
             }}
           >
-            <div
-              style={{
-                width: 32,
-                height: 32,
-                borderRadius: 8,
-                background: "linear-gradient(135deg, #06D6A0, #0096C7)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-              }}
-            >
-              <GlobalOutlined style={{ color: "#fff", fontSize: 16 }} />
-            </div>
+            <CheezyLogo size={32} style={{ flexShrink: 0 }} />
             {!collapsed && (
               <Text strong style={{ color: "#fff", fontSize: 15, whiteSpace: "nowrap" }}>
-                Nexora
+                Cheeze
               </Text>
             )}
           </div>
