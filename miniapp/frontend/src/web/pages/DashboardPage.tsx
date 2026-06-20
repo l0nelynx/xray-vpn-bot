@@ -6,11 +6,12 @@ import {
   ShoppingCartOutlined,
   WifiOutlined,
 } from "@ant-design/icons";
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../auth/AuthContext";
+import { useLang } from "../locale";
 import BrandLogo from "../components/BrandLogo";
 import { BRAND_NAME } from "../branding";
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { useAuth } from "../auth/AuthContext";
 import SubscriptionTab from "./dashboard/SubscriptionTab";
 import BuyTab from "./dashboard/BuyTab";
 import DevicesTab from "./dashboard/DevicesTab";
@@ -21,18 +22,19 @@ const { Text } = Typography;
 
 type TabKey = "subscription" | "buy" | "devices" | "settings";
 
-const MENU_ITEMS = [
-  { key: "subscription", icon: <WifiOutlined />, label: "Подписка" },
-  { key: "buy", icon: <ShoppingCartOutlined />, label: "Купить" },
-  { key: "devices", icon: <LaptopOutlined />, label: "Устройства" },
-  { key: "settings", icon: <SafetyCertificateOutlined />, label: "Настройки" },
-];
-
 export default function DashboardPage() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const { L, lang, toggle } = useLang();
   const [tab, setTab] = useState<TabKey>("subscription");
   const [collapsed, setCollapsed] = useState(false);
+
+  const MENU_ITEMS = [
+    { key: "subscription", icon: <WifiOutlined />, label: L.menu_subscription },
+    { key: "buy", icon: <ShoppingCartOutlined />, label: L.menu_buy },
+    { key: "devices", icon: <LaptopOutlined />, label: L.menu_devices },
+    { key: "settings", icon: <SafetyCertificateOutlined />, label: L.menu_settings },
+  ];
 
   async function handleLogout() {
     await logout();
@@ -41,21 +43,21 @@ export default function DashboardPage() {
 
   function renderTab() {
     switch (tab) {
-      case "subscription":
-        return <SubscriptionTab onBuyClick={() => setTab("buy")} />;
-      case "buy":
-        return <BuyTab />;
-      case "devices":
-        return <DevicesTab />;
-      case "settings":
-        return <SettingsTab />;
+      case "subscription": return <SubscriptionTab onBuyClick={() => setTab("buy")} />;
+      case "buy": return <BuyTab />;
+      case "devices": return <DevicesTab />;
+      case "settings": return <SettingsTab />;
     }
   }
 
+  const shortName = BRAND_NAME.split(" ")[0];
+
   return (
     <App>
-      <Layout style={{ minHeight: "100vh", background: "#0B0B14" }}>
-        {/* ── Sidebar ────────────────────────────────────────────────────── */}
+      {/* Root layout fills the viewport and never grows taller */}
+      <Layout style={{ height: "100vh", overflow: "hidden", background: "#0B0B14" }}>
+
+        {/* ── Sidebar (sticky, does not scroll with content) ──────────────── */}
         <Sider
           collapsible
           collapsed={collapsed}
@@ -63,72 +65,87 @@ export default function DashboardPage() {
           breakpoint="md"
           width={220}
           style={{
+            height: "100vh",
+            position: "sticky",
+            top: 0,
             background: "rgba(255,255,255,0.03)",
             borderRight: "1px solid rgba(255,255,255,0.07)",
+            overflow: "hidden",
           }}
         >
-          {/* Logo */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              padding: collapsed ? "20px 18px" : "20px 24px",
-              borderBottom: "1px solid rgba(255,255,255,0.07)",
-              overflow: "hidden",
-              transition: "padding 0.2s",
-            }}
-          >
-            <BrandLogo size={32} style={{ flexShrink: 0 }} />
-            {!collapsed && (
-              <Text strong style={{ color: "#fff", fontSize: 15, whiteSpace: "nowrap" }}>
-                {BRAND_NAME.split(" ")[0]}
-              </Text>
-            )}
-          </div>
+          {/* Flex column fills the sider */}
+          <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
 
-          {/* Navigation */}
-          <Menu
-            mode="inline"
-            selectedKeys={[tab]}
-            items={MENU_ITEMS}
-            onClick={({ key }) => setTab(key as TabKey)}
-            style={{
-              background: "transparent",
-              border: "none",
-              padding: "12px 0",
-            }}
-            theme="dark"
-          />
-
-          {/* Logout at bottom */}
-          <div
-            style={{
-              position: "absolute",
-              bottom: 60,
-              width: "100%",
-              padding: collapsed ? "0 12px" : "0 12px",
-            }}
-          >
-            <Button
-              icon={<LogoutOutlined />}
-              onClick={handleLogout}
-              block
+            {/* Logo — links to landing page */}
+            <Link
+              to="/"
               style={{
-                background: "rgba(255,255,255,0.04)",
-                border: "1px solid rgba(255,255,255,0.08)",
-                color: "rgba(255,255,255,0.5)",
-                borderRadius: 10,
-                textAlign: "left",
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                padding: collapsed ? "20px 18px" : "20px 24px",
+                borderBottom: "1px solid rgba(255,255,255,0.07)",
+                overflow: "hidden",
+                flexShrink: 0,
+                textDecoration: "none",
+                transition: "padding 0.2s",
               }}
             >
-              {!collapsed && "Выйти"}
-            </Button>
+              <BrandLogo size={32} style={{ flexShrink: 0 }} />
+              {!collapsed && (
+                <Text strong style={{ color: "#fff", fontSize: 15, whiteSpace: "nowrap" }}>
+                  {shortName}
+                </Text>
+              )}
+            </Link>
+
+            {/* Navigation — fills remaining space */}
+            <div style={{ flex: 1, overflowY: "auto" }}>
+              <Menu
+                mode="inline"
+                selectedKeys={[tab]}
+                items={MENU_ITEMS}
+                onClick={({ key }) => setTab(key as TabKey)}
+                style={{ background: "transparent", border: "none", padding: "12px 0" }}
+                theme="dark"
+              />
+            </div>
+
+            {/* Logout — pinned above the collapse trigger (trigger is ~48px) */}
+            <div
+              style={{
+                flexShrink: 0,
+                padding: collapsed ? "12px 12px 60px" : "12px 12px 60px",
+                borderTop: "1px solid rgba(255,255,255,0.06)",
+              }}
+            >
+              <Button
+                icon={<LogoutOutlined />}
+                onClick={handleLogout}
+                block
+                style={{
+                  background: "rgba(255,255,255,0.04)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  color: "rgba(255,255,255,0.5)",
+                  borderRadius: 10,
+                  textAlign: "left",
+                }}
+              >
+                {!collapsed && L.btn_logout}
+              </Button>
+            </div>
           </div>
         </Sider>
 
-        {/* ── Main ───────────────────────────────────────────────────────── */}
-        <Layout style={{ background: "#0B0B14" }}>
+        {/* ── Main area ────────────────────────────────────────────────────── */}
+        <Layout
+          style={{
+            background: "#0B0B14",
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
+          }}
+        >
           {/* Header */}
           <Header
             style={{
@@ -139,12 +156,28 @@ export default function DashboardPage() {
               justifyContent: "space-between",
               padding: "0 32px",
               height: 60,
+              flexShrink: 0,
             }}
           >
             <Text style={{ color: "rgba(255,255,255,0.5)", fontSize: 14 }}>
-              Клиентский портал
+              {L.header_portal}
             </Text>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              {/* Language toggle */}
+              <Button
+                size="small"
+                onClick={toggle}
+                style={{
+                  background: "rgba(255,255,255,0.06)",
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  color: "rgba(255,255,255,0.6)",
+                  borderRadius: 6,
+                  fontSize: 12,
+                  minWidth: 34,
+                }}
+              >
+                {L.lang_toggle}
+              </Button>
               <Avatar
                 size={32}
                 style={{ background: "linear-gradient(135deg, #06D6A0, #0096C7)", fontSize: 14 }}
@@ -157,11 +190,12 @@ export default function DashboardPage() {
             </div>
           </Header>
 
-          {/* Content */}
+          {/* Content — only this area scrolls */}
           <Content
             style={{
               padding: "32px 40px",
               overflowY: "auto",
+              flex: 1,
               maxWidth: 1100,
               width: "100%",
             }}

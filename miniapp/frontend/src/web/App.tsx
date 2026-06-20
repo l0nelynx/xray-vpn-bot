@@ -1,6 +1,7 @@
 import { ConfigProvider, Spin } from "antd";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "./auth/AuthContext";
+import { LangProvider } from "./locale";
 import LandingPage from "./pages/LandingPage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
@@ -39,6 +40,7 @@ function RequireVerified({ children }: { children: React.ReactNode }) {
 
 export default function WebApp() {
   return (
+    <LangProvider>
     <ConfigProvider {...webThemeConfig}>
       <Routes>
         <Route path="/" element={<LandingPage />} />
@@ -63,5 +65,6 @@ export default function WebApp() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </ConfigProvider>
+    </LangProvider>
   );
 }

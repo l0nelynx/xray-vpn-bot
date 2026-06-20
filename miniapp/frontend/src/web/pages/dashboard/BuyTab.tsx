@@ -20,6 +20,7 @@ import {
 } from "@ant-design/icons";
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, WebInvoiceResponse, WebMenuNode, webPayments } from "../../api/client";
+import { useLang } from "../../locale";
 
 const { Title, Text } = Typography;
 
@@ -80,11 +81,13 @@ function TariffCard({
   discountPct,
   onBuy,
   loading,
+  L,
 }: {
   node: WebMenuNode;
   discountPct: number;
   onBuy: (node: WebMenuNode) => void;
   loading: boolean;
+  L: ReturnType<typeof useLang>["L"];
 }) {
   const inv = node.invoice!;
   const origAmt = inv.original_amount ?? inv.amount;
@@ -108,7 +111,7 @@ function TariffCard({
 
       <Text style={{ color: "rgba(255,255,255,0.45)", fontSize: 13, marginBottom: "auto", paddingBottom: 16 }}>
         <ThunderboltOutlined style={{ marginRight: 4 }} />
-        {inv.days} {inv.days === 1 ? "день" : inv.days < 5 ? "дня" : "дней"}
+        {L.days(inv.days)}
       </Text>
 
       <div style={{ marginBottom: 16 }}>
@@ -144,13 +147,14 @@ function TariffCard({
           fontWeight: 600,
         }}
       >
-        Оплатить
+        {L.btn_pay}
       </Button>
     </div>
   );
 }
 
 export default function BuyTab() {
+  const { L } = useLang();
   const [tree, setTree] = useState<WebMenuNode[]>([]);
   const [discountPct, setDiscountPct] = useState(0);
   const [promoCode, setPromoCode] = useState<string | null>(null);
@@ -169,7 +173,7 @@ export default function BuyTab() {
       setDiscountPct(resp.discount_percent);
       setPromoCode(resp.promo_code);
     } catch {
-      setError("Не удалось загрузить тарифы. Попробуйте позже.");
+      setError(L.err_load_plans);
     } finally {
       setLoading(false);
     }
@@ -185,13 +189,13 @@ export default function BuyTab() {
       const resp = await webPayments.createInvoice(node.id);
       setInvoice(resp);
     } catch (e) {
-      let msg = "Ошибка создания счёта. Попробуйте позже.";
+      let errMsg = L.err_invoice;
       if (e instanceof ApiError) {
-        if (e.status === 429) msg = "Слишком много запросов";
-        else if (e.code === "provider_unavailable") msg = "Платёжный провайдер недоступен";
-        else if (e.code === "email_not_verified") msg = "Сначала подтвердите email";
+        if (e.status === 429) errMsg = L.err_rate_limited_inv;
+        else if (e.code === "provider_unavailable") errMsg = L.err_provider;
+        else if (e.code === "email_not_verified") errMsg = L.err_not_verified;
       }
-      Modal.error({ title: "Ошибка", content: msg, centered: true });
+      Modal.error({ title: "Error", content: errMsg, centered: true });
     } finally {
       setBuyingId(null);
     }
@@ -220,14 +224,12 @@ export default function BuyTab() {
                 borderRadius: 8,
               }}
             >
-              Назад
+              {L.btn_back}
             </Button>
           )}
           <Title level={4} style={{ color: "#fff", margin: 0 }}>
             <ShoppingCartOutlined style={{ marginRight: 8 }} />
-            {path.length === 0
-              ? "Купить подписку"
-              : breadcrumb[breadcrumb.length - 1]}
+            {path.length === 0 ? L.buy_title : breadcrumb[breadcrumb.length - 1]}
           </Title>
         </div>
 
@@ -238,7 +240,7 @@ export default function BuyTab() {
               style={{ color: "rgba(255,255,255,0.35)", fontSize: 12, cursor: "pointer" }}
               onClick={() => setPath([])}
             >
-              Тарифы
+              {L.buy_title}
             </Text>
             {breadcrumb.map((label, i) => (
               <span key={i}>
@@ -264,11 +266,9 @@ export default function BuyTab() {
             type="success"
             message={
               <Space>
-                <span>Промокод активен:</span>
+                <span>{L.promo_active}</span>
                 <Tag color="green">{promoCode}</Tag>
-                <span style={{ color: "rgba(255,255,255,0.7)" }}>
-                  Скидка {discountPct}% применена к ценам
-                </span>
+                <span style={{ color: "rgba(255,255,255,0.7)" }}>{L.promo_applied(discountPct)}</span>
               </Space>
             }
             style={{ borderRadius: 10, marginTop: 12 }}
@@ -290,7 +290,7 @@ export default function BuyTab() {
         <Alert type="error" message={error} showIcon style={{ borderRadius: 12 }} />
       ) : currentNodes.length === 0 ? (
         <div style={{ textAlign: "center", padding: 60, color: "rgba(255,255,255,0.3)" }}>
-          Тарифы не настроены
+          {L.no_tariffs}
         </div>
       ) : (
         <Space direction="vertical" size={20} style={{ width: "100%" }}>
@@ -321,6 +321,7 @@ export default function BuyTab() {
                       discountPct={discountPct}
                       onBuy={handleBuy}
                       loading={buyingId === n.id}
+                      L={L}
                     />
                   </Col>
                 ))}
@@ -335,7 +336,7 @@ export default function BuyTab() {
         onCancel={() => setInvoice(null)}
         footer={null}
         centered
-        title={<Text strong style={{ color: "#fff" }}>Счёт на оплату</Text>}
+        title={<Text strong style={{ color: "#fff" }}>{L.invoice_title}</Text>}
       >
         {invoice && (
           <Space direction="vertical" style={{ width: "100%" }} size={16}>
@@ -343,21 +344,21 @@ export default function BuyTab() {
               <Alert
                 icon={<GiftOutlined />}
                 type="success"
-                message={`Скидка ${invoice.discount_percent}% применена`}
+                message={L.discount_applied_msg(invoice.discount_percent)}
                 showIcon
                 style={{ borderRadius: 10 }}
               />
             )}
             <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 12, padding: 16 }}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                <Text style={{ color: "rgba(255,255,255,0.5)" }}>К оплате:</Text>
+                <Text style={{ color: "rgba(255,255,255,0.5)" }}>{L.to_pay}</Text>
                 <Text strong style={{ color: "#06D6A0", fontSize: 18 }}>
                   {invoice.amount.toFixed(0)} {invoice.currency}
                 </Text>
               </div>
               {invoice.discount_percent > 0 && (
                 <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <Text style={{ color: "rgba(255,255,255,0.35)", fontSize: 13 }}>Без скидки:</Text>
+                  <Text style={{ color: "rgba(255,255,255,0.35)", fontSize: 13 }}>{L.without_discount}</Text>
                   <Text delete style={{ color: "rgba(255,255,255,0.3)", fontSize: 13 }}>
                     {invoice.original_amount.toFixed(0)} {invoice.currency}
                   </Text>
@@ -381,7 +382,7 @@ export default function BuyTab() {
                 fontWeight: 600,
               }}
             >
-              Перейти к оплате
+              {L.btn_proceed}
             </Button>
           </Space>
         )}

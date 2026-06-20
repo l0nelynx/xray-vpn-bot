@@ -1,80 +1,55 @@
 import { Alert, Button, Card, Col, Descriptions, Progress, Row, Spin, Tag, Typography } from "antd";
-import {
-  CalendarOutlined,
-  LinkOutlined,
-  ReloadOutlined,
-  WifiOutlined,
-} from "@ant-design/icons";
+import { CalendarOutlined, LinkOutlined, ReloadOutlined, WifiOutlined } from "@ant-design/icons";
 import { useCallback, useEffect, useState } from "react";
 import { me, MeResponse, SubscriptionInfo } from "../../api/client";
+import { useLang } from "../../locale";
 
 const { Title, Text } = Typography;
 
-const STATUS_LABELS: Record<string, string> = {
-  active: "Активна",
-  expired: "Истекла",
-  disabled: "Отключена",
-  limited: "Ограничена",
-};
-
-const STATUS_COLOR: Record<string, string> = {
-  active: "success",
-  expired: "error",
-  disabled: "default",
-  limited: "warning",
-};
-
-function SubCard({ sub }: { sub: SubscriptionInfo }) {
+function SubCard({ sub, L }: { sub: SubscriptionInfo; L: ReturnType<typeof useLang>["L"] }) {
   const usagePct =
     sub.data_limit_gb && sub.data_limit_gb > 0
       ? Math.min(100, Math.round((sub.traffic_used_gb / sub.data_limit_gb) * 100))
       : 0;
 
-  const statusLabel = STATUS_LABELS[sub.status || ""] || sub.status || "—";
-  const statusColor = STATUS_COLOR[sub.status || ""] || "default";
+  const statusMap: Record<string, string> = {
+    active: L.status_active,
+    expired: L.status_expired,
+    disabled: L.status_disabled,
+    limited: L.status_limited,
+  };
+  const statusColorMap: Record<string, string> = {
+    active: "success", expired: "error", disabled: "default", limited: "warning",
+  };
 
   return (
     <Card
-      style={{
-        background: "rgba(255,255,255,0.04)",
-        border: "1px solid rgba(255,255,255,0.09)",
-        borderRadius: 16,
-        marginBottom: 16,
-      }}
+      style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)", borderRadius: 16, marginBottom: 16 }}
     >
       <Row gutter={[24, 24]} align="middle">
         <Col xs={24} md={12}>
-          <Descriptions
-            column={1}
-            size="small"
-            colon={false}
-            styles={{ label: { color: "rgba(255,255,255,0.5)", width: 160 } }}
-          >
-            <Descriptions.Item label="Тариф">
-              <Tag color="processing" style={{ fontWeight: 600 }}>
-                {sub.tariff}
+          <Descriptions column={1} size="small" colon={false} styles={{ label: { color: "rgba(255,255,255,0.5)", width: 160 } }}>
+            <Descriptions.Item label={L.label_plan}>
+              <Tag color="processing" style={{ fontWeight: 600 }}>{sub.tariff}</Tag>
+            </Descriptions.Item>
+            <Descriptions.Item label={L.label_status}>
+              <Tag color={statusColorMap[sub.status || ""] || "default"}>
+                {statusMap[sub.status || ""] || sub.status || "—"}
               </Tag>
             </Descriptions.Item>
-            <Descriptions.Item label="Статус">
-              <Tag color={statusColor}>{statusLabel}</Tag>
-            </Descriptions.Item>
-            <Descriptions.Item label="Осталось дней">
-              <Text strong style={{ color: "#fff", fontSize: 18 }}>
-                {sub.days_left}
-              </Text>
+            <Descriptions.Item label={L.label_days_left}>
+              <Text strong style={{ color: "#fff", fontSize: 18 }}>{sub.days_left}</Text>
             </Descriptions.Item>
             {sub.expire_iso && (
-              <Descriptions.Item label="Действует до">
+              <Descriptions.Item label={L.label_expires}>
                 <Text style={{ color: "rgba(255,255,255,0.75)" }}>
-                  {new Date(sub.expire_iso).toLocaleDateString("ru-RU")}
+                  {new Date(sub.expire_iso).toLocaleDateString()}
                 </Text>
               </Descriptions.Item>
             )}
-            <Descriptions.Item label="Устройств">
-              {sub.devices_count}
-            </Descriptions.Item>
-            <Descriptions.Item label="Трафик">
-              {sub.traffic_used_gb.toFixed(2)} / {sub.data_limit_gb ?? "∞"} ГБ
+            <Descriptions.Item label={L.label_devices}>{sub.devices_count}</Descriptions.Item>
+            <Descriptions.Item label={L.label_traffic}>
+              {sub.traffic_used_gb.toFixed(2)} / {sub.data_limit_gb ?? "∞"} GB
             </Descriptions.Item>
           </Descriptions>
         </Col>
@@ -82,15 +57,8 @@ function SubCard({ sub }: { sub: SubscriptionInfo }) {
         <Col xs={24} md={12}>
           {sub.data_limit_gb ? (
             <div>
-              <Text
-                style={{
-                  color: "rgba(255,255,255,0.5)",
-                  fontSize: 13,
-                  display: "block",
-                  marginBottom: 8,
-                }}
-              >
-                Использование трафика
+              <Text style={{ color: "rgba(255,255,255,0.5)", fontSize: 13, display: "block", marginBottom: 8 }}>
+                {L.traffic_usage}
               </Text>
               <Progress
                 percent={usagePct}
@@ -99,21 +67,13 @@ function SubCard({ sub }: { sub: SubscriptionInfo }) {
                 status={usagePct >= 95 ? "exception" : "active"}
               />
               <Text style={{ color: "rgba(255,255,255,0.4)", fontSize: 12 }}>
-                {sub.traffic_used_gb.toFixed(2)} ГБ из {sub.data_limit_gb} ГБ
+                {sub.traffic_used_gb.toFixed(2)} GB / {sub.data_limit_gb} GB
               </Text>
             </div>
           ) : (
-            <div
-              style={{
-                textAlign: "center",
-                padding: 24,
-                background: "rgba(6,214,160,0.06)",
-                borderRadius: 12,
-                border: "1px solid rgba(6,214,160,0.15)",
-              }}
-            >
+            <div style={{ textAlign: "center", padding: 24, background: "rgba(6,214,160,0.06)", borderRadius: 12, border: "1px solid rgba(6,214,160,0.15)" }}>
               <WifiOutlined style={{ fontSize: 32, color: "#06D6A0", marginBottom: 8 }} />
-              <div style={{ color: "rgba(255,255,255,0.6)" }}>Безлимитный трафик</div>
+              <div style={{ color: "rgba(255,255,255,0.6)" }}>{L.traffic_unlimited}</div>
             </div>
           )}
         </Col>
@@ -124,14 +84,10 @@ function SubCard({ sub }: { sub: SubscriptionInfo }) {
           <Button
             type="primary"
             icon={<LinkOutlined />}
-            style={{
-              background: "linear-gradient(135deg, #06D6A0, #0096C7)",
-              border: "none",
-              borderRadius: 10,
-            }}
+            style={{ background: "linear-gradient(135deg, #06D6A0, #0096C7)", border: "none", borderRadius: 10 }}
             onClick={() => window.open(sub.subscription_url!, "_blank")}
           >
-            Скопировать ссылку подписки
+            {L.copy_sub_link}
           </Button>
         </div>
       )}
@@ -140,6 +96,7 @@ function SubCard({ sub }: { sub: SubscriptionInfo }) {
 }
 
 export default function SubscriptionTab({ onBuyClick }: { onBuyClick: () => void }) {
+  const { L } = useLang();
   const [data, setData] = useState<MeResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -147,84 +104,39 @@ export default function SubscriptionTab({ onBuyClick }: { onBuyClick: () => void
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
-    try {
-      setData(await me.get());
-    } catch {
-      setError("Не удалось загрузить данные подписки");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+    try { setData(await me.get()); }
+    catch { setError(L.err_load_sub); }
+    finally { setLoading(false); }
+  }, [L]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useEffect(() => { load(); }, [load]);
 
   return (
     <div>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 24,
-        }}
-      >
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
         <Title level={4} style={{ color: "#fff", margin: 0 }}>
-          <WifiOutlined style={{ marginRight: 8 }} />
-          Моя подписка
+          <WifiOutlined style={{ marginRight: 8 }} />{L.sub_title}
         </Title>
-        <Button
-          icon={<ReloadOutlined />}
-          onClick={load}
-          loading={loading}
-          style={{
-            background: "rgba(255,255,255,0.06)",
-            border: "1px solid rgba(255,255,255,0.1)",
-            color: "rgba(255,255,255,0.7)",
-            borderRadius: 10,
-          }}
-        >
-          Обновить
+        <Button icon={<ReloadOutlined />} onClick={load} loading={loading}
+          style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.7)", borderRadius: 10 }}>
+          {L.btn_refresh}
         </Button>
       </div>
 
       {loading && !data ? (
-        <div style={{ textAlign: "center", padding: 60 }}>
-          <Spin size="large" />
-        </div>
+        <div style={{ textAlign: "center", padding: 60 }}><Spin size="large" /></div>
       ) : error ? (
         <Alert type="error" message={error} showIcon style={{ borderRadius: 12 }} />
       ) : data?.subscription ? (
-        <SubCard sub={data.subscription} />
+        <SubCard sub={data.subscription} L={L} />
       ) : (
-        <div
-          style={{
-            textAlign: "center",
-            padding: "60px 24px",
-            background: "rgba(255,255,255,0.03)",
-            borderRadius: 16,
-            border: "1px dashed rgba(255,255,255,0.1)",
-          }}
-        >
+        <div style={{ textAlign: "center", padding: "60px 24px", background: "rgba(255,255,255,0.03)", borderRadius: 16, border: "1px dashed rgba(255,255,255,0.1)" }}>
           <CalendarOutlined style={{ fontSize: 48, color: "rgba(255,255,255,0.2)", marginBottom: 16 }} />
-          <Title level={4} style={{ color: "rgba(255,255,255,0.5)" }}>
-            Нет активной подписки
-          </Title>
-          <Text style={{ color: "rgba(255,255,255,0.35)", display: "block", marginBottom: 24 }}>
-            Выберите тарифный план для начала работы
-          </Text>
-          <Button
-            type="primary"
-            size="large"
-            onClick={onBuyClick}
-            style={{
-              background: "linear-gradient(135deg, #06D6A0, #0096C7)",
-              border: "none",
-              borderRadius: 12,
-            }}
-          >
-            Купить подписку
+          <Title level={4} style={{ color: "rgba(255,255,255,0.5)" }}>{L.no_sub_title}</Title>
+          <Text style={{ color: "rgba(255,255,255,0.35)", display: "block", marginBottom: 24 }}>{L.no_sub_text}</Text>
+          <Button type="primary" size="large" onClick={onBuyClick}
+            style={{ background: "linear-gradient(135deg, #06D6A0, #0096C7)", border: "none", borderRadius: 12 }}>
+            {L.btn_buy_sub}
           </Button>
         </div>
       )}

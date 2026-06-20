@@ -1,5 +1,8 @@
 import { Alert, Button, Card, Form, Input, Space, Typography } from "antd";
-import { MailOutlined, GlobalOutlined, CheckCircleOutlined } from "@ant-design/icons";
+import { MailOutlined, CheckCircleOutlined } from "@ant-design/icons";
+import { Link } from "react-router-dom";
+import BrandLogo from "../components/BrandLogo";
+import { BRAND_NAME } from "../branding";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ApiError, email } from "../api/client";
@@ -109,30 +112,14 @@ export default function VerifyEmailPage() {
 
       <div style={{ width: "100%", maxWidth: 420, position: "relative" }}>
         <div style={{ textAlign: "center", marginBottom: 32 }}>
-          <div
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 10,
-            }}
-          >
-            <div
-              style={{
-                width: 38,
-                height: 38,
-                borderRadius: 10,
-                background: "linear-gradient(135deg, #06D6A0, #0096C7)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <GlobalOutlined style={{ color: "#fff", fontSize: 20 }} />
+          <Link to="/" style={{ textDecoration: "none" }}>
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+              <BrandLogo size={38} />
+              <Text strong style={{ fontSize: 20, color: "#fff" }}>
+                {BRAND_NAME}
+              </Text>
             </div>
-            <Text strong style={{ fontSize: 20, color: "#fff" }}>
-              Nexora Networks
-            </Text>
-          </div>
+          </Link>
         </div>
 
         <Card
