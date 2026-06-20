@@ -238,6 +238,18 @@ def get_email_code_max_attempts() -> int:
     return int(get_config().get("email_code_max_attempts", 5) or 5)
 
 
+# --- Web portal ------------------------------------------------------------
+
+def get_web_base_path() -> str:
+    """Base URL path for the web portal SPA.
+
+    Config key: web_base_path (e.g. "/bot/web"). Defaults to "/" when absent.
+    Trailing slash is always stripped; bare "/" is kept as-is.
+    """
+    raw = (get_config().get("web_base_path") or "").strip().rstrip("/")
+    return raw if raw else "/"
+
+
 # --- Google Play IAP -------------------------------------------------------
 
 def get_google_play_package_name() -> str:

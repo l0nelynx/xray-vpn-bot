@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 
@@ -17,6 +18,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from slowapi.errors import RateLimitExceeded
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from .config import get_web_base_path
 from .android import auth_router as android_auth_router
 from .android import data_router as android_data_router
 from .android import email_router as android_email_router
@@ -28,7 +30,7 @@ from .routers import devices, free, me, menu, payments, promo, support
 from .web import web_router
 
 BASE_PATH = "/bot/miniapp"
-WEB_BASE = "/bot/web"
+WEB_BASE = get_web_base_path()  # from config.yml: web_base_path, default "/"
 
 # Reuse the auth router's limiter so per-route decorators on it take effect.
 limiter = android_auth_router.limiter
@@ -109,26 +111,59 @@ if os.path.isdir(STATIC_DIR):
     _miniapp_html = os.path.join(STATIC_DIR, "index.html")
     _web_html = os.path.join(STATIC_DIR, "web.html")
 
+    def _web_html_response():
+        """Serve web.html with __WEB_BASE__ injected so React Router picks it up."""
+        from fastapi.responses import HTMLResponse
+        with open(_web_html, encoding="utf-8") as f:
+            html = f.read()
+        snippet = f'<script>window.__WEB_BASE__={json.dumps(WEB_BASE)};</script>'
+        html = html.replace("</head>", f"{snippet}</head>", 1)
+        return HTMLResponse(content=html)
+
+    def _is_web_path(path: str) -> bool:
+        """True for paths that belong to the web portal SPA."""
+        if path.startswith(BASE_PATH):
+            return False
+        if path.startswith("/health"):
+            return False
+        if "/api/" in path or path.endswith("/api"):
+            return False
+        if WEB_BASE == "/":
+            return True
+        return path == WEB_BASE or path.startswith(WEB_BASE + "/")
+
     @app.exception_handler(StarletteHTTPException)
     async def spa_handler(request, exc):
         if exc.status_code == 404:
             path = request.url.path
-            if path.startswith(WEB_BASE) and not path.startswith(f"{WEB_BASE}/api"):
-                if os.path.isfile(_web_html):
-                    return FileResponse(_web_html)
-            elif path.startswith(BASE_PATH) and not path.startswith(f"{BASE_PATH}/api"):
+            if path.startswith(BASE_PATH) and not path.startswith(f"{BASE_PATH}/api"):
                 if os.path.isfile(_miniapp_html):
                     return FileResponse(_miniapp_html)
+            elif _is_web_path(path) and os.path.isfile(_web_html):
+                return _web_html_response()
         return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
-    @app.get(WEB_BASE)
-    @app.get(f"{WEB_BASE}/{{rest:path}}")
-    async def web_root(rest: str = ""):
-        if os.path.isfile(_web_html):
-            return FileResponse(_web_html)
-        return JSONResponse(status_code=404, content={"detail": "web app not built"})
-
+    # Miniapp SPA catch-all
     @app.get(BASE_PATH)
     @app.get(f"{BASE_PATH}/{{rest:path}}")
     async def root(rest: str = ""):
         return FileResponse(_miniapp_html)
+
+    # Web portal SPA catch-all (registered last so miniapp routes take priority)
+    if WEB_BASE == "/":
+        @app.get("/")
+        @app.get("/{rest:path}")
+        async def web_root(rest: str = ""):
+            if not _is_web_path("/" + rest):
+                from fastapi import HTTPException
+                raise HTTPException(status_code=404)
+            if os.path.isfile(_web_html):
+                return _web_html_response()
+            return JSONResponse(status_code=404, content={"detail": "web app not built"})
+    else:
+        @app.get(WEB_BASE)
+        @app.get(f"{WEB_BASE}/{{rest:path}}")
+        async def web_root(rest: str = ""):  # type: ignore[misc]
+            if os.path.isfile(_web_html):
+                return _web_html_response()
+            return JSONResponse(status_code=404, content={"detail": "web app not built"})

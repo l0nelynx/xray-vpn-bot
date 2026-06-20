@@ -4,6 +4,11 @@ import { BrowserRouter } from "react-router-dom";
 import { AuthProvider } from "./auth/AuthContext";
 import WebApp from "./App";
 
+declare global {
+  interface Window { __WEB_BASE__?: string; }
+}
+const webBase: string = window.__WEB_BASE__ ?? "/";
+
 // Minimal global reset for the web portal
 const style = document.createElement("style");
 style.textContent = `
@@ -21,7 +26,7 @@ document.head.appendChild(style);
 
 ReactDOM.createRoot(document.getElementById("web-root")!).render(
   <React.StrictMode>
-    <BrowserRouter basename="/bot/web">
+    <BrowserRouter basename={webBase}>
       <AuthProvider>
         <WebApp />
       </AuthProvider>
