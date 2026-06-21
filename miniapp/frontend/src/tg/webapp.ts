@@ -8,15 +8,52 @@ declare global {
 
 export const tg = window.Telegram?.WebApp;
 
+// Telegram native apps that support and benefit from fullscreen mode.
+// Desktop clients (tdesktop, web, webk, webz) open in a popup — fullscreen
+// is either unsupported or simply wraps the browser fullscreen API, which is
+// not what we want. Restrict to iOS and Android.
+function isMobileTelegram(): boolean {
+  const p = tg?.platform ?? "";
+  return p === "ios" || p === "android";
+}
+
+// Read safe-area inset values from the JS API and apply them as CSS custom
+// properties. Telegram sets --tg-* variables automatically in some clients,
+// but not all versions do so reliably. Forcing them here ensures the CSS
+// calc() expressions in theme.css always work.
+function applyInsets() {
+  if (!tg) return;
+  const csa = tg.contentSafeAreaInset ?? {};
+  const sa  = tg.safeAreaInset ?? {};
+  const root = document.documentElement;
+  root.style.setProperty("--tg-content-safe-area-inset-top",    `${csa.top    ?? 0}px`);
+  root.style.setProperty("--tg-content-safe-area-inset-bottom", `${csa.bottom ?? 0}px`);
+  root.style.setProperty("--tg-content-safe-area-inset-left",   `${csa.left   ?? 0}px`);
+  root.style.setProperty("--tg-content-safe-area-inset-right",  `${csa.right  ?? 0}px`);
+  root.style.setProperty("--tg-safe-area-inset-top",    `${sa.top    ?? 0}px`);
+  root.style.setProperty("--tg-safe-area-inset-bottom", `${sa.bottom ?? 0}px`);
+  root.style.setProperty("--tg-safe-area-inset-left",   `${sa.left   ?? 0}px`);
+  root.style.setProperty("--tg-safe-area-inset-right",  `${sa.right  ?? 0}px`);
+}
+
 export function initTelegram() {
   if (!tg) return;
   try {
     tg.ready();
     tg.expand();
-    // Bot API 8.0+: request fullscreen mode.
-    // Telegram then sets --tg-content-safe-area-inset-* CSS variables so the
-    // app can offset content below the floating header.
-    if (tg.requestFullscreen) tg.requestFullscreen();
+
+    // Apply safe-area insets from JS API immediately (CSS-variable fallback).
+    applyInsets();
+    // Re-apply whenever Telegram reports a change (orientation, fullscreen toggle).
+    tg.onEvent?.("safeAreaChanged",        applyInsets);
+    tg.onEvent?.("contentSafeAreaChanged", applyInsets);
+
+    // Request fullscreen only on mobile native clients (Bot API 8.0+).
+    if (isMobileTelegram() && tg.requestFullscreen) {
+      tg.requestFullscreen();
+      // Re-apply insets after fullscreen transition completes.
+      tg.onEvent?.("fullscreenChanged", applyInsets);
+    }
   } catch (e) {
     console.warn("tg init failed", e);
   }
@@ -40,6 +77,12 @@ export function onFullscreenChange(cb: (fullscreen: boolean) => void) {
   } catch {
     /* noop */
   }
+}
+
+/** True when running inside Telegram Desktop or a web-based Telegram client. */
+export function isDesktopTelegram(): boolean {
+  const p = tg?.platform ?? "";
+  return p === "tdesktop" || p === "web" || p === "webk" || p === "webz";
 }
 
 export function getInitData(): string {

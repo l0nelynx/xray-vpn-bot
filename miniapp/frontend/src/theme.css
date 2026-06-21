@@ -114,12 +114,16 @@ select {
   padding: 40px;
 }
 
-/* Page header with floating refresh FAB */
+/* Page header with floating refresh FAB.
+   margin-top: 16px matches the browser default h3 margin-block-start so that
+   pages using page-header (Home, Devices) sit at the same vertical position
+   as pages where the title renders without a wrapper (Support, Account). */
 .page-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  margin-top: 16px;
   margin-bottom: 20px;
 }
 
@@ -560,4 +564,24 @@ h5.ant-typography,
   font-weight: 600;
   color: #FFFFFF;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+/* ── Desktop / wide viewport (Telegram Desktop popup) ────────────────────────
+   Telegram Desktop opens Mini Apps in a resizable popup that can be much wider
+   than a phone screen. Constrain and center the layout so it still looks like
+   a mobile app rather than stretching across the full width.                 */
+@media (min-width: 520px) {
+  html, body, #root {
+    max-width: 480px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  /* position:fixed elements ignore parent max-width — re-center them manually */
+  .bottom-tabs {
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    width: calc(min(480px, 100vw) - 24px);
+  }
 }
