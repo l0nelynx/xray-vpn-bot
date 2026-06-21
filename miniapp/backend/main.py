@@ -20,7 +20,9 @@ from .android import email_router as android_email_router
 from .android import iap_router as android_iap_router
 from .android import link_router as android_link_router
 from .android import payments_router as android_payments_router
+from .android import promo_router as android_promo_router
 from .android import subscription_router as android_subscription_router
+from .android import support_router as android_support_router
 from .routers import devices, free, me, menu, payments, promo, support
 from .web import web_router
 
@@ -68,6 +70,8 @@ app.include_router(android_iap_router.router, prefix=BASE_PATH)
 app.include_router(android_data_router.router, prefix=BASE_PATH)
 app.include_router(android_link_router.router, prefix=BASE_PATH)
 app.include_router(android_subscription_router.router, prefix=BASE_PATH)
+app.include_router(android_promo_router.router, prefix=BASE_PATH)
+app.include_router(android_support_router.router, prefix=BASE_PATH)
 app.include_router(web_router.router, prefix=BASE_PATH)
 
 
