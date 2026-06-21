@@ -13,8 +13,32 @@ export function initTelegram() {
   try {
     tg.ready();
     tg.expand();
+    // Bot API 8.0+: request fullscreen mode.
+    // Telegram then sets --tg-content-safe-area-inset-* CSS variables so the
+    // app can offset content below the floating header.
+    if (tg.requestFullscreen) tg.requestFullscreen();
   } catch (e) {
     console.warn("tg init failed", e);
+  }
+}
+
+export function isFullscreen(): boolean {
+  return tg?.isFullscreen ?? false;
+}
+
+export function exitFullscreen() {
+  try {
+    if (tg?.exitFullscreen) tg.exitFullscreen();
+  } catch {
+    /* noop */
+  }
+}
+
+export function onFullscreenChange(cb: (fullscreen: boolean) => void) {
+  try {
+    tg?.onEvent?.("fullscreenChanged", () => cb(tg?.isFullscreen ?? false));
+  } catch {
+    /* noop */
   }
 }
 

@@ -5,6 +5,18 @@
 
 :root {
   color-scheme: dark;
+
+  /* Telegram Bot API 8.0+ fullscreen CSS variables.
+     Telegram sets these automatically; defaults keep layout correct outside Telegram
+     and in non-fullscreen mode where the values are 0. */
+  --tg-safe-area-inset-top: 0px;
+  --tg-safe-area-inset-right: 0px;
+  --tg-safe-area-inset-bottom: 0px;
+  --tg-safe-area-inset-left: 0px;
+  --tg-content-safe-area-inset-top: 0px;
+  --tg-content-safe-area-inset-right: 0px;
+  --tg-content-safe-area-inset-bottom: 0px;
+  --tg-content-safe-area-inset-left: 0px;
 }
 
 html,
@@ -75,13 +87,16 @@ select {
   display: flex;
   flex-direction: column;
   min-height: 100%;
-  padding-bottom: calc(96px + env(safe-area-inset-bottom));
+  /* In fullscreen mode: add Telegram bottom content inset on top of device inset. */
+  padding-bottom: calc(96px + env(safe-area-inset-bottom) + var(--tg-content-safe-area-inset-bottom));
 }
 
 .page {
   flex: 1;
   padding: 16px;
-  padding-top: max(16px, env(safe-area-inset-top));
+  /* In fullscreen mode: env() covers the device notch, --tg-content-safe-area-inset-top
+     covers the Telegram floating header that overlaps the content. */
+  padding-top: max(16px, calc(env(safe-area-inset-top) + var(--tg-content-safe-area-inset-top)));
 }
 
 .page-centered {
@@ -298,7 +313,8 @@ textarea.ant-input:focus {
 /* Floating glass tab bar */
 .bottom-tabs {
   position: fixed;
-  bottom: max(12px, env(safe-area-inset-bottom));
+  /* In fullscreen: push tabs above both the device home indicator and any Telegram bottom UI. */
+  bottom: max(12px, calc(env(safe-area-inset-bottom) + var(--tg-content-safe-area-inset-bottom)));
   left: 12px;
   right: 12px;
   display: flex;

@@ -6,6 +6,7 @@ import {
 import {
   PlusOutlined, DeleteOutlined, SaveOutlined, CaretRightOutlined,
   CaretDownOutlined, ArrowUpOutlined, ArrowDownOutlined,
+  EyeOutlined, EyeInvisibleOutlined,
 } from "@ant-design/icons";
 import { api } from "../api/client";
 
@@ -101,7 +102,7 @@ function draftEquals(a: DraftNode, b: DraftNode): boolean {
 
 function NodeRow({
   node, siblings, providers, depth, drafts, setDraft, expanded, toggleExpand,
-  onSave, onDelete, onAddChild, onMove,
+  onSave, onDelete, onAddChild, onMove, onToggleActive,
 }: {
   node: MenuNode;
   siblings: MenuNode[];
@@ -115,6 +116,7 @@ function NodeRow({
   onDelete: (id: number) => void;
   onAddChild: (parentId: number) => void;
   onMove: (id: number, direction: "up" | "down") => void;
+  onToggleActive: (id: number) => void;
 }) {
   const draft = drafts[node.id] ?? nodeToDraft(node);
   const dirty = !draftEquals(draft, nodeToDraft(node));
@@ -154,7 +156,9 @@ function NodeRow({
         style={{
           marginBottom: 8,
           background: depth === 0 ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.03)",
-          borderColor: dirty ? "#FFD479" : "rgba(255,255,255,0.10)",
+          borderColor: dirty ? "#FFD479" : node.is_active ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.04)",
+          opacity: node.is_active ? 1 : 0.5,
+          transition: "opacity 0.2s, border-color 0.2s",
         }}
         styles={{ body: { padding: 12 } }}
       >
@@ -168,6 +172,9 @@ function NodeRow({
             />
           ) : (
             <Tag color="purple" style={{ marginTop: 4 }}>invoice</Tag>
+          )}
+          {!node.is_active && (
+            <Tag color="default" style={{ marginTop: 4 }}>hidden</Tag>
           )}
 
           <Input
@@ -270,6 +277,12 @@ function NodeRow({
             />
             <Button
               size="small"
+              icon={node.is_active ? <EyeInvisibleOutlined /> : <EyeOutlined />}
+              onClick={() => onToggleActive(node.id)}
+              title={node.is_active ? "Hide (won't appear in app/portal)" : "Show"}
+            />
+            <Button
+              size="small"
               type="primary"
               icon={<SaveOutlined />}
               disabled={!dirty}
@@ -317,6 +330,7 @@ function NodeRow({
                 onDelete={onDelete}
                 onAddChild={onAddChild}
                 onMove={onMove}
+                onToggleActive={onToggleActive}
               />
             ))}
           {node.children.length === 0 && (
@@ -504,6 +518,17 @@ export default function WebAppTariffsPage() {
     }
   };
 
+  const handleToggleActive = async (id: number) => {
+    const node = flatten.find((n) => n.id === id);
+    if (!node) return;
+    try {
+      await api.put<MenuNode>(`/webapp-menu/nodes/${id}`, { is_active: !node.is_active });
+      await reload();
+    } catch (e: unknown) {
+      message.error(`Toggle failed: ${(e as Error).message}`);
+    }
+  };
+
   const handleMove = async (id: number, direction: "up" | "down") => {
     const node = flatten.find((n) => n.id === id);
     if (!node) return;
@@ -579,6 +604,7 @@ export default function WebAppTariffsPage() {
             onDelete={handleDelete}
             onAddChild={handleAddChild}
             onMove={handleMove}
+            onToggleActive={handleToggleActive}
           />
         ))
       )}
