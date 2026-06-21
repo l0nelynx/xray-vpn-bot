@@ -1,24 +1,19 @@
-import json
 import logging
 import os
 
 from fastapi import FastAPI
 
-# Uvicorn по умолчанию вешает хэндлеры только на свои логгеры
-# (`uvicorn`, `uvicorn.access`). Наши `logging.getLogger(__name__)` ходят
-# на корневой и без этого вызова молчат — поэтому ставим минимальный
-# stdout-handler здесь, до импорта роутеров. LOG_LEVEL читается из env,
-# дефолт INFO; для отладки SMTP можно поставить DEBUG.
 logging.basicConfig(
     level=os.environ.get("LOG_LEVEL", "INFO").upper(),
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
 )
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from slowapi.errors import RateLimitExceeded
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from .config import get_web_base_path, get_web_brand_name, get_web_brand_logo
+from .config import get_web_allowed_origins
 from .android import auth_router as android_auth_router
 from .android import data_router as android_data_router
 from .android import email_router as android_email_router
@@ -30,9 +25,6 @@ from .routers import devices, free, me, menu, payments, promo, support
 from .web import web_router
 
 BASE_PATH = "/bot/miniapp"
-WEB_BASE = get_web_base_path()        # config.yml: web_base_path, default "/"
-WEB_BRAND_NAME = get_web_brand_name() # config.yml: web_brand_name, empty = frontend default
-WEB_BRAND_LOGO = get_web_brand_logo() # config.yml: web_brand_logo, empty = frontend default
 
 # Reuse the auth router's limiter so per-route decorators on it take effect.
 limiter = android_auth_router.limiter
@@ -44,6 +36,17 @@ app = FastAPI(
     redoc_url=None,
 )
 app.state.limiter = limiter
+
+# CORS for the external web portal (separate static hosting)
+_cors_origins = get_web_allowed_origins()
+if _cors_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_cors_origins,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type"],
+    )
 
 
 @app.exception_handler(RateLimitExceeded)
@@ -102,7 +105,7 @@ async def health():
     return {"status": "ok"}
 
 
-# Serve frontend SPA
+# Serve Telegram MiniApp SPA
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "..", "static")
 
 if os.path.isdir(STATIC_DIR):
@@ -111,34 +114,6 @@ if os.path.isdir(STATIC_DIR):
         app.mount(f"{BASE_PATH}/assets", StaticFiles(directory=assets_dir), name="assets")
 
     _miniapp_html = os.path.join(STATIC_DIR, "index.html")
-    _web_html = os.path.join(STATIC_DIR, "web.html")
-
-    def _web_html_response():
-        """Serve web.html with runtime config injected into <head>."""
-        from fastapi.responses import HTMLResponse
-        with open(_web_html, encoding="utf-8") as f:
-            html = f.read()
-        snippet = (
-            f"<script>"
-            f"window.__WEB_BASE__={json.dumps(WEB_BASE)};"
-            f"window.__WEB_BRAND_NAME__={json.dumps(WEB_BRAND_NAME)};"
-            f"window.__WEB_BRAND_LOGO__={json.dumps(WEB_BRAND_LOGO)};"
-            f"</script>"
-        )
-        html = html.replace("</head>", f"{snippet}</head>", 1)
-        return HTMLResponse(content=html)
-
-    def _is_web_path(path: str) -> bool:
-        """True for paths that belong to the web portal SPA."""
-        if path.startswith(BASE_PATH):
-            return False
-        if path.startswith("/health"):
-            return False
-        if "/api/" in path or path.endswith("/api"):
-            return False
-        if WEB_BASE == "/":
-            return True
-        return path == WEB_BASE or path.startswith(WEB_BASE + "/")
 
     @app.exception_handler(StarletteHTTPException)
     async def spa_handler(request, exc):
@@ -147,31 +122,9 @@ if os.path.isdir(STATIC_DIR):
             if path.startswith(BASE_PATH) and not path.startswith(f"{BASE_PATH}/api"):
                 if os.path.isfile(_miniapp_html):
                     return FileResponse(_miniapp_html)
-            elif _is_web_path(path) and os.path.isfile(_web_html):
-                return _web_html_response()
         return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
-    # Miniapp SPA catch-all
     @app.get(BASE_PATH)
     @app.get(f"{BASE_PATH}/{{rest:path}}")
     async def root(rest: str = ""):
         return FileResponse(_miniapp_html)
-
-    # Web portal SPA catch-all (registered last so miniapp routes take priority)
-    if WEB_BASE == "/":
-        @app.get("/")
-        @app.get("/{rest:path}")
-        async def web_root(rest: str = ""):
-            if not _is_web_path("/" + rest):
-                from fastapi import HTTPException
-                raise HTTPException(status_code=404)
-            if os.path.isfile(_web_html):
-                return _web_html_response()
-            return JSONResponse(status_code=404, content={"detail": "web app not built"})
-    else:
-        @app.get(WEB_BASE)
-        @app.get(f"{WEB_BASE}/{{rest:path}}")
-        async def web_root(rest: str = ""):  # type: ignore[misc]
-            if os.path.isfile(_web_html):
-                return _web_html_response()
-            return JSONResponse(status_code=404, content={"detail": "web app not built"})

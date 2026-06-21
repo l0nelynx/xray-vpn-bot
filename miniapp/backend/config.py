@@ -240,24 +240,19 @@ def get_email_code_max_attempts() -> int:
 
 # --- Web portal ------------------------------------------------------------
 
-def get_web_brand_name() -> str:
-    """Display name shown in the web portal. Defaults to empty string (frontend uses its built-in default)."""
-    return (get_config().get("web_brand_name") or "").strip()
+def get_web_allowed_origins() -> list[str]:
+    """CORS allowed origins for the external web portal frontend.
 
-
-def get_web_brand_logo() -> str:
-    """URL to an SVG logo for the web portal. Defaults to empty string (frontend uses built-in logo)."""
-    return (get_config().get("web_brand_logo") or "").strip()
-
-
-def get_web_base_path() -> str:
-    """Base URL path for the web portal SPA.
-
-    Config key: web_base_path (e.g. "/bot/web"). Defaults to "/" when absent.
-    Trailing slash is always stripped; bare "/" is kept as-is.
+    Config key: web_allowed_origins — a YAML list or comma-separated string.
+    Example:
+      web_allowed_origins:
+        - https://web.yourdomain.com
+        - https://yourrepo.vercel.app
     """
-    raw = (get_config().get("web_base_path") or "").strip().rstrip("/")
-    return raw if raw else "/"
+    raw = get_config().get("web_allowed_origins") or []
+    if isinstance(raw, str):
+        return [o.strip() for o in raw.split(",") if o.strip()]
+    return [str(o).strip() for o in raw if o]
 
 
 # --- Google Play IAP -------------------------------------------------------
