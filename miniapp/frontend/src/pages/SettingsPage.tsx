@@ -1,31 +1,37 @@
 import {
   FileTextOutlined,
   GiftOutlined,
-  KeyOutlined,
+  RightOutlined,
   SafetyOutlined,
   TeamOutlined,
   UsergroupAddOutlined,
 } from "@ant-design/icons";
-import { Button, Card, Input, Modal, Space, Tag, Typography, message } from "antd";
+import { Button, Input, Modal, Space, Tag, App } from "antd";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  PromoState,
-  promo as promoApi,
-} from "../api/client";
+import { PromoState, promo as promoApi } from "../api/client";
 import { showAlert } from "../tg/webapp";
 
 interface Props {
   username: string;
 }
 
+interface SettingsItemDef {
+  key: string;
+  icon: React.ReactNode;
+  iconBg: string;
+  label: string;
+  badge?: React.ReactNode;
+  onClick: () => void;
+}
+
 export default function SettingsPage({ username }: Props) {
   const navigate = useNavigate();
+  const { message } = App.useApp();
   const [promoState, setPromoState] = useState<PromoState | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [inputCode, setInputCode] = useState("");
   const [activating, setActivating] = useState(false);
-  const [messageApi, contextHolder] = message.useMessage();
 
   useEffect(() => {
     promoApi.getState().then(setPromoState).catch(() => {});
@@ -39,122 +45,152 @@ export default function SettingsPage({ username }: Props) {
       const res = await promoApi.activate(code);
       setPromoState((prev) =>
         prev
-          ? {
-              ...prev,
-              can_activate: false,
-              active_promo: res.active_promo,
-              discount_percent: res.discount_percent,
-            }
+          ? { ...prev, can_activate: false, active_promo: res.active_promo, discount_percent: res.discount_percent }
           : prev
       );
       setModalOpen(false);
       setInputCode("");
-      messageApi.success(`Промокод ${res.active_promo} активирован — скидка ${res.discount_percent}%`);
+      message.success(`Промокод ${res.active_promo} активирован — скидка ${res.discount_percent}%`);
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Ошибка";
-      showAlert(msg);
+      showAlert(e instanceof Error ? e.message : "Ошибка");
     } finally {
       setActivating(false);
     }
   };
 
-  const items = [
+  const referralItems: SettingsItemDef[] = [
     {
       key: "invite",
       icon: <UsergroupAddOutlined />,
-      title: "Пригласить друзей",
+      iconBg: "rgba(124,156,255,0.15)",
+      label: "Пригласить друзей",
       onClick: () => navigate("/invite"),
     },
     {
       key: "rules",
       icon: <TeamOutlined />,
-      title: "Правила реферальной программы",
+      iconBg: "rgba(124,156,255,0.15)",
+      label: "Правила реферальной программы",
       onClick: () => navigate("/referral-rules"),
     },
+  ];
+
+  const legalItems: SettingsItemDef[] = [
     {
       key: "policy",
       icon: <SafetyOutlined />,
-      title: "Политика конфиденциальности",
+      iconBg: "rgba(78,203,168,0.15)",
+      label: "Политика конфиденциальности",
       onClick: () => navigate("/policy"),
     },
     {
       key: "agreement",
       icon: <FileTextOutlined />,
-      title: "Пользовательское соглашение",
+      iconBg: "rgba(78,203,168,0.15)",
+      label: "Пользовательское соглашение",
       onClick: () => navigate("/agreement"),
-    },
-    {
-      key: "login",
-      icon: <KeyOutlined />,
-      title: "Вход в аккаунт",
-      onClick: () =>
-        showAlert("Раздел «Вход в аккаунт» появится в следующей версии."),
-    },
-    {
-      key: "promo",
-      icon: <GiftOutlined />,
-      title: promoState?.active_promo
-        ? `Промокод: ${promoState.active_promo} (−${promoState.discount_percent}%)`
-        : "Активировать промокод",
-      onClick: () => {
-        if (promoState?.active_promo) {
-          showAlert(
-            `Активный промокод: ${promoState.active_promo}\nСкидка: ${promoState.discount_percent}% на следующую покупку`
-          );
-        } else {
-          setModalOpen(true);
-        }
-      },
     },
   ];
 
+  const renderSection = (items: SettingsItemDef[]) => (
+    <div className="settings-section">
+      {items.map((item) => (
+        <button key={item.key} className="settings-item" onClick={item.onClick}>
+          <div
+            className="settings-item__icon"
+            style={{ background: item.iconBg, color: "rgba(255,255,255,0.80)" }}
+          >
+            {item.icon}
+          </div>
+          <span className="settings-item__text">{item.label}</span>
+          {item.badge && <span>{item.badge}</span>}
+          <RightOutlined className="settings-item__arrow" />
+        </button>
+      ))}
+    </div>
+  );
+
   return (
     <div className="page">
-      {contextHolder}
-      <Typography.Title level={3} style={{ marginBottom: 20 }}>
+      <div style={{ fontSize: 22, fontWeight: 700, color: "#FFFFFF", letterSpacing: "-0.3px", marginBottom: 20 }}>
         Аккаунт
-      </Typography.Title>
+      </div>
 
+      {/* User chip */}
       {username && (
-        <Card size="small" style={{ marginBottom: 16 }}>
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-            }}
-          >
-            <Typography.Text type="secondary">Telegram</Typography.Text>
-            <Tag color="processing">@{username}</Tag>
-          </div>
-        </Card>
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          background: "rgba(255,255,255,0.06)",
+          border: "1px solid rgba(255,255,255,0.10)",
+          borderRadius: 16,
+          padding: "14px 16px",
+          marginBottom: 12,
+        }}>
+          <span style={{ color: "rgba(255,255,255,0.45)", fontSize: 14 }}>Telegram</span>
+          <Tag color="processing" style={{ margin: 0, fontWeight: 600 }}>@{username}</Tag>
+        </div>
       )}
 
+      {/* Active promo banner */}
       {promoState?.active_promo && (
-        <Card size="small" className="glass-success" style={{ marginBottom: 16 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-            <Typography.Text type="secondary">Скидка активна</Typography.Text>
-            <Tag color="success">−{promoState.discount_percent}% на следующую покупку</Tag>
-          </div>
-        </Card>
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          background: "rgba(78,203,168,0.10)",
+          border: "1px solid rgba(78,203,168,0.28)",
+          borderRadius: 16,
+          padding: "14px 16px",
+          marginBottom: 12,
+          gap: 12,
+        }}>
+          <span style={{ color: "rgba(255,255,255,0.60)", fontSize: 14 }}>Скидка активна</span>
+          <Tag color="success" style={{ margin: 0, fontWeight: 600 }}>
+            −{promoState.discount_percent}% на следующую покупку
+          </Tag>
+        </div>
       )}
 
-      <Space direction="vertical" size={12} style={{ width: "100%" }}>
-        {items.map((item) => (
-          <Button
-            key={item.key}
-            block
-            size="large"
-            type={item.key === "promo" && !promoState?.active_promo ? "dashed" : "default"}
-            onClick={item.onClick}
-            className="settings-row"
+      {/* Promo activation row */}
+      <div className="settings-section" style={{ marginBottom: 12 }}>
+        <button
+          className="settings-item"
+          onClick={() => {
+            if (promoState?.active_promo) {
+              showAlert(
+                `Активный промокод: ${promoState.active_promo}\nСкидка: ${promoState.discount_percent}% на следующую покупку`
+              );
+            } else {
+              setModalOpen(true);
+            }
+          }}
+        >
+          <div
+            className="settings-item__icon"
+            style={{ background: "rgba(255,212,121,0.15)", color: "#FFD479" }}
           >
-            <span className="icon">{item.icon}</span>
-            <span className="text">{item.title}</span>
-          </Button>
-        ))}
-      </Space>
+            <GiftOutlined />
+          </div>
+          <span className="settings-item__text">
+            {promoState?.active_promo
+              ? `Промокод: ${promoState.active_promo}`
+              : "Активировать промокод"}
+          </span>
+          {promoState?.active_promo && (
+            <Tag color="warning" style={{ margin: 0, fontSize: 11 }}>
+              −{promoState.discount_percent}%
+            </Tag>
+          )}
+          <RightOutlined className="settings-item__arrow" />
+        </button>
+      </div>
 
+      {renderSection(referralItems)}
+      {renderSection(legalItems)}
+
+      {/* Promo modal */}
       <Modal
         title="Активировать промокод"
         open={modalOpen}
@@ -162,10 +198,10 @@ export default function SettingsPage({ username }: Props) {
         footer={null}
         centered
       >
-        <Space direction="vertical" size={12} style={{ width: "100%" }}>
-          <Typography.Text type="secondary">
-            Введите промокод для получения скидки на первую покупку
-          </Typography.Text>
+        <Space direction="vertical" size={12} style={{ width: "100%", paddingTop: 4 }}>
+          <p style={{ color: "rgba(255,255,255,0.50)", margin: 0, fontSize: 14 }}>
+            Введите промокод для получения скидки на следующую покупку
+          </p>
           <Input
             placeholder="EXAMPLE123"
             value={inputCode}

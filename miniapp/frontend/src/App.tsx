@@ -1,4 +1,4 @@
-import { ConfigProvider, Result, Spin, Alert } from "antd";
+import { App as AntApp, ConfigProvider, Result, Spin, Alert } from "antd";
 import { Navigate, Route, Routes } from "react-router-dom";
 import BottomTabs from "./components/BottomTabs";
 import { useMe } from "./hooks/useMe";
@@ -87,7 +87,9 @@ function AppInner() {
 export default function App() {
   return (
     <ConfigProvider {...liquidGlassConfig}>
-      <AppInner />
+      <AntApp>
+        <AppInner />
+      </AntApp>
     </ConfigProvider>
   );
 }

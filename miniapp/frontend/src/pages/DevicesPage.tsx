@@ -1,33 +1,35 @@
-import { DeleteOutlined, ReloadOutlined } from "@ant-design/icons";
-import {
-  Alert,
-  Button,
-  Card,
-  Empty,
-  Modal,
-  Popconfirm,
-  Space,
-  Spin,
-  Tag,
-  Typography,
-  message,
-} from "antd";
+import { DeleteOutlined, LaptopOutlined, MobileOutlined, ReloadOutlined } from "@ant-design/icons";
+import { Alert, Button, Empty, Modal, Popconfirm, Spin, Tag, App } from "antd";
 import { useEffect, useState } from "react";
 import { api, DeviceItem, DevicesResponse } from "../api/client";
 
 function formatDate(value: string | null): string {
   if (!value) return "—";
   try {
-    return new Date(value).toLocaleString();
+    return new Date(value).toLocaleString("ru-RU", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
   } catch {
     return value;
   }
+}
+
+function platformIcon(platform: string | null): React.ReactNode {
+  if (!platform) return <LaptopOutlined />;
+  const p = platform.toLowerCase();
+  if (p.includes("android") || p.includes("ios") || p.includes("iphone") || p.includes("mobile")) {
+    return <MobileOutlined />;
+  }
+  return <LaptopOutlined />;
 }
 
 export default function DevicesPage() {
   const [devices, setDevices] = useState<DeviceItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
+  const { message } = App.useApp();
 
   const load = () => {
     setDevices(null);
@@ -38,9 +40,7 @@ export default function DevicesPage() {
       .catch((e) => setError(e?.detail || String(e)));
   };
 
-  useEffect(() => {
-    load();
-  }, []);
+  useEffect(() => { load(); }, []);
 
   const handleDelete = async (hwid: string) => {
     setRemoving(hwid);
@@ -61,9 +61,9 @@ export default function DevicesPage() {
   return (
     <div className="page">
       <div className="page-header">
-        <Typography.Title level={3} style={{ margin: 0 }}>
+        <span style={{ fontSize: 22, fontWeight: 700, color: "#FFFFFF", letterSpacing: "-0.3px" }}>
           Мои устройства
-        </Typography.Title>
+        </span>
         <Button
           className="refresh-fab"
           shape="circle"
@@ -87,57 +87,52 @@ export default function DevicesPage() {
         <Empty description="Нет привязанных устройств" />
       )}
 
-      {devices &&
-        devices.map((d) => (
-          <Card
-            key={d.hwid}
-            size="small"
-            style={{ marginBottom: 12 }}
-            title={
-              <Space wrap>
-                <span>{d.device_model || d.platform || "Устройство"}</span>
-                {d.platform && <Tag color="blue">{d.platform}</Tag>}
-              </Space>
-            }
-            extra={
-              <Popconfirm
-                title="Удалить устройство?"
-                description="После удаления потребуется новая авторизация."
-                okText="Удалить"
-                cancelText="Отмена"
-                okButtonProps={{ danger: true, loading: removing === d.hwid }}
-                onConfirm={() => handleDelete(d.hwid)}
-              >
-                <Button
-                  danger
-                  size="small"
-                  icon={<DeleteOutlined />}
-                  loading={removing === d.hwid}
-                >
-                  Удалить
-                </Button>
-              </Popconfirm>
-            }
-          >
-            <Typography.Paragraph
-              type="secondary"
-              style={{ marginBottom: 4, fontSize: 12, wordBreak: "break-all" }}
-            >
-              HWID: {d.hwid}
-            </Typography.Paragraph>
+      {devices && devices.map((d) => (
+        <div key={d.hwid} className="device-card">
+          <div className="device-card__icon">
+            {platformIcon(d.platform)}
+          </div>
+
+          <div className="device-card__body">
+            <div className="device-card__name">
+              {d.device_model || d.platform || "Устройство"}
+              {d.platform && (
+                <Tag color="processing" style={{ marginLeft: 8, fontSize: 11, verticalAlign: "middle" }}>
+                  {d.platform}
+                </Tag>
+              )}
+            </div>
             {d.os_version && (
-              <Typography.Paragraph style={{ marginBottom: 4 }}>
-                ОС: {d.os_version}
-              </Typography.Paragraph>
+              <div className="device-card__meta">ОС: {d.os_version}</div>
             )}
-            <Typography.Paragraph
-              type="secondary"
-              style={{ marginBottom: 0, fontSize: 12 }}
-            >
+            <div className="device-card__meta" style={{ marginTop: 4 }}>
               Добавлено: {formatDate(d.created_at)}
-            </Typography.Paragraph>
-          </Card>
-        ))}
+            </div>
+            <div className="device-card__meta" style={{ opacity: 0.6, marginTop: 2, fontSize: 11 }}>
+              {d.hwid}
+            </div>
+          </div>
+
+          <div className="device-card__actions">
+            <Popconfirm
+              title="Удалить устройство?"
+              description="После удаления потребуется новая авторизация."
+              okText="Удалить"
+              cancelText="Отмена"
+              okButtonProps={{ danger: true, loading: removing === d.hwid }}
+              onConfirm={() => handleDelete(d.hwid)}
+            >
+              <Button
+                danger
+                size="small"
+                shape="circle"
+                icon={<DeleteOutlined />}
+                loading={removing === d.hwid}
+              />
+            </Popconfirm>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
