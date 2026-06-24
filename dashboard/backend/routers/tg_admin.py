@@ -15,6 +15,8 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import func, select
 
+from common_db.repo.users import PAID_ORDER_STATUSES
+
 from ..auth import get_current_user
 from ..config import (
     get_bot_token, get_news_id, get_news_url,
@@ -26,8 +28,6 @@ from ..database.session import async_session
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/tg-admin", tags=["tg-admin"])
-
-_PAID_STATUSES = ("confirmed", "delivered")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -204,7 +204,7 @@ async def sub_clean_scan(_: str = Depends(get_current_user)):
         paid_sq = (
             select(Transaction.user_id)
             .where(
-                Transaction.order_status.in_(list(_PAID_STATUSES)),
+                Transaction.order_status.in_(list(PAID_ORDER_STATUSES)),
                 Transaction.expire_date > now,
             )
             .scalar_subquery()
@@ -277,6 +277,13 @@ async def sub_clean_execute(body: SubCleanExecuteRequest, _: str = Depends(get_c
             rw_user = await rw.get_user_by_uuid(user.vless_uuid)
             current_status = (rw_user or {}).get("status", "active")
 
+            # Disable in RemnaWave first; only write to DB on success
+            rw_result = await rw.update_user(user_uuid=user.vless_uuid, status="disabled")
+            if not rw_result:
+                errors += 1
+                continue
+            disabled += 1
+
             async with async_session() as session:
                 existing = await session.scalar(
                     select(DisabledUser).where(DisabledUser.tg_id == tg_id)
@@ -288,13 +295,6 @@ async def sub_clean_execute(body: SubCleanExecuteRequest, _: str = Depends(get_c
                         disabled_at=datetime.now().isoformat(timespec="seconds"),
                     ))
                     await session.commit()
-
-            result = await rw.update_user(user_uuid=user.vless_uuid, status="disabled")
-            if result:
-                disabled += 1
-            else:
-                errors += 1
-                continue
         except Exception as e:
             logger.error("sub-clean disable error tg_id=%s: %s", tg_id, e)
             errors += 1
@@ -354,7 +354,7 @@ async def telemt_clean_scan(_: str = Depends(get_current_user)):
         paid_result = await session.execute(
             select(Transaction.user_id).where(
                 Transaction.user_id.in_([u.id for u in db_users.values()]),
-                Transaction.order_status.in_(list(_PAID_STATUSES)),
+                Transaction.order_status.in_(list(PAID_ORDER_STATUSES)),
                 Transaction.expire_date > now,
             )
         )

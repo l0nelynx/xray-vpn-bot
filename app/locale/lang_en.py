@@ -422,7 +422,7 @@ miniapp_welcome = (
     "🇺🇸 USA\n"
     "🇳🇱 Netherlands\n\n"
     "<b>Instructions:</b>\n"
-    "• Open the <a href=\"{miniapp_url}\">app</a>\n"
+    "• Open the <a href=\"{miniapp_tg_url}\">app</a>\n"
     "• Purchase a subscription or activate a trial\n"
     "• Tap the «Connect» button\n"
     "• Follow the on-screen instructions, choosing your platform"

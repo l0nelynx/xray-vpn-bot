@@ -65,8 +65,11 @@ async def main_menu(message_func, menu_type, user_id: int = None, days=None, dat
 
     if not _legacy_constructor_enabled:
         # MiniApp mode: single unified welcome for all user states.
+        # miniapp_url  — direct HTTPS URL for WebAppInfo (opens app inside Telegram)
+        # miniapp_tg_url — t.me/Bot/appname link for the clickable text href
         miniapp_url = secrets.get('miniapp_url', '')
-        text = lang.miniapp_welcome.format(miniapp_url=miniapp_url)
+        miniapp_tg_url = secrets.get('miniapp_tg_url') or miniapp_url
+        text = lang.miniapp_welcome.format(miniapp_tg_url=miniapp_tg_url)
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text=lang.btn_open_app, web_app=WebAppInfo(url=miniapp_url))],
             [InlineKeyboardButton(text=lang.btn_settings_info, callback_data='Settings')],
