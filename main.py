@@ -101,8 +101,8 @@ async def on_startup(dispatcher, **kwargs):
         flags = await get_bot_feature_flags(session)
         _events._legacy_constructor_enabled = flags.legacy_bot_constructor
         if flags.legacy_bot_constructor:
-            from app.bot_constructor import router as legacy_router
-            dispatcher.include_router(legacy_router)
+            from app.bot_constructor import get_router
+            dispatcher.include_router(get_router())
             logging.info("bot_constructor: legacy in-bot menus ENABLED")
         else:
             logging.info("bot_constructor: legacy in-bot menus disabled (miniapp mode)")
