@@ -10,6 +10,7 @@ directly from `common_db.models`.
 """
 from common_db import Base  # noqa: F401  (legacy: dashboard code referenced Base)
 from common_db.models import (  # noqa: F401
+    BotFeatureFlags,
     CacheVersion,
     DisabledUser,
     EmailVerification,
@@ -35,6 +36,7 @@ from common_db.models import (  # noqa: F401
 
 __all__ = [
     "Base",
+    "BotFeatureFlags",
     "CacheVersion",
     "DisabledUser",
     "EmailVerification",

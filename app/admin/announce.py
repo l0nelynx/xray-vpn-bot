@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 from aiogram import F, Router
@@ -55,13 +56,14 @@ async def announce_broadcast_send(message: Message, state: FSMContext):
 
     for i, tg_id in enumerate(tg_ids):
         try:
-            # Рассылка через main bot (юзеры взаимодействуют с основным ботом)
             await bot.send_message(chat_id=tg_id, text=text, parse_mode='HTML')
             sent += 1
-        except Exception:
+        except Exception as e:
+            logging.debug("Broadcast skip tg_id=%s: %s", tg_id, e)
             failed += 1
-        # Обновляем статус каждые 25 сообщений
+        # Telegram allows ~30 msg/s to different users; throttle every 25
         if (i + 1) % 25 == 0:
+            await asyncio.sleep(1)
             try:
                 await status_msg.edit_text(f"Рассылка... {i + 1}/{len(tg_ids)}")
             except Exception:

@@ -14,6 +14,7 @@ reach for what it needs without re-introducing a local class.
 """
 from common_db import Base  # noqa: F401  (legacy: miniapp code may reference Base)
 from common_db.models import (  # noqa: F401
+    BotFeatureFlags,
     CacheVersion,
     DisabledUser,
     EmailVerification,
@@ -39,6 +40,7 @@ from common_db.models import (  # noqa: F401
 
 __all__ = [
     "Base",
+    "BotFeatureFlags",
     "CacheVersion",
     "DisabledUser",
     "EmailVerification",

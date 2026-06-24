@@ -16,7 +16,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..base import Base
-from ..models import CacheVersion, PromoSettings, TelmtFreeParams
+from ..models import BotFeatureFlags, CacheVersion, PromoSettings, TelmtFreeParams
 
 # All singletons in this codebase live at id == 1. If that ever needs to
 # change for a specific table, override via the ``row_id`` parameter.
@@ -155,12 +155,25 @@ async def bump_cache_version(session: AsyncSession) -> int:
     return new_value
 
 
+# --- BotFeatureFlags ---------------------------------------------------------
+
+
+async def get_bot_feature_flags(session: AsyncSession) -> BotFeatureFlags:
+    """Return the (only) BotFeatureFlags row, creating it on first call."""
+    return await get_or_create_singleton(
+        session,
+        BotFeatureFlags,
+        defaults={"legacy_bot_constructor": False},
+    )
+
+
 __all__ = [
     "DEFAULT_DAYS_REWARD_PER_30",
     "DEFAULT_PROMO_DISCOUNT_PERCENT",
     "DEFAULT_REWARD_CAP_DAYS",
     "DEFAULT_TELMT_EXPIRE_DAYS",
     "bump_cache_version",
+    "get_bot_feature_flags",
     "get_cache_version",
     "get_days_reward_per_30",
     "get_default_discount_percent",

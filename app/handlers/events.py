@@ -3,17 +3,15 @@ import logging
 import app.database.requests as rq
 import app.keyboards as kb
 import app.api.remnawave.api as rem
-from collections import defaultdict
-from app.keyboards.localized import (
-    get_main_new_localized, get_main_pro_localized, get_main_free_localized,
-    get_dynamic_keyboard,
-)
 from app.locale.utils import get_user_lang
 from app.database.models import async_main
-from app.database.tariff_repository import get_screen_text
 from app.settings import bot, admin_bot, secrets
 from io import BytesIO
-from aiogram.types import BufferedInputFile
+from aiogram.types import BufferedInputFile, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
+
+# Set by main.py:on_startup() after reading BotFeatureFlags from DB.
+# Changing the Dashboard toggle requires a bot restart to take effect.
+_legacy_constructor_enabled: bool = False
 
 logger = logging.getLogger(__name__)
 
@@ -65,20 +63,23 @@ async def main_menu(message_func, menu_type, user_id: int = None, days=None, dat
     from app.locale import get_lang
     lang = get_lang(lang_code)
 
-    # Try DB-driven keyboard first, fallback to hardcoded
-    slug_map = {"pro": "main_pro", "free": "main_free", "new": "main_new"}
-    slug = slug_map.get(menu_type, "main_new")
-    dynamic_kb = await get_dynamic_keyboard(slug, lang_code)
+    if not _legacy_constructor_enabled:
+        # MiniApp mode: single unified welcome for all user states.
+        miniapp_url = secrets.get('miniapp_url', '')
+        text = lang.miniapp_welcome.format(miniapp_url=miniapp_url)
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text=lang.btn_open_app, web_app=WebAppInfo(url=miniapp_url))],
+            [InlineKeyboardButton(text=lang.btn_settings_info, callback_data='Settings')],
+        ])
+        await message_func(text, reply_markup=keyboard, parse_mode="HTML", disable_web_page_preview=True)
+        return
 
-    fallback_map = {
+    # Legacy constructor mode: subscription-status-specific menus.
+    from app.keyboards.localized import get_main_new_localized, get_main_pro_localized, get_main_free_localized
+    keyboards_map = {
         "pro": get_main_pro_localized(lang),
         "free": get_main_free_localized(lang),
         "new": get_main_new_localized(lang),
-    }
-    keyboards_map = {
-        "pro": dynamic_kb or fallback_map["pro"],
-        "free": dynamic_kb or fallback_map["free"],
-        "new": dynamic_kb or fallback_map["new"],
     }
 
     # Build subscription info block for pro/free users
@@ -93,7 +94,6 @@ async def main_menu(message_func, menu_type, user_id: int = None, days=None, dat
                 traffic = f"{data_limit} GB"
         plan = "PRO" if menu_type == "pro" else "FREE"
 
-        # Получаем количество устройств
         devices_count = 0
         if user_uuid:
             try:
@@ -113,14 +113,7 @@ async def main_menu(message_func, menu_type, user_id: int = None, days=None, dat
         "new": lang.start_base + lang.start_new + lang.start_agreement,
     }
 
-    # Try DB text first, fall back to hardcoded locale text
-    db_text = await get_screen_text(slug, lang_code)
-    if db_text:
-        # Support {sub_info} placeholder; ignore unknown placeholders
-        safe_map = defaultdict(str, sub_info=sub_info_text)
-        text = db_text.format_map(safe_map)
-    else:
-        text = texts_map.get(menu_type, texts_map["new"])
+    text = texts_map.get(menu_type, texts_map["new"])
     keyboard = keyboards_map.get(menu_type, keyboards_map["new"])
 
     await message_func(text, reply_markup=keyboard, parse_mode="HTML", disable_web_page_preview=True)

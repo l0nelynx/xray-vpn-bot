@@ -22,6 +22,7 @@ import common_db.models  # noqa: F401  -- side-effect: populate metadata
 
 
 CANONICAL_TABLES = frozenset({
+    "bot_feature_flags",
     "cache_version",
     "disabled_users",
     "email_verifications",

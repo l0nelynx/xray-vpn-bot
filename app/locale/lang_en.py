@@ -410,6 +410,27 @@ A purchase was made with your promo code — you've been credited <b>{reward_day
 Total purchased via promo code: {total_days} days
 Total bonus days: {total_rewarded}"""
 
+# ==================== MiniApp mode welcome ====================
+
+miniapp_welcome = (
+    f"<b>Welcome to {brand}!</b>\n"
+    "🚀 This bot will help you connect to VPN\n\n"
+    "<b>Available locations:</b>\n"
+    "🇩🇪 Germany\n"
+    "🇵🇱 Poland\n"
+    "🇫🇷 France\n"
+    "🇺🇸 USA\n"
+    "🇳🇱 Netherlands\n\n"
+    "<b>Instructions:</b>\n"
+    "• Open the <a href=\"{miniapp_url}\">app</a>\n"
+    "• Purchase a subscription or activate a trial\n"
+    "• Tap the «Connect» button\n"
+    "• Follow the on-screen instructions, choosing your platform"
+)
+
+btn_open_app = "🚀 Open App"
+btn_settings_info = "⚙️ Settings & info"
+
 # ==================== Language Selection ====================
 
 lang_choose = "🌐 <b>Выберите язык / Choose language:</b>"

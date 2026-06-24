@@ -417,16 +417,6 @@ async def detect_user_api_provider(tg_id: int,username: str) -> str:
         return api_provider
 
     # Если в БД нет информации, пытаемся определить по API
-    # DISABLED: Marzban detection removed — Remnawave is the only API
-    # try:
-    #     async with mz.MarzbanAsync() as marz:
-    #         user_info = await marz.get_user(name=username)
-    #         if user_info and user_info != 404:
-    #             await rq.update_user_api_info(tg_id, username, api_provider="marzban")
-    #             return "marzban"
-    # except:
-    #     pass
-
     try:
         # Проверяем RemnaWave — сначала по email, потом по username
         user_info = None
@@ -438,8 +428,8 @@ async def detect_user_api_provider(tg_id: int,username: str) -> str:
         if user_info:
             await rq.update_user_api_info(tg_id, username, api_provider="remnawave")
             return "remnawave"
-    except:
-        pass
+    except Exception as e:
+        logger.warning("RemnaWave provider detection failed for tg_id=%s: %s", tg_id, e)
 
     return "none"
 

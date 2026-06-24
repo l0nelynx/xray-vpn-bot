@@ -1,6 +1,6 @@
-import { Table, Tag, Button, Space, Popconfirm, Input, Select, Drawer, Descriptions, List, Card, App } from "antd";
+import { Table, Tag, Button, Space, Popconfirm, Input, Select, Drawer, Descriptions, List, Card, App, Typography, Divider } from "antd";
 import type { TableProps } from "antd";
-import { SearchOutlined, StopOutlined, CheckOutlined, DeleteOutlined, EyeOutlined, CrownOutlined } from "@ant-design/icons";
+import { SearchOutlined, StopOutlined, CheckOutlined, DeleteOutlined, EyeOutlined, CrownOutlined, SendOutlined, EditOutlined } from "@ant-design/icons";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "../api/client";
 import type { UserItem, UserDetail, PaginatedResponse, TransactionItem } from "../api/types";
@@ -29,6 +29,10 @@ export default function UsersTable() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserDetail | null>(null);
   const [userTx, setUserTx] = useState<TransactionItem[]>([]);
+  const [msgText, setMsgText] = useState("");
+  const [msgSending, setMsgSending] = useState(false);
+  const [emailInput, setEmailInput] = useState("");
+  const [emailSaving, setEmailSaving] = useState(false);
   const isMobile = useIsMobile();
   const debouncedSearch = useDebounce(search, 400);
   const abortRef = useRef<AbortController | null>(null);
@@ -101,7 +105,40 @@ export default function UsersTable() {
     const tx = await api.get<TransactionItem[]>(`/users/${tg_id}/transactions`);
     setSelectedUser(user);
     setUserTx(tx);
+    setMsgText("");
+    setEmailInput(user.email || "");
     setDrawerOpen(true);
+  };
+
+  const handleSendMessage = async () => {
+    if (!selectedUser || !msgText.trim()) return;
+    setMsgSending(true);
+    try {
+      await api.post(`/users/${selectedUser.tg_id}/send-message`, { text: msgText });
+      message.success("Сообщение отправлено");
+      setMsgText("");
+    } catch {
+      message.error("Ошибка отправки");
+    } finally {
+      setMsgSending(false);
+    }
+  };
+
+  const handleSaveEmail = async () => {
+    if (!selectedUser || !emailInput.trim()) return;
+    setEmailSaving(true);
+    try {
+      const res = await api.patch<{ ok: boolean; rw_uuid: string | null }>(
+        `/users/${selectedUser.tg_id}/email`,
+        { email: emailInput.trim() }
+      );
+      message.success(res.rw_uuid ? `Email сохранён, UUID: ${res.rw_uuid}` : "Email сохранён");
+      setSelectedUser({ ...selectedUser, email: emailInput.trim() });
+    } catch {
+      message.error("Ошибка сохранения email");
+    } finally {
+      setEmailSaving(false);
+    }
   };
 
   const sortOrderFor = (key: string) =>
@@ -315,6 +352,53 @@ export default function UsersTable() {
                 </List.Item>
               )}
             />
+
+            <Divider style={{ borderColor: "rgba(255,255,255,0.1)" }} />
+
+            <Typography.Text strong style={{ color: "rgba(255,255,255,0.85)" }}>
+              <EditOutlined style={{ marginRight: 6 }} />
+              Email пользователя
+            </Typography.Text>
+            <Space.Compact style={{ width: "100%", marginTop: 8 }}>
+              <Input
+                value={emailInput}
+                onChange={(e) => setEmailInput(e.target.value)}
+                placeholder="user@example.com"
+                onPressEnter={handleSaveEmail}
+              />
+              <Button
+                type="primary"
+                onClick={handleSaveEmail}
+                loading={emailSaving}
+                icon={<EditOutlined />}
+              >
+                Сохранить
+              </Button>
+            </Space.Compact>
+
+            <Divider style={{ borderColor: "rgba(255,255,255,0.1)" }} />
+
+            <Typography.Text strong style={{ color: "rgba(255,255,255,0.85)" }}>
+              <SendOutlined style={{ marginRight: 6 }} />
+              Сообщение пользователю
+            </Typography.Text>
+            <Input.TextArea
+              style={{ marginTop: 8 }}
+              rows={3}
+              value={msgText}
+              onChange={(e) => setMsgText(e.target.value)}
+              placeholder="Текст сообщения..."
+            />
+            <Button
+              type="primary"
+              style={{ marginTop: 8 }}
+              icon={<SendOutlined />}
+              loading={msgSending}
+              onClick={handleSendMessage}
+              disabled={!msgText.trim()}
+            >
+              Отправить
+            </Button>
           </>
         )}
       </Drawer>

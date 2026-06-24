@@ -1,9 +1,16 @@
+import logging
+import re
 from datetime import datetime
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy import select, func, delete, exists
 
+logger = logging.getLogger(__name__)
+
 from ..auth import get_current_user
+from ..config import get_bot_token, get_remnawave_url, get_remnawave_token
 from ..database.models import User, Transaction
 from ..database.session import async_session
 
@@ -225,3 +232,63 @@ async def delete_user(tg_id: int, _: str = Depends(get_current_user)):
         await session.execute(delete(User).where(User.id == user.id))
         await session.commit()
     return {"ok": True, "message": f"User {tg_id} deleted"}
+
+
+class SendMessageRequest(BaseModel):
+    text: str
+
+
+@router.post("/{tg_id}/send-message")
+async def send_message(tg_id: int, body: SendMessageRequest, _: str = Depends(get_current_user)):
+    if not body.text.strip():
+        raise HTTPException(status_code=400, detail="Text is required")
+    token = get_bot_token()
+    if not token:
+        raise HTTPException(status_code=503, detail="Bot token not configured")
+    payload = {
+        "chat_id": tg_id,
+        "text": f"Сообщение от администратора:\n\n{body.text}",
+        "parse_mode": "HTML",
+    }
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.post(f"https://api.telegram.org/bot{token}/sendMessage", json=payload)
+    if r.status_code != 200:
+        detail = r.json().get("description", "Telegram error")
+        raise HTTPException(status_code=502, detail=detail)
+    return {"ok": True}
+
+
+class UpdateEmailRequest(BaseModel):
+    email: str
+
+
+@router.patch("/{tg_id}/email")
+async def update_email(tg_id: int, body: UpdateEmailRequest, _: str = Depends(get_current_user)):
+    email = body.email.strip().lower()
+    if not re.match(r"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$", email):
+        raise HTTPException(status_code=400, detail="Invalid email format")
+    async with async_session() as session:
+        user = await _repo_users.get_user_by_tg_id(session, tg_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        user.email = email
+        await session.commit()
+        username = user.username
+
+    rw_uuid = None
+    try:
+        from remnawave_client import configure
+        rw = configure(base_url=get_remnawave_url(), token=get_remnawave_token(), free_squad_id="")
+        rw_user = await rw.get_user_by_email(email)
+        if rw_user and rw_user.get("uuid"):
+            rw_uuid = str(rw_user["uuid"])
+            async with async_session() as session:
+                user = await _repo_users.get_user_by_tg_id(session, tg_id)
+                if user:
+                    user.vless_uuid = rw_uuid
+                    user.api_provider = "remnawave"
+                    await session.commit()
+    except Exception as exc:
+        logger.warning("RW email lookup failed for %s: %s", email, exc)
+
+    return {"ok": True, "email": email, "rw_uuid": rw_uuid}

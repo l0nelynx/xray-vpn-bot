@@ -119,7 +119,22 @@ async def cmd_start(message: Message, command: CommandObject = None):
                 reply_markup=get_subcheck_free_localized(lang),
             )
             return
-        # buy / extend → меню способов оплаты
+        # buy / extend — when bot constructor is disabled, open the MiniApp directly
+        # instead of showing inline payment method buttons (those callbacks have no handler)
+        from app.handlers.events import _legacy_constructor_enabled
+        if not _legacy_constructor_enabled:
+            miniapp_url = secrets.get('miniapp_url')
+            if miniapp_url:
+                from aiogram.types import WebAppInfo
+                text = lang.text_extend_pay_method if payload == "extend" else lang.text_pay_method
+                await message.answer(
+                    text=text, parse_mode='HTML',
+                    disable_web_page_preview=True,
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                        [InlineKeyboardButton(text=lang.btn_buy_premium, web_app=WebAppInfo(url=miniapp_url))],
+                    ]),
+                )
+                return
         show_promo = await rq.can_use_promo(message.from_user.id)
         text = lang.text_extend_pay_method if payload == "extend" else lang.text_pay_method
         await message.answer(
@@ -365,9 +380,6 @@ async def broadcast_make(message: Message):
 @router.callback_query(F.data == 'sub_check')
 async def sub_check(callback: CallbackQuery):
     sub_status = await check_tg_subscription(bot=bot, chat_id=secrets.get('news_id'), user_id=callback.from_user.id)
-    print(callback.from_user.id)
-    print(secrets.get("admin_id"))
-    print(sub_status)
     if sub_status:
         await free_sub_handler(callback, secrets.get('free_days'), secrets.get('free_traffic'), True)
 

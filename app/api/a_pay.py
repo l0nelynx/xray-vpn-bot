@@ -67,12 +67,9 @@ class PaymentProcessor:
                     #json=body
                     #headers=headers
             ) as response:
-                print(headers)
-                print(body)
                 if response.status == 200:
                     response_data = await response.json()
                     payment_link = response_data.get("url")
-                    print(f"Status{response_data}")
                     logger.info(f"Payment link created successfully: {payment_link}")
                     return response_data
                 else:
@@ -96,7 +93,6 @@ async def create_sbp_link(callback: CallbackQuery, amount, days: int):
     transaction_id = uuid.uuid4()
     if await rq.get_full_transaction_info(f"{transaction_id}"):  # For safety
         transaction_id = uuid.uuid4()
-    print(transaction_id)
     async with PaymentProcessor(secrets.get('apay_id'), secrets.get('apay_secret'),
                                 secrets.get('apay_api_url')) as processor:
         data = await processor.create_payment_link(

@@ -12,7 +12,7 @@ from .menus import MenuButton, MenuScreen, WebAppMenuNode
 from .promo_redemptions import PromoRedemption
 from .promos import Promo, PromoSettings
 from .support import SupportMessage, SupportTicket
-from .system import CacheVersion, TelmtFreeParams
+from .system import BotFeatureFlags, CacheVersion, TelmtFreeParams
 from .tariffs import SquadProfile, TariffPlan, TariffPrice
 from .transactions import Transaction
 from .users import DisabledUser, User
@@ -46,6 +46,7 @@ __all__ = [
     "GooglePlayPurchase",
     "GooglePlaySku",
     # system
+    "BotFeatureFlags",
     "CacheVersion",
     "TelmtFreeParams",
 ]

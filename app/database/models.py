@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 # keeps working for every class.
 from common_db import Base  # noqa: F401
 from common_db.models import (  # noqa: F401
+    BotFeatureFlags,
     CacheVersion,
     DisabledUser,
     EmailVerification,
@@ -64,6 +65,7 @@ __all__ = [
     "async_session",
     "async_main",
     # models (re-exported from common_db.models)
+    "BotFeatureFlags",
     "CacheVersion",
     "DisabledUser",
     "EmailVerification",
@@ -104,6 +106,7 @@ async def async_main():
     await _backfill_screen_texts()
     await _seed_telemt_free_params()
     await _seed_promo_settings()
+    await _seed_bot_feature_flags()
 
 
 async def _seed_cache_version():
@@ -323,3 +326,14 @@ async def _seed_promo_settings():
             session.add(PromoSettings(id=1, default_discount_percent=20))
             await session.commit()
             logging.info("Seed: promo_settings default row created")
+
+
+async def _seed_bot_feature_flags():
+    """Ensure bot_feature_flags has a default row (legacy_bot_constructor=False)."""
+    from sqlalchemy import select, func
+    async with async_session() as session:
+        count = await session.scalar(select(func.count()).select_from(BotFeatureFlags))
+        if not count:
+            session.add(BotFeatureFlags(id=1, legacy_bot_constructor=False))
+            await session.commit()
+            logging.info("Seed: bot_feature_flags default row created")

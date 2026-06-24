@@ -19,6 +19,7 @@ import {
   MessageOutlined,
   MobileOutlined,
   GiftOutlined,
+  RobotOutlined,
 } from "@ant-design/icons";
 import { clearToken } from "../api/client";
 import useIsMobile from "../hooks/useIsMobile";
@@ -46,6 +47,7 @@ const menuItems = [
       { key: "/webapp/settings", label: "Settings" },
     ],
   },
+  { key: "/tg-admin", icon: <RobotOutlined />, label: "TG Admin" },
 ];
 
 export default function Layout() {
