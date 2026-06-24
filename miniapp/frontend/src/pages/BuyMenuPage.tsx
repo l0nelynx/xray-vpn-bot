@@ -210,30 +210,16 @@ export default function BuyMenuPage() {
         {/* Chip levels */}
         {chipLevels.map((chips, depth) => (
           <div key={depth} style={{ marginBottom: 12 }}>
-            {depth === 0 && (
-              <div style={{
-                fontSize: 11,
-                fontWeight: 600,
-                color: "rgba(255,255,255,0.30)",
-                textTransform: "uppercase",
-                letterSpacing: "0.5px",
-                marginBottom: 8,
-              }}>
-                Категория
-              </div>
-            )}
-            {depth === 1 && (
-              <div style={{
-                fontSize: 11,
-                fontWeight: 600,
-                color: "rgba(255,255,255,0.30)",
-                textTransform: "uppercase",
-                letterSpacing: "0.5px",
-                marginBottom: 8,
-              }}>
-                Тип
-              </div>
-            )}
+            <div style={{
+              fontSize: 11,
+              fontWeight: 600,
+              color: "rgba(255,255,255,0.30)",
+              textTransform: "uppercase",
+              letterSpacing: "0.5px",
+              marginBottom: 8,
+            }}>
+              {depth === 0 ? "Тариф" : depth === 1 ? "Период" : "Подкатегория"}
+            </div>
             <div className="chip-row-wrap">
               <div className="chip-row">
                 {chips.map((chip) => (
@@ -265,7 +251,7 @@ export default function BuyMenuPage() {
               letterSpacing: "0.5px",
               marginBottom: 8,
             }}>
-              Период
+              Метод оплаты
             </div>
             <div className="tariff-scroll-wrap">
               <div className="tariff-scroll">
@@ -283,9 +269,6 @@ export default function BuyMenuPage() {
                       className={`tariff-card${isSelected ? " selected" : ""}`}
                       onClick={() => selectInvoice(n.id)}
                     >
-                      <div className="tariff-card__label">
-                        {inv.days ? `${inv.days} дн.` : "—"}
-                      </div>
                       <div className="tariff-card__name">{n.text}</div>
                       <div className="tariff-card__price-row">
                         {discAmt !== null && (

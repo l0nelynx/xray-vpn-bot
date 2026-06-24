@@ -48,12 +48,7 @@ export function initTelegram() {
     tg.onEvent?.("safeAreaChanged",        applyInsets);
     tg.onEvent?.("contentSafeAreaChanged", applyInsets);
 
-    // Request fullscreen only on mobile native clients (Bot API 8.0+).
-    if (isMobileTelegram() && tg.requestFullscreen) {
-      tg.requestFullscreen();
-      // Re-apply insets after fullscreen transition completes.
-      tg.onEvent?.("fullscreenChanged", applyInsets);
-    }
+    // Fullscreen mode intentionally disabled.
   } catch (e) {
     console.warn("tg init failed", e);
   }
