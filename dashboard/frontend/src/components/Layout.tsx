@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
-import { Layout as AntLayout, Menu, Button, Drawer, theme } from "antd";
-import { api } from "../api/client";
+import { Layout as AntLayout, Menu, Button, Drawer } from "antd";
+import type { MenuProps } from "antd";
 import {
   DashboardOutlined,
   UserOutlined,
@@ -22,36 +22,89 @@ import {
   GiftOutlined,
   RobotOutlined,
 } from "@ant-design/icons";
-import { clearToken } from "../api/client";
-
-const LEGACY_ONLY_KEYS = new Set(["/tariffs", "/menus", "/squads"]);
+import { api, clearToken } from "../api/client";
 import useIsMobile from "../hooks/useIsMobile";
 
-const { Sider, Header, Content } = AntLayout;
+const { Sider, Content } = AntLayout;
 
-const menuItems = [
-  { key: "/", icon: <DashboardOutlined />, label: "Dashboard" },
-  { key: "/users", icon: <UserOutlined />, label: "Users" },
-  { key: "/transactions", icon: <TransactionOutlined />, label: "Transactions" },
-  { key: "/stats", icon: <BarChartOutlined />, label: "Statistics" },
-  { key: "/tariffs", icon: <ShoppingOutlined />, label: "Tariffs" },
-  { key: "/menus", icon: <AppstoreOutlined />, label: "Bot Menus" },
-  { key: "/squads", icon: <TeamOutlined />, label: "Squads" },
-  { key: "/telemt", icon: <CloudServerOutlined />, label: "Telemt" },
-  { key: "/store", icon: <ShopOutlined />, label: "Store" },
-  { key: "/support", icon: <MessageOutlined />, label: "Support" },
-  { key: "/promocodes", icon: <GiftOutlined />, label: "Promocodes" },
-  {
-    key: "webapp",
-    icon: <MobileOutlined />,
-    label: "WebApp",
-    children: [
-      { key: "/webapp/tariffs", label: "Tariff Constructor" },
-      { key: "/webapp/settings", label: "Settings" },
-    ],
-  },
-  { key: "/tg-admin", icon: <RobotOutlined />, label: "TG Admin" },
-];
+type ItemType = NonNullable<MenuProps["items"]>[number];
+
+const PAGE_TITLES: Record<string, string> = {
+  "/": "Dashboard",
+  "/users": "Users",
+  "/transactions": "Transactions",
+  "/stats": "Statistics",
+  "/tariffs": "Tariffs",
+  "/menus": "Bot Menus",
+  "/squads": "Squads",
+  "/telemt": "Telemt",
+  "/store": "Store",
+  "/support": "Support",
+  "/promocodes": "Promocodes",
+  "/webapp/tariffs": "Tariff Constructor",
+  "/webapp/settings": "Settings",
+  "/tg-admin": "TG Admin",
+};
+
+function buildMenuItems(legacyEnabled: boolean): ItemType[] {
+  const legacyGroup: ItemType[] = legacyEnabled
+    ? [
+        {
+          type: "group",
+          label: "Bot Constructor",
+          key: "g-bot",
+          children: [
+            { key: "/tariffs", icon: <ShoppingOutlined />, label: "Tariffs" },
+            { key: "/menus", icon: <AppstoreOutlined />, label: "Bot Menus" },
+            { key: "/squads", icon: <TeamOutlined />, label: "Squads" },
+          ],
+        } as ItemType,
+      ]
+    : [];
+
+  return [
+    {
+      type: "group",
+      label: "Overview",
+      key: "g-overview",
+      children: [
+        { key: "/", icon: <DashboardOutlined />, label: "Dashboard" },
+        { key: "/users", icon: <UserOutlined />, label: "Users" },
+        { key: "/transactions", icon: <TransactionOutlined />, label: "Transactions" },
+        { key: "/stats", icon: <BarChartOutlined />, label: "Statistics" },
+      ],
+    } as ItemType,
+    ...legacyGroup,
+    {
+      type: "group",
+      label: "Services",
+      key: "g-services",
+      children: [
+        { key: "/telemt", icon: <CloudServerOutlined />, label: "Telemt" },
+        { key: "/store", icon: <ShopOutlined />, label: "Store" },
+        { key: "/support", icon: <MessageOutlined />, label: "Support" },
+        { key: "/promocodes", icon: <GiftOutlined />, label: "Promocodes" },
+        { key: "/tg-admin", icon: <RobotOutlined />, label: "TG Admin" },
+      ],
+    } as ItemType,
+    {
+      type: "group",
+      label: "WebApp",
+      key: "g-webapp",
+      children: [
+        {
+          key: "webapp",
+          icon: <MobileOutlined />,
+          label: "WebApp",
+          children: [
+            { key: "/webapp/tariffs", label: "Tariff Constructor" },
+            { key: "/webapp/settings", label: "Settings" },
+          ],
+        },
+      ],
+    } as ItemType,
+  ];
+}
 
 export default function Layout() {
   const [collapsed, setCollapsed] = useState(false);
@@ -59,18 +112,21 @@ export default function Layout() {
   const [legacyEnabled, setLegacyEnabled] = useState<boolean>(true);
   const navigate = useNavigate();
   const location = useLocation();
-  const { token } = theme.useToken();
   const isMobile = useIsMobile();
 
   useEffect(() => {
-    api.get<{ legacy_bot_constructor: boolean }>("/settings/features")
-      .then(r => setLegacyEnabled(r.legacy_bot_constructor))
-      .catch(() => setLegacyEnabled(true)); // fail-open: show all items on error
+    api
+      .get<{ legacy_bot_constructor: boolean }>("/settings/features")
+      .then((r) => setLegacyEnabled(r.legacy_bot_constructor))
+      .catch(() => setLegacyEnabled(true));
   }, []);
 
-  const visibleMenuItems = useMemo(
-    () => legacyEnabled ? menuItems : menuItems.filter(item => !LEGACY_ONLY_KEYS.has(item.key)),
-    [legacyEnabled],
+  const menuItems = useMemo(() => buildMenuItems(legacyEnabled), [legacyEnabled]);
+
+  const defaultOpenKeys = useMemo(
+    () => (location.pathname.startsWith("/webapp") ? ["webapp"] : []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
   );
 
   const handleLogout = () => {
@@ -78,58 +134,106 @@ export default function Layout() {
     navigate("/login");
   };
 
-  const handleMenuClick = (key: string) => {
+  const handleMenuClick = ({ key }: { key: string }) => {
     if (!key.startsWith("/")) return;
     navigate(key);
     if (isMobile) setMobileMenuOpen(false);
   };
 
+  const pageTitle = PAGE_TITLES[location.pathname] ?? "Dashboard";
+
+  /* ── Sidebar content ──────────────────────────────── */
   const sidebarContent = (
-    <>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+      {/* Logo */}
       <div
         style={{
           height: 56,
           display: "flex",
           alignItems: "center",
-          justifyContent: "center",
-          fontWeight: 700,
-          fontSize: isMobile ? 18 : collapsed ? 14 : 18,
-          color: token.colorPrimary,
-          letterSpacing: isMobile ? 2 : collapsed ? 0 : 2,
-          borderBottom: "1px solid rgba(255,255,255,0.04)",
+          gap: 10,
+          padding: "0 16px",
+          borderBottom: "1px solid #1A2038",
+          flexShrink: 0,
         }}
       >
-        {!isMobile && collapsed ? "VP" : "Dashboard"}
-      </div>
-      <Menu
-        mode="inline"
-        selectedKeys={[location.pathname]}
-        items={visibleMenuItems}
-        onClick={({ key }) => handleMenuClick(key)}
-        style={{
-          borderRight: 0,
-          background: "transparent",
-          padding: "8px 4px",
-        }}
-      />
-      {isMobile && (
-        <div style={{ padding: "16px", marginTop: "auto" }}>
-          <Button
-            type="text"
-            icon={<LogoutOutlined />}
-            onClick={handleLogout}
-            block
-            style={{ color: "rgba(255,255,255,0.5)", textAlign: "left" }}
-          >
-            Logout
-          </Button>
+        <div
+          style={{
+            width: 30,
+            height: 30,
+            borderRadius: 8,
+            background: "linear-gradient(135deg, #6C8EFF, #A78BFF)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 13,
+            fontWeight: 700,
+            color: "#fff",
+            flexShrink: 0,
+          }}
+        >
+          VP
         </div>
-      )}
-    </>
+        {(!collapsed || isMobile) && (
+          <span
+            style={{
+              fontSize: 14,
+              fontWeight: 600,
+              color: "#E2E8F8",
+              letterSpacing: 0.3,
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+            }}
+          >
+            VPN Admin
+          </span>
+        )}
+      </div>
+
+      {/* Nav */}
+      <div style={{ flex: 1, overflow: "auto", paddingTop: 6 }}>
+        <Menu
+          mode="inline"
+          theme="dark"
+          selectedKeys={[location.pathname]}
+          defaultOpenKeys={defaultOpenKeys}
+          items={menuItems}
+          onClick={handleMenuClick}
+          style={{ background: "transparent", border: 0 }}
+        />
+      </div>
+
+      {/* Footer logout */}
+      <div
+        style={{
+          padding: "12px 10px",
+          borderTop: "1px solid #1A2038",
+          flexShrink: 0,
+        }}
+      >
+        <Button
+          type="text"
+          icon={<LogoutOutlined />}
+          onClick={handleLogout}
+          style={{
+            width: "100%",
+            textAlign: "left",
+            color: "rgba(255,255,255,0.35)",
+            fontSize: 13,
+            height: 34,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
+          {(!collapsed || isMobile) && "Logout"}
+        </Button>
+      </div>
+    </div>
   );
 
   return (
-    <AntLayout style={{ minHeight: "100vh", background: "#0B0B14" }}>
+    <AntLayout style={{ minHeight: "100vh", background: "#0C0F1A" }}>
       {/* Desktop sidebar */}
       {!isMobile && (
         <Sider
@@ -137,40 +241,33 @@ export default function Layout() {
           collapsed={collapsed}
           onCollapse={setCollapsed}
           trigger={null}
-          width={240}
-          collapsedWidth={64}
+          width={220}
+          collapsedWidth={60}
           style={{
-            background: "rgba(20, 20, 30, 0.55)",
-            backdropFilter: "blur(24px) saturate(1.6)",
-            WebkitBackdropFilter: "blur(24px) saturate(1.6)",
-            borderRight: "1px solid rgba(255,255,255,0.08)",
-            overflow: "auto",
+            background: "#0F1220",
+            borderRight: "1px solid #1A2038",
+            overflow: "hidden",
             height: "100vh",
             position: "sticky",
             top: 0,
             left: 0,
-          } as React.CSSProperties}
+          }}
         >
           {sidebarContent}
         </Sider>
       )}
 
-      {/* Mobile drawer menu */}
+      {/* Mobile drawer */}
       {isMobile && (
         <Drawer
           placement="left"
           open={mobileMenuOpen}
           onClose={() => setMobileMenuOpen(false)}
-          width={260}
-          closeIcon={<CloseOutlined style={{ color: "rgba(255,255,255,0.6)" }} />}
+          width={240}
+          closeIcon={<CloseOutlined style={{ color: "rgba(255,255,255,0.5)" }} />}
           styles={{
             header: { display: "none" },
-            body: {
-              padding: 0,
-              background: "transparent",
-              display: "flex",
-              flexDirection: "column",
-            },
+            body: { padding: 0, background: "#0F1220", display: "flex", flexDirection: "column" },
           }}
           rootStyle={{ zIndex: 1001 }}
         >
@@ -178,68 +275,71 @@ export default function Layout() {
         </Drawer>
       )}
 
-      <AntLayout style={{ background: "#0B0B14" }}>
-        <Header
+      <AntLayout style={{ background: "#0C0F1A", overflow: "hidden" }}>
+        {/* Top bar */}
+        <div
           style={{
-            padding: isMobile ? "0 12px" : "0 24px",
+            height: 52,
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            background: "rgba(20, 20, 30, 0.55)",
-            backdropFilter: "blur(24px) saturate(1.6)",
-            WebkitBackdropFilter: "blur(24px) saturate(1.6)",
-            borderBottom: "1px solid rgba(255,255,255,0.08)",
-            height: 56,
-            lineHeight: "56px",
+            padding: isMobile ? "0 14px" : "0 20px",
+            background: "#0F1220",
+            borderBottom: "1px solid #1A2038",
             position: "sticky",
             top: 0,
             zIndex: 10,
+            flexShrink: 0,
           }}
         >
-          {isMobile ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            {/* Toggle / burger */}
             <Button
               type="text"
-              icon={<MenuOutlined />}
-              onClick={() => setMobileMenuOpen(true)}
-              style={{ color: "rgba(255,255,255,0.6)" }}
+              icon={
+                isMobile ? (
+                  <MenuOutlined />
+                ) : collapsed ? (
+                  <MenuUnfoldOutlined />
+                ) : (
+                  <MenuFoldOutlined />
+                )
+              }
+              onClick={isMobile ? () => setMobileMenuOpen(true) : () => setCollapsed(!collapsed)}
+              style={{ color: "rgba(255,255,255,0.40)", padding: 0, width: 32, height: 32 }}
             />
-          ) : (
-            <Button
-              type="text"
-              icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-              onClick={() => setCollapsed(!collapsed)}
-              style={{ color: "rgba(255,255,255,0.6)" }}
-            />
-          )}
-          {isMobile ? (
+            {/* Page title */}
             <span
               style={{
-                fontWeight: 700,
-                fontSize: 16,
-                color: token.colorPrimary,
-                letterSpacing: 1,
+                fontSize: 14,
+                fontWeight: 600,
+                color: "#E2E8F8",
+                letterSpacing: -0.1,
               }}
             >
-              DASHBOARD
+              {pageTitle}
             </span>
-          ) : null}
-          {!isMobile ? (
-            <Button
-              type="text"
-              icon={<LogoutOutlined />}
-              onClick={handleLogout}
-              style={{ color: "rgba(255,255,255,0.5)" }}
-            >
-              Logout
-            </Button>
-          ) : (
-            <div style={{ width: 32 }} /> // Spacer for centering title
-          )}
-        </Header>
+          </div>
+
+          {/* Breadcrumb path — subtle */}
+          <span
+            style={{
+              fontSize: 11.5,
+              color: "rgba(255,255,255,0.22)",
+              letterSpacing: 0.2,
+              display: isMobile ? "none" : "block",
+            }}
+          >
+            {location.pathname === "/" ? "/ dashboard" : location.pathname}
+          </span>
+        </div>
+
+        {/* Page content */}
         <Content
           style={{
-            margin: isMobile ? 12 : 24,
-            minHeight: "calc(100vh - 56px - 48px)",
+            padding: isMobile ? 12 : 20,
+            minHeight: "calc(100vh - 52px)",
+            overflow: "auto",
           }}
         >
           <Outlet />
