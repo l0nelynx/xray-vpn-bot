@@ -18,7 +18,7 @@ from app.admin import router as router_admin
 from app.handlers.base import router as router_base
 from app.handlers.devices import router as router_devices
 from app.handlers.events import start_bot, stop_bot
-from app.settings import bot, admin_bot, cp, run_webserver, app_uvi, limiter
+from app.settings import bot, admin_bot, cp, run_webserver, app_uvi, limiter, secrets
 
 app_uvi.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -97,6 +97,7 @@ async def on_startup(dispatcher, **kwargs):
     from app.database.models import async_session
     from common_db.repo.system import get_bot_feature_flags
     from app.handlers import events as _events
+    from app.admin.backup import scheduled_backup_loop
     async with async_session() as session:
         flags = await get_bot_feature_flags(session)
         _events._legacy_constructor_enabled = flags.legacy_bot_constructor
@@ -106,6 +107,11 @@ async def on_startup(dispatcher, **kwargs):
             logging.info("bot_constructor: legacy in-bot menus ENABLED")
         else:
             logging.info("bot_constructor: legacy in-bot menus disabled (miniapp mode)")
+
+    admin_id = secrets.get("admin_id")
+    if admin_id:
+        asyncio.create_task(scheduled_backup_loop(bot, int(admin_id)))
+        logging.info("Scheduled daily backup at 01:00 for admin_id=%s", admin_id)
 
 
 async def main():
@@ -133,6 +139,5 @@ if __name__ == "__main__":
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
     from app.log_buffer import init_error_log_handler
-    from app.settings import secrets
     init_error_log_handler(maxlen=secrets.get('admin_logs_length', 20))
     asyncio.run(main())
