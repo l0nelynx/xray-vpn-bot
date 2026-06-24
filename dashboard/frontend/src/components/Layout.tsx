@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { Layout as AntLayout, Menu, Button, Drawer, theme } from "antd";
+import { api } from "../api/client";
 import {
   DashboardOutlined,
   UserOutlined,
@@ -22,6 +23,8 @@ import {
   RobotOutlined,
 } from "@ant-design/icons";
 import { clearToken } from "../api/client";
+
+const LEGACY_ONLY_KEYS = new Set(["/tariffs", "/menus", "/squads"]);
 import useIsMobile from "../hooks/useIsMobile";
 
 const { Sider, Header, Content } = AntLayout;
@@ -53,10 +56,22 @@ const menuItems = [
 export default function Layout() {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [legacyEnabled, setLegacyEnabled] = useState<boolean>(true);
   const navigate = useNavigate();
   const location = useLocation();
   const { token } = theme.useToken();
   const isMobile = useIsMobile();
+
+  useEffect(() => {
+    api.get<{ legacy_bot_constructor: boolean }>("/settings/features")
+      .then(r => setLegacyEnabled(r.legacy_bot_constructor))
+      .catch(() => setLegacyEnabled(true)); // fail-open: show all items on error
+  }, []);
+
+  const visibleMenuItems = useMemo(
+    () => legacyEnabled ? menuItems : menuItems.filter(item => !LEGACY_ONLY_KEYS.has(item.key)),
+    [legacyEnabled],
+  );
 
   const handleLogout = () => {
     clearToken();
@@ -89,7 +104,7 @@ export default function Layout() {
       <Menu
         mode="inline"
         selectedKeys={[location.pathname]}
-        items={menuItems}
+        items={visibleMenuItems}
         onClick={({ key }) => handleMenuClick(key)}
         style={{
           borderRight: 0,
