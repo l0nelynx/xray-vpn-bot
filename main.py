@@ -96,7 +96,7 @@ async def on_startup(dispatcher, **kwargs):
     # Requires a bot restart to take effect after toggling in Dashboard.
     from app.database.models import async_session
     from common_db.repo.system import get_bot_feature_flags
-    from app import events as _events
+    from app.handlers import events as _events
     async with async_session() as session:
         flags = await get_bot_feature_flags(session)
         _events._legacy_constructor_enabled = flags.legacy_bot_constructor
