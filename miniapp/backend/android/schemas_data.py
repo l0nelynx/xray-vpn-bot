@@ -15,6 +15,7 @@ class AndroidUserSummary(BaseModel):
     email_verified: bool
     tg_id: int | None
     language: str | None
+    has_password: bool = False
 
 
 class AndroidSubscription(BaseModel):

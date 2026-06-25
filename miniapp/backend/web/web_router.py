@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import json as _json
 import logging
 import secrets
 import time
@@ -650,3 +651,212 @@ async def telegram_auth_exchange(
             has_telegram=user.tg_id is not None,
         ),
     )
+
+
+# ── Credential setup for Telegram-only users ──────────────────────────────────
+#
+# Two flows:
+#   A) No email, no password  → /setup/email-request + /setup/email-confirm
+#   B) Has email, no password → /setup/password-request + /setup/password-confirm
+
+
+class SetupEmailRequest(BaseModel):
+    email: EmailStr
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+class SetupEmailConfirm(BaseModel):
+    code: str = Field(min_length=4, max_length=12)
+
+
+class SetupPasswordConfirm(BaseModel):
+    new_password: str = Field(min_length=8, max_length=128)
+    code: str = Field(min_length=4, max_length=12)
+
+
+@router.post("/auth/setup/email-request")
+@limiter.limit("3/minute")
+async def setup_email_request(
+    body: SetupEmailRequest,
+    request: Request,
+    user: android_repo.UserRow = Depends(deps.get_current_user),
+) -> dict:
+    """Step 1 for users with no email: validate email, store password hash in code
+    payload, send verification code to the new email."""
+    if user.email:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail={"code": "email_already_set"})
+
+    new_email = str(body.email).strip().lower()
+    other = await android_repo.find_user_by_email(new_email)
+    if other is not None and other.id != user.id:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail={"code": "email_taken"})
+
+    from ..android import mailer, security as _sec
+    from ..config import get_email_code_ttl_seconds
+
+    password_hash = _sec.hash_password(body.new_password)
+    payload = _json.dumps({"email": new_email, "ph": password_hash})
+
+    code = _sec.new_email_code()
+    code_hash = _sec.hash_email_code(code)
+    await android_repo.invalidate_pending_codes(user.id, android_repo.PURPOSE_SETUP_EMAIL)
+    await android_repo.store_verification_code(
+        user_id=user.id,
+        purpose=android_repo.PURPOSE_SETUP_EMAIL,
+        code_hash=code_hash,
+        payload=payload,
+        ttl_seconds=get_email_code_ttl_seconds(),
+    )
+    try:
+        subject, text_body = mailer.render_verify(code)
+        await mailer.send_email(to=new_email, subject=subject, text=text_body)
+    except mailer.MailerError as exc:
+        logger.error("setup_email_request: send to %s failed: %s", new_email, exc)
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, detail={"code": "email_send_failed"}
+        ) from exc
+
+    return {"status": "ok"}
+
+
+@router.post("/auth/setup/email-confirm")
+@limiter.limit("10/minute")
+async def setup_email_confirm(
+    body: SetupEmailConfirm,
+    request: Request,
+    user: android_repo.UserRow = Depends(deps.get_current_user),
+) -> dict:
+    """Step 2: verify the code, then atomically set email + password + verified_at."""
+    if user.email:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail={"code": "email_already_set"})
+
+    from ..android import security as _sec
+
+    row = await android_repo.find_active_code(user.id, android_repo.PURPOSE_SETUP_EMAIL)
+    if row is None or row.expires_at <= _datetime_now_iso():
+        if row:
+            await android_repo.mark_code_used(row.id)
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail={"code": "code_expired"})
+
+    if row.attempts >= _get_max_attempts():
+        await android_repo.mark_code_used(row.id)
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, detail={"code": "code_exhausted"})
+
+    if not _sec.constant_time_code_eq(row.code_hash, body.code):
+        attempts = await android_repo.increment_code_attempts(row.id)
+        if attempts >= _get_max_attempts():
+            await android_repo.mark_code_used(row.id)
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail={"code": "code_invalid"})
+
+    await android_repo.mark_code_used(row.id)
+
+    try:
+        data = _json.loads(row.payload or "{}")
+        new_email = data["email"]
+        password_hash = data["ph"]
+    except (ValueError, KeyError) as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail={"code": "code_invalid"}) from exc
+
+    # Last-second collision check
+    other = await android_repo.find_user_by_email(new_email)
+    if other is not None and other.id != user.id:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail={"code": "email_taken"})
+
+    await android_repo.set_email_with_password(user.id, new_email, password_hash)
+    await notify_log(
+        f"🔐 <b>Email+password set (Web)</b>\n"
+        f"user_id: <code>{user.id}</code>\n"
+        f"email: <code>{esc(new_email)}</code>"
+    )
+    return {"status": "ok"}
+
+
+@router.post("/auth/setup/password-request")
+@limiter.limit("3/minute")
+async def setup_password_request(
+    request: Request,
+    user: android_repo.UserRow = Depends(deps.get_current_user),
+) -> dict:
+    """Step 1 for users with email but no password: send code to existing email."""
+    if not user.email:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail={"code": "email_missing"})
+    if user.password_hash:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail={"code": "password_already_set"})
+
+    from ..android import mailer, security as _sec
+    from ..config import get_email_code_ttl_seconds
+
+    code = _sec.new_email_code()
+    code_hash = _sec.hash_email_code(code)
+    await android_repo.invalidate_pending_codes(user.id, android_repo.PURPOSE_SETUP_PASSWORD)
+    await android_repo.store_verification_code(
+        user_id=user.id,
+        purpose=android_repo.PURPOSE_SETUP_PASSWORD,
+        code_hash=code_hash,
+        payload=None,
+        ttl_seconds=get_email_code_ttl_seconds(),
+    )
+    try:
+        subject, text_body = mailer.render_verify(code)
+        await mailer.send_email(to=user.email, subject=subject, text=text_body)
+    except mailer.MailerError as exc:
+        logger.error("setup_password_request: send to %s failed: %s", user.email, exc)
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, detail={"code": "email_send_failed"}
+        ) from exc
+
+    return {"status": "ok"}
+
+
+@router.post("/auth/setup/password-confirm")
+@limiter.limit("10/minute")
+async def setup_password_confirm(
+    body: SetupPasswordConfirm,
+    request: Request,
+    user: android_repo.UserRow = Depends(deps.get_current_user),
+) -> dict:
+    """Step 2: verify the code, then set the password."""
+    if not user.email:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail={"code": "email_missing"})
+    if user.password_hash:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail={"code": "password_already_set"})
+
+    from ..android import security as _sec
+
+    row = await android_repo.find_active_code(user.id, android_repo.PURPOSE_SETUP_PASSWORD)
+    if row is None or row.expires_at <= _datetime_now_iso():
+        if row:
+            await android_repo.mark_code_used(row.id)
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail={"code": "code_expired"})
+
+    if row.attempts >= _get_max_attempts():
+        await android_repo.mark_code_used(row.id)
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, detail={"code": "code_exhausted"})
+
+    if not _sec.constant_time_code_eq(row.code_hash, body.code):
+        attempts = await android_repo.increment_code_attempts(row.id)
+        if attempts >= _get_max_attempts():
+            await android_repo.mark_code_used(row.id)
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail={"code": "code_invalid"})
+
+    await android_repo.mark_code_used(row.id)
+    await android_repo.set_password(user.id, _sec.hash_password(body.new_password))
+    if not user.email_verified_at:
+        await android_repo.mark_email_verified(user.id)
+
+    await notify_log(
+        f"🔐 <b>Password set (Web)</b>\n"
+        f"user_id: <code>{user.id}</code>\n"
+        f"email: <code>{esc(user.email or '—')}</code>"
+    )
+    return {"status": "ok"}
+
+
+def _datetime_now_iso() -> str:
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def _get_max_attempts() -> int:
+    from ..config import get_email_code_max_attempts
+    return get_email_code_max_attempts()

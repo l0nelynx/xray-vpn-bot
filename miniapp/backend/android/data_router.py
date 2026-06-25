@@ -91,6 +91,7 @@ def _user_summary(user: repo.UserRow) -> AndroidUserSummary:
         email_verified=bool(user.email_verified_at),
         tg_id=user.tg_id,
         language=user.language,
+        has_password=user.password_hash is not None,
     )
 
 

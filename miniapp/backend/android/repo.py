@@ -188,6 +188,27 @@ async def adopt_user_for_migration(
         await s.commit()
 
 
+async def set_email_with_password(
+    user_id: int,
+    email: str,
+    password_hash: str,
+) -> None:
+    """Atomically set email + password + mark email_verified_at.
+    Used for Telegram-only users who add email+password login."""
+    normalized = email.strip().lower()
+    now = _utcnow_iso()
+    async with async_session() as s:
+        await s.execute(
+            text(
+                "UPDATE users SET email = :e, password_hash = :p, "
+                "password_updated_at = :n, email_verified_at = :n "
+                "WHERE id = :i"
+            ),
+            {"e": normalized, "p": password_hash, "n": now, "i": user_id},
+        )
+        await s.commit()
+
+
 async def set_password(user_id: int, password_hash: str) -> None:
     now = _utcnow_iso()
     async with async_session() as s:
@@ -402,6 +423,8 @@ PURPOSE_VERIFY = "verify"
 PURPOSE_PASSWORD_RESET = "password_reset"
 PURPOSE_EMAIL_CHANGE = "email_change"
 PURPOSE_TG_LINK = "tg_link"
+PURPOSE_SETUP_EMAIL = "setup_email"       # set email+password for users who have neither
+PURPOSE_SETUP_PASSWORD = "setup_password"  # set password for users who have email but not pwd
 
 
 async def invalidate_pending_codes(user_id: int, purpose: str) -> None:
