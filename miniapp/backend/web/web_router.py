@@ -54,6 +54,7 @@ from ..android.schemas import AuthResponse, UserSummary
 from ..database.session import async_session
 from ..config import get_bot_token, get_tg_client_secret
 from ..notify_log import esc, notify_log
+from ..remnawave_client import get_user_from_username as _rw_get_by_username
 from ..payments import InvoiceRequest, PaymentError, create_invoice, get_provider
 from . import brute_force
 from common_db.models.promo_redemptions import PromoRedemption, REDEMPTION_ACTIVE
@@ -564,9 +565,53 @@ async def telegram_auth_exchange(
         ) from exc
 
     tg_user_id = int(claims["sub"])
+    # Telegram @username from OIDC (profile scope), no "@" prefix
+    tg_username: str | None = (
+        claims.get("preferred_username") or claims.get("username") or ""
+    ).lstrip("@").strip() or None
 
+    logger.info(
+        "Telegram OIDC exchange: tg_id=%s username=%s", tg_user_id, tg_username
+    )
+
+    # ── 1. Primary: exact tg_id match (covers all bot users and linked accounts)
     user = await android_repo.find_user_by_tg_id(tg_user_id)
+
+    # ── 2. Fallback: find by Telegram @username stored in users.username,
+    #       then auto-link the tg_id so future logins go through path 1.
+    if user is None and tg_username:
+        from common_db.repo.users import get_user_by_username as _get_by_uname
+        async with async_session() as _s:
+            _db = await _get_by_uname(_s, tg_username)
+        if _db is not None and _db.tg_id is None:
+            await android_repo.set_user_tg_id(_db.id, tg_user_id)
+            user = await android_repo.find_user_by_id(_db.id)
+            logger.info(
+                "Telegram OIDC: auto-linked tg_id=%s → user_id=%s (via @username)",
+                tg_user_id, _db.id,
+            )
+
+    # ── 3. Fallback: look up in Remnawave by vless_uuid stored in users.username
+    #       (bots without @username store the numeric tg_id as the Remnawave username).
     if user is None:
+        _rw = await _rw_get_by_username(str(tg_user_id))
+        if _rw:
+            _uuid = _rw.get("uuid")
+            if _uuid:
+                user = await android_repo.find_user_by_vless_uuid(_uuid)
+                if user is not None and user.tg_id is None:
+                    await android_repo.set_user_tg_id(user.id, tg_user_id)
+                    user = await android_repo.find_user_by_id(user.id)
+                    logger.info(
+                        "Telegram OIDC: auto-linked tg_id=%s → user_id=%s (via Remnawave uuid)",
+                        tg_user_id, user.id,
+                    )
+
+    if user is None:
+        logger.warning(
+            "Telegram OIDC: no users row found for tg_id=%s username=%s",
+            tg_user_id, tg_username,
+        )
         raise HTTPException(
             status.HTTP_404_NOT_FOUND,
             detail={"code": "tg_not_registered"},
@@ -598,6 +643,6 @@ async def telegram_auth_exchange(
             email=user.email,
             email_verified=True,
             has_password=user.password_hash is not None,
-            has_telegram=True,
+            has_telegram=user.tg_id is not None,
         ),
     )
