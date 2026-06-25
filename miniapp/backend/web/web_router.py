@@ -28,14 +28,19 @@ Discount accounting for web users:
 """
 from __future__ import annotations
 
+import base64
 import hashlib
-import hmac as _hmac
 import logging
+import secrets
 import time
+import urllib.parse
 import uuid
 from datetime import datetime, timezone
 
+import httpx
+import jwt as _pyjwt
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from jwt import PyJWKClient as _PyJWKClient
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
@@ -47,7 +52,7 @@ from ..android.auth_router import _issue_pair, _user_summary, limiter
 from ..android.payments_router import _load_menu_rows, _load_node, _node_payload
 from ..android.schemas import AuthResponse, UserSummary
 from ..database.session import async_session
-from ..config import get_bot_token
+from ..config import get_bot_token, get_tg_client_secret
 from ..notify_log import esc, notify_log
 from ..payments import InvoiceRequest, PaymentError, create_invoice, get_provider
 from . import brute_force
@@ -58,6 +63,21 @@ from common_db.repo import system as _repo_system
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/web", tags=["web-portal"])
+
+# PKCE state store: state_token → {code_verifier, redirect_uri, expires_ts}
+# Entries expire after 10 minutes and are cleaned up lazily.
+_pkce_store: dict[str, dict] = {}
+_PKCE_TTL = 600
+
+# JWKS client — fetches Telegram's public keys on first use, then caches them.
+_tg_jwks: _PyJWKClient | None = None
+
+
+def _get_tg_jwks() -> _PyJWKClient:
+    global _tg_jwks
+    if _tg_jwks is None:
+        _tg_jwks = _PyJWKClient("https://oauth.telegram.org/.well-known/jwks.json")
+    return _tg_jwks
 
 
 # ---------------------------------------------------------------------------
@@ -135,14 +155,9 @@ class WebInvoiceRequest(BaseModel):
     description: str | None = None
 
 
-class TelegramAuthRequest(BaseModel):
-    id: int
-    first_name: str
-    last_name: str | None = None
-    username: str | None = None
-    photo_url: str | None = None
-    auth_date: int
-    hash: str
+class TelegramExchangeRequest(BaseModel):
+    code: str
+    state: str
 
 
 class WebInvoiceResponse(BaseModel):
@@ -431,60 +446,126 @@ async def web_invoice(
     )
 
 
-@router.post("/auth/telegram", response_model=AuthResponse)
-@limiter.limit("10/minute")
-async def telegram_auth(
-    body: TelegramAuthRequest,
-    request: Request,
-) -> AuthResponse:
-    """Authenticate a web portal user via Telegram Login Widget.
+@router.get("/auth/telegram/init")
+@limiter.limit("20/minute")
+async def telegram_auth_init(request: Request, redirect_uri: str) -> dict:
+    """Generate PKCE pair + state and return the Telegram OIDC authorization URL.
 
-    Verifies the HMAC-SHA256 signature from Telegram, then looks up
-    the user by tg_id.  Existing bot subscribers can log into the web
-    portal without a separate email registration.
-
-    On first Telegram login, email_verified_at is set so the user
-    reaches the dashboard directly on subsequent page loads.
+    The frontend opens this URL in a popup; Telegram redirects to redirect_uri
+    with ?code=...&state=... after the user authorizes.
     """
     bot_token = get_bot_token()
-    if not bot_token:
+    bot_id = bot_token.split(":")[0] if bot_token else ""
+    if not bot_id or not get_tg_client_secret():
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={"code": "tg_auth_unavailable"},
         )
 
-    # Build the data-check-string: key=value pairs sorted alphabetically
-    data_dict: dict[str, str] = {
-        "auth_date": str(body.auth_date),
-        "first_name": body.first_name,
-        "id": str(body.id),
+    # Lazy cleanup of expired entries
+    now_ts = time.time()
+    for k in [s for s, v in _pkce_store.items() if v["expires"] < now_ts]:
+        del _pkce_store[k]
+
+    # PKCE S256
+    verifier = base64.urlsafe_b64encode(secrets.token_bytes(32)).rstrip(b"=").decode()
+    challenge = base64.urlsafe_b64encode(
+        hashlib.sha256(verifier.encode()).digest()
+    ).rstrip(b"=").decode()
+
+    state = secrets.token_hex(16)
+    _pkce_store[state] = {
+        "code_verifier": verifier,
+        "redirect_uri": redirect_uri,
+        "expires": now_ts + _PKCE_TTL,
     }
-    if body.last_name is not None:
-        data_dict["last_name"] = body.last_name
-    if body.photo_url is not None:
-        data_dict["photo_url"] = body.photo_url
-    if body.username is not None:
-        data_dict["username"] = body.username
 
-    data_check_string = "\n".join(
-        f"{k}={v}" for k, v in sorted(data_dict.items())
-    )
-    secret_key = hashlib.sha256(bot_token.encode()).digest()
-    expected = _hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
+    params = urllib.parse.urlencode({
+        "client_id": bot_id,
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "scope": "openid profile",
+        "state": state,
+        "code_challenge": challenge,
+        "code_challenge_method": "S256",
+    })
+    return {"auth_url": f"https://oauth.telegram.org/auth?{params}"}
 
-    if not _hmac.compare_digest(expected, body.hash):
+
+@router.post("/auth/telegram/exchange", response_model=AuthResponse)
+@limiter.limit("10/minute")
+async def telegram_auth_exchange(
+    body: TelegramExchangeRequest,
+    request: Request,
+) -> AuthResponse:
+    """Complete Telegram OIDC login: exchange code → tokens → verify id_token → issue JWT."""
+    entry = _pkce_store.pop(body.state, None)
+    if entry is None or entry["expires"] < time.time():
         raise HTTPException(
-            status.HTTP_401_UNAUTHORIZED,
-            detail={"code": "invalid_tg_hash"},
+            status.HTTP_400_BAD_REQUEST,
+            detail={"code": "invalid_state"},
         )
 
-    if time.time() - body.auth_date > 86400:
+    bot_token = get_bot_token()
+    bot_id = bot_token.split(":")[0] if bot_token else ""
+    client_secret = get_tg_client_secret()
+
+    # Exchange authorization code for id_token
+    credentials = base64.b64encode(f"{bot_id}:{client_secret}".encode()).decode()
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(
+                "https://oauth.telegram.org/token",
+                data={
+                    "grant_type": "authorization_code",
+                    "code": body.code,
+                    "redirect_uri": entry["redirect_uri"],
+                    "client_id": bot_id,
+                    "code_verifier": entry["code_verifier"],
+                },
+                headers={"Authorization": f"Basic {credentials}"},
+            )
+    except httpx.HTTPError as exc:
+        logger.warning("Telegram token endpoint unreachable: %s", exc)
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            detail={"code": "tg_exchange_failed"},
+        ) from exc
+
+    if resp.status_code != 200:
+        logger.warning("Telegram token exchange %s: %s", resp.status_code, resp.text)
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED,
-            detail={"code": "tg_auth_expired"},
+            detail={"code": "tg_exchange_failed"},
         )
 
-    user = await android_repo.find_user_by_tg_id(body.id)
+    id_token = resp.json().get("id_token")
+    if not id_token:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "tg_no_id_token"},
+        )
+
+    # Verify id_token signature and claims with Telegram's JWKS
+    try:
+        signing_key = _get_tg_jwks().get_signing_key_from_jwt(id_token)
+        claims = _pyjwt.decode(
+            id_token,
+            signing_key.key,
+            algorithms=["RS256"],
+            audience=str(bot_id),
+            issuer="https://oauth.telegram.org",
+        )
+    except Exception as exc:
+        logger.warning("Telegram id_token invalid: %s", exc)
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "invalid_tg_token"},
+        ) from exc
+
+    tg_user_id = int(claims["sub"])
+
+    user = await android_repo.find_user_by_tg_id(tg_user_id)
     if user is None:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND,
@@ -497,8 +578,6 @@ async def telegram_auth(
             detail={"code": "banned"},
         )
 
-    # First-time Telegram login: mark identity as confirmed so the user
-    # reaches the dashboard directly on subsequent page loads.
     if user.email_verified_at is None:
         await android_repo.mark_email_verified(user.id)
 
@@ -506,9 +585,8 @@ async def telegram_auth(
 
     _, ip_log = deps.client_meta(request)
     await notify_log(
-        f"🌐🔑 <b>Telegram login (Web)</b>\n"
-        f"tg_id: <code>{body.id}</code>\n"
-        f"name: <code>{esc(body.first_name)}</code>\n"
+        f"🌐🔑 <b>Telegram OIDC login (Web)</b>\n"
+        f"tg_id: <code>{tg_user_id}</code>\n"
         f"user_id: <code>{user.id}</code>\n"
         f"IP: <code>{esc(ip_log or '—')}</code>"
     )

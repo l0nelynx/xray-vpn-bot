@@ -240,6 +240,15 @@ def get_email_code_max_attempts() -> int:
 
 # --- Web portal ------------------------------------------------------------
 
+def get_tg_client_secret() -> str:
+    """Client Secret issued by BotFather for Telegram OpenID Connect (Login 2.0).
+
+    Config key: tg_client_secret.  Required for the web portal "Sign in with
+    Telegram" button; leave empty to disable the feature.
+    """
+    return get_config().get("tg_client_secret", "") or ""
+
+
 def get_web_allowed_origins() -> list[str]:
     """CORS allowed origins for the external web portal frontend.
 

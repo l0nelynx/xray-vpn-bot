@@ -133,6 +133,13 @@ google_play_rtdn_token: ""                         # Shared secret for Play RTDN
 # web_allowed_origins:
 #   - https://web.yourdomain.com
 
+# Telegram OpenID Connect (Login 2.0) — enables "Sign in with Telegram" on the web portal.
+# 1. In BotFather: /mybots → your bot → Bot Settings → Web Login → Set Domain → yourdomain.com
+# 2. BotFather → the same menu → Client Secret → copy the value here.
+# 3. Set VITE_TG_BOT_ID in GitHub Actions Variables to your bot's numeric ID.
+# Leave empty to hide the Telegram login button on the portal.
+tg_client_secret: ""
+
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
 # ║  SUPPORT BOT (legacy standalone bot — support.py)                           ║
