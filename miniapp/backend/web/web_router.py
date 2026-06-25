@@ -28,7 +28,10 @@ Discount accounting for web users:
 """
 from __future__ import annotations
 
+import hashlib
+import hmac as _hmac
 import logging
+import time
 import uuid
 from datetime import datetime, timezone
 
@@ -42,8 +45,9 @@ from ..android import repo as android_repo
 from ..android import security as android_security
 from ..android.auth_router import _issue_pair, _user_summary, limiter
 from ..android.payments_router import _load_menu_rows, _load_node, _node_payload
-from ..android.schemas import AuthResponse
+from ..android.schemas import AuthResponse, UserSummary
 from ..database.session import async_session
+from ..config import get_bot_token
 from ..notify_log import esc, notify_log
 from ..payments import InvoiceRequest, PaymentError, create_invoice, get_provider
 from . import brute_force
@@ -129,6 +133,16 @@ class WebMenuResponse(BaseModel):
 class WebInvoiceRequest(BaseModel):
     node_id: int = Field(..., ge=1)
     description: str | None = None
+
+
+class TelegramAuthRequest(BaseModel):
+    id: int
+    first_name: str
+    last_name: str | None = None
+    username: str | None = None
+    photo_url: str | None = None
+    auth_date: int
+    hash: str
 
 
 class WebInvoiceResponse(BaseModel):
@@ -414,4 +428,98 @@ async def web_invoice(
         currency=invoice.currency,
         transaction_id=persisted_id,
         payment_method=provider.payment_method,
+    )
+
+
+@router.post("/auth/telegram", response_model=AuthResponse)
+@limiter.limit("10/minute")
+async def telegram_auth(
+    body: TelegramAuthRequest,
+    request: Request,
+) -> AuthResponse:
+    """Authenticate a web portal user via Telegram Login Widget.
+
+    Verifies the HMAC-SHA256 signature from Telegram, then looks up
+    the user by tg_id.  Existing bot subscribers can log into the web
+    portal without a separate email registration.
+
+    On first Telegram login, email_verified_at is set so the user
+    reaches the dashboard directly on subsequent page loads.
+    """
+    bot_token = get_bot_token()
+    if not bot_token:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": "tg_auth_unavailable"},
+        )
+
+    # Build the data-check-string: key=value pairs sorted alphabetically
+    data_dict: dict[str, str] = {
+        "auth_date": str(body.auth_date),
+        "first_name": body.first_name,
+        "id": str(body.id),
+    }
+    if body.last_name is not None:
+        data_dict["last_name"] = body.last_name
+    if body.photo_url is not None:
+        data_dict["photo_url"] = body.photo_url
+    if body.username is not None:
+        data_dict["username"] = body.username
+
+    data_check_string = "\n".join(
+        f"{k}={v}" for k, v in sorted(data_dict.items())
+    )
+    secret_key = hashlib.sha256(bot_token.encode()).digest()
+    expected = _hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
+
+    if not _hmac.compare_digest(expected, body.hash):
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "invalid_tg_hash"},
+        )
+
+    if time.time() - body.auth_date > 86400:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "tg_auth_expired"},
+        )
+
+    user = await android_repo.find_user_by_tg_id(body.id)
+    if user is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail={"code": "tg_not_registered"},
+        )
+
+    if user.is_banned:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail={"code": "banned"},
+        )
+
+    # First-time Telegram login: mark identity as confirmed so the user
+    # reaches the dashboard directly on subsequent page loads.
+    if user.email_verified_at is None:
+        await android_repo.mark_email_verified(user.id)
+
+    tokens = await _issue_pair(user.id, request)
+
+    _, ip_log = deps.client_meta(request)
+    await notify_log(
+        f"🌐🔑 <b>Telegram login (Web)</b>\n"
+        f"tg_id: <code>{body.id}</code>\n"
+        f"name: <code>{esc(body.first_name)}</code>\n"
+        f"user_id: <code>{user.id}</code>\n"
+        f"IP: <code>{esc(ip_log or '—')}</code>"
+    )
+
+    return AuthResponse(
+        tokens=tokens,
+        user=UserSummary(
+            id=user.id,
+            email=user.email,
+            email_verified=True,
+            has_password=user.password_hash is not None,
+            has_telegram=True,
+        ),
     )
