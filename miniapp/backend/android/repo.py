@@ -549,6 +549,17 @@ async def find_user_by_tg_id(tg_id: int) -> UserRow | None:
     return _row_to_user(row)
 
 
+async def find_user_by_username_ci(username: str) -> UserRow | None:
+    """Case-insensitive Telegram @username lookup. Used for Telegram OIDC login
+    where preferred_username from the JWT matches users.username."""
+    async with async_session() as s:
+        row = (await s.execute(
+            text(f"SELECT {_USER_COLS} FROM users WHERE LOWER(username) = :u LIMIT 1"),
+            {"u": username.lower()},
+        )).first()
+    return _row_to_user(row)
+
+
 async def set_user_tg_id(user_id: int, tg_id: int) -> None:
     async with async_session() as s:
         await s.execute(

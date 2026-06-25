@@ -564,53 +564,57 @@ async def telegram_auth_exchange(
             detail={"code": "invalid_tg_token"},
         ) from exc
 
-    tg_user_id = int(claims["sub"])
-    # Telegram @username from OIDC (profile scope), no "@" prefix
+    # Telegram OIDC JWT fields (per https://core.telegram.org/bots/telegram-login):
+    #   `sub`  — opaque OIDC subject, NOT the bot-API user ID
+    #   `id`   — actual Telegram numeric user ID (same as message.from_user.id in bot)
+    #   `preferred_username` — Telegram @username
+    tg_id: int | None = int(claims["id"]) if claims.get("id") else None
     tg_username: str | None = (
         claims.get("preferred_username") or claims.get("username") or ""
     ).lstrip("@").strip() or None
 
     logger.info(
-        "Telegram OIDC exchange: tg_id=%s username=%s", tg_user_id, tg_username
+        "Telegram OIDC exchange: id=%s username=%s sub=%s",
+        tg_id, tg_username, claims.get("sub"),
     )
 
-    # ── 1. Primary: exact tg_id match (covers all bot users and linked accounts)
-    user = await android_repo.find_user_by_tg_id(tg_user_id)
+    user = None
 
-    # ── 2. Fallback: find by Telegram @username stored in users.username,
-    #       then auto-link the tg_id so future logins go through path 1.
+    # ── 1. Primary: exact tg_id match — the `id` claim IS the bot-API user ID.
+    if tg_id:
+        user = await android_repo.find_user_by_tg_id(tg_id)
+        if user:
+            logger.info("Telegram OIDC: found user_id=%s by tg_id=%s", user.id, tg_id)
+
+    # ── 2. Fallback: Telegram @username (case-insensitive) in users.username.
+    #       Covers web-portal users whose tg_id column is still NULL.
     if user is None and tg_username:
-        from common_db.repo.users import get_user_by_username as _get_by_uname
-        async with async_session() as _s:
-            _db = await _get_by_uname(_s, tg_username)
-        if _db is not None and _db.tg_id is None:
-            await android_repo.set_user_tg_id(_db.id, tg_user_id)
-            user = await android_repo.find_user_by_id(_db.id)
+        user = await android_repo.find_user_by_username_ci(tg_username)
+        if user:
             logger.info(
-                "Telegram OIDC: auto-linked tg_id=%s → user_id=%s (via @username)",
-                tg_user_id, _db.id,
+                "Telegram OIDC: found user_id=%s by @username=%s", user.id, tg_username
             )
 
-    # ── 3. Fallback: look up in Remnawave by vless_uuid stored in users.username
-    #       (bots without @username store the numeric tg_id as the Remnawave username).
-    if user is None:
-        _rw = await _rw_get_by_username(str(tg_user_id))
+    # ── 3. Last resort: Remnawave lookup by @username → vless_uuid → users row.
+    if user is None and tg_username:
+        try:
+            _rw = await _rw_get_by_username(tg_username)
+        except Exception:
+            _rw = None
         if _rw:
             _uuid = _rw.get("uuid")
             if _uuid:
                 user = await android_repo.find_user_by_vless_uuid(_uuid)
-                if user is not None and user.tg_id is None:
-                    await android_repo.set_user_tg_id(user.id, tg_user_id)
-                    user = await android_repo.find_user_by_id(user.id)
+                if user:
                     logger.info(
-                        "Telegram OIDC: auto-linked tg_id=%s → user_id=%s (via Remnawave uuid)",
-                        tg_user_id, user.id,
+                        "Telegram OIDC: found user_id=%s via Remnawave uuid=%s",
+                        user.id, _uuid,
                     )
 
     if user is None:
         logger.warning(
-            "Telegram OIDC: no users row found for tg_id=%s username=%s",
-            tg_user_id, tg_username,
+            "Telegram OIDC: no user found — tg_id=%s username=%s",
+            tg_id, tg_username,
         )
         raise HTTPException(
             status.HTTP_404_NOT_FOUND,
@@ -631,7 +635,7 @@ async def telegram_auth_exchange(
     _, ip_log = deps.client_meta(request)
     await notify_log(
         f"🌐🔑 <b>Telegram OIDC login (Web)</b>\n"
-        f"tg_id: <code>{tg_user_id}</code>\n"
+        f"@username: <code>{esc(tg_username or '—')}</code>\n"
         f"user_id: <code>{user.id}</code>\n"
         f"IP: <code>{esc(ip_log or '—')}</code>"
     )
