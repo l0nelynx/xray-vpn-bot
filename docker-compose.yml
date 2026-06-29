@@ -41,7 +41,8 @@ services:
       context: .
       dockerfile: infra/docker/bot.Dockerfile
       args:
-        BASE_IMAGE: ghcr.io/l0nelynx/python-base:${IMAGE_TAG:-staging}
+        BASE_IMAGE: ${REGISTRY-ghcr.io/l0nelynx/}python-base:${IMAGE_TAG:-staging}
+        REGISTRY: ${REGISTRY-ghcr.io/l0nelynx/}
     command: ["python", "-c", "from migrations_runner import upgrade_to_head; upgrade_to_head()"]
     restart: "no"
     environment:
@@ -62,7 +63,8 @@ services:
       context: .
       dockerfile: infra/docker/bot.Dockerfile
       args:
-        BASE_IMAGE: ghcr.io/l0nelynx/python-base:${IMAGE_TAG:-staging}
+        BASE_IMAGE: ${REGISTRY-ghcr.io/l0nelynx/}python-base:${IMAGE_TAG:-staging}
+        REGISTRY: ${REGISTRY-ghcr.io/l0nelynx/}
     volumes:
       - /var/lib/marzban/certs/:/usr/src/app/uvicorn/ssl
       - ./config.yml:/usr/src/app/config.yml
@@ -125,7 +127,8 @@ services:
       context: .
       dockerfile: infra/docker/dashboard.Dockerfile
       args:
-        BASE_IMAGE: ghcr.io/l0nelynx/python-base:${IMAGE_TAG:-staging}
+        BASE_IMAGE: ${REGISTRY-ghcr.io/l0nelynx/}python-base:${IMAGE_TAG:-staging}
+        REGISTRY: ${REGISTRY-ghcr.io/l0nelynx/}
     volumes:
       - ./config.yml:/app/config.yml:ro
     networks:
@@ -157,7 +160,8 @@ services:
       context: .
       dockerfile: infra/docker/miniapp.Dockerfile
       args:
-        BASE_IMAGE: ghcr.io/l0nelynx/python-base:${IMAGE_TAG:-staging}
+        BASE_IMAGE: ${REGISTRY-ghcr.io/l0nelynx/}python-base:${IMAGE_TAG:-staging}
+        REGISTRY: ${REGISTRY-ghcr.io/l0nelynx/}
     volumes:
       - ./config.yml:/app/config.yml:ro
     networks:
