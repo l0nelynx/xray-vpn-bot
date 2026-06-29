@@ -216,6 +216,28 @@ export interface OrderParam {
   data: string;
 }
 
+export interface SupportTicketSummary {
+  id: number;
+  user_id: number;
+  tg_id: number | null;
+  username: string | null;
+  subject: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SupportMessageItem {
+  id: number;
+  sender: string;
+  text: string;
+  created_at: string;
+}
+
+export interface SupportTicketDetail extends SupportTicketSummary {
+  messages: SupportMessageItem[];
+}
+
 export interface MenuScreen {
   id: number;
   slug: string;

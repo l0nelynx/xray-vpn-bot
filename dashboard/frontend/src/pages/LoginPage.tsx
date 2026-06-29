@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Form, Input, Button, Card, message, Typography } from "antd";
+import { Form, Input, Button, App } from "antd";
 import { LockOutlined, UserOutlined } from "@ant-design/icons";
 import { api, setToken } from "../api/client";
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const { message } = App.useApp();
   const [loading, setLoading] = useState(false);
 
   const onFinish = async (values: { login: string; password: string }) => {
@@ -28,52 +29,85 @@ export default function LoginPage() {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        padding: 16,
-        background: "linear-gradient(135deg, #0a0a0f 0%, #0f0f1e 50%, #0a0a0f 100%)",
+        padding: 24,
+        background: "#0C0F1A",
       }}
     >
-      <Card
-        style={{
-          width: "100%",
-          maxWidth: 400,
-          background: "#13131d",
-          border: "1px solid rgba(255,255,255,0.06)",
-          borderTop: "2px solid #4f8cff",
-        }}
-        styles={{
-          body: { padding: "32px 24px 24px" },
-        }}
-      >
+      <div style={{ width: "100%", maxWidth: 360 }}>
+        {/* Logo mark */}
         <div style={{ textAlign: "center", marginBottom: 32 }}>
-          <Typography.Title
-            level={3}
+          <div
             style={{
-              margin: 0,
-              color: "rgba(255,255,255,0.92)",
+              width: 48,
+              height: 48,
+              borderRadius: 14,
+              background: "linear-gradient(135deg, #6C8EFF, #A78BFF)",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 20,
               fontWeight: 700,
-              letterSpacing: 1,
+              color: "#fff",
+              marginBottom: 16,
+              boxShadow: "0 8px 24px rgba(108, 142, 255, 0.30)",
             }}
           >
-            XRAY VPN
-          </Typography.Title>
-          <Typography.Text style={{ color: "rgba(255,255,255,0.4)", fontSize: 13 }}>
-            Sign in to dashboard
-          </Typography.Text>
+            VP
+          </div>
+          <div
+            style={{
+              fontSize: 20,
+              fontWeight: 700,
+              color: "#E2E8F8",
+              letterSpacing: -0.3,
+              marginBottom: 6,
+            }}
+          >
+            VPN Admin
+          </div>
+          <div style={{ fontSize: 13, color: "rgba(255,255,255,0.35)" }}>
+            Sign in to continue
+          </div>
         </div>
-        <Form onFinish={onFinish} autoComplete="off">
-          <Form.Item name="login" rules={[{ required: true, message: "Enter login" }]}>
-            <Input prefix={<UserOutlined style={{ color: "rgba(255,255,255,0.3)" }} />} placeholder="Login" size="large" />
-          </Form.Item>
-          <Form.Item name="password" rules={[{ required: true, message: "Enter password" }]}>
-            <Input.Password prefix={<LockOutlined style={{ color: "rgba(255,255,255,0.3)" }} />} placeholder="Password" size="large" />
-          </Form.Item>
-          <Form.Item style={{ marginBottom: 0 }}>
-            <Button type="primary" htmlType="submit" loading={loading} block size="large">
-              Sign In
-            </Button>
-          </Form.Item>
-        </Form>
-      </Card>
+
+        {/* Card */}
+        <div
+          style={{
+            background: "#111827",
+            border: "1px solid #1E2540",
+            borderRadius: 14,
+            padding: "28px 24px",
+          }}
+        >
+          <Form onFinish={onFinish} autoComplete="off" size="large">
+            <Form.Item
+              name="login"
+              style={{ marginBottom: 12 }}
+              rules={[{ required: true, message: "Enter login" }]}
+            >
+              <Input
+                prefix={<UserOutlined style={{ color: "rgba(255,255,255,0.22)", fontSize: 14 }} />}
+                placeholder="Login"
+              />
+            </Form.Item>
+            <Form.Item
+              name="password"
+              style={{ marginBottom: 20 }}
+              rules={[{ required: true, message: "Enter password" }]}
+            >
+              <Input.Password
+                prefix={<LockOutlined style={{ color: "rgba(255,255,255,0.22)", fontSize: 14 }} />}
+                placeholder="Password"
+              />
+            </Form.Item>
+            <Form.Item style={{ marginBottom: 0 }}>
+              <Button type="primary" htmlType="submit" loading={loading} block>
+                Sign In
+              </Button>
+            </Form.Item>
+          </Form>
+        </div>
+      </div>
     </div>
   );
 }

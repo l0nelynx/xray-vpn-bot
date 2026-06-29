@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import {
   Typography, Button, Space, Modal, Form, Input, InputNumber,
-  Select, message, Popconfirm, Tag, Spin, Empty, Collapse,
+  Select, App, Popconfirm, Tag, Spin, Empty, Collapse,
 } from "antd";
 import {
   PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined,
@@ -112,6 +112,7 @@ export default function StorePage() {
   const [filterItemId, setFilterItemId] = useState<string>("");
   const [form] = Form.useForm();
   const isMobile = useIsMobile();
+  const { message } = App.useApp();
 
   const load = useCallback(async () => {
     setLoading(true);

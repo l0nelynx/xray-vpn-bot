@@ -5,7 +5,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 import os
 
 from .auth import LoginRequest, TokenResponse, create_access_token, verify_credentials, get_current_user
-from .routers import users, transactions, stats, promos, tariffs, menus, squads, telemt, store
+from .routers import users, transactions, stats, promos, tariffs, menus, squads, telemt, store, support, webapp_menu, webapp_payments, settings, tg_admin
 
 BASE_PATH = "/bot/dashboard"
 
@@ -21,6 +21,23 @@ app.include_router(menus.router, prefix=BASE_PATH)
 app.include_router(squads.router, prefix=BASE_PATH)
 app.include_router(telemt.router, prefix=BASE_PATH)
 app.include_router(store.router, prefix=BASE_PATH)
+app.include_router(support.router, prefix=BASE_PATH)
+app.include_router(webapp_menu.router, prefix=BASE_PATH)
+app.include_router(webapp_payments.router, prefix=BASE_PATH)
+app.include_router(settings.router, prefix=BASE_PATH)
+app.include_router(tg_admin.router, prefix=BASE_PATH)
+
+
+@app.on_event("startup")
+async def ensure_schema_up_to_date():
+    """Apply Alembic migrations. No-op if init container already ran them."""
+    import sys
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[2]
+    if str(root) not in sys.path:
+        sys.path.insert(0, str(root))
+    from migrations_runner import upgrade_to_head
+    upgrade_to_head()
 
 
 @app.get("/health")

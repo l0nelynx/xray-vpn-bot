@@ -1,21 +1,37 @@
+# Build context for this Dockerfile is the repository root.
+# Use:  docker build -f dashboard/Dockerfile .
+
 # Stage 1: Build React frontend
 FROM node:20-alpine AS frontend-build
 WORKDIR /build
-COPY frontend/package.json frontend/package-lock.json* ./
+COPY dashboard/frontend/package.json dashboard/frontend/package-lock.json* ./
 RUN npm ci --ignore-scripts || npm install
-COPY frontend/ .
+COPY dashboard/frontend/ .
 RUN npm run build
 
 # Stage 2: Python runtime
 FROM python:3.13-alpine
 WORKDIR /app
 
-RUN apk add --no-cache curl
+RUN apk add --no-cache curl libpq
 
-COPY backend/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY dashboard/backend/requirements.txt .
+RUN apk add --no-cache --virtual .build-deps gcc musl-dev postgresql-dev \
+ && pip install --no-cache-dir -r requirements.txt \
+ && apk del .build-deps
 
-COPY backend/ ./backend/
+COPY packages/remnawave_client /tmp/remnawave_client
+RUN pip install --no-cache-dir /tmp/remnawave_client && rm -rf /tmp/remnawave_client
+
+# Shared DB layer (Base, models, URL helpers) — single source of truth
+# across app, dashboard and miniapp. See packages/common_db.
+COPY packages/common_db /tmp/common_db
+RUN pip install --no-cache-dir /tmp/common_db && rm -rf /tmp/common_db
+
+COPY dashboard/backend/ ./backend/
+COPY alembic ./alembic
+COPY alembic.ini ./alembic.ini
+COPY migrations_runner.py ./migrations_runner.py
 COPY --from=frontend-build /build/dist ./static/
 
 EXPOSE 8000

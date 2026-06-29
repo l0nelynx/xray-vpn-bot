@@ -12,7 +12,7 @@ import {
   Input,
   InputNumber,
   DatePicker,
-  message,
+  App,
   Descriptions,
   Space,
   Tabs,
@@ -67,15 +67,11 @@ function formatBytes(bytes: number): string {
   return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`;
 }
 
-function copyToClipboard(text: string) {
-  navigator.clipboard.writeText(text);
-  message.success("Copied to clipboard");
-}
-
 // ======================== Server Tab ========================
 
 function ServerTab() {
   const isMobile = useIsMobile();
+  const { message } = App.useApp();
   const [loading, setLoading] = useState(true);
   const [sysInfo, setSysInfo] = useState<TelmtSystemInfo | null>(null);
   const [summary, setSummary] = useState<TelmtSummary | null>(null);
@@ -123,7 +119,7 @@ function ServerTab() {
             title="Connections"
             value={summary?.connections_total ?? 0}
             loading={loading}
-            color="#4f8cff"
+            color="#7C9CFF"
           />
         </Col>
         <Col xs={12} sm={12} lg={6}>
@@ -239,6 +235,7 @@ function ServerTab() {
 
 function UsersTab() {
   const isMobile = useIsMobile();
+  const { message } = App.useApp();
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<TelmtUser[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
@@ -246,6 +243,11 @@ function UsersTab() {
   const [linksUser, setLinksUser] = useState<TelmtUser | null>(null);
   const [createForm] = Form.useForm();
   const [editForm] = Form.useForm();
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    message.success("Copied to clipboard");
+  };
 
   const load = useCallback(() => {
     setLoading(true);
@@ -568,6 +570,7 @@ function UsersTab() {
 // ======================== Free Params Tab ========================
 
 function FreeParamsTab() {
+  const { message } = App.useApp();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [form] = Form.useForm();

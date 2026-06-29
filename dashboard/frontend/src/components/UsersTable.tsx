@@ -1,10 +1,20 @@
-import { Table, Tag, Button, Space, Popconfirm, Input, Select, Drawer, Descriptions, List, Card, message } from "antd";
-import { SearchOutlined, StopOutlined, CheckOutlined, DeleteOutlined, EyeOutlined, CrownOutlined } from "@ant-design/icons";
+import { Table, Tag, Button, Space, Popconfirm, Input, Select, Drawer, Descriptions, List, Card, App, Typography, Divider } from "antd";
+import type { TableProps } from "antd";
+import { SearchOutlined, StopOutlined, CheckOutlined, DeleteOutlined, EyeOutlined, CrownOutlined, SendOutlined, EditOutlined } from "@ant-design/icons";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "../api/client";
 import type { UserItem, UserDetail, PaginatedResponse, TransactionItem } from "../api/types";
 import useIsMobile from "../hooks/useIsMobile";
 import useDebounce from "../hooks/useDebounce";
+import MobileSortControl, { SortOrder } from "./MobileSortControl";
+
+const SORT_OPTIONS = [
+  { value: "id", label: "ID" },
+  { value: "tg_id", label: "TG ID" },
+  { value: "username", label: "Username" },
+  { value: "api_provider", label: "Provider" },
+  { value: "is_paid", label: "Paid status" },
+];
 
 export default function UsersTable() {
   const [data, setData] = useState<UserItem[]>([]);
@@ -13,13 +23,20 @@ export default function UsersTable() {
   const [perPage] = useState(20);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
+  const [sort, setSort] = useState("id");
+  const [order, setOrder] = useState<SortOrder>("desc");
   const [loading, setLoading] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserDetail | null>(null);
   const [userTx, setUserTx] = useState<TransactionItem[]>([]);
+  const [msgText, setMsgText] = useState("");
+  const [msgSending, setMsgSending] = useState(false);
+  const [emailInput, setEmailInput] = useState("");
+  const [emailSaving, setEmailSaving] = useState(false);
   const isMobile = useIsMobile();
   const debouncedSearch = useDebounce(search, 400);
   const abortRef = useRef<AbortController | null>(null);
+  const { message } = App.useApp();
 
   const fetchUsers = useCallback(async () => {
     abortRef.current?.abort();
@@ -29,7 +46,7 @@ export default function UsersTable() {
     setLoading(true);
     try {
       const res = await api.get<PaginatedResponse<UserItem>>(
-        `/users?page=${page}&per_page=${perPage}&search=${encodeURIComponent(debouncedSearch)}&filter=${filter}`,
+        `/users?page=${page}&per_page=${perPage}&search=${encodeURIComponent(debouncedSearch)}&filter=${filter}&sort=${sort}&order=${order}`,
         controller.signal
       );
       setData(res.items);
@@ -40,7 +57,7 @@ export default function UsersTable() {
     } finally {
       setLoading(false);
     }
-  }, [page, perPage, debouncedSearch, filter]);
+  }, [page, perPage, debouncedSearch, filter, sort, order]);
 
   useEffect(() => {
     fetchUsers();
@@ -88,18 +105,56 @@ export default function UsersTable() {
     const tx = await api.get<TransactionItem[]>(`/users/${tg_id}/transactions`);
     setSelectedUser(user);
     setUserTx(tx);
+    setMsgText("");
+    setEmailInput(user.email || "");
     setDrawerOpen(true);
   };
 
-  const columns = [
-    { title: "ID", dataIndex: "id", key: "id", width: 60 },
-    { title: "TG ID", dataIndex: "tg_id", key: "tg_id", width: 140 },
-    { title: "Username", dataIndex: "username", key: "username" },
-    { title: "Provider", dataIndex: "api_provider", key: "api_provider", width: 100 },
+  const handleSendMessage = async () => {
+    if (!selectedUser || !msgText.trim()) return;
+    setMsgSending(true);
+    try {
+      await api.post(`/users/${selectedUser.tg_id}/send-message`, { text: msgText });
+      message.success("Сообщение отправлено");
+      setMsgText("");
+    } catch {
+      message.error("Ошибка отправки");
+    } finally {
+      setMsgSending(false);
+    }
+  };
+
+  const handleSaveEmail = async () => {
+    if (!selectedUser || !emailInput.trim()) return;
+    setEmailSaving(true);
+    try {
+      const res = await api.patch<{ ok: boolean; rw_uuid: string | null }>(
+        `/users/${selectedUser.tg_id}/email`,
+        { email: emailInput.trim() }
+      );
+      message.success(res.rw_uuid ? `Email сохранён, UUID: ${res.rw_uuid}` : "Email сохранён");
+      setSelectedUser({ ...selectedUser, email: emailInput.trim() });
+    } catch {
+      message.error("Ошибка сохранения email");
+    } finally {
+      setEmailSaving(false);
+    }
+  };
+
+  const sortOrderFor = (key: string) =>
+    sort === key ? (order === "asc" ? "ascend" : "descend") : null;
+
+  const columns: TableProps<UserItem>["columns"] = [
+    { title: "ID", dataIndex: "id", key: "id", width: 60, sorter: true, sortOrder: sortOrderFor("id") },
+    { title: "TG ID", dataIndex: "tg_id", key: "tg_id", width: 140, sorter: true, sortOrder: sortOrderFor("tg_id") },
+    { title: "Username", dataIndex: "username", key: "username", sorter: true, sortOrder: sortOrderFor("username") },
+    { title: "Provider", dataIndex: "api_provider", key: "api_provider", width: 100, sorter: true, sortOrder: sortOrderFor("api_provider") },
     {
       title: "Status",
-      key: "status",
+      key: "is_paid",
       width: 120,
+      sorter: true,
+      sortOrder: sortOrderFor("is_paid"),
       render: (_: unknown, r: UserItem) => (
         <Space>
           {r.vip && <Tag color="gold">VIP</Tag>}
@@ -136,6 +191,15 @@ export default function UsersTable() {
       ),
     },
   ];
+
+  const handleTableChange: TableProps<UserItem>["onChange"] = (_p, _f, sorter) => {
+    const s = Array.isArray(sorter) ? sorter[0] : sorter;
+    if (s && s.order) {
+      setSort(String(s.columnKey));
+      setOrder(s.order === "ascend" ? "asc" : "desc");
+    }
+    setPage(1);
+  };
 
   const renderMobileCard = (user: UserItem) => (
     <Card
@@ -208,6 +272,16 @@ export default function UsersTable() {
 
       {isMobile ? (
         <>
+          <MobileSortControl
+            options={SORT_OPTIONS}
+            sort={sort}
+            order={order}
+            onChange={(s, o) => {
+              setSort(s);
+              setOrder(o);
+              setPage(1);
+            }}
+          />
           {loading ? (
             <div style={{ textAlign: "center", padding: 40, color: "rgba(255,255,255,0.4)" }}>Loading...</div>
           ) : (
@@ -231,6 +305,7 @@ export default function UsersTable() {
           columns={columns}
           dataSource={data}
           loading={loading}
+          onChange={handleTableChange}
           pagination={{
             current: page,
             pageSize: perPage,
@@ -277,6 +352,53 @@ export default function UsersTable() {
                 </List.Item>
               )}
             />
+
+            <Divider style={{ borderColor: "rgba(255,255,255,0.1)" }} />
+
+            <Typography.Text strong style={{ color: "rgba(255,255,255,0.85)" }}>
+              <EditOutlined style={{ marginRight: 6 }} />
+              Email пользователя
+            </Typography.Text>
+            <Space.Compact style={{ width: "100%", marginTop: 8 }}>
+              <Input
+                value={emailInput}
+                onChange={(e) => setEmailInput(e.target.value)}
+                placeholder="user@example.com"
+                onPressEnter={handleSaveEmail}
+              />
+              <Button
+                type="primary"
+                onClick={handleSaveEmail}
+                loading={emailSaving}
+                icon={<EditOutlined />}
+              >
+                Сохранить
+              </Button>
+            </Space.Compact>
+
+            <Divider style={{ borderColor: "rgba(255,255,255,0.1)" }} />
+
+            <Typography.Text strong style={{ color: "rgba(255,255,255,0.85)" }}>
+              <SendOutlined style={{ marginRight: 6 }} />
+              Сообщение пользователю
+            </Typography.Text>
+            <Input.TextArea
+              style={{ marginTop: 8 }}
+              rows={3}
+              value={msgText}
+              onChange={(e) => setMsgText(e.target.value)}
+              placeholder="Текст сообщения..."
+            />
+            <Button
+              type="primary"
+              style={{ marginTop: 8 }}
+              icon={<SendOutlined />}
+              loading={msgSending}
+              onClick={handleSendMessage}
+              disabled={!msgText.trim()}
+            >
+              Отправить
+            </Button>
           </>
         )}
       </Drawer>

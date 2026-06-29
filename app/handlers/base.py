@@ -1,5 +1,5 @@
 from aiogram import F, Router
-from aiogram.filters import Command
+from aiogram.filters import Command, CommandObject
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 import logging
 import app.database.requests as rq
@@ -18,17 +18,65 @@ from app.handlers.tools import startup_user_dialog, free_sub_handler, subscripti
     get_user_days
 
 from app.settings import secrets, bot, admin_bot
+from common_db.repo import promos as rq_promos
 import string
 import random
 
 router = Router()
 
 
+_ANDROID_LINK_MESSAGES = {
+    "ok": {
+        "ru": "✅ Ваш аккаунт Android-приложения связан с этим Telegram.",
+        "en": "✅ Your Android-app account is now linked to this Telegram.",
+    },
+    "invalid": {
+        "ru": "❌ Код связывания недействителен. Откройте приложение и попробуйте снова.",
+        "en": "❌ Invalid link code. Open the app and try again.",
+    },
+    "expired": {
+        "ru": "⌛ Срок действия кода истёк. Запросите новый в приложении.",
+        "en": "⌛ Link code expired. Request a new one from the app.",
+    },
+    "exhausted": {
+        "ru": "🚫 Слишком много попыток. Запросите новый код в приложении.",
+        "en": "🚫 Too many attempts. Request a new code from the app.",
+    },
+    "user_already_linked": {
+        "ru": "⚠️ Этот аккаунт приложения уже связан с Telegram.",
+        "en": "⚠️ This app account is already linked to a Telegram.",
+    },
+    "merged_pro": {
+        "ru": "✅ Аккаунты объединены. Сохранена PRO-подписка.",
+        "en": "✅ Accounts merged. PRO subscription preserved.",
+    },
+    "merged_free": {
+        "ru": "✅ Аккаунты объединены.",
+        "en": "✅ Accounts merged.",
+    },
+    "both_pro_support_needed": {
+        "ru": (
+            "⚠️ Обнаружены две активные PRO-подписки на разных аккаунтах. "
+            "Свяжитесь с поддержкой для объединения."
+        ),
+        "en": (
+            "⚠️ Two active PRO subscriptions found on different accounts. "
+            "Contact support to merge."
+        ),
+    },
+}
+
+
+def _android_link_reply(result: str, lang_code: str) -> str:
+    bucket = _ANDROID_LINK_MESSAGES.get(result, _ANDROID_LINK_MESSAGES["invalid"])
+    return bucket.get(lang_code) or bucket["en"]
+
+
 @router.message(Command("start"))  # Start command handler
-async def cmd_start(message: Message):
+async def cmd_start(message: Message, command: CommandObject = None):
     if await rq.is_user_banned(message.from_user.id):
         lang = await get_user_lang(message.from_user.id)
-        await message.answer(lang.msg_account_banned)
+        await message.answer(lang.msg_account_banned, disable_web_page_preview=True)
         return
     await rq.set_user(message.from_user.id, message.from_user.username)
 
@@ -40,11 +88,85 @@ async def cmd_start(message: Message):
         await message.answer(
             text=lang_ru.lang_choose,
             parse_mode='HTML',
+            disable_web_page_preview=True,
             reply_markup=get_language_select_keyboard()
         )
-    else:
-        # Language already chosen — go straight to main menu
+        return
+
+    # Deep-link payloads from MiniApp (?start=buy|extend|trial) and
+    # Android link flow (?start=link_<code>). Keep `link_<code>` as the
+    # original-case payload — base64url codes are case-sensitive.
+    raw_payload = (command.args or "").strip() if command else ""
+    if raw_payload.startswith("link_"):
+        from app.handlers.android_link import consume_android_link_code
+        code = raw_payload[5:].strip()
+        result = await consume_android_link_code(message.from_user.id, code)
+        lang_code = (await rq.get_user_language(message.from_user.id)) or "en"
+        await message.answer(
+            _android_link_reply(result, lang_code),
+            parse_mode="HTML",
+            disable_web_page_preview=True,
+        )
+        return
+
+    payload = raw_payload.lower()
+    if payload in ("buy", "extend", "trial"):
+        lang = await get_user_lang(message.from_user.id)
+        if payload == "trial":
+            await message.answer(
+                text=lang.free_menu, parse_mode='HTML',
+                disable_web_page_preview=True,
+                reply_markup=get_subcheck_free_localized(lang),
+            )
+            return
+        # buy / extend — when bot constructor is disabled, open the MiniApp directly
+        # instead of showing inline payment method buttons (those callbacks have no handler)
+        from app.handlers.events import _legacy_constructor_enabled
+        if not _legacy_constructor_enabled:
+            miniapp_url = secrets.get('miniapp_url')
+            if miniapp_url:
+                from aiogram.types import WebAppInfo
+                text = lang.text_extend_pay_method if payload == "extend" else lang.text_pay_method
+                await message.answer(
+                    text=text, parse_mode='HTML',
+                    disable_web_page_preview=True,
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                        [InlineKeyboardButton(text=lang.btn_buy_premium, web_app=WebAppInfo(url=miniapp_url))],
+                    ]),
+                )
+                return
+        show_promo = await rq.can_use_promo(message.from_user.id)
+        text = lang.text_extend_pay_method if payload == "extend" else lang.text_pay_method
+        await message.answer(
+            text=text, parse_mode='HTML',
+            disable_web_page_preview=True,
+            reply_markup=get_pay_methods_localized(lang, show_promo=show_promo),
+        )
+        return
+
+    # Referral/promo deeplink: t.me/<bot>?start=<CODE>. Auto-activate it; rules
+    # are enforced in the repo (referral codes only for users with no
+    # transactions, one active promo at a time, no re-use). A bad deeplink must
+    # not block /start — on failure we fall through to the main menu, only
+    # surfacing the "referral is for new users" case which is worth explaining.
+    if raw_payload and raw_payload.isalnum():
+        lang = await get_user_lang(message.from_user.id)
+        result = await rq.redeem_promo_for_user(message.from_user.id, raw_payload.upper())
+        if result.ok:
+            await message.answer(
+                text=lang.promo_deeplink_applied_text.format(discount=result.discount_percent),
+                parse_mode='HTML', disable_web_page_preview=True,
+            )
+        elif result.reason == rq_promos.REASON_REFERRAL_NOT_NEW:
+            await message.answer(
+                text=lang.promo_referral_new_only_text,
+                parse_mode='HTML', disable_web_page_preview=True,
+            )
         await startup_user_dialog(message)
+        return
+
+    # Language already chosen — go straight to main menu
+    await startup_user_dialog(message)
 
 
 @router.message(Command("lang"))  # Language change command
@@ -53,6 +175,7 @@ async def cmd_lang(message: Message):
     await message.answer(
         text=lang.msg_lang_current,
         parse_mode='HTML',
+        disable_web_page_preview=True,
         reply_markup=get_language_change_keyboard(lang)
     )
 
@@ -71,6 +194,7 @@ async def set_language(callback: CallbackQuery):
 async def user_agreement(callback: CallbackQuery):
     lang = await get_user_lang(callback.from_user.id)
     await callback.message.edit_text(text=lang.user_agreement, parse_mode='HTML',
+                                     disable_web_page_preview=True,
                                      reply_markup=get_agreement_menu_localized(lang))
 
 
@@ -78,6 +202,7 @@ async def user_agreement(callback: CallbackQuery):
 async def privacy_policy(callback: CallbackQuery):
     lang = await get_user_lang(callback.from_user.id)
     await callback.message.edit_text(text=lang.privacy_policy, parse_mode='HTML',
+                                     disable_web_page_preview=True,
                                      reply_markup=get_policy_menu_localized(lang))
 
 
@@ -87,6 +212,7 @@ async def settings_menu(callback: CallbackQuery):
     await callback.message.edit_text(
         text=lang.msg_settings,
         parse_mode='HTML',
+        disable_web_page_preview=True,
         reply_markup=get_settings_menu_localized(lang)
     )
 
@@ -97,6 +223,7 @@ async def change_language_menu(callback: CallbackQuery):
     await callback.message.edit_text(
         text=lang.msg_lang_current,
         parse_mode='HTML',
+        disable_web_page_preview=True,
         reply_markup=get_language_change_keyboard(lang)
     )
 
@@ -151,12 +278,14 @@ async def free_buy(callback: CallbackQuery):
 
     if await rq.is_user_banned(callback.from_user.id):
         await callback.message.edit_text(text=lang.msg_account_banned, parse_mode='HTML',
+                                         disable_web_page_preview=True,
                                          reply_markup=get_to_main_localized(lang))
         return
 
     username = callback.from_user.username
     if not username or username == "None":
         await callback.message.edit_text(text=lang.msg_username_required, parse_mode='HTML',
+                                         disable_web_page_preview=True,
                                          reply_markup=get_to_main_localized(lang))
         return
 
@@ -181,12 +310,14 @@ async def telemt_free_buy(callback: CallbackQuery):
 
     if await rq.is_user_banned(callback.from_user.id):
         await callback.message.edit_text(text=lang.msg_account_banned, parse_mode='HTML',
+                                         disable_web_page_preview=True,
                                          reply_markup=get_to_main_localized(lang))
         return
 
     username = callback.from_user.username
     if not username or username == "None":
         await callback.message.edit_text(text=lang.msg_username_required, parse_mode='HTML',
+                                         disable_web_page_preview=True,
                                          reply_markup=get_to_main_localized(lang))
         return
 
@@ -206,6 +337,7 @@ async def telemt_free_buy(callback: CallbackQuery):
         await callback.message.edit_text(
             text=lang.telemt_free_already_exists.format(links=links_text),
             parse_mode='HTML',
+            disable_web_page_preview=True,
             reply_markup=get_to_main_localized(lang),
         )
         return
@@ -222,6 +354,7 @@ async def telemt_free_buy(callback: CallbackQuery):
 
     if not result:
         await callback.message.edit_text(text=lang.telemt_free_error, parse_mode='HTML',
+                                         disable_web_page_preview=True,
                                          reply_markup=get_to_main_localized(lang))
         return
 
@@ -229,6 +362,7 @@ async def telemt_free_buy(callback: CallbackQuery):
     await callback.message.edit_text(
         text=lang.telemt_free_success.format(links=links_text),
         parse_mode='HTML',
+        disable_web_page_preview=True,
         reply_markup=get_to_main_localized(lang),
     )
 
@@ -246,9 +380,6 @@ async def broadcast_make(message: Message):
 @router.callback_query(F.data == 'sub_check')
 async def sub_check(callback: CallbackQuery):
     sub_status = await check_tg_subscription(bot=bot, chat_id=secrets.get('news_id'), user_id=callback.from_user.id)
-    print(callback.from_user.id)
-    print(secrets.get("admin_id"))
-    print(sub_status)
     if sub_status:
         await free_sub_handler(callback, secrets.get('free_days'), secrets.get('free_traffic'), True)
 
@@ -258,29 +389,25 @@ async def invite_friends(callback: CallbackQuery):
     lang = await get_user_lang(callback.from_user.id)
 
     tg_id = callback.from_user.id
+    # Ensure the user has a referral code (creates one on first open).
+    code = await rq.get_or_create_referral_code(tg_id)
     promo = await rq.get_promo_by_tg_id(tg_id)
 
-    if not promo:
-        while True:
-            code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
-            existing = await rq.get_promo_by_code(code)
-            if not existing:
-                break
-        await rq.create_promo(tg_id, code)
-        promo = await rq.get_promo_by_tg_id(tg_id)
-
-    promo_discount = secrets.get('promo_discount', 20)
-    promo_days_reward = secrets.get('promo_days_reward', 3)
+    # Discount + reward tunables now come from promo_settings (single source
+    # of truth) rather than config.yml.
+    promo_discount = await rq.get_default_promo_discount()
+    promo_days_reward, _reward_cap = await rq.get_promo_reward_settings()
 
     text = lang.promo_invite_text.format(
-        promo_code=promo['promo_code'],
+        promo_code=code,
         discount=promo_discount,
         reward_days=promo_days_reward,
-        days_purchased=promo['days_purchased'],
-        days_rewarded=promo['days_rewarded'],
+        days_purchased=promo['days_purchased'] if promo else 0,
+        days_rewarded=promo['days_rewarded'] if promo else 0,
     )
 
-    await callback.message.edit_text(text=text, parse_mode='HTML', reply_markup=get_to_main_localized(lang))
+    await callback.message.edit_text(text=text, parse_mode='HTML', disable_web_page_preview=True,
+                                     reply_markup=get_to_main_localized(lang))
 
 
 @router.callback_query(F.data == 'subcheck_reactivate')
@@ -309,6 +436,7 @@ async def subcheck_reactivate(callback: CallbackQuery):
         await callback.message.edit_text(
             text=lang.msg_sub_clean_still_not_subscribed,
             parse_mode='HTML',
+            disable_web_page_preview=True,
             reply_markup=kb_retry,
         )
         return
@@ -321,6 +449,7 @@ async def subcheck_reactivate(callback: CallbackQuery):
         await callback.message.edit_text(
             text=lang.msg_sub_clean_reactivation_error,
             parse_mode='HTML',
+            disable_web_page_preview=True,
         )
         return
 
@@ -332,11 +461,13 @@ async def subcheck_reactivate(callback: CallbackQuery):
         await callback.message.edit_text(
             text=lang.msg_sub_clean_reactivated,
             parse_mode='HTML',
+            disable_web_page_preview=True,
         )
     else:
         await callback.message.edit_text(
             text=lang.msg_sub_clean_reactivation_error,
             parse_mode='HTML',
+            disable_web_page_preview=True,
         )
 
 

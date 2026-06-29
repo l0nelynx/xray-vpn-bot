@@ -4,8 +4,13 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select, func
 
 from ..auth import get_current_user
+from ..currency import convert_to_rub, get_rates
 from ..database.models import User, Transaction
 from ..database.session import async_session
+
+# Canonical "paid" predicate + counts live in common_db.repo.users.
+# Use them to keep the overview endpoint aligned with users.py.
+from common_db.repo import users as _repo_users
 
 router = APIRouter(prefix="/api/stats", tags=["stats"])
 
@@ -70,24 +75,29 @@ def _fill_weekly_gaps(data: dict[str, float], date_from: str | None, date_to: st
 
 @router.get("/overview")
 async def overview(_: str = Depends(get_current_user)):
-    now_iso = datetime.now().isoformat(timespec='seconds')
+    now = datetime.now()
+    rates = await get_rates()
     async with async_session() as session:
-        total_users = await session.scalar(select(func.count()).select_from(User)) or 0
-        paid_users = await session.scalar(
-            select(func.count(func.distinct(Transaction.user_id))).select_from(Transaction).where(
-                Transaction.order_status.in_(["confirmed", "delivered"]),
-                Transaction.expire_date > now_iso,
-            )
-        ) or 0
+        total_users = await _repo_users.count_users(session)
+        paid_users = await _repo_users.count_paid_users(session, now=now)
         free_users = total_users - paid_users
-        revenue = await session.scalar(
-            select(func.sum(Transaction.amount)).where(
-                Transaction.order_status.in_(["confirmed", "delivered"])
+        # Sum per payment_method, then convert each group to RUB before totalling
+        # so mixed-currency methods (CRYPTOPAY=USD, TG_STARS=Stars) are comparable.
+        method_rows = await session.execute(
+            select(
+                Transaction.payment_method,
+                func.sum(Transaction.amount).label("total"),
             )
-        ) or 0
+            .where(Transaction.order_status.in_(_repo_users.PAID_ORDER_STATUSES))
+            .group_by(Transaction.payment_method)
+        )
+        revenue = sum(
+            convert_to_rub(float(r.total or 0), r.payment_method, rates)
+            for r in method_rows
+        )
         order_count = await session.scalar(
             select(func.count()).select_from(Transaction).where(
-                Transaction.order_status.in_(["confirmed", "delivered"])
+                Transaction.order_status.in_(_repo_users.PAID_ORDER_STATUSES)
             )
         ) or 0
         avg_order = round(revenue / order_count, 2) if order_count else 0
@@ -112,23 +122,25 @@ async def revenue(
     Groups by day, except 6month which groups by ISO week (Mon-Sun).
     """
     date_from, date_to = _period_range(period)
+    rates = await get_rates()
 
     async with async_session() as session:
-        if period == "6month":
-            # Group by ISO week: use strftime to get year + week number
-            # SQLite: compute Monday of the week via julianday trick
-            date_expr = func.substr(Transaction.created_at, 1, 10)
-        else:
-            date_expr = func.substr(Transaction.created_at, 1, 10)
+        date_expr = func.substr(Transaction.created_at, 1, 10)
 
+        # Group by (day, payment_method) so each currency group can be
+        # converted to RUB before being summed into the daily total.
         query = (
-            select(date_expr.label("date"), func.sum(Transaction.amount).label("total"))
+            select(
+                date_expr.label("date"),
+                Transaction.payment_method,
+                func.sum(Transaction.amount).label("total"),
+            )
             .where(
-                Transaction.order_status.in_(["confirmed", "delivered"]),
+                Transaction.order_status.in_(_repo_users.PAID_ORDER_STATUSES),
                 Transaction.created_at != None,
                 Transaction.amount != None,
             )
-            .group_by("date")
+            .group_by("date", Transaction.payment_method)
             .order_by("date")
         )
 
@@ -140,23 +152,29 @@ async def revenue(
         result = await session.execute(query)
         rows = result.all()
 
+    # Collapse (day, method) rows into per-day RUB totals.
+    daily: dict[str, float] = {}
+    for row in rows:
+        daily[row.date] = daily.get(row.date, 0.0) + convert_to_rub(
+            float(row.total or 0), row.payment_method, rates
+        )
+
     if period == "6month":
         # Aggregate daily data into weekly buckets (Monday-based)
         weekly: dict[str, float] = {}
-        for row in rows:
+        for date_key, value in daily.items():
             try:
-                d = datetime.fromisoformat(row.date)
+                d = datetime.fromisoformat(date_key)
                 monday = d - timedelta(days=d.weekday())
                 week_label = monday.strftime("%Y-%m-%d")
-                weekly[week_label] = weekly.get(week_label, 0) + float(row.total or 0)
+                weekly[week_label] = weekly.get(week_label, 0) + value
             except (ValueError, TypeError):
                 continue
         filled = _fill_weekly_gaps(weekly, date_from, date_to)
-        return [{"date": k, "revenue": v} for k, v in filled]
+        return [{"date": k, "revenue": round(v, 2)} for k, v in filled]
 
-    daily = {row.date: float(row.total or 0) for row in rows}
     filled = _fill_daily_gaps(daily, date_from, date_to)
-    return [{"date": k, "revenue": v} for k, v in filled]
+    return [{"date": k, "revenue": round(v, 2)} for k, v in filled]
 
 
 @router.get("/user-growth")
@@ -217,6 +235,7 @@ async def user_growth(
 
 @router.get("/payment-methods")
 async def payment_methods(_: str = Depends(get_current_user)):
+    rates = await get_rates()
     async with async_session() as session:
         result = await session.execute(
             select(
@@ -225,15 +244,21 @@ async def payment_methods(_: str = Depends(get_current_user)):
                 func.sum(Transaction.amount).label("total"),
             )
             .where(
-                Transaction.order_status.in_(["confirmed", "delivered"]),
+                Transaction.order_status.in_(_repo_users.PAID_ORDER_STATUSES),
                 Transaction.payment_method != None,
             )
             .group_by(Transaction.payment_method)
         )
         rows = result.all()
 
+    # `total` is normalised to RUB; `total_native` keeps the original amount.
     return [
-        {"method": row.payment_method, "count": row.count, "total": float(row.total or 0)}
+        {
+            "method": row.payment_method,
+            "count": row.count,
+            "total": round(convert_to_rub(float(row.total or 0), row.payment_method, rates), 2),
+            "total_native": float(row.total or 0),
+        }
         for row in rows
     ]
 

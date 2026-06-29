@@ -14,6 +14,7 @@ import app.keyboards as kb
 from app.handlers.events import main_menu
 from app.handlers.subscription_service import deliver_subscription, SubscriptionType
 from app.locale.utils import get_user_lang
+from app.notify_log import esc, notify_log
 from app.keyboards.localized import (
     # get_main_marzban_pro_localized, get_main_marzban_free_localized,  # DISABLED: Marzban removed
     get_connect_localized,
@@ -128,10 +129,12 @@ async def get_user_info(username, api: str = "remnawave"):
 
                 # Нормализуем ответ для совместимости
                 return {
+                    "uuid": user_info.get("uuid"),
                     "status": user_info.get("status", "active"),
                     "expire": expire,
                     "subscription_url": user_info.get("subscription_url"),
                     "data_limit": user_info.get("data_limit"),
+                    # "last_updated":
                 }
             return 404
         else:
@@ -140,6 +143,96 @@ async def get_user_info(username, api: str = "remnawave"):
     except Exception as e:
         logger.error(f"Error getting user info from {api}: {e}")
         return 404
+
+
+async def resolve_remnawave_account(
+    tg_id: int,
+    username: str,
+) -> tuple[str | None, dict | None]:
+    """Resolve which Remnawave account belongs to (tg_id, username).
+
+    Lookup order: users.vless_uuid in local DB -> users.email -> username.
+    First match wins; that account's uuid is the single source of truth for
+    subsequent subscription updates. When the resolution falls back to email
+    or username, the discovered uuid is written back to users.vless_uuid so
+    the next purchase takes the direct path.
+
+    Returns (uuid, user_info) where user_info is the normalized Remnawave
+    dict (same shape as `get_user_info`'s normalized output). Returns
+    (None, None) when no Remnawave account exists yet.
+    """
+    db_user = await rq.get_full_username_info(username)
+    db_uuid = (db_user or {}).get("vless_uuid")
+
+    if db_uuid:
+        info = await rem.get_user_from_uuid(db_uuid)
+        if info:
+            try:
+                by_name = await rem.get_user_from_username(username)
+                if (by_name and by_name.get("uuid")
+                        and str(by_name["uuid"]) != str(db_uuid)):
+                    await notify_log(
+                        f"⚠️ <b>Remnawave account mismatch</b>\n"
+                        f"user: <code>{tg_id}</code> @{esc(username or '—')}\n"
+                        f"db.vless_uuid: <code>{esc(str(db_uuid))}</code>\n"
+                        f"by_username.uuid: <code>{esc(str(by_name['uuid']))}</code>\n"
+                        f"using db.vless_uuid for delivery"
+                    )
+            except Exception as mismatch_err:
+                logger.warning(
+                    "resolve_remnawave_account: mismatch check failed for %s: %s",
+                    username, mismatch_err,
+                )
+            return _normalize_info_uuid(info), _normalize_info(info)
+        logger.warning(
+            "resolve_remnawave_account: db.vless_uuid=%s for tg_id=%s @%s "
+            "not found in Remnawave, falling back to email/username",
+            db_uuid, tg_id, username,
+        )
+
+    email = await rq.get_user_email(tg_id) if tg_id else None
+    if email:
+        info = await rem.get_user_from_email(email)
+        if info and info.get("uuid"):
+            await rq.update_user_api_info(
+                tg_id=tg_id, username=username,
+                vless_uuid=str(info["uuid"]), api_provider="remnawave",
+            )
+            return _normalize_info_uuid(info), _normalize_info(info)
+
+    info = await rem.get_user_from_username(username)
+    if info and info.get("uuid"):
+        await rq.update_user_api_info(
+            tg_id=tg_id, username=username,
+            vless_uuid=str(info["uuid"]), api_provider="remnawave",
+        )
+        return _normalize_info_uuid(info), _normalize_info(info)
+
+    return None, None
+
+
+def _normalize_info_uuid(info: dict) -> str | None:
+    raw = info.get("uuid")
+    return str(raw) if raw else None
+
+
+def _normalize_info(info: dict) -> dict:
+    """Bring a raw remnawave_client dict into the same shape get_user_info
+    returns (uuid + expire as int timestamp). Mirrors the normalization in
+    `get_user_info` so resolve_remnawave_account is interchangeable with it."""
+    expire = info.get("expire")
+    if expire is not None:
+        if hasattr(expire, "timestamp"):
+            expire = int(expire.timestamp())
+        else:
+            expire = int(expire) if expire else None
+    return {
+        "uuid": _normalize_info_uuid(info),
+        "status": info.get("status", "active"),
+        "expire": expire,
+        "subscription_url": info.get("subscription_url"),
+        "data_limit": info.get("data_limit"),
+    }
 
 
 async def add_new_user_info(
@@ -324,16 +417,6 @@ async def detect_user_api_provider(tg_id: int,username: str) -> str:
         return api_provider
 
     # Если в БД нет информации, пытаемся определить по API
-    # DISABLED: Marzban detection removed — Remnawave is the only API
-    # try:
-    #     async with mz.MarzbanAsync() as marz:
-    #         user_info = await marz.get_user(name=username)
-    #         if user_info and user_info != 404:
-    #             await rq.update_user_api_info(tg_id, username, api_provider="marzban")
-    #             return "marzban"
-    # except:
-    #     pass
-
     try:
         # Проверяем RemnaWave — сначала по email, потом по username
         user_info = None
@@ -345,8 +428,8 @@ async def detect_user_api_provider(tg_id: int,username: str) -> str:
         if user_info:
             await rq.update_user_api_info(tg_id, username, api_provider="remnawave")
             return "remnawave"
-    except:
-        pass
+    except Exception as e:
+        logger.warning("RemnaWave provider detection failed for tg_id=%s: %s", tg_id, e)
 
     return "none"
 

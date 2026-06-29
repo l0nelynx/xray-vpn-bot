@@ -4,7 +4,6 @@ Handles all subscription activation scenarios with localized messages.
 """
 
 import logging
-from enum import Enum
 from typing import Optional, Union
 
 from aiogram.types import Message, CallbackQuery
@@ -13,25 +12,34 @@ import app.keyboards as kb
 # import app.marzban.templates as templates  # DISABLED: Marzban removed
 from app.locale.lang_ru import admin_transaction_message, admin_migration_message
 from app.locale.utils import get_user_lang
+from app.notify_log import esc, notify_log
 from app.settings import bot, admin_bot, secrets
+
+from remnawave_client import (
+    SubscriptionScenario,
+    SubscriptionType,
+    apply_extend,
+    apply_new_user,
+    apply_update,
+    resolve_scenario,
+)
 
 _notify = admin_bot or bot
 
 
-class SubscriptionType(Enum):
-    """Enum для типов подписок"""
-    FREE = "free"
-    PAID = "paid"
-
-
-class SubscriptionScenario(Enum):
-    """Enum для сценариев выдачи подписки"""
-    NEW_USER = "new_user"
-    EXTEND = "extend"
-    UPDATE = "update"
-    ALREADY_ACTIVE = "already_active"
-    MIGRATION = "migration"
-    LIMITED = "limited"
+def _parse_squad_slug(slug: str) -> Optional[dict]:
+    """Parse "sid:<squad_id>:esid:<external_squad_id>" produced by the
+    WebApp Tariff Constructor. Returns None if the slug is not in this format.
+    """
+    if not slug or not slug.startswith("sid:"):
+        return None
+    try:
+        _, sid, marker, esid = slug.split(":", 3)
+    except ValueError:
+        return None
+    if marker != "esid" or not sid or not esid:
+        return None
+    return {"squad_id": sid, "external_squad_id": esid}
 
 
 async def get_subscription_scenario(
@@ -41,32 +49,11 @@ async def get_subscription_scenario(
     subscription_type: SubscriptionType,
     current_days: Optional[int] = None,
 ) -> SubscriptionScenario:
-    """Определяет сценарий выдачи подписки"""
-    if user_info == 404:
-        return SubscriptionScenario.NEW_USER
-
-
-    status = user_info.get("status")
-    limit = user_info.get("data_limit")
-    # PRO = активная подписка без лимита трафика (платная)
-    # FREE = есть лимит трафика (data_limit не None и >= 0)
-    is_paid_subscription = status == "active" and limit is None
-
-    if subscription_type == SubscriptionType.FREE:
-        if status == "limited":
-            return SubscriptionScenario.LIMITED
-        if user_info.get("expire") == 0 or status != "active":
-            return SubscriptionScenario.UPDATE
-        else:
-            return SubscriptionScenario.ALREADY_ACTIVE
-    else:
-        # При покупке платной подписки:
-        # - если текущая подписка платная (PRO) → складываем дни (EXTEND)
-        # - если текущая подписка бесплатная (FREE) → заменяем, не складывая дни (UPDATE)
-        if is_paid_subscription:
-            return SubscriptionScenario.EXTEND
-        else:
-            return SubscriptionScenario.UPDATE
+    """Determine which subscription scenario applies. Thin wrapper around the
+    pure resolver in `remnawave_client.scenarios` so call sites can keep using
+    this name; new code should call `resolve_scenario` directly."""
+    info = None if user_info == 404 else user_info
+    return resolve_scenario(info, subscription_type)
 
 
 async def deliver_subscription(
@@ -101,7 +88,10 @@ async def deliver_subscription(
     """
     try:
         # Lazy import to avoid circular dependency
-        from app.handlers.tools import get_user_info, detect_user_api_provider, get_user_days, add_new_user_info
+        from app.handlers.tools import (
+            get_user_info, detect_user_api_provider, get_user_days,
+            add_new_user_info, resolve_remnawave_account,
+        )
         import app.database.requests as rq
 
         # Get user's language for localized messages
@@ -130,8 +120,13 @@ async def deliver_subscription(
         #         else:
         #             logging.error(f"Auto-migration failed for {username}")
 
-        # Стандартная логика — RemnaWave is the only API
-        user_info = await get_user_info(username)
+        # Стандартная логика — RemnaWave is the only API.
+        # Resolve account by uuid (DB) -> email -> username so that scenario
+        # detection and the subsequent Remnawave update target the same
+        # account. See app.handlers.tools.resolve_remnawave_account.
+        account_uuid, user_info = await resolve_remnawave_account(user_id, username)
+        if user_info is None:
+            user_info = 404
 
         scenario = await get_subscription_scenario(
             user_id, user_info, username, subscription_type, days
@@ -148,11 +143,17 @@ async def deliver_subscription(
             amount=amount,
         )
 
-        # Resolve squad from tariff (for PAID subscriptions)
+        # Resolve squad from tariff (for PAID subscriptions).
+        # Two formats are supported for `tariff_slug`:
+        #  1) Existing tariff slug -> looked up via tariff_repository.
+        #  2) Ad-hoc squad encoded by the WebApp tariff constructor as
+        #     "sid:<squad_id>:esid:<external_squad_id>".
         tariff_squad = None
         if subscription_type == SubscriptionType.PAID and tariff_slug:
-            from app.database.tariff_repository import get_squad_for_tariff_slug
-            tariff_squad = await get_squad_for_tariff_slug(tariff_slug)
+            tariff_squad = _parse_squad_slug(tariff_slug)
+            if tariff_squad is None:
+                from app.database.tariff_repository import get_squad_for_tariff_slug
+                tariff_squad = await get_squad_for_tariff_slug(tariff_slug)
 
         if scenario == SubscriptionScenario.NEW_USER:
             result = await _handle_new_user(
@@ -162,29 +163,39 @@ async def deliver_subscription(
         elif scenario == SubscriptionScenario.EXTEND:
             result = await _handle_extend_subscription(
                 message, username, user_id, days, subscription_type, lang, user_info=user_info,
-                tariff_squad=tariff_squad,
+                tariff_squad=tariff_squad, account_uuid=account_uuid,
             )
         elif scenario == SubscriptionScenario.UPDATE:
             result = await _handle_update_subscription(
                 message, username, user_id, days, data_limit, reset_strategy, subscription_type, lang,
-                tariff_squad=tariff_squad,
+                tariff_squad=tariff_squad, account_uuid=account_uuid,
             )
         elif scenario == SubscriptionScenario.LIMITED:
             result = await _handle_limited(message, username, subscription_type, lang, user_info=user_info)
         elif scenario == SubscriptionScenario.ALREADY_ACTIVE:
             result = await _handle_already_active(message, username, subscription_type, lang, user_info=user_info)
 
-        # Referral reward: check if buyer used a promo code
+        # Referral reward + promo consume. Consume the buyer's active
+        # redemption first (so the discount applies only once), which returns
+        # the snapshotted promo_code used to route the referral reward — no
+        # reliance on the legacy used_promo column.
         if subscription_type == SubscriptionType.PAID:
+            consumed = None
             try:
-                buyer_promo = await rq.get_promo_by_tg_id(user_id)
-                if buyer_promo and buyer_promo['used_promo']:
-                    referral_data = await rq.add_referral_days(buyer_promo['used_promo'], days)
+                consumed = await rq.consume_promo_redemption(user_id)
+            except Exception as consume_err:
+                logging.warning(f"Failed to consume promo redemption: {consume_err}")
+
+            try:
+                if consumed and consumed.get('promo_code'):
+                    referral_data = await rq.add_referral_days(consumed['promo_code'], days)
                     if referral_data:
-                        promo_days_reward = secrets.get('promo_days_reward', 3)
+                        days_reward_per_30, reward_cap_days = await rq.get_promo_reward_settings()
                         total_purchased = referral_data['days_purchased']
                         already_rewarded = referral_data['days_rewarded']
-                        reward_days = (total_purchased // 30) * promo_days_reward - already_rewarded
+                        reward_days = (total_purchased // 30) * days_reward_per_30 - already_rewarded
+                        # Cap cumulative reward per owner (req: max 180 days).
+                        reward_days = max(0, min(reward_days, reward_cap_days - already_rewarded))
 
                         if reward_days > 0:
                             owner_tg_id = referral_data['tg_id']
@@ -243,12 +254,31 @@ async def deliver_subscription(
 
         # Обновляем delivery_status после успешной доставки
         if transaction_id:
+            # user_info = await get_user_info(username) #DELIVERY FIX HERE
             await rq.update_delivery_status(transaction_id, 1)
+
+        await notify_log(
+            f"📦 <b>Subscription delivered</b>\n"
+            f"user: <code>{user_id}</code> @{esc(username or '—')}\n"
+            f"type: <code>{esc(subscription_type.value)}</code>\n"
+            f"days: <code>{days}</code>\n"
+            f"method: <code>{esc(payment_method)}</code>\n"
+            f"slug: <code>{esc(tariff_slug or '—')}</code>\n"
+            f"tx: <code>{esc(transaction_id or '—')}</code>"
+        )
 
         return {"status": "success", "scenario": scenario.value, **result}
 
     except Exception as e:
         logging.error(f"Error delivering subscription: {e}")
+        await notify_log(
+            f"❌ <b>Subscription delivery FAILED</b>\n"
+            f"user: <code>{user_id}</code> @{esc(username or '—')}\n"
+            f"days: <code>{days}</code>\n"
+            f"method: <code>{esc(payment_method)}</code>\n"
+            f"tx: <code>{esc(transaction_id or '—')}</code>\n"
+            f"error: <code>{esc(str(e)[:300])}</code>"
+        )
         return {"status": "error", "message": str(e)}
 
 
@@ -265,28 +295,32 @@ async def _handle_new_user(
 ) -> dict:
     """Handle new user subscription creation"""
     # Lazy import to avoid circular dependency
-    from app.handlers.tools import add_new_user_info, get_user_days
+    from app.handlers.tools import get_user_days
+    import app.database.requests as rq
     if subscription_type == SubscriptionType.FREE:
         squad_id = secrets.get("rw_free_id")
         external_squad_id = secrets.get("rw_ext_free_id")
     else:
         squad_id = tariff_squad["squad_id"] if tariff_squad else secrets.get("rw_pro_id")
         external_squad_id = tariff_squad["external_squad_id"] if tariff_squad else secrets.get("rw_ext_pro_id")
-    print("Days:", days)
-    print("Data Limit (GB):", data_limit)
-    buyer_info = await add_new_user_info(
-        name=username,
-        userid=user_id,
-        limit=data_limit,
-        #res_strat=reset_strategy,
-        expire_days=days,
-        # template=templates.vless_france,  # DISABLED: Marzban templates removed
+    buyer_info = await apply_new_user(
+        username=username,
+        telegram_id=user_id,
+        days=days,
+        limit_gb=data_limit,
         email=f"{username}@marzban.ru",
         description="Telegram subscription",
         squad_id=squad_id,
         external_squad_id=external_squad_id,
-        api="remnawave"
     )
+
+    if buyer_info and buyer_info.get("uuid"):
+        await rq.update_user_api_info(
+            tg_id=user_id,
+            username=username,
+            vless_uuid=buyer_info["uuid"],
+            api_provider="remnawave",
+        )
 
     expire_day = await get_user_days(buyer_info)
     sub_link = buyer_info["subscription_url"]
@@ -312,10 +346,12 @@ async def _handle_extend_subscription(
     lang=None,
     user_info: dict = None,
     tariff_squad: Optional[dict] = None,
+    account_uuid: Optional[str] = None,
 ) -> dict:
     """Handle existing subscription extension"""
     # Lazy import to avoid circular dependency
-    from app.handlers.tools import get_user_info, get_user_days, set_user_info
+    from app.handlers.tools import get_user_info, get_user_days
+    import app.database.requests as rq_extend
     if user_info is None:
         user_info = await get_user_info(username)
     sub_link = user_info["subscription_url"]
@@ -324,21 +360,46 @@ async def _handle_extend_subscription(
         squad_id = secrets.get("rw_free_id")
         external_squad_id = secrets.get("rw_ext_free_id")
         new_expire_days = days
+        days_for_apply = days
+        current_days_left = 0
     else:
         squad_id = tariff_squad["squad_id"] if tariff_squad else secrets.get("rw_pro_id")
         external_squad_id = tariff_squad["external_squad_id"] if tariff_squad else secrets.get("rw_ext_pro_id")
-        new_expire_days = expire_day + days if isinstance(expire_day, int) else days
+        current_days_left = expire_day if isinstance(expire_day, int) else 0
+        new_expire_days = current_days_left + days
+        days_for_apply = days
 
-    buyer_info = await set_user_info(
-        name=username,
-        limit=0,
-        res_strat="no_reset",
-        expire_days=new_expire_days,
-        # template=templates.vless_france,  # DISABLED: Marzban templates removed
-        api="remnawave",
-        squad_id=squad_id,
-        external_squad_id=external_squad_id
-    )
+    # Prefer the resolved account_uuid (uuid -> email -> username) over a
+    # bare DB lookup so we update the same Remnawave account the scenario
+    # was resolved against.
+    target_uuid = account_uuid
+    if not target_uuid:
+        db_user = await rq_extend.get_full_username_info(username)
+        target_uuid = (db_user or {}).get("vless_uuid")
+    if not target_uuid:
+        logging.warning(f"User {username} not found in DB for extend")
+        return {"days": expire_day, "link": sub_link}
+
+    if subscription_type == SubscriptionType.FREE:
+        buyer_info = await apply_update(
+            user_uuid=target_uuid,
+            username=username,
+            days=new_expire_days,
+            limit_gb=0,
+            squad_id=squad_id,
+            external_squad_id=external_squad_id,
+            description="updated by backend v2",
+        )
+    else:
+        buyer_info = await apply_extend(
+            user_uuid=target_uuid,
+            username=username,
+            days=days_for_apply,
+            current_days_left=current_days_left,
+            squad_id=squad_id,
+            external_squad_id=external_squad_id,
+            description="updated by backend v2",
+        )
 
     final_expire_day = await get_user_days(buyer_info)
 
@@ -366,10 +427,11 @@ async def _handle_update_subscription(
     subscription_type: SubscriptionType,
     lang=None,
     tariff_squad: Optional[dict] = None,
+    account_uuid: Optional[str] = None,
 ) -> dict:
     """Handle subscription update (replacement)"""
     # Lazy import to avoid circular dependency
-    from app.handlers.tools import set_user_info, get_user_days, get_user_info
+    from app.handlers.tools import get_user_days
     from app.api.remnawave.api import reset_user_traffic
     import app.database.requests as rq_update
 
@@ -380,25 +442,31 @@ async def _handle_update_subscription(
     else:
         squad_id = secrets.get("rw_free_id")
         external_squad_id = secrets.get("rw_ext_free_id")
+
+    target_uuid = account_uuid
+    if not target_uuid:
+        db_user = await rq_update.get_full_username_info(username)
+        target_uuid = (db_user or {}).get("vless_uuid")
+    if not target_uuid:
+        logging.warning(f"User {username} not found in DB for update")
+        return {"days": 0, "link": None}
+
     # Сброс трафика при выдаче FREE подписки (чтобы limited пользователь мог снова пользоваться)
     if subscription_type == SubscriptionType.FREE and data_limit > 0:
         try:
-            db_user = await rq_update.get_full_username_info(username)
-            if db_user and db_user.get("vless_uuid"):
-                await reset_user_traffic(db_user["vless_uuid"])
-                logging.info(f"Reset traffic for {username} before FREE subscription update")
+            await reset_user_traffic(target_uuid)
+            logging.info(f"Reset traffic for {username} before FREE subscription update")
         except Exception as e:
             logging.warning(f"Failed to reset traffic for {username}: {e}")
 
-    buyer_info = await set_user_info(
-        name=username,
-        limit=data_limit,
-        res_strat=reset_strategy,
-        expire_days=days,
-        # template=templates.vless_france,  # DISABLED: Marzban templates removed
-        api="remnawave",
+    buyer_info = await apply_update(
+        user_uuid=target_uuid,
+        username=username,
+        days=days,
+        limit_gb=data_limit,
         squad_id=squad_id,
-        external_squad_id=external_squad_id
+        external_squad_id=external_squad_id,
+        description="updated by backend v2",
     )
 
     expire_day = await get_user_days(buyer_info)

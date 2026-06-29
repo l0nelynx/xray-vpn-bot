@@ -1,13 +1,14 @@
 """
 Support Bot Database Module
-Works with the main application database (db.sqlite3)
+Standalone SQLite database for the legacy support bot.
+Isolated from the main project (which uses PostgreSQL).
 """
 import sqlite3
 from pathlib import Path
 from datetime import datetime
 
 
-DB_PATH = Path('db/db.sqlite3')
+DB_PATH = Path('db/support_bot.sqlite3')
 
 
 def get_db_connection():

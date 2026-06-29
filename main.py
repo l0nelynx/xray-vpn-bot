@@ -12,13 +12,13 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from app.api.a_pay import payment_webhook_handler as apays_webhook_handler
 from app.api.crystal_pay import payment_webhook_handler as crystal_webhook_handler
+from app.api.crypto_pay import cryptopay_webhook_handler
+from app.api.platega import payment_webhook_handler as platega_webhook_handler
 from app.admin import router as router_admin
 from app.handlers.base import router as router_base
 from app.handlers.devices import router as router_devices
 from app.handlers.events import start_bot, stop_bot
-from app.handlers.payments import router as router_payments
-from app.handlers.dynamic_menus import router as router_dynamic_menus
-from app.settings import bot, admin_bot, cp, run_webserver, app_uvi, limiter
+from app.settings import bot, admin_bot, cp, run_webserver, app_uvi, limiter, secrets
 
 app_uvi.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -43,8 +43,6 @@ dp = Dispatcher()
 dp.callback_query.middleware(UsernameRequiredMiddleware())
 dp.include_router(router_base)
 dp.include_router(router_devices)
-dp.include_router(router_payments)
-dp.include_router(router_dynamic_menus)
 dp.startup.register(start_bot)
 dp.shutdown.register(stop_bot)
 
@@ -80,17 +78,56 @@ async def payment_webhook_crystal(request: Request, background_tasks: Background
     await crystal_webhook_handler(request, background_tasks)
 
 
+@app_uvi.post("/bot/cryptopay_webhook")
+@limiter.limit("60/minute")
+async def payment_webhook_cryptopay(request: Request, background_tasks: BackgroundTasks):
+    return await cryptopay_webhook_handler(request, background_tasks)
+
+
+@app_uvi.post("/bot/platega_webhook")
+@limiter.limit("60/minute")
+async def payment_webhook_platega(request: Request, background_tasks: BackgroundTasks):
+    return await platega_webhook_handler(request, background_tasks)
+
+
 async def on_startup(dispatcher, **kwargs):
-    """Действия при запуске бота"""
     asyncio.create_task(run_webserver())
+    # Conditionally load legacy in-bot constructor based on DB feature flag.
+    # Requires a bot restart to take effect after toggling in Dashboard.
+    from app.database.models import async_session
+    from common_db.repo.system import get_bot_feature_flags
+    from app.handlers import events as _events
+    from app.admin.backup import scheduled_backup_loop
+    async with async_session() as session:
+        flags = await get_bot_feature_flags(session)
+        _events._legacy_constructor_enabled = flags.legacy_bot_constructor
+        if flags.legacy_bot_constructor:
+            from app.bot_constructor import get_router
+            dispatcher.include_router(get_router())
+            logging.info("bot_constructor: legacy in-bot menus ENABLED")
+        else:
+            logging.info("bot_constructor: legacy in-bot menus disabled (miniapp mode)")
+
+    admin_id = secrets.get("admin_id")
+    if admin_id:
+        asyncio.create_task(scheduled_backup_loop(bot, int(admin_id)))
+        logging.info("Scheduled daily backup at 01:00 for admin_id=%s", admin_id)
 
 
 async def main():
     dp.startup.register(on_startup)
-    tasks = [
-        dp.start_polling(bot),
-        cp.start_polling(),
-    ]
+
+    # Check feature flag before building task list so cp.start_polling() is only
+    # started when the in-bot payment flow (bot_constructor) is active.
+    from app.database.models import async_session
+    from common_db.repo.system import get_bot_feature_flags
+    async with async_session() as _sess:
+        _flags = await get_bot_feature_flags(_sess)
+        _legacy_enabled = _flags.legacy_bot_constructor
+
+    tasks = [dp.start_polling(bot)]
+    if _legacy_enabled:
+        tasks.append(cp.start_polling())
     if admin_bot:
         tasks.append(admin_dp.start_polling(admin_bot))
     await asyncio.gather(*tasks)
@@ -102,6 +139,5 @@ if __name__ == "__main__":
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
     from app.log_buffer import init_error_log_handler
-    from app.settings import secrets
     init_error_log_handler(maxlen=secrets.get('admin_logs_length', 20))
     asyncio.run(main())

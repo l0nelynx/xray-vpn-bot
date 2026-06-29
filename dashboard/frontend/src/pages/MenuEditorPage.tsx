@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import {
   Typography, Card, Button, Input, Switch, Space, Row, Col, List,
-  message, Popconfirm, Select, Empty, Badge,
+  App, Popconfirm, Select, Empty, Badge,
 } from "antd";
 import {
   PlusOutlined, DeleteOutlined, EditOutlined, SaveOutlined,
@@ -84,6 +84,7 @@ export default function MenuEditorPage() {
   const [isDirty, setIsDirty] = useState(false);
   const isMobile = useIsMobile();
   const snapshotRef = useRef("");
+  const { message } = App.useApp();
 
   useUnsavedWarning(isDirty);
 

@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import {
   Typography, Card, Button, Input, InputNumber, Switch, Space, Row, Col,
-  message, Popconfirm, Select, Collapse, Empty,
+  App, Popconfirm, Select, Collapse, Empty,
 } from "antd";
 import {
   PlusOutlined, DeleteOutlined, HolderOutlined, SaveOutlined,
@@ -145,6 +145,7 @@ export default function TariffEditorPage() {
   const [isDirty, setIsDirty] = useState(false);
   const isMobile = useIsMobile();
   const snapshotRef = useRef("");
+  const { message } = App.useApp();
 
   useUnsavedWarning(isDirty);
 

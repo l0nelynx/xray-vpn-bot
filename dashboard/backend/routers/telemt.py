@@ -9,6 +9,10 @@ from ..config import get_telemt_server, get_telemt_header
 from ..database.session import async_session
 from ..database.models import TelmtFreeParams
 
+# Singleton auto-seed lives in common_db.repo.system. Use it so the GET
+# always returns the canonical defaults (expire_days=30) on a fresh DB.
+from common_db.repo import system as _repo_system
+
 router = APIRouter(prefix="/api/telemt", tags=["telemt"])
 
 
@@ -158,9 +162,8 @@ class TelmtFreeParamsSchema(BaseModel):
 @router.get("/free-params", response_model=TelmtFreeParamsSchema)
 async def get_free_params(_: str = Depends(get_current_user)):
     async with async_session() as session:
-        row = await session.scalar(select(TelmtFreeParams).where(TelmtFreeParams.id == 1))
-        if not row:
-            return TelmtFreeParamsSchema()
+        row = await _repo_system.get_telmt_free_params(session)
+        await session.commit()  # persist auto-seed
         return TelmtFreeParamsSchema(
             max_tcp_conns=row.max_tcp_conns,
             max_unique_ips=row.max_unique_ips,
@@ -172,10 +175,7 @@ async def get_free_params(_: str = Depends(get_current_user)):
 @router.put("/free-params", response_model=TelmtFreeParamsSchema)
 async def update_free_params(body: TelmtFreeParamsSchema, _: str = Depends(get_current_user)):
     async with async_session() as session:
-        row = await session.scalar(select(TelmtFreeParams).where(TelmtFreeParams.id == 1))
-        if not row:
-            row = TelmtFreeParams(id=1)
-            session.add(row)
+        row = await _repo_system.get_telmt_free_params(session)
         row.max_tcp_conns = body.max_tcp_conns
         row.max_unique_ips = body.max_unique_ips
         row.data_quota_bytes = body.data_quota_bytes

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Row, Col, Select, Typography, Card, Tag, message } from "antd";
+import { Row, Col, Select, Typography, Card, Tag, App } from "antd";
 import RevenueChart from "../components/RevenueChart";
 import UserGrowthChart from "../components/UserGrowthChart";
 import PaymentMethodPieChart from "../components/PaymentMethodPieChart";
@@ -15,6 +15,7 @@ export default function StatsPage() {
   const [orderStatuses, setOrderStatuses] = useState<OrderStatusStat[]>([]);
   const [loading, setLoading] = useState(true);
   const isMobile = useIsMobile();
+  const { message } = App.useApp();
 
   useEffect(() => {
     Promise.all([
@@ -67,7 +68,7 @@ export default function StatsPage() {
           <StatsCard title="Conversion" value={`${conversionRate}%`} loading={loading} color="#36cfc9" />
         </Col>
         <Col xs={12} sm={8}>
-          <StatsCard title="Total Orders" value={totalOrders} loading={loading} color="#4f8cff" />
+          <StatsCard title="Total Orders" value={totalOrders} loading={loading} color="#7C9CFF" />
         </Col>
       </Row>
 

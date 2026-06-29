@@ -1,13 +1,18 @@
-import os
-
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-DB_PATH = os.environ.get("DB_PATH", "/app/db.sqlite3")
+from .url import async_db_url
+
+DB_URL = async_db_url(default_sqlite_path="/app/db.sqlite3")
+
+_connect_args: dict = {}
+if DB_URL.startswith("sqlite"):
+    _connect_args = {"check_same_thread": False}
 
 engine = create_async_engine(
-    f"sqlite+aiosqlite:///{DB_PATH}",
+    DB_URL,
     echo=False,
-    connect_args={"check_same_thread": False},
+    pool_pre_ping=True,
+    connect_args=_connect_args,
 )
 
 async_session = async_sessionmaker(engine, expire_on_commit=False)

@@ -1,9 +1,12 @@
 .env
 .venv
 .idea
+.claude
+__pycache__
 XRAY-VPN-BOT.iml
 venv
 uvicorn
+node_modules
 Deprecated
 db.sqlite3
 config.yml
@@ -13,4 +16,7 @@ dig_data.json
 data.json
 support.db
 test.py
+package.json
+package-lock.json
+./pyproject.toml
 ./tests/run_sec.py

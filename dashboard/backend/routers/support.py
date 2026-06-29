@@ -1,0 +1,190 @@
+from datetime import datetime
+
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
+from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
+
+from ..auth import get_current_user
+from ..config import get_bot_token
+from ..database.models import SupportTicket, SupportMessage, User
+from ..database.session import async_session
+
+from common_db.repo import support as _repo_support
+from common_db.repo import users as _repo_users
+
+router = APIRouter(prefix="/api/support", tags=["support"])
+
+VALID_STATUSES = {"open", "in_progress", "closed"}
+
+
+class ReplyBody(BaseModel):
+    text: str = Field(..., min_length=1, max_length=4000)
+
+
+class StatusBody(BaseModel):
+    status: str
+
+
+def _now_iso() -> str:
+    return datetime.now().isoformat(timespec="seconds")
+
+
+_TICKET_SORT_COLUMNS = {
+    "id": SupportTicket.id,
+    "subject": SupportTicket.subject,
+    "username": SupportTicket.username,
+    "status": SupportTicket.status,
+    "created_at": SupportTicket.created_at,
+    "updated_at": SupportTicket.updated_at,
+}
+
+
+@router.get("/tickets")
+async def list_tickets(
+    status: str = Query("all"),
+    search: str = Query(""),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=100),
+    sort: str = Query("updated_at"),
+    order: str = Query("desc"),
+    _: str = Depends(get_current_user),
+):
+    async with async_session() as session:
+        stmt = select(SupportTicket, User.tg_id).join(User, User.id == SupportTicket.user_id)
+        count_stmt = select(func.count()).select_from(SupportTicket)
+        if status != "all":
+            if status not in VALID_STATUSES:
+                raise HTTPException(400, "invalid status")
+            stmt = stmt.where(SupportTicket.status == status)
+            count_stmt = count_stmt.where(SupportTicket.status == status)
+        if search:
+            like = f"%{search}%"
+            stmt = stmt.where(SupportTicket.subject.ilike(like))
+            count_stmt = count_stmt.where(SupportTicket.subject.ilike(like))
+        total = await session.scalar(count_stmt) or 0
+        sort_col = _TICKET_SORT_COLUMNS.get(sort, SupportTicket.updated_at)
+        sort_clause = sort_col.asc() if order == "asc" else sort_col.desc()
+        stmt = stmt.order_by(sort_clause).offset((page - 1) * per_page).limit(per_page)
+        rows = (await session.execute(stmt)).all()
+        items = [
+            {
+                "id": t.id,
+                "user_id": t.user_id,
+                "tg_id": tg_id,
+                "username": t.username,
+                "subject": t.subject,
+                "status": t.status,
+                "created_at": t.created_at,
+                "updated_at": t.updated_at,
+            }
+            for t, tg_id in rows
+        ]
+    return {"items": items, "total": total, "page": page, "per_page": per_page}
+
+
+@router.get("/tickets/{ticket_id}")
+async def get_ticket(ticket_id: int, _: str = Depends(get_current_user)):
+    async with async_session() as session:
+        stmt = (
+            select(SupportTicket)
+            .where(SupportTicket.id == ticket_id)
+            .options(selectinload(SupportTicket.messages))
+        )
+        ticket = await session.scalar(stmt)
+        if not ticket:
+            raise HTTPException(404, "ticket not found")
+        user = await _repo_users.get_user_by_id(session, ticket.user_id)
+        messages = sorted(ticket.messages, key=lambda m: m.id)
+        return {
+            "id": ticket.id,
+            "user_id": ticket.user_id,
+            "tg_id": user.tg_id if user else None,
+            "username": ticket.username,
+            "subject": ticket.subject,
+            "status": ticket.status,
+            "created_at": ticket.created_at,
+            "updated_at": ticket.updated_at,
+            "messages": [
+                {"id": m.id, "sender": m.sender, "text": m.text, "created_at": m.created_at}
+                for m in messages
+            ],
+        }
+
+
+@router.post("/tickets/{ticket_id}/reply")
+async def reply_ticket(ticket_id: int, body: ReplyBody, _: str = Depends(get_current_user)):
+    text = body.text.strip()
+    if not text:
+        raise HTTPException(400, "empty text")
+    async with async_session() as session:
+        ticket = await _repo_support.get_ticket_by_id(session, ticket_id)
+        if not ticket:
+            raise HTTPException(404, "ticket not found")
+        user = await _repo_users.get_user_by_id(session, ticket.user_id)
+        now = _now_iso()
+        msg = SupportMessage(ticket_id=ticket.id, sender="admin", text=text, created_at=now)
+        session.add(msg)
+        ticket.updated_at = now
+        if ticket.status == "open":
+            ticket.status = "in_progress"
+        await session.commit()
+        tg_id = user.tg_id if user else None
+
+    if tg_id:
+        token = get_bot_token()
+        if token:
+            notify = (
+                f"💬 Ответ по обращению #{ticket_id}: <b>{ticket.subject}</b>\n\n{text}"
+            )
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    await client.post(
+                        f"https://api.telegram.org/bot{token}/sendMessage",
+                        json={"chat_id": tg_id, "text": notify, "parse_mode": "HTML"},
+                    )
+            except Exception:
+                pass
+    return {"ok": True}
+
+
+@router.patch("/tickets/{ticket_id}")
+async def update_status(ticket_id: int, body: StatusBody, _: str = Depends(get_current_user)):
+    if body.status not in VALID_STATUSES:
+        raise HTTPException(400, "invalid status")
+    async with async_session() as session:
+        ticket = await _repo_support.get_ticket_by_id(session, ticket_id)
+        if not ticket:
+            raise HTTPException(404, "ticket not found")
+        ticket.status = body.status
+        ticket.updated_at = _now_iso()
+        await session.commit()
+    return {"ok": True}
+
+
+@router.delete("/tickets/{ticket_id}/messages/{message_id}")
+async def delete_admin_message(
+    ticket_id: int,
+    message_id: int,
+    _: str = Depends(get_current_user),
+):
+    """Delete an admin-authored reply from a ticket.
+
+    Only messages with sender='admin' can be removed. The repo helper
+    enforces this at the SQL level; the endpoint translates "nothing
+    deleted" into a 404 (covers: wrong message_id, wrong ticket_id,
+    or a user-authored message).
+    """
+    async with async_session() as session:
+        ticket = await _repo_support.get_ticket_by_id(session, ticket_id)
+        if not ticket:
+            raise HTTPException(404, "ticket not found")
+        deleted = await _repo_support.delete_admin_message(
+            session, ticket_id=ticket_id, message_id=message_id
+        )
+        if not deleted:
+            raise HTTPException(404, "message not found")
+        ticket.updated_at = _now_iso()
+        await session.commit()
+    return {"ok": True}

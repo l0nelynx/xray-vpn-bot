@@ -40,3 +40,23 @@ def get_store_url() -> str:
 
 def get_store_api_token() -> str:
     return get_config().get("store_api_token", "")
+
+
+def get_bot_token() -> str:
+    return get_config().get("token", "")
+
+
+def get_news_id():
+    return get_config().get("news_id")
+
+
+def get_news_url() -> str:
+    return get_config().get("news_url", "")
+
+
+def get_remnawave_url() -> str:
+    return get_config().get("remnawave_url", "")
+
+
+def get_remnawave_token() -> str:
+    return get_config().get("remnawave_token", "")

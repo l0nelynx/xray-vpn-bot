@@ -65,6 +65,7 @@ def get_others_localized(lang) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
+
 def get_pay_methods_localized(lang, show_promo: bool = False) -> InlineKeyboardMarkup:
     buttons = [
         [InlineKeyboardButton(text=lang.btn_pay_stars, callback_data='Stars_Plans')],
@@ -160,42 +161,7 @@ def get_language_change_keyboard(lang) -> InlineKeyboardMarkup:
 
 def get_pay_extend_month_localized(lang) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text=lang.btn_extend_subscription, callback_data='Extend_Month')
+    builder.button(text=lang.btn_extend_subscription, callback_data="Extend_Month")
     builder.row()
-    builder.button(text=lang.btn_to_main, callback_data='Main')
+    builder.button(text=lang.btn_to_main, callback_data="Main")
     return builder.as_markup()
-
-
-async def get_dynamic_keyboard(screen_slug: str, lang_code: str = "ru",
-                                show_promo: bool = False) -> InlineKeyboardMarkup | None:
-    """Build a keyboard from DB data for any screen. Returns None if screen not in DB."""
-    from app.database.tariff_repository import get_screen_buttons
-
-    buttons_data = await get_screen_buttons(screen_slug, lang_code)
-    if not buttons_data:
-        return None
-
-    # Group buttons by row
-    rows: dict[int, list] = {}
-    for btn in buttons_data:
-        # Handle visibility conditions
-        if btn.get("visibility_condition") == "show_promo" and not show_promo:
-            continue
-
-        row_idx = btn["row"]
-        if row_idx not in rows:
-            rows[row_idx] = []
-
-        if btn["button_type"] == "url" and btn.get("url"):
-            rows[row_idx].append(InlineKeyboardButton(text=btn["text"], url=btn["url"]))
-        elif btn["button_type"] == "webapp" and btn.get("url"):
-            rows[row_idx].append(InlineKeyboardButton(
-                text=btn["text"], web_app=WebAppInfo(url=btn["url"])
-            ))
-        else:
-            rows[row_idx].append(InlineKeyboardButton(
-                text=btn["text"], callback_data=btn.get("callback_data", "noop")
-            ))
-
-    keyboard = [rows[r] for r in sorted(rows.keys())]
-    return InlineKeyboardMarkup(inline_keyboard=keyboard)

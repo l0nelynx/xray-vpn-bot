@@ -58,8 +58,8 @@ export default function RevenueChart({ period = "month" }: Props) {
           radiusTopRight: 4,
           fill: (d: Record<string, unknown>) =>
             (d as { _realRevenue: number })._realRevenue === 0
-              ? "rgba(79,140,255,0.25)"
-              : "#4f8cff",
+              ? "rgba(124, 156, 255, 0.25)"
+              : "#7C9CFF",
           maxWidth: isMobile ? 16 : 32,
         }}
         axis={{

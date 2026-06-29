@@ -119,16 +119,13 @@ async def admin_confirm_sub_clean(callback: CallbackQuery):
         current_status = user["current_status"]
 
         try:
-            # Save original status before disabling
-            await rq.create_disabled_user(tg_id, current_status)
-
-            # Disable in RemnaWave
+            # Disable in RemnaWave first; only persist to DB on success
             result = await rem.update_user(vless_uuid, status="disabled")
-            if result:
-                disabled_count += 1
-            else:
+            if not result:
                 error_count += 1
                 continue
+            disabled_count += 1
+            await rq.create_disabled_user(tg_id, current_status)
 
             # Send notification to user
             try:

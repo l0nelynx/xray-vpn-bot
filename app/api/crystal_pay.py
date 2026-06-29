@@ -287,15 +287,6 @@ async def crystal_create_link(callback: CallbackQuery, amount, currency: str, da
 
     # Пример асинхронного вызова
     try:
-        # Получение информации о кассе
-        me_info = await crystal.Me.getinfo()
-        print("Me info:", me_info)
-
-        # Получение баланса
-        balance = await crystal.Balance.getinfo()
-        print("Balance:", balance)
-
-        # Создание инвойса
         invoice = await crystal.Invoice.create(
             amount=amount,
             type_=InvoiceType.purchase,
@@ -304,9 +295,6 @@ async def crystal_create_link(callback: CallbackQuery, amount, currency: str, da
             amount_currency=currency,
             callback_url=f"{secrets.get('crystal_webhook')}",
         )
-        print("Invoice:", invoice)
-        print(invoice["id"])
-        print(invoice["url"])
         if invoice["id"]:
             await rq.create_transaction(user_tg_id=callback.from_user.id,
                                         user_transaction=invoice["id"],
@@ -319,7 +307,7 @@ async def crystal_create_link(callback: CallbackQuery, amount, currency: str, da
             return 'CrystalPay api error'
 
     except Exception as e:
-        print(f"Error: {e}")
+        logging.error("CrystalPay invoice creation error: %s", e)
 
 
 async def payment_webhook_handler(request: Request, background_tasks: BackgroundTasks):

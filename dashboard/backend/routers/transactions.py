@@ -64,6 +64,19 @@ async def get_transaction(transaction_id: str, _: str = Depends(get_current_user
         }
 
 
+_TX_SORT_COLUMNS = {
+    "transaction_id": Transaction.transaction_id,
+    "username": Transaction.username,
+    "user_tg_id": User.tg_id,
+    "payment_method": Transaction.payment_method,
+    "amount": Transaction.amount,
+    "order_status": Transaction.order_status,
+    "days_ordered": Transaction.days_ordered,
+    "created_at": Transaction.created_at,
+    "expire_date": Transaction.expire_date,
+}
+
+
 @router.get("")
 async def list_transactions(
     page: int = Query(1, ge=1),
@@ -72,6 +85,8 @@ async def list_transactions(
     payment_method: str = Query(""),
     date_from: str = Query(""),
     date_to: str = Query(""),
+    sort: str = Query("created_at"),
+    order: str = Query("desc"),
     _: str = Depends(get_current_user),
 ):
     async with async_session() as session:
@@ -92,9 +107,14 @@ async def list_transactions(
         count_q = select(func.count()).select_from(base.subquery())
         total = await session.scalar(count_q) or 0
 
+        sort_col = _TX_SORT_COLUMNS.get(sort, Transaction.created_at)
+        ordered = base.order_by(
+            sort_col.asc() if order == "asc" else sort_col.desc()
+        )
+
         offset = (page - 1) * per_page
         result = await session.execute(
-            base.order_by(Transaction.created_at.desc()).offset(offset).limit(per_page)
+            ordered.offset(offset).limit(per_page)
         )
         rows = result.all()
 
