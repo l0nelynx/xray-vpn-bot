@@ -24,10 +24,12 @@ venv
 env
 ENV
 
-# Local env
+# Local env & secrets — never bake into an image (pushed to GHCR). The runtime
+# config is bind-mounted via docker-compose, so it must not be in the context.
 .env
 .env.*
 !.env.example
+config.yml
 
 # Project: local databases & backups
 db
