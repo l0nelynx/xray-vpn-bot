@@ -17,18 +17,82 @@ Advanced Telegram bot suite for selling VPN subscriptions, backed by **Remnawave
 
 ## Architecture
 
-The project ships three containers orchestrated by `docker-compose.yml`:
+Services live under `services/`, shared Python packages under `packages/`, the
+frontends and their shared packages under `web/`, and all Dockerfiles under
+`infra/docker/`. `docker-compose.yml` orchestrates these containers:
 
 | Service | Image | Purpose |
 |---------|-------|---------|
-| `seller-bot` | `ghcr.io/l0nelynx/seller-bot` | Main user-facing Telegram bot + payment webhooks (port `5000`) |
-| `support-bot` | `ghcr.io/l0nelynx/support-bot` | Standalone bot for user↔admin conversations |
-| `dashboard` | `ghcr.io/l0nelynx/dashboard` | React + FastAPI admin panel (port `8000`, mapped to `8080` on host) |
+| `bot` | `ghcr.io/l0nelynx/bot` | Main user-facing Telegram bot + payment webhooks (port `5000`). Keeps a `seller-bot` network alias for backwards compatibility. |
+| `support-bot` | `ghcr.io/l0nelynx/support-bot` | Legacy standalone bot for user↔admin conversations (own SQLite). |
+| `dashboard` | `ghcr.io/l0nelynx/dashboard` | FastAPI admin **API** (port `8000`). |
+| `miniapp` | `ghcr.io/l0nelynx/miniapp` | FastAPI **API** for the Telegram MiniApp / web portal / Android (port `8001`). |
+| `frontend` | `ghcr.io/l0nelynx/frontend` | nginx serving the two built SPAs as static files (port `80`). No proxying — routing lives in the edge nginx. |
+| `postgres` / `migrate` | `postgres:16` / `bot` image | Shared database and one-shot Alembic migrations. |
+| `python-base` | `ghcr.io/l0nelynx/python-base` | Build-time base image: common Python deps + `common_db`/`remnawave_client`, shared by `bot`/`dashboard`/`miniapp` (not a runtime service). |
+
+The backends are **pure JSON APIs** — the React SPAs are built once and served by
+the `frontend` container, not by FastAPI.
 
 Images are built by CI (`.github/workflows/build.yml` and `.gitlab-ci.yml`) and published as:
 - `:latest` — built from `main`
 - `:staging` — built from `develop`
 - `:sha-<short>` / `:build-<n>` — immutable per-build tags
+
+### Web tier & reverse proxy
+
+Routing is owned by the **edge nginx**. The `frontend` container
+(`infra/docker/frontend.Dockerfile` + `infra/docker/frontend.nginx.conf`) only
+serves the two built SPAs as static files; the backends are pure JSON APIs. The
+edge routes by URL prefix — every API endpoint lives under `.../api`, so the
+static-vs-API split is unambiguous:
+
+| Path | Target |
+|------|--------|
+| `/bot/dashboard/api/…` | `dashboard:8000` (admin API) |
+| `/bot/dashboard/…` | `frontend:80` (dashboard SPA) |
+| `/bot/miniapp/api/…` | `miniapp:8001` (miniapp / web portal / android API) |
+| `/bot/miniapp/…` | `frontend:80` (miniapp SPA) |
+| `/bot/…` | `bot:5000` (payment webhooks, e.g. `/bot/apays_webhook`) |
+| `/` | `frontend:80` (miniapp SPA — public web portal entry) |
+
+The edge nginx must share the `backend-network` so the upstream names resolve.
+`proxy_pass` directives without a trailing path preserve the original URI, so the
+`frontend` container receives the same `/bot/<app>/…` path it serves, and each
+backend receives its `/bot/<app>/api/…` path unchanged.
+
+```nginx
+upstream frontend      { server frontend:80; }
+upstream dashboard_api { server dashboard:8000; }
+upstream miniapp_api   { server miniapp:8001; }
+upstream bot_api       { server bot:5000; }
+
+server {
+    listen 443 ssl;
+    server_name example.com;
+    # ... ssl_certificate / ssl_certificate_key ...
+
+    # Shared proxy headers.
+    proxy_set_header Host              $host;
+    proxy_set_header X-Real-IP         $remote_addr;
+    proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    # APIs — longest-prefix match wins, so these beat the SPA blocks below.
+    location /bot/dashboard/api/ { proxy_pass http://dashboard_api; }
+    location /bot/miniapp/api/   { proxy_pass http://miniapp_api; }
+
+    # SPAs (static) -> frontend container.
+    location /bot/dashboard/ { proxy_pass http://frontend; }
+    location /bot/miniapp/   { proxy_pass http://frontend; }
+
+    # Payment webhooks and other bot endpoints.
+    location /bot/ { proxy_pass http://bot_api; }
+
+    # Public web portal entry -> miniapp SPA.
+    location / { proxy_pass http://frontend; }
+}
+```
 
 ## Dashboard
 
@@ -107,16 +171,27 @@ docker compose pull
 docker compose up -d
 ```
 
-Or build locally from source:
+Or build locally from source. The three Python backends (`bot`, `dashboard`,
+`miniapp`) share a base image with the common, heavy dependencies — build it
+first, then the services:
 
 ```bash
-docker compose build
+docker compose --profile build build base   # shared Python base (deps once)
+docker compose build                         # bot / dashboard / miniapp / frontend
 docker compose up -d
 ```
 
+> The shared base (`infra/docker/base.Dockerfile` + `requirements-base.txt`)
+> carries fastapi/uvicorn/sqlalchemy/pydantic/asyncpg/psycopg2/alembic plus
+> `common_db` and `remnawave_client`, so those are built and stored once instead
+> of per service. In CI the `python-base` image is rebuilt **only when its own
+> inputs change** (base.Dockerfile, requirements-base.txt, common_db,
+> remnawave_client); service-only changes reuse the already-published base.
+
 Services:
-- Seller bot webhooks: `127.0.0.1:5000`
-- Dashboard: `127.0.0.1:8080` (FastAPI listens on `:8000` inside the container)
+- Bot webhooks: `127.0.0.1:5000`
+- Dashboard API: `127.0.0.1:8080` (FastAPI listens on `:8000` inside the container)
+- Web (SPAs): `127.0.0.1:8088` (frontend container)
 
 Put a reverse proxy (nginx / Caddy / Traefik) in front to terminate TLS and expose the Dashboard at `/bot/dashboard` and the payment webhook endpoints on your public domain.
 

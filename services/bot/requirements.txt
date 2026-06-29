@@ -1,0 +1,13 @@
+# Bot-specific deps. Common deps (fastapi, uvicorn, sqlalchemy, pydantic, pyyaml,
+# aiosqlite, alembic, asyncpg, psycopg2, remnawave) come from the shared base
+# image — see infra/docker/requirements-base.txt.
+aiogram>=3.21.0
+aiohttp>=3.13.3
+aiosend>=3.0.5
+aiofiles>=24.1.0
+requests>=2.32.4
+orjson>=3.11.2
+magic-filter>=1.0.12
+pydantic-settings>=2.10.1
+python-dotenv>=1.1.1
+slowapi>=0.1.0

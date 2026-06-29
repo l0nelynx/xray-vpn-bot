@@ -1,9 +1,9 @@
-"""Tests for app.handlers.android_link_merge."""
+"""Tests for the account_linking package (Android<->Telegram merge)."""
 from __future__ import annotations
 
 import pytest
 
-from app.handlers.android_link_merge import _classify
+from account_linking import _classify
 
 
 class TestClassify:
@@ -28,7 +28,7 @@ class TestClassify:
 
 import asyncio
 
-from app.handlers.android_link_merge import _lookup_rw
+from account_linking import _lookup_rw
 
 
 class TestLookupRw:
@@ -66,7 +66,7 @@ class TestLookupRw:
     def test_swallows_exceptions_returns_none(self, fake_remnawave, monkeypatch):
         async def boom(*a, **kw):
             raise RuntimeError("network down")
-        import app.api.remnawave.api as rem
+        from remnawave_client import api as rem
         monkeypatch.setattr(rem, "get_user_from_email", boom)
         a_info, _ = asyncio.run(_lookup_rw(
             email="a@x.io", vless_uuid=None, username=None,
@@ -74,7 +74,7 @@ class TestLookupRw:
         assert a_info is None
 
 
-from app.handlers.android_link_merge import (
+from account_linking import (
     LookupNotFound,
     _lookup_a_side_rw,
 )
@@ -108,7 +108,7 @@ class TestLookupASideRw:
     def test_swallows_exceptions_returns_none(self, fake_remnawave, monkeypatch):
         async def boom(*a, **kw):
             raise RuntimeError("network down")
-        import app.api.remnawave.api as rem
+        from remnawave_client import api as rem
         monkeypatch.setattr(rem, "get_user_from_uuid", boom)
         result = asyncio.run(_lookup_a_side_rw(
             vless_uuid="a-uuid", email=None,
@@ -125,7 +125,7 @@ class TestLookupNotFound:
         assert "missing-short" in str(exc)
 
 
-from app.handlers.android_link_merge import _decide, MergeBlocked
+from account_linking import _decide, MergeBlocked
 
 
 class TestDecide:
@@ -194,7 +194,7 @@ import asyncio as _asyncio
 
 from sqlalchemy import select
 from common_db.models import User
-from app.handlers.android_link_merge import _apply_merge_db
+from account_linking import _apply_merge_db
 
 
 class TestApplyMergeDb:
@@ -256,7 +256,7 @@ class TestApplyMergeDb:
         _asyncio.run(go())
 
 
-from app.handlers.android_link_merge import merge_android_and_tg
+from account_linking import merge_android_and_tg
 
 
 class TestMergeAndroidAndTg:
@@ -531,19 +531,19 @@ class TestFakeRemnawaveShortUuid:
             uuid="b-uuid", short_uuid="sN_xxxxxxxxxxxx",
             status="active", data_limit=None, email="b@x.io",
         )
-        import app.api.remnawave.api as rem
+        from remnawave_client import api as rem
         rec = _asyncio.run(rem.get_user_by_short_uuid_raw("sN_xxxxxxxxxxxx"))
         assert rec is not None
         assert rec["uuid"] == "b-uuid"
         assert rec["status"] == "active"
 
     def test_short_uuid_lookup_returns_none_for_unknown(self, fake_remnawave):
-        import app.api.remnawave.api as rem
+        from remnawave_client import api as rem
         rec = _asyncio.run(rem.get_user_by_short_uuid_raw("missing"))
         assert rec is None
 
 
-from app.handlers.android_link_merge import import_subscription_by_uuid
+from account_linking import import_subscription_by_uuid
 
 
 class TestImportSubscriptionByUuid:

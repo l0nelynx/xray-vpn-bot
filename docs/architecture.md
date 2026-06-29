@@ -1,50 +1,75 @@
 # Project Architecture
 
-The XRAY-VPN-BOT project is a comprehensive suite for selling and managing VPN subscriptions via Telegram. It is composed of several interconnected services orchestrated via Docker Compose.
+XRAY-VPN-BOT is a suite for selling and managing VPN subscriptions via Telegram,
+an admin dashboard and a Telegram MiniApp / Android app. Services are orchestrated
+with Docker Compose and share a single PostgreSQL database.
 
-## Components Overview
+## Repository layout
 
-1.  **Seller Bot (Main Bot)**:
-    *   **Path**: `./app/`, `main.py`
-    *   **Role**: The primary user interface for customers. Handles plan selection, payments, and subscription management.
-    *   **Tech Stack**: Python, `aiogram` 3.x, `SQLAlchemy`, `FastAPI` (for webhooks).
+```
+services/                 # deployable services (one image each)
+  bot/                    # main seller bot — aiogram + FastAPI webhooks
+    app/                  #   python package (kept name `app`)
+    main.py
+    scripts/
+  support_bot/            # legacy support bot (own SQLite); to be retired
+  dashboard/backend/      # FastAPI admin API
+  miniapp/backend/        # FastAPI API for the MiniApp / web portal / Android
+web/
+  apps/dashboard/         # React + Vite (admin)
+  apps/miniapp/           # React + Vite (MiniApp)
+  packages/ui/            # shared antd liquid-glass theme builder (@xray/ui)
+  packages/api/           # shared fetch client (@xray/api)
+packages/                 # shared python packages (installed into each image)
+  common_db/              #   single SQLAlchemy Base + models + repo helpers
+  remnawave_client/       #   Remnawave panel API client + subscription ops
+  account_linking/        #   Android<->Telegram account merge logic
+  payments/               #   gateway providers + webhook signature verification
+  subscription_delivery/  #   Android paid-subscription delivery
+infra/docker/             # bot / support_bot / dashboard / miniapp Dockerfiles
+alembic/ alembic.ini migrations_runner.py   # shared DB migrations (root)
+docker-compose.yml  package.json (npm workspaces root)  config.yml
+```
 
-2.  **Support Bot**:
-    *   **Path**: `support.py`
-    *   **Role**: Facilitates communication between users and administrators. Handles support tickets and direct messaging.
-    *   **Tech Stack**: Python, `aiogram` 3.x.
+## Components
 
-3.  **Dashboard**:
-    *   **Path**: `./dashboard/`
-    *   **Role**: Administrative web interface for managing tariffs, menus, users, and viewing statistics.
-    *   **Tech Stack**:
-        *   **Backend**: FastAPI, JWT authentication.
-        *   **Frontend**: React + Vite, Tailwind CSS.
+1. **Bot** (`services/bot`, image `bot`) — customer-facing Telegram bot: plan
+   selection, payments, subscription management. Hosts the payment webhook
+   endpoints (`/bot/*_webhook`). Tech: aiogram 3.x, FastAPI, SQLAlchemy.
+2. **Support bot** (`services/support_bot`) — legacy ticket/DM bot with its own
+   SQLite DB. Slated for removal once tickets land in miniapp/dashboard.
+3. **Dashboard** (`services/dashboard/backend` + `web/apps/dashboard`) — admin
+   web UI: tariffs, menus, users, stats. FastAPI + JWT; React/Vite/antd frontend.
+4. **MiniApp** (`services/miniapp/backend` + `web/apps/miniapp`) — Telegram
+   MiniApp + web portal + Android API (JWT, Google Play IAP). FastAPI; React/Vite.
 
-4.  **MiniApp**:
-    *   **Path**: `./miniapp/`
-    *   **Role**: A Telegram MiniApp integrated into the bot for a richer UI experience during selection and support.
-    *   **Tech Stack**:
-        *   **Backend**: FastAPI.
-        *   **Frontend**: React + Vite.
+## Shared code
 
-5.  **Remnawave Client**:
-    *   **Path**: `./packages/remnawave_client/`
-    *   **Role**: A shared library for interacting with the Remnawave VPN panel API.
+Cross-service logic lives in `packages/` (python) and `web/packages/` (frontend)
+so it is defined once and consumed by every service. Notably `common_db` owns the
+single `Base.metadata` (alembic autogenerates against it), and each service wires
+credentials into `remnawave_client` / `payments` via `set_config_provider`.
 
-## Data Flow
+## Data flow
 
-*   **User Action**: A user interacts with the Seller Bot or MiniApp.
-*   **Database**: All services share a common SQLite database (`db.sqlite3`), ensuring data consistency across the bot, dashboard, and miniapp.
-*   **VPN Management**: The Seller Bot communicates with the **Remnawave** panel to create/extend VPN accounts using the `remnawave_client`.
-*   **Payments**: External payment gateways (CryptoBot, Crystal Pay, A-Pays) send webhooks to the Seller Bot's FastAPI endpoints to confirm transactions.
-*   **Administration**: Admins use the Dashboard to modify tariffs or the Support Bot to respond to user inquiries.
+- Users interact with the Bot or MiniApp; the Android app talks to the MiniApp API.
+- All services share one **PostgreSQL** database (`DATABASE_URL`), so state is
+  consistent across bot, dashboard and miniapp.
+- VPN provisioning goes through the **Remnawave** panel via `remnawave_client`.
+- Payments: external gateways (CryptoBot, CrystalPay, Platega, APay) and Google
+  Play IAP create invoices via `packages/payments`; confirmations hit the bot's
+  webhook endpoints, which verify signatures (`payments.signatures`) and deliver.
 
-## Deployment
+## Deployment & networking
 
-The project is designed to run in Docker containers. A `docker-compose.yml` file defines the services:
-*   `seller-bot`: Main bot and payment webhooks.
-*   `support-bot`: Dedicated support messaging.
-*   `dashboard`: The web admin interface.
+`docker-compose.yml` defines: `postgres`, `migrate` (one-shot alembic), `bot`,
+`support-bot`, `dashboard`, `miniapp`. Networks are segmented:
 
-The `miniapp` is typically served via the same backend as the dashboard or bot, depending on the configuration.
+- **backend-network** (external) — the edge; nginx is attached here and proxies
+  to the app backends. The `bot` service keeps a `seller-bot` network alias for
+  backwards compatibility with the existing nginx upstream.
+- **data-network** (internal, no gateway) — PostgreSQL + the services that talk
+  to it. Postgres is not reachable from the edge.
+
+Frontends are built (npm workspaces) and their `dist` is served as static files
+by the corresponding FastAPI service, fronted by nginx.

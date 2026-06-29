@@ -13,6 +13,8 @@ Public API:
     in the calling service.
 """
 
+from . import api
+from .api import set_config_provider
 from .client import RemnawaveClient, configure, get_default_client
 from .operations import apply_extend, apply_new_user, apply_update
 from .scenarios import SubscriptionScenario, SubscriptionType, resolve_scenario
@@ -21,6 +23,8 @@ __all__ = [
     "RemnawaveClient",
     "configure",
     "get_default_client",
+    "api",
+    "set_config_provider",
     "SubscriptionScenario",
     "SubscriptionType",
     "resolve_scenario",

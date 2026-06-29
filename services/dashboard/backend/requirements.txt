@@ -1,0 +1,6 @@
+# Dashboard-specific deps. Common deps (fastapi, uvicorn, sqlalchemy, pydantic,
+# pyyaml, aiosqlite, alembic, asyncpg, psycopg2, remnawave) come from the shared
+# base image — see infra/docker/requirements-base.txt.
+python-jose[cryptography]>=3.3.0
+passlib>=1.7.4
+httpx>=0.28.1

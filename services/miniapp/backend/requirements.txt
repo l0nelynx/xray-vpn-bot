@@ -1,0 +1,13 @@
+# MiniApp-specific deps. Common deps (fastapi, uvicorn, sqlalchemy, pydantic,
+# pyyaml, aiosqlite, alembic, asyncpg, psycopg2, remnawave) come from the shared
+# base image — see infra/docker/requirements-base.txt.
+aiohttp>=3.13.3
+aiosend>=3.0.5
+httpx
+slowapi>=0.1.9
+argon2-cffi>=23.1.0
+pyjwt[crypto]>=2.9.0
+email-validator>=2.2.0
+aiosmtplib>=3.0.0
+google-auth>=2.32.0
+google-api-python-client>=2.140.0

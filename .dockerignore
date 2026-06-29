@@ -36,12 +36,9 @@ db
 db.sqlite3*
 
 # Project: build artifacts shouldn't be in build context
-miniapp/frontend/node_modules
-miniapp/frontend/dist
-miniapp/static
-dashboard/frontend/node_modules
-dashboard/frontend/dist
-dashboard/static
+web/apps/*/node_modules
+web/apps/*/dist
+web/packages/*/node_modules
 node_modules
 
 # Logs / runtime junk

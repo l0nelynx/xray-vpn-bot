@@ -13,8 +13,12 @@ from alembic import context
 from sqlalchemy import engine_from_config, pool
 
 ROOT = Path(__file__).resolve().parent.parent
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+# The bot package lives at services/bot/app after the services/ reorg; add that
+# dir so the autogenerate target `app.database.models` resolves both locally and
+# in CI. In the bot image `app` sits directly at WORKDIR (=ROOT), already covered.
+for _candidate in (ROOT, ROOT / "services" / "bot"):
+    if str(_candidate) not in sys.path:
+        sys.path.insert(0, str(_candidate))
 
 config = context.config
 
