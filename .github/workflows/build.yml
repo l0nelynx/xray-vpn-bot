@@ -85,18 +85,15 @@ jobs:
 # and the steps below are identical across all four services.
 # ─────────────────────────────────────────────────────────────────
 
-  # Shared base image — built first; the Python backend jobs FROM it.
-  # Its `if` is the UNION of the dependents' conditions, so whenever a dependent
-  # runs, this job has run too (satisfies `needs`) without needing always().
+  # Shared base image. Rebuilt ONLY when its own inputs change (base.Dockerfile,
+  # requirements-base.txt, common_db, remnawave_client) or on workflow changes.
+  # When it's skipped, the backend jobs below still run and reuse the
+  # already-published python-base from the registry via their FROM.
   build-base:
     needs: detect
     if: |
-      needs.detect.outputs.base      == 'true' ||
-      needs.detect.outputs.shared    == 'true' ||
-      needs.detect.outputs.meta      == 'true' ||
-      needs.detect.outputs.bot       == 'true' ||
-      needs.detect.outputs.dashboard == 'true' ||
-      needs.detect.outputs.miniapp   == 'true'
+      needs.detect.outputs.base == 'true' ||
+      needs.detect.outputs.meta == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -137,11 +134,17 @@ jobs:
 
   build-bot:
     needs: [detect, build-base]
-    # rebuild when: bot files changed, shared packages changed, or workflow changed
-    if: |
-      needs.detect.outputs.bot    == 'true' ||
-      needs.detect.outputs.shared == 'true' ||
-      needs.detect.outputs.meta   == 'true'
+    # Runs on bot/shared/meta changes. `build-base` may be skipped (base
+    # unchanged) — !cancelled() + base.result != 'failure' lets this run anyway
+    # and reuse the published python-base; if base build failed, skip.
+    if: >-
+      ${{ !cancelled()
+          && needs.detect.result == 'success'
+          && needs['build-base'].result != 'failure'
+          && (needs.detect.outputs.bot == 'true'
+              || needs.detect.outputs.shared == 'true'
+              || needs.detect.outputs.base == 'true'
+              || needs.detect.outputs.meta == 'true') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -227,10 +230,14 @@ jobs:
 
   build-dashboard:
     needs: [detect, build-base]
-    if: |
-      needs.detect.outputs.dashboard == 'true' ||
-      needs.detect.outputs.shared    == 'true' ||
-      needs.detect.outputs.meta      == 'true'
+    if: >-
+      ${{ !cancelled()
+          && needs.detect.result == 'success'
+          && needs['build-base'].result != 'failure'
+          && (needs.detect.outputs.dashboard == 'true'
+              || needs.detect.outputs.shared == 'true'
+              || needs.detect.outputs.base == 'true'
+              || needs.detect.outputs.meta == 'true') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -317,10 +324,14 @@ jobs:
 
   build-miniapp:
     needs: [detect, build-base]
-    if: |
-      needs.detect.outputs.miniapp == 'true' ||
-      needs.detect.outputs.shared  == 'true' ||
-      needs.detect.outputs.meta    == 'true'
+    if: >-
+      ${{ !cancelled()
+          && needs.detect.result == 'success'
+          && needs['build-base'].result != 'failure'
+          && (needs.detect.outputs.miniapp == 'true'
+              || needs.detect.outputs.shared == 'true'
+              || needs.detect.outputs.base == 'true'
+              || needs.detect.outputs.meta == 'true') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read

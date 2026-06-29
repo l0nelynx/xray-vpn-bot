@@ -184,7 +184,9 @@ docker compose up -d
 > The shared base (`infra/docker/base.Dockerfile` + `requirements-base.txt`)
 > carries fastapi/uvicorn/sqlalchemy/pydantic/asyncpg/psycopg2/alembic plus
 > `common_db` and `remnawave_client`, so those are built and stored once instead
-> of per service. CI builds and pushes `python-base` before the backend images.
+> of per service. In CI the `python-base` image is rebuilt **only when its own
+> inputs change** (base.Dockerfile, requirements-base.txt, common_db,
+> remnawave_client); service-only changes reuse the already-published base.
 
 Services:
 - Bot webhooks: `127.0.0.1:5000`

@@ -29,9 +29,18 @@ workflow:
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
 
 # Shared Python base image — built first; the backend images FROM it.
+# Only rebuilt when its own inputs change; otherwise `build` reuses the
+# already-published python-base (see the optional `needs` on `build`).
 build-base:
   extends: .docker
   stage: base
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"'
+      changes:
+        - infra/docker/base.Dockerfile
+        - infra/docker/requirements-base.txt
+        - packages/common_db/**/*
+        - packages/remnawave_client/**/*
   script:
     - IMAGE="$CI_REGISTRY_IMAGE/python-base"
     - SHORT_SHA=$(echo "$CI_COMMIT_SHA" | cut -c1-7)
@@ -44,8 +53,11 @@ build-base:
 build:
   extends: .docker
   stage: build
+  # optional: `build-base` only exists in the pipeline when base inputs changed;
+  # otherwise the backend images reuse the already-published python-base.
   needs:
-    - build-base
+    - job: build-base
+      optional: true
   parallel:
     matrix:
       - NAME: bot
