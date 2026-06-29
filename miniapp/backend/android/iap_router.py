@@ -28,7 +28,11 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, Field
 
+from subscription_delivery import deliver_android_paid
+
 from ..config import get_google_play_rtdn_token
+from ..database.session import async_session
+from ..notify_log import notify_log
 from . import deps, iap_repo, repo
 from .auth_router import limiter
 from .google_play import GooglePlayError, SubscriptionPurchase, acknowledge_subscription, get_subscription
@@ -140,15 +144,13 @@ async def _deliver_to_remnawave(
     sku: iap_repo.SkuRow,
     sub: SubscriptionPurchase,
 ) -> bool:
-    """Bridge into the bot-side delivery helper. Logs but never raises."""
+    """Deliver the IAP subscription via the shared delivery package.
+
+    Logs but never raises. The IAP SKU already carries the squad, so the slug is
+    the pre-resolved "sid:..:esid:.." form and no squad_resolver is needed.
+    """
     if not email:
         logger.error("IAP delivery skipped: user %s has no email", user_id)
-        return False
-
-    try:
-        from app.handlers.android_delivery import deliver_android_paid
-    except Exception:  # pragma: no cover — bot package not importable
-        logger.exception("IAP delivery: cannot import deliver_android_paid")
         return False
 
     tariff_slug = _build_tariff_slug(sku.squad_id, sku.external_squad_id)
@@ -162,6 +164,8 @@ async def _deliver_to_remnawave(
             email=email,
             days=sku.days,
             tariff_slug=tariff_slug,
+            session_factory=async_session,
+            notifier=notify_log,
         )
     except Exception:
         logger.exception("IAP delivery raised for user %s", user_id)

@@ -47,6 +47,12 @@ RUN pip install --no-cache-dir --no-deps /tmp/account_linking && rm -rf /tmp/acc
 COPY packages/payments /tmp/payments
 RUN pip install --no-cache-dir --no-deps /tmp/payments && rm -rf /tmp/payments
 
+# Shared Android paid-delivery (seller fiat webhooks + miniapp IAP). Deps
+# (sqlalchemy, remnawave_client) already present, so --no-deps is safe.
+# See packages/subscription_delivery.
+COPY packages/subscription_delivery /tmp/subscription_delivery
+RUN pip install --no-cache-dir --no-deps /tmp/subscription_delivery && rm -rf /tmp/subscription_delivery
+
 COPY miniapp/backend/ ./backend/
 COPY alembic ./alembic
 COPY alembic.ini ./alembic.ini

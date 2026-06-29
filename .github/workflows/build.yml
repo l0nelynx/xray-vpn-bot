@@ -48,7 +48,6 @@ jobs:
             seller_bot:
               - 'app/**'
               - 'main.py'
-              - 'support.py'        # also COPY'd into seller-bot image
               - 'requirements.txt'
               - 'Dockerfile'
               - 'scripts/**'
@@ -59,11 +58,19 @@ jobs:
               - 'requirements_support.txt'
               - 'Dockerfile_support'
 
+            # Frontends are npm workspaces: they also depend on the shared
+            # web/packages and the root manifest/lockfile.
             dashboard:
               - 'dashboard/**'
+              - 'web/**'
+              - 'package.json'
+              - 'package-lock.json'
 
             miniapp:
               - 'miniapp/**'
+              - 'web/**'
+              - 'package.json'
+              - 'package-lock.json'
 
 # ─────────────────────────────────────────────────────────────────
 # Shared build steps — each job sets SERVICE/DOCKERFILE env vars
