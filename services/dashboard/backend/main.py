@@ -29,12 +29,14 @@ async def ensure_schema_up_to_date():
     """Apply Alembic migrations. No-op if init container already ran them."""
     import sys
     from pathlib import Path
-    # services/dashboard/backend/main.py -> repo root is 4 levels up; needed so
-    # the repo-root migrations_runner is importable for local (non-container)
-    # runs. In the image migrations_runner sits at WORKDIR and is already on path.
-    root = Path(__file__).resolve().parents[3]
-    if str(root) not in sys.path:
-        sys.path.insert(0, str(root))
+    # Make migrations_runner importable in both layouts without a fixed parent
+    # index: the flat container (/app, already on sys.path) and the source tree
+    # (services/dashboard/backend -> repo root). Walk up to the dir that has it.
+    for parent in Path(__file__).resolve().parents:
+        if (parent / "migrations_runner.py").exists():
+            if str(parent) not in sys.path:
+                sys.path.insert(0, str(parent))
+            break
     try:
         from migrations_runner import upgrade_to_head
     except ImportError:
