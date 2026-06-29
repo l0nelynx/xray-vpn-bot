@@ -1,26 +1,19 @@
-# Build context for this Dockerfile is the repository root.
+# Build context is the repository root.
 # Use:  docker build -f infra/docker/dashboard.Dockerfile .
+# Requires the shared base image (infra/docker/base.Dockerfile) — pass a
+# matching tag via --build-arg BASE_IMAGE=... (defaults to :staging).
 #
-# Pure JSON API. The SPA is built and served by the `frontend` container
-# (infra/docker/frontend.Dockerfile).
+# Pure JSON API. The SPA is built and served by the `frontend` container.
+ARG BASE_IMAGE=ghcr.io/l0nelynx/python-base:staging
+FROM ${BASE_IMAGE}
 
-FROM python:3.13-alpine
 WORKDIR /app
 
-RUN apk add --no-cache curl libpq
-
+# Dashboard-specific deps on top of the shared base.
 COPY services/dashboard/backend/requirements.txt .
 RUN apk add --no-cache --virtual .build-deps gcc musl-dev postgresql-dev \
  && pip install --no-cache-dir -r requirements.txt \
  && apk del .build-deps
-
-COPY packages/remnawave_client /tmp/remnawave_client
-RUN pip install --no-cache-dir /tmp/remnawave_client && rm -rf /tmp/remnawave_client
-
-# Shared DB layer (Base, models, URL helpers) — single source of truth
-# across app, dashboard and miniapp. See packages/common_db.
-COPY packages/common_db /tmp/common_db
-RUN pip install --no-cache-dir /tmp/common_db && rm -rf /tmp/common_db
 
 COPY services/dashboard/backend/ ./backend/
 COPY alembic ./alembic

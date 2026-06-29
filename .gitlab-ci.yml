@@ -1,5 +1,6 @@
 # .gitlab-ci.yml
 stages:
+  - base
   - build
 
 workflow:
@@ -17,14 +18,34 @@ workflow:
         - "!docs/**/*"
         - "!**/*.md"
 
-build:
-  stage: build
+.docker:
   image: docker:24.0
   services:
     - docker:24.0-dind
   variables:
     DOCKER_HOST: tcp://docker:2376
     DOCKER_TLS_CERTDIR: "/certs"
+  before_script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+
+# Shared Python base image — built first; the backend images FROM it.
+build-base:
+  extends: .docker
+  stage: base
+  script:
+    - IMAGE="$CI_REGISTRY_IMAGE/python-base"
+    - SHORT_SHA=$(echo "$CI_COMMIT_SHA" | cut -c1-7)
+    - TAGS="-t $IMAGE:sha-$SHORT_SHA -t $IMAGE:build-$CI_PIPELINE_IID"
+    - if [ "$CI_COMMIT_BRANCH" = "main" ]; then TAGS="$TAGS -t $IMAGE:latest"; fi
+    - if [ "$CI_COMMIT_BRANCH" = "develop" ]; then TAGS="$TAGS -t $IMAGE:staging"; fi
+    - docker build $TAGS -f ./infra/docker/base.Dockerfile .
+    - docker push --all-tags "$IMAGE"
+
+build:
+  extends: .docker
+  stage: build
+  needs:
+    - build-base
   parallel:
     matrix:
       - NAME: bot
@@ -42,8 +63,6 @@ build:
       - NAME: frontend
         CONTEXT: ./
         DOCKERFILE: ./infra/docker/frontend.Dockerfile
-  before_script:
-    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
   script:
     - IMAGE="$CI_REGISTRY_IMAGE/$NAME"
     - SHORT_SHA=$(echo "$CI_COMMIT_SHA" | cut -c1-7)
@@ -52,5 +71,7 @@ build:
     # moving environment tags
     - if [ "$CI_COMMIT_BRANCH" = "main" ]; then TAGS="$TAGS -t $IMAGE:latest"; fi
     - if [ "$CI_COMMIT_BRANCH" = "develop" ]; then TAGS="$TAGS -t $IMAGE:staging"; fi
-    - docker build $TAGS -f "$DOCKERFILE" "$CONTEXT"
+    # backend images FROM the shared base; support-bot/frontend ignore this arg.
+    - BASE_TAG=staging; [ "$CI_COMMIT_BRANCH" = "main" ] && BASE_TAG=latest
+    - docker build $TAGS --build-arg BASE_IMAGE="$CI_REGISTRY_IMAGE/python-base:$BASE_TAG" -f "$DOCKERFILE" "$CONTEXT"
     - docker push --all-tags "$IMAGE"

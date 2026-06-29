@@ -29,6 +29,7 @@ frontends and their shared packages under `web/`, and all Dockerfiles under
 | `miniapp` | `ghcr.io/l0nelynx/miniapp` | FastAPI **API** for the Telegram MiniApp / web portal / Android (port `8001`). |
 | `frontend` | `ghcr.io/l0nelynx/frontend` | nginx serving the two built SPAs as static files (port `80`). No proxying — routing lives in the edge nginx. |
 | `postgres` / `migrate` | `postgres:16` / `bot` image | Shared database and one-shot Alembic migrations. |
+| `python-base` | `ghcr.io/l0nelynx/python-base` | Build-time base image: common Python deps + `common_db`/`remnawave_client`, shared by `bot`/`dashboard`/`miniapp` (not a runtime service). |
 
 The backends are **pure JSON APIs** — the React SPAs are built once and served by
 the `frontend` container, not by FastAPI.
@@ -170,16 +171,25 @@ docker compose pull
 docker compose up -d
 ```
 
-Or build locally from source:
+Or build locally from source. The three Python backends (`bot`, `dashboard`,
+`miniapp`) share a base image with the common, heavy dependencies — build it
+first, then the services:
 
 ```bash
-docker compose build
+docker compose --profile build build base   # shared Python base (deps once)
+docker compose build                         # bot / dashboard / miniapp / frontend
 docker compose up -d
 ```
 
+> The shared base (`infra/docker/base.Dockerfile` + `requirements-base.txt`)
+> carries fastapi/uvicorn/sqlalchemy/pydantic/asyncpg/psycopg2/alembic plus
+> `common_db` and `remnawave_client`, so those are built and stored once instead
+> of per service. CI builds and pushes `python-base` before the backend images.
+
 Services:
-- Seller bot webhooks: `127.0.0.1:5000`
-- Dashboard: `127.0.0.1:8080` (FastAPI listens on `:8000` inside the container)
+- Bot webhooks: `127.0.0.1:5000`
+- Dashboard API: `127.0.0.1:8080` (FastAPI listens on `:8000` inside the container)
+- Web (SPAs): `127.0.0.1:8088` (frontend container)
 
 Put a reverse proxy (nginx / Caddy / Traefik) in front to terminate TLS and expose the Dashboard at `/bot/dashboard` and the payment webhook endpoints on your public domain.
 

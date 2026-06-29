@@ -25,12 +25,23 @@ services:
       resources:
         limits:
           memory: 512M
+  # Build-only helper: the shared Python base image. Not started on `up`
+  # (profile `build`). Build it first:  docker compose --profile build build base
+  base:
+    image: ghcr.io/l0nelynx/python-base:${IMAGE_TAG:-staging}
+    build:
+      context: .
+      dockerfile: infra/docker/base.Dockerfile
+    profiles: ["build"]
+    command: ["true"]
   migrate:
     container_name: xray-migrate
     image: ghcr.io/l0nelynx/bot:${IMAGE_TAG:-staging}
     build:
       context: .
       dockerfile: infra/docker/bot.Dockerfile
+      args:
+        BASE_IMAGE: ghcr.io/l0nelynx/python-base:${IMAGE_TAG:-staging}
     command: ["python", "-c", "from migrations_runner import upgrade_to_head; upgrade_to_head()"]
     restart: "no"
     environment:
@@ -50,6 +61,8 @@ services:
     build:
       context: .
       dockerfile: infra/docker/bot.Dockerfile
+      args:
+        BASE_IMAGE: ghcr.io/l0nelynx/python-base:${IMAGE_TAG:-staging}
     volumes:
       - /var/lib/marzban/certs/:/usr/src/app/uvicorn/ssl
       - ./config.yml:/usr/src/app/config.yml
@@ -111,6 +124,8 @@ services:
     build:
       context: .
       dockerfile: infra/docker/dashboard.Dockerfile
+      args:
+        BASE_IMAGE: ghcr.io/l0nelynx/python-base:${IMAGE_TAG:-staging}
     volumes:
       - ./config.yml:/app/config.yml:ro
     networks:
@@ -141,6 +156,8 @@ services:
     build:
       context: .
       dockerfile: infra/docker/miniapp.Dockerfile
+      args:
+        BASE_IMAGE: ghcr.io/l0nelynx/python-base:${IMAGE_TAG:-staging}
     volumes:
       - ./config.yml:/app/config.yml:ro
     networks:

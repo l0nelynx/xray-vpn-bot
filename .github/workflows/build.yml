@@ -23,6 +23,7 @@ jobs:
       dashboard:   ${{ steps.filter.outputs.dashboard }}
       miniapp:     ${{ steps.filter.outputs.miniapp }}
       frontend:    ${{ steps.filter.outputs.frontend }}
+      base:        ${{ steps.filter.outputs.base }}
       # shared — triggers bot + dashboard + miniapp (not support-bot)
       shared:      ${{ steps.filter.outputs.shared }}
       # meta — workflow files changed, rebuild everything
@@ -41,6 +42,13 @@ jobs:
               - 'alembic/**'
               - 'alembic.ini'
               - 'migrations_runner.py'
+
+            # Shared Python base image (common deps + common_db/remnawave_client).
+            base:
+              - 'infra/docker/base.Dockerfile'
+              - 'infra/docker/requirements-base.txt'
+              - 'packages/common_db/**'
+              - 'packages/remnawave_client/**'
 
             # Workflow files changed — rebuild all images to be safe
             meta:
@@ -77,20 +85,25 @@ jobs:
 # and the steps below are identical across all four services.
 # ─────────────────────────────────────────────────────────────────
 
-  build-bot:
+  # Shared base image — built first; the Python backend jobs FROM it.
+  # Its `if` is the UNION of the dependents' conditions, so whenever a dependent
+  # runs, this job has run too (satisfies `needs`) without needing always().
+  build-base:
     needs: detect
-    # rebuild when: bot files changed, shared packages changed, or workflow changed
     if: |
-      needs.detect.outputs.bot    == 'true' ||
-      needs.detect.outputs.shared == 'true' ||
-      needs.detect.outputs.meta   == 'true'
+      needs.detect.outputs.base      == 'true' ||
+      needs.detect.outputs.shared    == 'true' ||
+      needs.detect.outputs.meta      == 'true' ||
+      needs.detect.outputs.bot       == 'true' ||
+      needs.detect.outputs.dashboard == 'true' ||
+      needs.detect.outputs.miniapp   == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     env:
-      SERVICE:    bot
-      DOCKERFILE: ./infra/docker/bot.Dockerfile
+      SERVICE:    python-base
+      DOCKERFILE: ./infra/docker/base.Dockerfile
       CONTEXT:    ./
     steps:
       - uses: actions/checkout@v4
@@ -118,6 +131,54 @@ jobs:
           push:       true
           tags:       ${{ steps.meta.outputs.tags }}
           labels:     ${{ steps.meta.outputs.labels }}
+          build-args: |
+            BASE_IMAGE=${{ env.BASE_IMAGE }}
+
+
+  build-bot:
+    needs: [detect, build-base]
+    # rebuild when: bot files changed, shared packages changed, or workflow changed
+    if: |
+      needs.detect.outputs.bot    == 'true' ||
+      needs.detect.outputs.shared == 'true' ||
+      needs.detect.outputs.meta   == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      SERVICE:    bot
+      DOCKERFILE: ./infra/docker/bot.Dockerfile
+      CONTEXT:    ./
+      BASE_IMAGE: ghcr.io/${{ github.repository_owner }}/python-base:${{ github.ref == 'refs/heads/main' && 'latest' || 'staging' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/${{ env.SERVICE }}
+          tags: |
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=staging,enable=${{ github.ref == 'refs/heads/develop' }}
+            type=sha,prefix=sha-,format=short
+            type=raw,value=build-${{ github.run_number }}
+
+      - uses: docker/build-push-action@v5
+        with:
+          context:    ${{ env.CONTEXT }}
+          file:       ${{ env.DOCKERFILE }}
+          push:       true
+          tags:       ${{ steps.meta.outputs.tags }}
+          labels:     ${{ steps.meta.outputs.labels }}
+          build-args: |
+            BASE_IMAGE=${{ env.BASE_IMAGE }}
 
 
   build-support-bot:
@@ -160,10 +221,12 @@ jobs:
           push:       true
           tags:       ${{ steps.meta.outputs.tags }}
           labels:     ${{ steps.meta.outputs.labels }}
+          build-args: |
+            BASE_IMAGE=${{ env.BASE_IMAGE }}
 
 
   build-dashboard:
-    needs: detect
+    needs: [detect, build-base]
     if: |
       needs.detect.outputs.dashboard == 'true' ||
       needs.detect.outputs.shared    == 'true' ||
@@ -176,6 +239,7 @@ jobs:
       SERVICE:    dashboard
       DOCKERFILE: ./infra/docker/dashboard.Dockerfile
       CONTEXT:    ./
+      BASE_IMAGE: ghcr.io/${{ github.repository_owner }}/python-base:${{ github.ref == 'refs/heads/main' && 'latest' || 'staging' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -202,6 +266,8 @@ jobs:
           push:       true
           tags:       ${{ steps.meta.outputs.tags }}
           labels:     ${{ steps.meta.outputs.labels }}
+          build-args: |
+            BASE_IMAGE=${{ env.BASE_IMAGE }}
 
 
   build-frontend:
@@ -245,10 +311,12 @@ jobs:
           push:       true
           tags:       ${{ steps.meta.outputs.tags }}
           labels:     ${{ steps.meta.outputs.labels }}
+          build-args: |
+            BASE_IMAGE=${{ env.BASE_IMAGE }}
 
 
   build-miniapp:
-    needs: detect
+    needs: [detect, build-base]
     if: |
       needs.detect.outputs.miniapp == 'true' ||
       needs.detect.outputs.shared  == 'true' ||
@@ -261,6 +329,7 @@ jobs:
       SERVICE:    miniapp
       DOCKERFILE: ./infra/docker/miniapp.Dockerfile
       CONTEXT:    ./
+      BASE_IMAGE: ghcr.io/${{ github.repository_owner }}/python-base:${{ github.ref == 'refs/heads/main' && 'latest' || 'staging' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -287,3 +356,5 @@ jobs:
           push:       true
           tags:       ${{ steps.meta.outputs.tags }}
           labels:     ${{ steps.meta.outputs.labels }}
+          build-args: |
+            BASE_IMAGE=${{ env.BASE_IMAGE }}
