@@ -1,9 +1,9 @@
-"""Tests for app.handlers.android_link_merge."""
+"""Tests for the account_linking package (Android<->Telegram merge)."""
 from __future__ import annotations
 
 import pytest
 
-from app.handlers.android_link_merge import _classify
+from account_linking import _classify
 
 
 class TestClassify:
@@ -28,7 +28,7 @@ class TestClassify:
 
 import asyncio
 
-from app.handlers.android_link_merge import _lookup_rw
+from account_linking import _lookup_rw
 
 
 class TestLookupRw:
@@ -74,7 +74,7 @@ class TestLookupRw:
         assert a_info is None
 
 
-from app.handlers.android_link_merge import (
+from account_linking import (
     LookupNotFound,
     _lookup_a_side_rw,
 )
@@ -125,7 +125,7 @@ class TestLookupNotFound:
         assert "missing-short" in str(exc)
 
 
-from app.handlers.android_link_merge import _decide, MergeBlocked
+from account_linking import _decide, MergeBlocked
 
 
 class TestDecide:
@@ -194,7 +194,7 @@ import asyncio as _asyncio
 
 from sqlalchemy import select
 from common_db.models import User
-from app.handlers.android_link_merge import _apply_merge_db
+from account_linking import _apply_merge_db
 
 
 class TestApplyMergeDb:
@@ -256,7 +256,7 @@ class TestApplyMergeDb:
         _asyncio.run(go())
 
 
-from app.handlers.android_link_merge import merge_android_and_tg
+from account_linking import merge_android_and_tg
 
 
 class TestMergeAndroidAndTg:
@@ -543,7 +543,7 @@ class TestFakeRemnawaveShortUuid:
         assert rec is None
 
 
-from app.handlers.android_link_merge import import_subscription_by_uuid
+from account_linking import import_subscription_by_uuid
 
 
 class TestImportSubscriptionByUuid:

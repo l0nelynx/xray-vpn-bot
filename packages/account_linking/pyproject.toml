@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "account-linking"
+version = "0.1.0"
+description = "Shared Android<->Telegram account merge logic used by the seller bot and the miniapp."
+requires-python = ">=3.11"
+dependencies = [
+    "sqlalchemy>=2.0",
+    "common-db",
+    "remnawave-client",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["account_linking*"]

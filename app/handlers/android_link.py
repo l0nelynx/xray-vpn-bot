@@ -161,7 +161,7 @@ async def consume_android_link_code(tg_id: int, code: str) -> str:
 
         if existing_row and existing_row[0] != user_id:
             # Conflict path — merge the two rows.
-            from app.handlers.android_link_merge import (
+            from account_linking import (
                 MergeBlocked, merge_android_and_tg,
             )
             try:

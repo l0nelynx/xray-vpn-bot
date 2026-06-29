@@ -19,6 +19,12 @@ RUN pip install --no-cache-dir /tmp/remnawave_client && rm -rf /tmp/remnawave_cl
 COPY packages/common_db /tmp/common_db
 RUN pip install --no-cache-dir /tmp/common_db && rm -rf /tmp/common_db
 
+# Shared Android<->Telegram merge logic. Depends on common_db and
+# remnawave_client (installed above), so --no-deps avoids PyPI resolution of
+# those local-only packages. See packages/account_linking.
+COPY packages/account_linking /tmp/account_linking
+RUN pip install --no-cache-dir --no-deps /tmp/account_linking && rm -rf /tmp/account_linking
+
 RUN touch ./db.sqlite3
 
 COPY ./app ./app
