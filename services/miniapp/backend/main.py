@@ -8,10 +8,8 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
-from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .config import get_web_allowed_origins
 from .android import auth_router as android_auth_router
@@ -109,26 +107,6 @@ async def health():
     return {"status": "ok"}
 
 
-# Serve Telegram MiniApp SPA
-STATIC_DIR = os.path.join(os.path.dirname(__file__), "..", "static")
-
-if os.path.isdir(STATIC_DIR):
-    assets_dir = os.path.join(STATIC_DIR, "assets")
-    if os.path.isdir(assets_dir):
-        app.mount(f"{BASE_PATH}/assets", StaticFiles(directory=assets_dir), name="assets")
-
-    _miniapp_html = os.path.join(STATIC_DIR, "index.html")
-
-    @app.exception_handler(StarletteHTTPException)
-    async def spa_handler(request, exc):
-        if exc.status_code == 404:
-            path = request.url.path
-            if path.startswith(BASE_PATH) and not path.startswith(f"{BASE_PATH}/api"):
-                if os.path.isfile(_miniapp_html):
-                    return FileResponse(_miniapp_html)
-        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
-
-    @app.get(BASE_PATH)
-    @app.get(f"{BASE_PATH}/{{rest:path}}")
-    async def root(rest: str = ""):
-        return FileResponse(_miniapp_html)
+# The React SPA (Telegram MiniApp + web portal) is built and served by the
+# dedicated `frontend` container (infra/docker/frontend.Dockerfile). This
+# service is a pure JSON API.

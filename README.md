@@ -17,18 +17,67 @@ Advanced Telegram bot suite for selling VPN subscriptions, backed by **Remnawave
 
 ## Architecture
 
-The project ships three containers orchestrated by `docker-compose.yml`:
+Services live under `services/`, shared Python packages under `packages/`, the
+frontends and their shared packages under `web/`, and all Dockerfiles under
+`infra/docker/`. `docker-compose.yml` orchestrates these containers:
 
 | Service | Image | Purpose |
 |---------|-------|---------|
-| `seller-bot` | `ghcr.io/l0nelynx/seller-bot` | Main user-facing Telegram bot + payment webhooks (port `5000`) |
-| `support-bot` | `ghcr.io/l0nelynx/support-bot` | Standalone bot for user↔admin conversations |
-| `dashboard` | `ghcr.io/l0nelynx/dashboard` | React + FastAPI admin panel (port `8000`, mapped to `8080` on host) |
+| `bot` | `ghcr.io/l0nelynx/bot` | Main user-facing Telegram bot + payment webhooks (port `5000`). Keeps a `seller-bot` network alias for backwards compatibility. |
+| `support-bot` | `ghcr.io/l0nelynx/support-bot` | Legacy standalone bot for user↔admin conversations (own SQLite). |
+| `dashboard` | `ghcr.io/l0nelynx/dashboard` | FastAPI admin **API** (port `8000`). |
+| `miniapp` | `ghcr.io/l0nelynx/miniapp` | FastAPI **API** for the Telegram MiniApp / web portal / Android (port `8001`). |
+| `frontend` | `ghcr.io/l0nelynx/frontend` | nginx serving both built SPAs and reverse-proxying API/webhook traffic to the backends (port `80`). |
+| `postgres` / `migrate` | `postgres:16` / `bot` image | Shared database and one-shot Alembic migrations. |
+
+The backends are **pure JSON APIs** — the React SPAs are built once and served by
+the `frontend` container, not by FastAPI.
 
 Images are built by CI (`.github/workflows/build.yml` and `.gitlab-ci.yml`) and published as:
 - `:latest` — built from `main`
 - `:staging` — built from `develop`
 - `:sha-<short>` / `:build-<n>` — immutable per-build tags
+
+### Web tier & reverse proxy
+
+The `frontend` container (`infra/docker/frontend.Dockerfile` +
+`infra/docker/frontend.nginx.conf`) is the single web upstream. It bakes in the
+built dashboard and miniapp SPAs and routes by URL prefix (every API endpoint
+lives under `.../api`, so the static-vs-API split is unambiguous):
+
+| Path | Target |
+|------|--------|
+| `/bot/dashboard/api/…` | `dashboard:8000` (admin API) |
+| `/bot/dashboard/…` | dashboard SPA (static, SPA fallback) |
+| `/bot/miniapp/api/…` | `miniapp:8001` (miniapp / web portal / android API) |
+| `/bot/miniapp/…` | miniapp SPA (static, SPA fallback) |
+| `/bot/…` | `bot:5000` (payment webhooks, e.g. `/bot/apays_webhook`) |
+| `/` | miniapp SPA (public web portal entry) |
+
+Your **edge nginx** (TLS / domain termination) only needs to forward everything
+to the `frontend` container — it no longer needs per-service `location` blocks:
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name example.com;
+    # ... ssl_certificate / ssl_certificate_key ...
+
+    location / {
+        proxy_pass http://frontend:80;          # the frontend container
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+The edge nginx must share the `backend-network` with the `frontend` container so
+`frontend:80` resolves. The internal routing (static + API split) is owned by
+`frontend.nginx.conf`; if you prefer to keep routing in the edge nginx instead,
+mirror the prefix table above there and point each `/…/api/` at the matching
+backend while serving the SPAs from the `frontend` container.
 
 ## Dashboard
 

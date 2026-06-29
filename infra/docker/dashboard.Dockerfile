@@ -1,22 +1,9 @@
 # Build context for this Dockerfile is the repository root.
 # Use:  docker build -f infra/docker/dashboard.Dockerfile .
+#
+# Pure JSON API. The SPA is built and served by the `frontend` container
+# (infra/docker/frontend.Dockerfile).
 
-# Stage 1: Build React frontend (npm workspaces — needs the root manifest and
-# the shared web/packages alongside this app).
-FROM node:20-alpine AS frontend-build
-WORKDIR /build
-COPY package.json package-lock.json* ./
-COPY web/packages ./web/packages
-# Both workspace frontends are listed in the root manifest, so their package
-# manifests must be present for the workspace install to resolve. Only the
-# target app is built.
-COPY web/apps/dashboard/package.json ./web/apps/dashboard/package.json
-COPY web/apps/miniapp/package.json ./web/apps/miniapp/package.json
-RUN npm ci || npm install
-COPY web/apps/dashboard ./web/apps/dashboard
-RUN npm run build -w xray-vpn-dashboard
-
-# Stage 2: Python runtime
 FROM python:3.13-alpine
 WORKDIR /app
 
@@ -39,7 +26,6 @@ COPY services/dashboard/backend/ ./backend/
 COPY alembic ./alembic
 COPY alembic.ini ./alembic.ini
 COPY migrations_runner.py ./migrations_runner.py
-COPY --from=frontend-build /build/web/apps/dashboard/dist ./static/
 
 EXPOSE 8000
 

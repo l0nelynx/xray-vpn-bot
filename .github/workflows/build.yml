@@ -22,6 +22,7 @@ jobs:
       support_bot: ${{ steps.filter.outputs.support_bot }}
       dashboard:   ${{ steps.filter.outputs.dashboard }}
       miniapp:     ${{ steps.filter.outputs.miniapp }}
+      frontend:    ${{ steps.filter.outputs.frontend }}
       # shared — triggers bot + dashboard + miniapp (not support-bot)
       shared:      ${{ steps.filter.outputs.shared }}
       # meta — workflow files changed, rebuild everything
@@ -53,23 +54,23 @@ jobs:
               - 'services/support_bot/**'
               - 'infra/docker/support_bot.Dockerfile'
 
-            # Frontends are npm workspaces: they also depend on the shared
-            # web/packages and the root manifest/lockfile.
+            # Backends are now pure JSON APIs — the SPAs live in the `frontend`
+            # image, so frontend source no longer rebuilds these.
             dashboard:
               - 'services/dashboard/**'
-              - 'web/apps/dashboard/**'
-              - 'web/packages/**'
-              - 'package.json'
-              - 'package-lock.json'
               - 'infra/docker/dashboard.Dockerfile'
 
             miniapp:
               - 'services/miniapp/**'
-              - 'web/apps/miniapp/**'
-              - 'web/packages/**'
+              - 'infra/docker/miniapp.Dockerfile'
+
+            # Single web tier: both SPAs (npm workspaces) + nginx reverse proxy.
+            frontend:
+              - 'web/**'
               - 'package.json'
               - 'package-lock.json'
-              - 'infra/docker/miniapp.Dockerfile'
+              - 'infra/docker/frontend.Dockerfile'
+              - 'infra/docker/frontend.nginx.conf'
 
 # ─────────────────────────────────────────────────────────────────
 # Shared build steps — each job sets SERVICE/DOCKERFILE env vars
@@ -174,6 +175,49 @@ jobs:
     env:
       SERVICE:    dashboard
       DOCKERFILE: ./infra/docker/dashboard.Dockerfile
+      CONTEXT:    ./
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/${{ env.SERVICE }}
+          tags: |
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=staging,enable=${{ github.ref == 'refs/heads/develop' }}
+            type=sha,prefix=sha-,format=short
+            type=raw,value=build-${{ github.run_number }}
+
+      - uses: docker/build-push-action@v5
+        with:
+          context:    ${{ env.CONTEXT }}
+          file:       ${{ env.DOCKERFILE }}
+          push:       true
+          tags:       ${{ steps.meta.outputs.tags }}
+          labels:     ${{ steps.meta.outputs.labels }}
+
+
+  build-frontend:
+    needs: detect
+    # The web tier depends only on web/** and its Dockerfile/nginx conf — not on
+    # the python `shared` packages.
+    if: |
+      needs.detect.outputs.frontend == 'true' ||
+      needs.detect.outputs.meta     == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      SERVICE:    frontend
+      DOCKERFILE: ./infra/docker/frontend.Dockerfile
       CONTEXT:    ./
     steps:
       - uses: actions/checkout@v4
