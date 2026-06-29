@@ -1,5 +1,0 @@
-sqlalchemy>=2.0
-
-[test]
-pytest>=8
-aiosqlite>=0.19
