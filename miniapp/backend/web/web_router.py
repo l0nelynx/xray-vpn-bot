@@ -55,7 +55,7 @@ from ..android.schemas import AuthResponse, UserSummary
 from ..database.session import async_session
 from ..config import get_bot_token, get_tg_client_secret
 from ..notify_log import esc, notify_log
-from ..remnawave_client import get_user_from_username as _rw_get_by_username
+from remnawave_client.api import get_user_from_username as _rw_get_by_username
 from ..payments import InvoiceRequest, PaymentError, create_invoice, get_provider
 from . import brute_force
 from common_db.models.promo_redemptions import PromoRedemption, REDEMPTION_ACTIVE

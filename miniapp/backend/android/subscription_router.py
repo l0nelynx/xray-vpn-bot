@@ -26,7 +26,7 @@ from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.exc import IntegrityError
 
 from ..notify_log import esc, notify_log
-from ..remnawave_client import get_user_by_short_uuid_raw
+from remnawave_client.api import get_user_by_short_uuid_raw
 from . import deps, repo, security
 from .auth_router import _issue_pair, _user_summary, limiter
 from .schemas import AuthResponse

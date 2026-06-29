@@ -432,7 +432,7 @@ async def _handle_update_subscription(
     """Handle subscription update (replacement)"""
     # Lazy import to avoid circular dependency
     from app.handlers.tools import get_user_days
-    from app.api.remnawave.api import reset_user_traffic
+    from remnawave_client.api import reset_user_traffic
     import app.database.requests as rq_update
 
     # При переходе с FREE на PAID — ставим PRO squad, при FREE — FREE squad

@@ -108,30 +108,19 @@ class FakeRemnawave:
 @pytest.fixture
 def fake_remnawave(monkeypatch) -> FakeRemnawave:
     fake = FakeRemnawave()
-    import app.api.remnawave.api as rem
+    # Both the seller bot and the miniapp now go through the single shared
+    # facade `remnawave_client.api`; patching it covers every caller that uses
+    # attribute access (`rem.get_user_from_email(...)`), including the
+    # module-level `resolve_remnawave_user`. Callers that bound the functions by
+    # name at import time patch their own module reference too (see
+    # test_link_by_url_router.py).
+    import remnawave_client.api as rem
     monkeypatch.setattr(rem, "get_user_from_email", fake.get_user_from_email)
     monkeypatch.setattr(rem, "get_user_from_username", fake.get_user_from_username)
-    monkeypatch.setattr(rem, "update_user", fake.update_user)
-    # get_user_from_uuid не существует в api shim — добавляем атрибут.
-    monkeypatch.setattr(rem, "get_user_from_uuid", fake.get_user_from_uuid,
-                        raising=False)
+    monkeypatch.setattr(rem, "get_user_from_uuid", fake.get_user_from_uuid)
     monkeypatch.setattr(rem, "get_user_by_short_uuid_raw",
-                        fake.get_user_by_short_uuid_raw, raising=False)
-    # Mirror onto the miniapp shim so router tests that import
-    # `..remnawave_client as rem` see the same fake.
-    try:
-        import miniapp.backend.remnawave_client as mrem
-        monkeypatch.setattr(mrem, "get_user_from_email",
-                            fake.get_user_from_email)
-        monkeypatch.setattr(mrem, "get_user_from_username",
-                            fake.get_user_from_username)
-        monkeypatch.setattr(mrem, "get_user_from_uuid",
-                            fake.get_user_from_uuid, raising=False)
-        monkeypatch.setattr(mrem, "get_user_by_short_uuid_raw",
-                            fake.get_user_by_short_uuid_raw, raising=False)
-        monkeypatch.setattr(mrem, "update_user", fake.update_user)
-    except ImportError:
-        pass
+                        fake.get_user_by_short_uuid_raw)
+    monkeypatch.setattr(rem, "update_user", fake.update_user)
     return fake
 
 

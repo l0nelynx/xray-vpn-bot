@@ -205,7 +205,7 @@ async def consume_android_link_code(tg_id: int, code: str) -> str:
             # Best-effort RW deactivate. Errors don't roll back the merge.
             if merge["loser_rw_uuid"]:
                 try:
-                    import app.api.remnawave.api as rem
+                    from remnawave_client import api as rem
                     await rem.update_user(
                         user_uuid=merge["loser_rw_uuid"], status="disabled",
                     )

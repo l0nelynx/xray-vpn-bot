@@ -46,7 +46,7 @@ async def _lookup_rw(
     must continue even if Remnawave is temporarily down.
     """
     import asyncio
-    import app.api.remnawave.api as rem
+    from remnawave_client import api as rem
 
     async def safe(coro):
         try:
@@ -94,7 +94,7 @@ async def _lookup_a_side_rw(
     branch of `_lookup_rw` but without the TG-side concurrent fetch — the
     by_url flow already has B-side loaded via short_uuid.
     """
-    import app.api.remnawave.api as rem
+    from remnawave_client import api as rem
 
     if vless_uuid:
         try:
@@ -348,7 +348,7 @@ async def import_subscription_by_uuid(
     uuid (if any) is the caller's responsibility too — this function
     does not touch the Remnawave API beyond read lookups.
     """
-    import app.api.remnawave.api as rem
+    from remnawave_client import api as rem
     from common_db.models import User
 
     a = await session.get(User, current_user_id)

@@ -96,6 +96,19 @@ def get_apay_secret() -> str:
     return get_config().get("apay_secret", "")
 
 
+# Wire the shared Remnawave client to the miniapp's config. The module-level
+# helpers in `remnawave_client.api` lazily configure the default client from
+# this provider on first use (replaces the old miniapp.backend.remnawave_client
+# shim).
+import remnawave_client as _remna
+
+_remna.set_config_provider(lambda: {
+    "base_url": get_remnawave_url(),
+    "token": get_remnawave_token(),
+    "free_squad_id": get_rw_free_id(),
+})
+
+
 def get_apay_api_url() -> str:
     return get_config().get("apay_api_url", "")
 

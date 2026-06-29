@@ -8,7 +8,7 @@ from aiogram.types import (
 from aiogram.exceptions import TelegramForbiddenError, TelegramBadRequest, TelegramNotFound
 
 import app.database.requests as rq
-import app.api.remnawave.api as rem
+from remnawave_client import api as rem
 from app.handlers.tools import check_tg_subscription
 from app.settings import secrets, bot
 from .router import is_admin, BTN_SUB_CLEAN

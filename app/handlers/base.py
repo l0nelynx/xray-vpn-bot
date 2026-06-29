@@ -442,7 +442,7 @@ async def subcheck_reactivate(callback: CallbackQuery):
         return
 
     # User is subscribed again — restore original status
-    import app.api.remnawave.api as rem
+    from remnawave_client import api as rem
 
     user_ctx = await rq.get_user_full_context(tg_id)
     if not user_ctx or not user_ctx.get("vless_uuid"):

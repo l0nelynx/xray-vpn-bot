@@ -66,7 +66,7 @@ class TestLookupRw:
     def test_swallows_exceptions_returns_none(self, fake_remnawave, monkeypatch):
         async def boom(*a, **kw):
             raise RuntimeError("network down")
-        import app.api.remnawave.api as rem
+        from remnawave_client import api as rem
         monkeypatch.setattr(rem, "get_user_from_email", boom)
         a_info, _ = asyncio.run(_lookup_rw(
             email="a@x.io", vless_uuid=None, username=None,
@@ -108,7 +108,7 @@ class TestLookupASideRw:
     def test_swallows_exceptions_returns_none(self, fake_remnawave, monkeypatch):
         async def boom(*a, **kw):
             raise RuntimeError("network down")
-        import app.api.remnawave.api as rem
+        from remnawave_client import api as rem
         monkeypatch.setattr(rem, "get_user_from_uuid", boom)
         result = asyncio.run(_lookup_a_side_rw(
             vless_uuid="a-uuid", email=None,
@@ -531,14 +531,14 @@ class TestFakeRemnawaveShortUuid:
             uuid="b-uuid", short_uuid="sN_xxxxxxxxxxxx",
             status="active", data_limit=None, email="b@x.io",
         )
-        import app.api.remnawave.api as rem
+        from remnawave_client import api as rem
         rec = _asyncio.run(rem.get_user_by_short_uuid_raw("sN_xxxxxxxxxxxx"))
         assert rec is not None
         assert rec["uuid"] == "b-uuid"
         assert rec["status"] == "active"
 
     def test_short_uuid_lookup_returns_none_for_unknown(self, fake_remnawave):
-        import app.api.remnawave.api as rem
+        from remnawave_client import api as rem
         rec = _asyncio.run(rem.get_user_by_short_uuid_raw("missing"))
         assert rec is None
 

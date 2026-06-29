@@ -25,10 +25,10 @@ from ..config import (
     get_rw_pro_id,
     get_support_bot_link,
 )
-from ..remnawave_client import (
+from remnawave_client.api import (
     delete_user_hwid_device,
     get_user_devices_count,
-    get_user_hwid_devices,
+    list_user_hwid_devices,
     resolve_remnawave_user,
 )
 from . import deps, iap_repo, repo
@@ -176,7 +176,7 @@ async def list_devices(
     uuid = await _resolve_remnawave_uuid(user)
     if not uuid:
         return AndroidDevicesResponse(total=0, devices=[])
-    devices = await get_user_hwid_devices(uuid)
+    devices = await list_user_hwid_devices(uuid)
     items = [AndroidDeviceItem(**d) for d in devices]
     return AndroidDevicesResponse(total=len(items), devices=items)
 

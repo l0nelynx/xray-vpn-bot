@@ -118,7 +118,7 @@ async def deliver_android_paid(
     # Запрашиваем Remnawave напрямую — `tools.get_user_info` нормализует
     # ответ под старый Marzban-клиент и теряет поле `uuid`, из-за чего
     # ветка EXTEND падала с "extend without uuid".
-    import app.api.remnawave.api as rem
+    from remnawave_client import api as rem
     info = await rem.get_user_from_username(username)
     scenario = resolve_scenario(info, SubscriptionType.PAID)
 

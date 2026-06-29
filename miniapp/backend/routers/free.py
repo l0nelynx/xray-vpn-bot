@@ -10,7 +10,7 @@ from ..database.session import async_session
 
 from common_db.repo import system as _repo_system
 from common_db.repo import users as _repo_users
-from ..remnawave_client import create_user, get_user_from_username, update_user
+from remnawave_client.api import create_user, get_user_from_username, update_user
 from ..telemt_client import create_telemt_user, first_link, get_telemt_user
 from ..tg_auth import TgUser, get_tg_user
 from ..tg_channel import is_user_subscribed_to_news
@@ -141,6 +141,7 @@ async def free_claim(tg: TgUser = Depends(get_tg_user)) -> ClaimResponse:
         days=days,
         limit_gb=limit_gb,
         descr="Free trial via miniapp",
+        email=f"{user.username}@miniapp.xyz",
         telegram_id=tg.tg_id,
         squad_id=free_squad,
     )

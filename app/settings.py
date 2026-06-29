@@ -57,3 +57,14 @@ if secrets.get('admin_bot_token'):
     admin_bot = Bot(token=secrets.get('admin_bot_token'))
 else:
     admin_bot = None
+
+# Wire the shared Remnawave client to this service's settings. The module-level
+# helpers in `remnawave_client.api` lazily configure the default client from
+# this provider on first use (replaces the old app.api.remnawave.api shim).
+import remnawave_client as _remna
+
+_remna.set_config_provider(lambda: {
+    "base_url": secrets.get("remnawave_url"),
+    "token": secrets.get("remnawave_token"),
+    "free_squad_id": secrets.get("rw_free_id"),
+})

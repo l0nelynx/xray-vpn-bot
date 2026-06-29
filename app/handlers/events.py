@@ -2,7 +2,7 @@ import logging
 
 import app.database.requests as rq
 import app.keyboards as kb
-import app.api.remnawave.api as rem
+from remnawave_client import api as rem
 from app.locale.utils import get_user_lang
 from app.database.models import async_main
 from app.settings import bot, admin_bot, secrets

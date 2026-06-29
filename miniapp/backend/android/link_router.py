@@ -21,7 +21,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from ..config import get_bot_url, get_subscription_host
 from ..database.session import async_session
 from ..notify_log import esc, notify_log
-from ..remnawave_client import update_user
+from remnawave_client.api import update_user
 from . import auth_router, deps, repo, security
 from .schemas_data import LinkByUrlRequest, LinkByUrlResponse, LinkStartResponse
 

@@ -67,7 +67,7 @@ async def admin_email_save(message: Message, state: FSMContext):
     info = await rq.get_user_full_info_by_tg_id(tg_id)
     if info:
         try:
-            from app.api.remnawave.api import get_user_from_email
+            from remnawave_client.api import get_user_from_email
             rw_user = await get_user_from_email(email)
             if rw_user and rw_user.get("uuid"):
                 await rq.update_user_api_info(

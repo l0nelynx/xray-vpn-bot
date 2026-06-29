@@ -7,9 +7,9 @@ from ..database.models import User
 from ..database.session import async_session
 
 from common_db.repo import users as _repo_users
-from ..remnawave_client import (
+from remnawave_client.api import (
     delete_user_hwid_device,
-    get_user_hwid_devices,
+    list_user_hwid_devices,
     resolve_remnawave_user,
 )
 from ..schemas.devices import DeviceItem, DevicesResponse
@@ -42,7 +42,7 @@ async def _resolve_user_uuid(tg: TgUser) -> str:
 @router.get("", response_model=DevicesResponse)
 async def list_devices(tg: TgUser = Depends(get_tg_user)) -> DevicesResponse:
     user_uuid = await _resolve_user_uuid(tg)
-    devices = await get_user_hwid_devices(user_uuid)
+    devices = await list_user_hwid_devices(user_uuid)
     items = [DeviceItem(**d) for d in devices]
     return DevicesResponse(total=len(items), devices=items)
 

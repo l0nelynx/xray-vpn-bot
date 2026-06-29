@@ -5,7 +5,7 @@ from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 
 import app.database.requests as rq
-import app.api.remnawave.api as rem
+from remnawave_client import api as rem
 from app.locale.utils import get_user_lang
 
 logger = logging.getLogger(__name__)

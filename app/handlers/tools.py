@@ -1,7 +1,7 @@
 import time
 import uuid
 
-import app.api.remnawave.api as rem
+from remnawave_client import api as rem
 # import app.marzban.marzban as mz  # DISABLED: Marzban removed, Remnawave is primary API
 import app.database.requests as rq
 

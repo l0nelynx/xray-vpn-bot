@@ -17,7 +17,7 @@ from ..database.models import User
 from ..database.session import async_session
 
 from common_db.repo import users as _repo_users
-from ..remnawave_client import get_user_devices_count, resolve_remnawave_user
+from remnawave_client.api import get_user_devices_count, resolve_remnawave_user
 from ..schemas.me import LinksInfo, MeResponse, SubscriptionInfo, UserInfo
 from ..tg_auth import TgUser, get_tg_user
 
