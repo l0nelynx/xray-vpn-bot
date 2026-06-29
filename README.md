@@ -56,21 +56,24 @@ static-vs-API split is unambiguous:
 | `/bot/…` | `bot:5000` (payment webhooks, e.g. `/bot/apays_webhook`) |
 | `/` | `frontend:80` (miniapp SPA — public web portal entry) |
 
-The edge nginx must share the `backend-network` so the upstream names resolve.
-`proxy_pass` directives without a trailing path preserve the original URI, so the
-`frontend` container receives the same `/bot/<app>/…` path it serves, and each
-backend receives its `/bot/<app>/api/…` path unchanged.
+The edge nginx must share the `backend-network` so the container names resolve.
+
+> **Important:** do NOT use `upstream { server dashboard:8000; }` blocks (or a
+> bare `proxy_pass http://dashboard:8000;`). nginx resolves those names **at
+> startup** and aborts with `[emerg] host not found in upstream` if a backend
+> isn't running/resolvable yet. Instead, use Docker's embedded DNS resolver
+> (`127.0.0.11`) and put the target in a **variable** — that defers resolution
+> to request time. With a variable you must append `$request_uri` to preserve
+> the path (and the backend receives the original `/bot/<app>/…` URI unchanged).
 
 ```nginx
-upstream frontend      { server frontend:80; }
-upstream dashboard_api { server dashboard:8000; }
-upstream miniapp_api   { server miniapp:8001; }
-upstream bot_api       { server bot:5000; }
-
 server {
     listen 443 ssl;
     server_name example.com;
     # ... ssl_certificate / ssl_certificate_key ...
+
+    # Docker's embedded DNS — required for the runtime resolution below.
+    resolver 127.0.0.11 valid=30s ipv6=off;
 
     # Shared proxy headers.
     proxy_set_header Host              $host;
@@ -79,18 +82,36 @@ server {
     proxy_set_header X-Forwarded-Proto $scheme;
 
     # APIs — longest-prefix match wins, so these beat the SPA blocks below.
-    location /bot/dashboard/api/ { proxy_pass http://dashboard_api; }
-    location /bot/miniapp/api/   { proxy_pass http://miniapp_api; }
+    location /bot/dashboard/api/ {
+        set $up dashboard:8000;
+        proxy_pass http://$up$request_uri;
+    }
+    location /bot/miniapp/api/ {
+        set $up miniapp:8001;
+        proxy_pass http://$up$request_uri;
+    }
 
     # SPAs (static) -> frontend container.
-    location /bot/dashboard/ { proxy_pass http://frontend; }
-    location /bot/miniapp/   { proxy_pass http://frontend; }
+    location /bot/dashboard/ {
+        set $up frontend:80;
+        proxy_pass http://$up$request_uri;
+    }
+    location /bot/miniapp/ {
+        set $up frontend:80;
+        proxy_pass http://$up$request_uri;
+    }
 
     # Payment webhooks and other bot endpoints.
-    location /bot/ { proxy_pass http://bot_api; }
+    location /bot/ {
+        set $up bot:5000;
+        proxy_pass http://$up$request_uri;
+    }
 
     # Public web portal entry -> miniapp SPA.
-    location / { proxy_pass http://frontend; }
+    location / {
+        set $up frontend:80;
+        proxy_pass http://$up$request_uri;
+    }
 }
 ```
 
