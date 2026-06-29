@@ -1,76 +1,55 @@
-# Database Schema
+# Database
 
-The project runs against **PostgreSQL 16** in production (separate `postgres` container, data on the `./pg_data` volume), with a **SQLite fallback** for local development when `DATABASE_URL` is not set. Schema is defined via SQLAlchemy ORM and applied through Alembic.
+Production runs on **PostgreSQL 16** (separate `postgres` container, data on the
+`./pg_data` volume). A **SQLite fallback** is used for local dev when
+`DATABASE_URL` is unset. The schema is defined as SQLAlchemy ORM and applied with
+Alembic.
 
-All services (`seller-bot`, `miniapp`, `dashboard`) share the same database. `support-bot` keeps its own SQLite file under `./db/` and is unaffected by the Postgres switch.
+All backends (`bot`, `dashboard`, `miniapp`) share the same database through the
+`common_db` package. The legacy `support-bot` keeps its own SQLite under `./db/`.
 
-The active backend is selected by the `DATABASE_URL` environment variable:
-- `postgresql+asyncpg://user:pw@postgres:5432/xray_vpn_bot` — production, async driver for the apps.
-- unset → `sqlite+aiosqlite:///db/db.sqlite3` — local dev fallback (resolved by `app/db_url.py`).
+## Single source of truth: `common_db`
 
-Sync variants (`postgresql+psycopg2://...`, `sqlite:///...`) are used by Alembic and the one-shot data migrator only.
+`packages/common_db` owns everything DB-related, shared by every backend:
 
-## Main Tables
+- **`common_db.base`** — the single `Base` / `Base.metadata` (Alembic
+  autogenerates against it).
+- **`common_db.models`** — all ORM models (`users`, `transactions`, `tariffs`,
+  `promos`, `support`, `menus`, `google_play`, `auth`, `system`, …).
+- **`common_db.repo`** — reusable query helpers (users, promos, support, system)
+  so query logic isn't duplicated across services.
+- **`common_db.url` / `common_db.session`** — `DATABASE_URL` resolution and the
+  async engine/sessionmaker factory.
 
-### `users`
-Stores information about Telegram users and their VPN profiles.
-- `id`: Internal primary key.
-- `tg_id`: Telegram User ID (unique).
-- `username`: Telegram username.
-- `vless_uuid`: The UUID assigned to the user in the VPN panel.
-- `api_provider`: The VPN panel provider (e.g., "remnawave").
-- `email`: User email (often used as the identifier in Remnawave).
-- `is_banned`: Boolean flag for user access.
-- `language`: User's preferred language (en/ru).
-- `vip`: Integer flag for VIP status.
+The backend selected by `DATABASE_URL`:
+- `postgresql+asyncpg://…@postgres:5432/…` — production (async driver).
+- unset → `sqlite+aiosqlite:///…` — local dev fallback.
+Sync variants (`postgresql+psycopg2://…`, `sqlite:///…`) are used by Alembic.
 
-### `transactions`
-Records all payment attempts and completed orders.
-- `transaction_id`: External ID from the payment provider.
-- `vless_uuid`: User's VPN UUID.
-- `order_status`: Current status (e.g., "paid", "pending").
-- `payment_method`: Provider used (e.g., "cryptobot", "stars").
-- `amount`: Transaction amount.
-- `days_ordered`: Duration of the purchased subscription.
-- `tariff_slug`: Identifier of the purchased tariff.
+## Key tables
 
-### `tariff_plans`
-Defines the available VPN subscription plans.
-- `name`: Display name.
-- `slug`: Unique identifier.
-- `duration_days`: Plan length.
-- `is_active`: Visibility toggle.
-- `squad_id`: The Remnawave squad assigned to this plan.
+| Table | Purpose |
+|-------|---------|
+| `users` | Telegram/web/Android users + VPN profile (`tg_id`, `email`, `vless_uuid`, `is_banned`, `language`, `vip`). |
+| `transactions` | Payments/orders (`transaction_id`, `order_status`, `payment_method`, `amount`, `days_ordered`, `tariff_slug`, `delivery_status`). |
+| `tariff_plans` / `tariff_prices` | Subscription plans + per-currency pricing; `squad_id` binds a plan to a Remnawave squad. |
+| `promos` / `promo_redemptions` | Promo codes, discounts, bonus days, referrals. |
+| `support_tickets` / `support_messages` | In-app support ticketing. |
+| `menu_screens` / `menu_buttons` (webapp menu) | Dynamic menu structure configured in the Dashboard. |
+| `google_play_*` | Google Play IAP SKUs and purchases. |
+| `email_verifications` / `refresh_tokens` | Web/Android registration + JWT refresh. |
 
-### `tariff_prices`
-Stores pricing for tariffs in different currencies.
-- `tariff_id`: Link to `tariff_plans`.
-- `currency`: e.g., "stars", "usdt", "rub".
-- `amount`: The price value.
+The full, authoritative set lives in `packages/common_db/common_db/models/`.
 
-### `promos`
-Manages promotional codes and rewards.
-- `promo_code`: The code string.
-- `discount_percent`: Percentage discount.
-- `days_rewarded`: Extra days granted.
+## Migrations
 
-### `support_tickets` & `support_messages`
-Handles support interactions.
-- `subject`: Ticket topic.
-- `message`: Initial user message.
-- `status`: "open", "closed", etc.
-- `messages`: Individual replies between user and admin.
+Schema changes go exclusively through **Alembic** (`alembic/versions/`). The
+one-shot `migrate` container runs `alembic upgrade head` on startup; the app
+services wait for it (`depends_on: service_completed_successfully`) and run no
+ad-hoc DDL of their own.
 
-### `webapp_menu_nodes`
-Stores the dynamic menu structure configured in the Dashboard.
-- `parent_id`: For nested menus.
-- `text`: Button label.
-- `action`: Type of action (e.g., "link", "buttons", "invoice").
-
-## Migration & Initialization
-
-Schema is managed exclusively by **Alembic** (`alembic/versions/`). The `migrate` init container in `docker-compose.yml` runs `alembic upgrade head` once on startup; `seller-bot`, `miniapp`, and `dashboard` wait for it via `depends_on: service_completed_successfully` before they boot.
-
-- Online services no longer run ad-hoc DDL — the legacy `_check_and_migrate` (bot) and dashboard startup DDL were folded into Alembic revision `0006_postgres_compat`.
-- For local dev without Docker, run `python -c "from migrations_runner import upgrade_to_head; upgrade_to_head()"` after creating the SQLite file.
-- One-shot SQLite → Postgres data copy lives in `scripts/sqlite_to_postgres.py` (see `docs/postgres-migration-runbook.md`).
+- Autogenerate target is `common_db.Base.metadata` (`alembic/env.py`).
+- Local dev without Docker:
+  `python -c "from migrations_runner import upgrade_to_head; upgrade_to_head()"`.
+- Drift guards in `packages/common_db/tests/` keep models, the canonical table
+  set and Alembic HEAD aligned.

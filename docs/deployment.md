@@ -1,85 +1,101 @@
-# Deployment and Configuration
+# Deployment
 
-The XRAY-VPN-BOT is designed for containerized deployment using Docker and Docker Compose. This ensures a consistent environment for all components.
+Containerised deployment via Docker Compose. See [architecture.md](architecture.md)
+for the container list and networking model.
 
 ## Prerequisites
 
--   Docker and Docker Compose installed on the host machine.
--   A Telegram Bot token (from @BotFather).
--   A Remnawave API token.
--   (Optional) Credentials for payment gateways (CryptoBot, Crystal Pay, etc.).
+- Docker + Docker Compose.
+- A Telegram bot token (and optionally separate admin/support tokens).
+- A Remnawave URL + API token.
+- (Optional) payment-gateway credentials.
 
-## Configuration (`config.yml`)
+## Configuration
 
-1.  Copy the example configuration: `cp config-example.yml config.yml`.
-2.  Edit `config.yml` with your specific settings.
-    -   **Branding**: Set your service name and links.
-    -   **Tokens**: Enter your Telegram bot tokens (main, support, admin).
-    -   **Remnawave**: Provide the URL and API token for your panel.
-    -   **Dashboard**: Set the login, password, and a random secret for JWT.
-    -   **Payments**: Add API keys for any payment gateways you wish to use.
+### `config.yml`
+Application config (tokens, Remnawave, dashboard creds, payment keys, branding):
 
-## Deployment with Docker Compose
+```bash
+cp config-example.yml config.yml   # then edit
+```
 
-The `docker-compose.yml` file defines six services:
+It is mounted read-only into the backends (`bot`, `dashboard`, `miniapp`) and the
+`support-bot`. Key groups: branding, bot tokens, `remnawave_url` /
+`remnawave_token`, `dashboard_login` / `dashboard_password` / `dashboard_secret`,
+payment-gateway keys, `telemt_*`.
 
-1.  **`postgres`**: PostgreSQL 16 (alpine). Data lives in `./pg_data`. Healthchecked via `pg_isready`. Not exposed to the host — only reachable on the `backend-network`.
-2.  **`migrate`**: One-shot init container. Runs Alembic `upgrade head` against `DATABASE_URL`, then exits. `restart: "no"`. App services wait on `service_completed_successfully` before starting.
-3.  **`seller-bot`**: Main bot + FastAPI server for payment webhooks. **Ports**: `127.0.0.1:5000 → 5000`.
-4.  **`miniapp`**: Telegram WebApp + Android API backend. Internal port `8001`, exposed through the seller-bot proxy.
-5.  **`support-bot`**: Standalone support bot. Still uses its own SQLite file under `./db/`.
-6.  **`dashboard`**: Admin dashboard backend + bundled frontend. **Ports**: `127.0.0.1:8080 → 8000`.
-
-### Environment variables
-
-Copy `.env.example` to `.env` and fill in:
+### `.env`
+Compose-level variables (`cp .env.example .env`):
 
 ```dotenv
 POSTGRES_USER=xray
-POSTGRES_PASSWORD=...       # required, compose refuses to start if empty
+POSTGRES_PASSWORD=...        # required — compose refuses to start if empty
 POSTGRES_DB=xray_vpn_bot
 IMAGE_TAG=staging
+# REGISTRY=ghcr.io/l0nelynx/  # default (pull from ghcr). Set EMPTY to build/run
+#                             # fully locally without pulling (see below).
 ```
 
 `DATABASE_URL` is composed automatically inside compose:
-`postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}`
+`postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}`.
 
-### Initial Setup
-
-```bash
-# Create the external network (if required by your setup)
-docker network create backend-network
-
-# Postgres data volume — first start creates the DB
-mkdir -p pg_data
-
-# Support-bot still uses SQLite
-mkdir -p db
-touch db/db.sqlite3
-```
-
-### Launching
-
-Startup order is enforced by `depends_on`: `postgres` (healthy) → `migrate` (completed) → `seller-bot` / `miniapp` / `dashboard`.
+## Networks
 
 ```bash
-docker compose up -d --build
+docker network create backend-network    # external edge network (once)
+```
+`backend-network` (edge) is external and shared with the reverse-proxy nginx.
+`data-network` (private, `internal: true`) is created by compose and carries
+PostgreSQL — it has no gateway, so the DB is never exposed outward.
+
+## Images & build
+
+Backends share a `python-base` image (common deps built once). The `frontend`
+image builds both SPAs (npm workspaces) and serves them with nginx.
+
+**Pull prebuilt images (default — from ghcr):**
+```bash
+docker compose pull
+docker compose up -d
 ```
 
-For an existing SQLite deployment, follow `docs/postgres-migration-runbook.md` to copy data into Postgres on first cutover.
+**Build locally from source.** Build the base image first, then the rest:
+```bash
+docker compose --profile build build base   # shared python-base
+docker compose build                        # bot / dashboard / miniapp / frontend
+docker compose up -d
+```
 
-## Reverse Proxy
+**Build locally without touching ghcr** (test environments): set `REGISTRY=` in
+`.env` (empty). Image names become local (`bot:staging`, `python-base:staging`,
+…) and nothing is pulled. Then run the two build commands above.
 
-It is highly recommended to run the services behind a reverse proxy like **Nginx**, **Caddy**, or **Traefik**. The proxy should:
--   Terminate TLS (HTTPS).
--   Forward traffic to the Seller Bot (webhook endpoints) and the Dashboard.
--   Handle domain-based routing.
+Startup order is enforced by `depends_on`: `postgres` (healthy) → `migrate`
+(completed) → `bot` / `dashboard` / `miniapp`. `frontend` is independent.
 
-## Local Development (Non-Docker)
+## Migrations
 
-To run the bot locally without Docker:
-1.  Create a virtual environment: `python -m venv venv`.
-2.  Activate it: `source venv/bin/activate` (or `venv\Scripts\activate` on Windows).
-3.  Install dependencies: `pip install -r requirements.txt`.
-4.  Run the bot: `python main.py`.
-5.  Run the support bot: `python support.py`.
+Schema is managed exclusively by Alembic. The one-shot `migrate` container runs
+`alembic upgrade head` before the apps boot; they wait on it via
+`depends_on: service_completed_successfully`. See [database.md](database.md).
+
+## Reverse proxy
+
+Run the stack behind an edge nginx that terminates TLS and routes traffic to the
+backends and the `frontend` container. The exact, copy-pasteable config (using
+the Docker-DNS resolver pattern so nginx doesn't fail when a backend is briefly
+unresolvable) lives in the project [README](../README.md) → "Web tier & reverse
+proxy". The edge nginx must share `backend-network`.
+
+## Host ports
+
+For local debugging compose binds (loopback only):
+`bot :5000`, `dashboard :8080→8000`, `frontend :8088→80`. In production traffic
+goes through the edge nginx, not these host ports.
+
+## CI
+
+`.github/workflows/build.yml` (and `.gitlab-ci.yml`) build and push per-service
+images to ghcr on pushes to `main` (`:latest`) and `develop` (`:staging`), plus
+immutable `:sha-…` / `:build-…` tags. Only changed services rebuild; `python-base`
+rebuilds only when its own inputs change and is otherwise reused.
