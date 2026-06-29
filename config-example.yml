@@ -70,8 +70,16 @@ subscription_url: "https://sub.example.com"        # [optional] Base URL for Rem
 # ╚══════════════════════════════════════════════════════════════════════════════╝
 
 dashboard_login: admin                             # [REQUIRED] Dashboard admin login
-dashboard_password: change-me                      # [REQUIRED] Dashboard admin password — change before deploy!
-dashboard_secret: change-me-to-random-string       # [REQUIRED] JWT signing secret — use a long random string
+dashboard_password: change-me                      # [REQUIRED] Admin password — must NOT be empty or "admin" (boot refuses)
+# JWT signing secret. The dashboard REFUSES TO START if this is unset, equal to
+# the old built-in default, or shorter than 32 bytes — anyone with a known secret
+# can forge admin tokens. Generate one with:  openssl rand -hex 32
+dashboard_secret: change-me-to-a-random-string-of-at-least-32-bytes
+
+# Serve Swagger UI (/api/docs) + openapi.json on the dashboard AND miniapp APIs.
+# Keep false in production — when true the full API surface (incl. admin/IAP
+# routes) is publicly enumerable. Can also be toggled with env EXPOSE_API_DOCS=1.
+expose_api_docs: false
 
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗

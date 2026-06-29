@@ -296,6 +296,19 @@ def get_web_allowed_origins() -> list[str]:
     return [str(o).strip() for o in raw if o]
 
 
+def get_expose_api_docs() -> bool:
+    """Whether to serve the interactive Swagger UI and openapi.json.
+
+    Off by default: in production the schema exposes the full API surface
+    (including admin/IAP endpoints) to anyone. Enable temporarily for debugging
+    via config `expose_api_docs: true` or env `EXPOSE_API_DOCS=1`.
+    """
+    env = os.environ.get("EXPOSE_API_DOCS")
+    if env is not None:
+        return env.strip().lower() in ("1", "true", "yes", "on")
+    return bool(get_config().get("expose_api_docs", False))
+
+
 # --- Google Play IAP -------------------------------------------------------
 
 def get_google_play_package_name() -> str:

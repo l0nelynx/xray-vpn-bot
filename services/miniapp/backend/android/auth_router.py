@@ -9,14 +9,16 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from slowapi import Limiter
-from slowapi.util import get_remote_address
 from sqlalchemy.exc import IntegrityError
 
 from ..notify_log import esc, notify_log
 from . import deps, repo, security
 
 # Module-level limiter shared with main.app.state.limiter via singleton.
-limiter = Limiter(key_func=get_remote_address)
+# Key on the real client IP (X-Real-IP from the trusted edge), NOT the socket
+# peer — otherwise every request appears to come from the nginx container and
+# all per-IP limits collapse into one global bucket.
+limiter = Limiter(key_func=deps.real_client_ip)
 from .schemas import (
     AuthResponse,
     LoginRequest,

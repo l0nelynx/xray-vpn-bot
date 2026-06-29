@@ -1,5 +1,6 @@
 import logging
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
@@ -11,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 
-from .config import get_web_allowed_origins
+from .config import get_expose_api_docs, get_web_allowed_origins
 from .android import auth_router as android_auth_router
 from .android import data_router as android_data_router
 from .android import email_router as android_email_router
@@ -29,11 +30,46 @@ BASE_PATH = "/bot/miniapp"
 # Reuse the auth router's limiter so per-route decorators on it take effect.
 limiter = android_auth_router.limiter
 
+
+def _run_migrations() -> None:
+    """Bring the shared Postgres schema to head via Alembic. Whichever service
+    boots first applies them; subsequent boots are no-ops. If alembic config
+    isn't bundled in this image, the bot or dashboard service owns migrations."""
+    try:
+        from migrations_runner import upgrade_to_head
+    except ImportError:
+        return
+    upgrade_to_head()
+    # Страховка: если что-то по дороге всё-таки дёрнуло fileConfig() и
+    # выключило ранее заведённые логгеры — реактивируем их и заново ставим
+    # хэндлер на корне. force=True гарантирует, что повторный basicConfig
+    # не будет проигнорирован.
+    for name in list(logging.Logger.manager.loggerDict):
+        lg = logging.getLogger(name)
+        if isinstance(lg, logging.Logger):
+            lg.disabled = False
+    logging.basicConfig(
+        level=os.environ.get("LOG_LEVEL", "INFO").upper(),
+        format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+        force=True,
+    )
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    _run_migrations()
+    yield
+
+
+# Swagger UI / openapi.json are gated behind a config flag — off in production so
+# the full API surface (incl. admin/IAP routes) isn't publicly enumerable.
+_expose_docs = get_expose_api_docs()
 app = FastAPI(
     title="XRAY-VPN MiniApp",
-    docs_url=f"{BASE_PATH}/api/docs",
-    openapi_url=f"{BASE_PATH}/openapi.json",
+    docs_url=f"{BASE_PATH}/api/docs" if _expose_docs else None,
+    openapi_url=f"{BASE_PATH}/openapi.json" if _expose_docs else None,
     redoc_url=None,
+    lifespan=lifespan,
 )
 app.state.limiter = limiter
 
@@ -71,35 +107,6 @@ app.include_router(android_subscription_router.router, prefix=BASE_PATH)
 app.include_router(android_promo_router.router, prefix=BASE_PATH)
 app.include_router(android_support_router.router, prefix=BASE_PATH)
 app.include_router(web_router.router, prefix=BASE_PATH)
-
-
-@app.on_event("startup")
-async def ensure_support_tables():
-    """Run Alembic migrations.
-
-    Schema management lives in alembic/. Any service that boots first will
-    bring the shared SQLite forward; subsequent boots are no-ops.
-    """
-    try:
-        from migrations_runner import upgrade_to_head
-    except ImportError:
-        # If alembic config is not bundled in this image, the bot or dashboard
-        # service is responsible for migrations.
-        return
-    upgrade_to_head()
-    # Страховка: если что-то по дороге всё-таки дёрнуло fileConfig() и
-    # выключило ранее заведённые логгеры — реактивируем их и заново
-    # ставим хэндлер на корне. force=True гарантирует, что повторный
-    # basicConfig не будет проигнорирован.
-    for name in list(logging.Logger.manager.loggerDict):
-        lg = logging.getLogger(name)
-        if isinstance(lg, logging.Logger):
-            lg.disabled = False
-    logging.basicConfig(
-        level=os.environ.get("LOG_LEVEL", "INFO").upper(),
-        format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
-        force=True,
-    )
 
 
 @app.get("/health")

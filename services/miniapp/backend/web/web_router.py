@@ -87,7 +87,9 @@ def _get_tg_jwks() -> _PyJWKClient:
 # ---------------------------------------------------------------------------
 
 def _client_ip(request: Request) -> str:
-    return request.client.host if request.client else "unknown"
+    # Real client IP via the trusted edge (X-Real-IP), not the nginx socket peer.
+    # Keeps the brute-force guard per-attacker instead of one shared global bucket.
+    return deps.real_client_ip(request)
 
 
 def _now_iso() -> str:

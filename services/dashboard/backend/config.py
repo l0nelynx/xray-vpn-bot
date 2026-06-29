@@ -14,16 +14,35 @@ def get_config() -> dict:
     return _config
 
 
+# Legacy built-in default — now rejected at startup. Kept as a constant so the
+# validator can detect and refuse a config that still ships it.
+INSECURE_DASHBOARD_SECRET = "xray-vpn-dashboard-jwt-secret-key"
+
+
 def get_dashboard_login() -> str:
     return get_config().get("dashboard_login", "admin")
 
 
 def get_dashboard_password() -> str:
-    return get_config().get("dashboard_password", "admin")
+    # No insecure default — an unset password must fail closed at startup,
+    # never silently fall back to a guessable value.
+    return get_config().get("dashboard_password", "") or ""
 
 
 def get_secret_key() -> str:
-    return get_config().get("dashboard_secret", "xray-vpn-dashboard-jwt-secret-key")
+    # No insecure default — an unset/weak secret would let anyone forge admin
+    # JWTs. validate_security_config() refuses to boot in that case.
+    return get_config().get("dashboard_secret", "") or ""
+
+
+def get_expose_api_docs() -> bool:
+    """Whether to serve Swagger UI + openapi.json. Off by default so the admin
+    API surface isn't publicly enumerable. Enable via config `expose_api_docs:
+    true` or env `EXPOSE_API_DOCS=1` for debugging."""
+    env = os.environ.get("EXPOSE_API_DOCS")
+    if env is not None:
+        return env.strip().lower() in ("1", "true", "yes", "on")
+    return bool(get_config().get("expose_api_docs", False))
 
 
 def get_telemt_server() -> str:

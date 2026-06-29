@@ -93,6 +93,27 @@ For local debugging compose binds (loopback only):
 `bot :5000`, `dashboard :8080→8000`, `frontend :8088→80`. In production traffic
 goes through the edge nginx, not these host ports.
 
+## Scaling & workers (single-worker constraint)
+
+Each backend runs as **one uvicorn worker in one container**. Several security
+mechanisms keep state **in-process**, so this is load-bearing — do not add
+`--workers N` or run multiple replicas without first externalising that state:
+
+- **Rate limiting** (slowapi) and the **invite brute-force guard**
+  (`miniapp/.../web/brute_force.py`) — per-process counters.
+- **Dashboard login throttle** (`dashboard/.../login_guard.py`) — per-process.
+- **Telegram OIDC PKCE store** and the **JWKS cache** (`miniapp/.../web/web_router.py`)
+  — a multi-worker setup would route the callback to a worker that never saw the
+  `state`/`code_verifier`, so **Sign-in-with-Telegram would fail intermittently**.
+
+To scale horizontally, move this state to Postgres/Redis (e.g. slowapi with a
+Redis storage backend, a shared PKCE/throttle table) first.
+
+**Rate-limit correctness depends on the edge nginx** setting `X-Real-IP`
+(`proxy_set_header X-Real-IP $remote_addr;` — already in the README edge config).
+The backends key every limit on that header; without it all clients collapse into
+one bucket (the nginx container IP) and the limits/guards stop being per-client.
+
 ## CI
 
 `.github/workflows/build.yml` (and `.gitlab-ci.yml`) build and push per-service

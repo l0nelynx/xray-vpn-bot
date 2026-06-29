@@ -5,12 +5,31 @@ import uvicorn
 import yaml
 from aiogram import Bot
 from aiosend import CryptoPay
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from slowapi import Limiter
-from slowapi.util import get_remote_address
+
+
+def _real_client_ip(request: Request) -> str:
+    """Rate-limit key on the real client IP behind the trusted edge nginx.
+
+    The edge overwrites ``X-Real-IP`` with its ``$remote_addr``; trusting the
+    socket peer instead would collapse every webhook caller into one bucket
+    (the nginx container), so a flood from one provider could rate-limit
+    another's callbacks. Falls back to the rightmost XFF hop, then the peer.
+    """
+    xri = request.headers.get("x-real-ip")
+    if xri and xri.strip():
+        return xri.strip()
+    fwd = request.headers.get("x-forwarded-for")
+    if fwd:
+        hops = [p.strip() for p in fwd.split(",") if p.strip()]
+        if hops:
+            return hops[-1]
+    return request.client.host if request.client else "unknown"
+
 
 app_uvi = FastAPI()
-limiter = Limiter(key_func=get_remote_address)
+limiter = Limiter(key_func=_real_client_ip)
 app_uvi.state.limiter = limiter
 
 

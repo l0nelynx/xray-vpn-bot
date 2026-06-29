@@ -30,6 +30,11 @@ COPY alembic ./alembic
 COPY alembic.ini ./alembic.ini
 COPY migrations_runner.py ./migrations_runner.py
 
+# Drop privileges: the API is stateless (writes only to Postgres over the
+# network), so it never needs root. Everything above ran as root; runtime does not.
+RUN adduser -D -u 10001 appuser
+USER appuser
+
 EXPOSE 8001
 
 CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8001"]

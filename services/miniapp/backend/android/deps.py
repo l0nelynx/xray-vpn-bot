@@ -11,13 +11,34 @@ from fastapi import Depends, Header, HTTPException, Request, status
 from . import repo, security
 
 
+def real_client_ip(request: Request) -> str:
+    """Resolve the real client IP behind the trusted edge nginx.
+
+    The edge sets ``X-Real-IP`` to its ``$remote_addr`` (the actual connecting
+    client) with ``proxy_set_header`` (overwrite, not append), so we trust it
+    first. We deliberately do NOT trust the *leftmost* ``X-Forwarded-For`` entry
+    — that one is attacker-supplied and was previously used here, which let a
+    client spoof its IP to evade the brute-force guard and poison logs. As a
+    fallback we take the *rightmost* XFF hop (the value the trusted edge
+    appended) and finally the socket peer.
+
+    Backend ports are bound to 127.0.0.1, so requests can only reach us via the
+    edge; the ``X-Real-IP`` it sets cannot be forged by external clients.
+    """
+    xri = request.headers.get("x-real-ip")
+    if xri and xri.strip():
+        return xri.strip()
+    fwd = request.headers.get("x-forwarded-for")
+    if fwd:
+        hops = [p.strip() for p in fwd.split(",") if p.strip()]
+        if hops:
+            return hops[-1]
+    return request.client.host if request.client else "unknown"
+
+
 def _client_meta(request: Request) -> tuple[str | None, str | None]:
     ua = request.headers.get("user-agent")
-    fwd = request.headers.get("x-forwarded-for")
-    ip = (fwd.split(",")[0].strip() if fwd else None) or (
-        request.client.host if request.client else None
-    )
-    return ua, ip
+    return ua, real_client_ip(request)
 
 
 async def get_current_user(
