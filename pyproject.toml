@@ -1,0 +1,10 @@
+# Repo-root config. The services moved under services/ and the frontends under
+# web/apps/, so tests need these roots on sys.path to keep importing the bot as
+# `app.*` and the web backends as `miniapp.backend.*` / `dashboard.backend.*`
+# without rewriting import statements.
+[tool.pytest.ini_options]
+pythonpath = ["services", "services/bot", "."]
+testpaths = ["tests", "packages"]
+# importlib mode: lets the root tests/ and each packages/*/tests/ coexist
+# (same "tests" basename) without import-file-mismatch collisions.
+addopts = "--import-mode=importlib"

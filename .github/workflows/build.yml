@@ -18,11 +18,11 @@ jobs:
     if: "!startsWith(github.event.head_commit.message, 'docs:')"
     runs-on: ubuntu-latest
     outputs:
-      seller_bot:  ${{ steps.filter.outputs.seller_bot }}
+      bot:         ${{ steps.filter.outputs.bot }}
       support_bot: ${{ steps.filter.outputs.support_bot }}
       dashboard:   ${{ steps.filter.outputs.dashboard }}
       miniapp:     ${{ steps.filter.outputs.miniapp }}
-      # shared — triggers seller-bot + dashboard + miniapp (not support-bot)
+      # shared — triggers bot + dashboard + miniapp (not support-bot)
       shared:      ${{ steps.filter.outputs.shared }}
       # meta — workflow files changed, rebuild everything
       meta:        ${{ steps.filter.outputs.meta }}
@@ -34,7 +34,7 @@ jobs:
         with:
           filters: |
             # Cross-service shared code (common_db, remnawave_client, alembic)
-            # Affects seller-bot, dashboard and miniapp — not support-bot.
+            # Affects bot, dashboard and miniapp — not support-bot.
             shared:
               - 'packages/**'
               - 'alembic/**'
@@ -45,52 +45,51 @@ jobs:
             meta:
               - '.github/workflows/**'
 
-            seller_bot:
-              - 'app/**'
-              - 'main.py'
-              - 'requirements.txt'
-              - 'Dockerfile'
-              - 'scripts/**'
+            bot:
+              - 'services/bot/**'
+              - 'infra/docker/bot.Dockerfile'
 
             support_bot:
-              - 'support.py'
-              - 'support_db.py'
-              - 'requirements_support.txt'
-              - 'Dockerfile_support'
+              - 'services/support_bot/**'
+              - 'infra/docker/support_bot.Dockerfile'
 
             # Frontends are npm workspaces: they also depend on the shared
             # web/packages and the root manifest/lockfile.
             dashboard:
-              - 'dashboard/**'
-              - 'web/**'
+              - 'services/dashboard/**'
+              - 'web/apps/dashboard/**'
+              - 'web/packages/**'
               - 'package.json'
               - 'package-lock.json'
+              - 'infra/docker/dashboard.Dockerfile'
 
             miniapp:
-              - 'miniapp/**'
-              - 'web/**'
+              - 'services/miniapp/**'
+              - 'web/apps/miniapp/**'
+              - 'web/packages/**'
               - 'package.json'
               - 'package-lock.json'
+              - 'infra/docker/miniapp.Dockerfile'
 
 # ─────────────────────────────────────────────────────────────────
 # Shared build steps — each job sets SERVICE/DOCKERFILE env vars
 # and the steps below are identical across all four services.
 # ─────────────────────────────────────────────────────────────────
 
-  build-seller-bot:
+  build-bot:
     needs: detect
-    # rebuild when: seller-bot files changed, shared packages changed, or workflow changed
+    # rebuild when: bot files changed, shared packages changed, or workflow changed
     if: |
-      needs.detect.outputs.seller_bot == 'true' ||
-      needs.detect.outputs.shared     == 'true' ||
-      needs.detect.outputs.meta       == 'true'
+      needs.detect.outputs.bot    == 'true' ||
+      needs.detect.outputs.shared == 'true' ||
+      needs.detect.outputs.meta   == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     env:
-      SERVICE:    seller-bot
-      DOCKERFILE: ./Dockerfile
+      SERVICE:    bot
+      DOCKERFILE: ./infra/docker/bot.Dockerfile
       CONTEXT:    ./
     steps:
       - uses: actions/checkout@v4
@@ -132,7 +131,7 @@ jobs:
       packages: write
     env:
       SERVICE:    support-bot
-      DOCKERFILE: ./Dockerfile_support
+      DOCKERFILE: ./infra/docker/support_bot.Dockerfile
       CONTEXT:    ./
     steps:
       - uses: actions/checkout@v4
@@ -174,7 +173,7 @@ jobs:
       packages: write
     env:
       SERVICE:    dashboard
-      DOCKERFILE: ./dashboard/Dockerfile
+      DOCKERFILE: ./infra/docker/dashboard.Dockerfile
       CONTEXT:    ./
     steps:
       - uses: actions/checkout@v4
@@ -216,7 +215,7 @@ jobs:
       packages: write
     env:
       SERVICE:    miniapp
-      DOCKERFILE: ./miniapp/Dockerfile
+      DOCKERFILE: ./infra/docker/miniapp.Dockerfile
       CONTEXT:    ./
     steps:
       - uses: actions/checkout@v4

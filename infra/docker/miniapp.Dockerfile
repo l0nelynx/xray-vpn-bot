@@ -1,5 +1,5 @@
 # Build context for this Dockerfile is the repository root.
-# Use:  docker build -f miniapp/Dockerfile .
+# Use:  docker build -f infra/docker/miniapp.Dockerfile .
 
 # Stage 1: Build React frontend (npm workspaces — needs the root manifest and
 # the shared web/packages alongside this app).
@@ -10,10 +10,10 @@ COPY web/packages ./web/packages
 # Both workspace frontends are listed in the root manifest, so their package
 # manifests must be present for the workspace install to resolve. Only the
 # target app is built.
-COPY miniapp/frontend/package.json ./miniapp/frontend/package.json
-COPY dashboard/frontend/package.json ./dashboard/frontend/package.json
+COPY web/apps/miniapp/package.json ./web/apps/miniapp/package.json
+COPY web/apps/dashboard/package.json ./web/apps/dashboard/package.json
 RUN npm ci || npm install
-COPY miniapp/frontend ./miniapp/frontend
+COPY web/apps/miniapp ./web/apps/miniapp
 RUN npm run build -w xray-vpn-miniapp
 
 # Stage 2: Python runtime
@@ -22,7 +22,7 @@ WORKDIR /app
 
 RUN apk add --no-cache curl libpq
 
-COPY miniapp/backend/requirements.txt .
+COPY services/miniapp/backend/requirements.txt .
 RUN apk add --no-cache --virtual .build-deps gcc musl-dev postgresql-dev \
  && pip install --no-cache-dir -r requirements.txt \
  && apk del .build-deps
@@ -53,11 +53,11 @@ RUN pip install --no-cache-dir --no-deps /tmp/payments && rm -rf /tmp/payments
 COPY packages/subscription_delivery /tmp/subscription_delivery
 RUN pip install --no-cache-dir --no-deps /tmp/subscription_delivery && rm -rf /tmp/subscription_delivery
 
-COPY miniapp/backend/ ./backend/
+COPY services/miniapp/backend/ ./backend/
 COPY alembic ./alembic
 COPY alembic.ini ./alembic.ini
 COPY migrations_runner.py ./migrations_runner.py
-COPY --from=frontend-build /build/miniapp/frontend/dist ./static/
+COPY --from=frontend-build /build/web/apps/miniapp/dist ./static/
 
 EXPOSE 8001
 

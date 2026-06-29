@@ -27,18 +27,18 @@ build:
     DOCKER_TLS_CERTDIR: "/certs"
   parallel:
     matrix:
-      - NAME: seller-bot
+      - NAME: bot
         CONTEXT: ./
-        DOCKERFILE: ./Dockerfile
+        DOCKERFILE: ./infra/docker/bot.Dockerfile
       - NAME: support-bot
         CONTEXT: ./
-        DOCKERFILE: ./Dockerfile_support
+        DOCKERFILE: ./infra/docker/support_bot.Dockerfile
       - NAME: dashboard
         CONTEXT: ./
-        DOCKERFILE: ./dashboard/Dockerfile
+        DOCKERFILE: ./infra/docker/dashboard.Dockerfile
       - NAME: miniapp
         CONTEXT: ./
-        DOCKERFILE: ./miniapp/Dockerfile
+        DOCKERFILE: ./infra/docker/miniapp.Dockerfile
   before_script:
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
   script:

@@ -42,7 +42,9 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 # Directories whose Python sources must NOT declare ORM-mapped classes
 # nor invent a new DeclarativeBase. New entries: any first-party service
 # that imports from common_db.
-SCANNED_DIRS = ("app", "dashboard", "miniapp")
+# Service code dirs after the services/ reorg (was app/, dashboard/, miniapp/).
+# support_bot is intentionally excluded — it is legacy with its own SQLite models.
+SCANNED_DIRS = ("services/bot/app", "services/dashboard", "services/miniapp")
 
 # Files that are explicitly allowed to mention the forbidden symbols
 # even though they live inside SCANNED_DIRS. Use sparingly — every entry

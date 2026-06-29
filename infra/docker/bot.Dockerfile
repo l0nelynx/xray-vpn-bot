@@ -4,7 +4,7 @@ WORKDIR /usr/src/app
 
 RUN apk add --no-cache bash curl postgresql-client libpq
 
-COPY requirements.txt ./
+COPY services/bot/requirements.txt ./
 RUN apk add --no-cache --virtual .build-deps gcc musl-dev postgresql-dev \
  && pip install --no-cache-dir -r requirements.txt \
  && apk del .build-deps
@@ -39,11 +39,11 @@ RUN pip install --no-cache-dir --no-deps /tmp/subscription_delivery && rm -rf /t
 
 RUN touch ./db.sqlite3
 
-COPY ./app ./app
-COPY ./main.py ./main.py
-COPY ./alembic ./alembic
-COPY ./alembic.ini ./alembic.ini
-COPY ./migrations_runner.py ./migrations_runner.py
-COPY ./scripts ./scripts
+COPY services/bot/app ./app
+COPY services/bot/main.py ./main.py
+COPY alembic ./alembic
+COPY alembic.ini ./alembic.ini
+COPY migrations_runner.py ./migrations_runner.py
+COPY services/bot/scripts ./scripts
 
 CMD ["/bin/sh", "-c", "python main.py"]

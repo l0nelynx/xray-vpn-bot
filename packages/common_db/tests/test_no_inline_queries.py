@@ -27,7 +27,9 @@ import re
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-SCANNED_DIRS = ("app", "dashboard", "miniapp")
+# Service code dirs after the services/ reorg (was app/, dashboard/, miniapp/).
+# support_bot is intentionally excluded — legacy, own SQLite.
+SCANNED_DIRS = ("services/bot/app", "services/dashboard", "services/miniapp")
 
 # Patterns to flag. Each entry is (regex, why, helper).
 INLINE_PATTERNS: list[tuple[re.Pattern[str], str, str]] = [
@@ -65,9 +67,9 @@ INLINE_PATTERNS: list[tuple[re.Pattern[str], str, str]] = [
 ALLOWED_FILES: frozenset[str] = frozenset({
     # Shim modules re-export models; they reference the names but don't
     # query them.
-    "app/database/models.py",
-    "dashboard/backend/database/models.py",
-    "miniapp/backend/database/models.py",
+    "services/bot/app/database/models.py",
+    "services/dashboard/backend/database/models.py",
+    "services/miniapp/backend/database/models.py",
 })
 
 

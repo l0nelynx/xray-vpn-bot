@@ -27,10 +27,10 @@ services:
           memory: 512M
   migrate:
     container_name: xray-migrate
-    image: ghcr.io/l0nelynx/seller-bot:${IMAGE_TAG:-staging}
+    image: ghcr.io/l0nelynx/bot:${IMAGE_TAG:-staging}
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: infra/docker/bot.Dockerfile
     command: ["python", "-c", "from migrations_runner import upgrade_to_head; upgrade_to_head()"]
     restart: "no"
     environment:
@@ -44,20 +44,24 @@ services:
       resources:
         limits:
           memory: 256M
-  seller-bot:
-    container_name: seller-bot
-    image: ghcr.io/l0nelynx/seller-bot:${IMAGE_TAG:-staging}
+  bot:
+    container_name: bot
+    image: ghcr.io/l0nelynx/bot:${IMAGE_TAG:-staging}
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: infra/docker/bot.Dockerfile
     volumes:
       - /var/lib/marzban/certs/:/usr/src/app/uvicorn/ssl
       - ./config.yml:/usr/src/app/config.yml
       - ./dig_data.json:/usr/src/app/dig_data.json
-    # Edge (nginx proxies /bot/ here) + private data-network (Postgres).
+    # Edge (nginx proxies /bot/ here) + private data-network (Postgres). The
+    # `seller-bot` network alias keeps the existing nginx upstream
+    # (proxy_pass http://seller-bot:5000) working after the rename to `bot`.
     networks:
-      - backend-network
-      - data-network
+      backend-network:
+        aliases:
+          - seller-bot
+      data-network: {}
     ports:
        - '127.0.0.1:5000:5000'
 #      - "5000:5000"
@@ -82,7 +86,7 @@ services:
     image: ghcr.io/l0nelynx/support-bot:${IMAGE_TAG:-staging}
     build:
       context: .
-      dockerfile: Dockerfile_support
+      dockerfile: infra/docker/support_bot.Dockerfile
     volumes:
       - ./db:/usr/src/app/db
       - ./config.yml:/usr/src/app/config.yml
@@ -106,7 +110,7 @@ services:
     image: ghcr.io/l0nelynx/dashboard:${IMAGE_TAG:-staging}
     build:
       context: .
-      dockerfile: dashboard/Dockerfile
+      dockerfile: infra/docker/dashboard.Dockerfile
     volumes:
       - ./config.yml:/app/config.yml:ro
     networks:
@@ -136,7 +140,7 @@ services:
     image: ghcr.io/l0nelynx/miniapp:${IMAGE_TAG:-staging}
     build:
       context: .
-      dockerfile: miniapp/Dockerfile
+      dockerfile: infra/docker/miniapp.Dockerfile
     volumes:
       - ./config.yml:/app/config.yml:ro
     networks:
@@ -151,7 +155,7 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
-      seller-bot:
+      bot:
         condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
