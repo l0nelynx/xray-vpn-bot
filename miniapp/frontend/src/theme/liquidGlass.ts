@@ -1,5 +1,4 @@
-import { theme } from "antd";
-import type { ConfigProviderProps } from "antd";
+import { buildLiquidGlassConfig } from "@xray/ui";
 
 const tokens = {
   colorPrimary: "#7C9CFF",
@@ -42,11 +41,7 @@ const tokens = {
   boxShadowSecondary: "0 2px 12px rgba(0, 0, 0, 0.22)",
 };
 
-export const liquidGlassConfig: ConfigProviderProps = {
-  theme: {
-    algorithm: theme.darkAlgorithm,
-    token: tokens,
-    components: {
+const components = {
       Card: {
         colorBgContainer: "rgba(255, 255, 255, 0.06)",
         boxShadowTertiary: "0 4px 24px rgba(0, 0, 0, 0.28)",
@@ -105,6 +100,6 @@ export const liquidGlassConfig: ConfigProviderProps = {
       Empty: {
         colorTextDescription: "rgba(255, 255, 255, 0.48)",
       },
-    },
-  },
 };
+
+export const liquidGlassConfig = buildLiquidGlassConfig(tokens, components);

@@ -1,0 +1,11 @@
+{
+  "name": "xray-vpn-web",
+  "private": true,
+  "version": "1.0.0",
+  "description": "npm workspaces root for the dashboard and miniapp frontends plus their shared packages.",
+  "workspaces": [
+    "web/packages/*",
+    "dashboard/frontend",
+    "miniapp/frontend"
+  ]
+}

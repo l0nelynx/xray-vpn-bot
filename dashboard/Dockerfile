@@ -1,13 +1,20 @@
 # Build context for this Dockerfile is the repository root.
 # Use:  docker build -f dashboard/Dockerfile .
 
-# Stage 1: Build React frontend
+# Stage 1: Build React frontend (npm workspaces — needs the root manifest and
+# the shared web/packages alongside this app).
 FROM node:20-alpine AS frontend-build
 WORKDIR /build
-COPY dashboard/frontend/package.json dashboard/frontend/package-lock.json* ./
-RUN npm ci --ignore-scripts || npm install
-COPY dashboard/frontend/ .
-RUN npm run build
+COPY package.json package-lock.json* ./
+COPY web/packages ./web/packages
+# Both workspace frontends are listed in the root manifest, so their package
+# manifests must be present for the workspace install to resolve. Only the
+# target app is built.
+COPY dashboard/frontend/package.json ./dashboard/frontend/package.json
+COPY miniapp/frontend/package.json ./miniapp/frontend/package.json
+RUN npm ci || npm install
+COPY dashboard/frontend ./dashboard/frontend
+RUN npm run build -w xray-vpn-dashboard
 
 # Stage 2: Python runtime
 FROM python:3.13-alpine
@@ -32,7 +39,7 @@ COPY dashboard/backend/ ./backend/
 COPY alembic ./alembic
 COPY alembic.ini ./alembic.ini
 COPY migrations_runner.py ./migrations_runner.py
-COPY --from=frontend-build /build/dist ./static/
+COPY --from=frontend-build /build/dashboard/frontend/dist ./static/
 
 EXPOSE 8000
 

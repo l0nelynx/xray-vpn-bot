@@ -1,49 +1,15 @@
+import { createJsonClient } from "@xray/api";
+
 import { getInitData } from "../tg/webapp";
 
 const BASE = "/bot/miniapp/api";
 
-export class ApiError extends Error {
-  status: number;
-  detail: string;
-  constructor(status: number, detail: string) {
-    super(detail);
-    this.status = status;
-    this.detail = detail;
-  }
-}
+export { ApiError } from "@xray/api";
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const headers: Record<string, string> = {
-    "X-Telegram-Init-Data": getInitData(),
-  };
-  if (body !== undefined) headers["Content-Type"] = "application/json";
-
-  const res = await fetch(`${BASE}${path}`, {
-    method,
-    headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
-
-  if (!res.ok) {
-    let detail = `HTTP ${res.status}`;
-    try {
-      const data = await res.json();
-      if (data?.detail) detail = data.detail;
-    } catch {
-      /* ignore */
-    }
-    throw new ApiError(res.status, detail);
-  }
-
-  if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
-}
-
-export const api = {
-  get: <T>(path: string) => request<T>("GET", path),
-  post: <T>(path: string, body?: unknown) => request<T>("POST", path, body),
-  delete: <T>(path: string) => request<T>("DELETE", path),
-};
+export const api = createJsonClient({
+  base: BASE,
+  getHeaders: () => ({ "X-Telegram-Init-Data": getInitData() }),
+});
 
 export interface UserInfo {
   tg_id: number;

@@ -9,6 +9,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@xray/api": "*",
+    "@xray/ui": "*",
     "@ant-design/icons": "^6.2.2",
     "antd": "^6.3.7",
     "dayjs": "^1.11.13",
