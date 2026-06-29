@@ -4,12 +4,8 @@ from typing import Any
 
 import aiohttp
 
-from ..config import (
-    get_crystal_login,
-    get_crystal_secret,
-    get_crystal_webhook,
-)
 from .base import Invoice, InvoiceRequest, PaymentError, PaymentProvider
+from .config import get_config
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +13,7 @@ INVOICE_LIFETIME = 3600
 
 
 class CrystalPayProvider(PaymentProvider):
-    """CrystalPay invoice (purchase type). Mirrors app/api/crystal_pay.py."""
+    """CrystalPay invoice (purchase type)."""
 
     name = "crystal"
     payment_method = "CRYSTAL_PAY"
@@ -50,8 +46,9 @@ class CrystalPayProvider(PaymentProvider):
         return payload
 
     async def create_invoice(self, request: InvoiceRequest) -> Invoice:
-        login = get_crystal_login()
-        secret = get_crystal_secret()
+        cfg = get_config()
+        login = cfg.crystal_login
+        secret = cfg.crystal_secret
         if not (login and secret):
             raise PaymentError("CrystalPay is not configured")
 
@@ -64,9 +61,8 @@ class CrystalPayProvider(PaymentProvider):
             "description": request.description or f"Subscription {request.days}d",
             "amount_currency": request.currency.upper(),
         }
-        webhook = get_crystal_webhook()
-        if webhook:
-            params["callback_url"] = webhook
+        if cfg.crystal_webhook:
+            params["callback_url"] = cfg.crystal_webhook
 
         data = await self._request("invoice", "create", params)
 

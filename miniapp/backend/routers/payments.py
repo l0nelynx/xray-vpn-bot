@@ -14,7 +14,7 @@ from ..notify_log import esc, notify_log
 # no auto-seed of PromoSettings. The helper does it properly.
 from common_db.repo import promos as _repo_promos
 from common_db.repo import users as _repo_users
-from ..payments import (
+from payments import (
     InvoiceRequest,
     PaymentError,
     available_providers,

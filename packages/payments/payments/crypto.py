@@ -2,8 +2,8 @@ import logging
 
 from aiosend import CryptoPay
 
-from ..config import get_crypto_bot_token
 from .base import Invoice, InvoiceRequest, PaymentError, PaymentProvider
+from .config import get_config
 
 logger = logging.getLogger(__name__)
 
@@ -11,9 +11,8 @@ logger = logging.getLogger(__name__)
 class CryptoPayProvider(PaymentProvider):
     """@CryptoBot (aiosend.CryptoPay) invoices.
 
-    Note: CryptoPay confirmations come through aiosend's polling/webhook in
-    the bot process (app/handlers/payments.py). The webapp side only creates
-    the invoice URL — delivery is handled there once the user pays.
+    Confirmations arrive via the bot's CryptoPay webhook
+    (app/api/crypto_pay.py); this provider only creates the invoice URL.
     """
 
     name = "crypto"
@@ -25,7 +24,7 @@ class CryptoPayProvider(PaymentProvider):
     @classmethod
     def _get_client(cls) -> CryptoPay:
         if cls._client is None:
-            token = get_crypto_bot_token()
+            token = get_config().crypto_bot_token
             if not token:
                 raise PaymentError("CryptoPay token is not configured")
             cls._client = CryptoPay(token)

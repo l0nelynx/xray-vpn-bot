@@ -8,8 +8,6 @@ key (sha256 of token, then HMAC over the raw JSON body).
 See: https://help.crypt.bot/crypto-pay-api#webhook-updates
 """
 
-import hashlib
-import hmac
 import json
 import logging
 
@@ -18,16 +16,9 @@ from fastapi import BackgroundTasks, HTTPException, Request
 import app.database.requests as rq
 from app.api.handlers import payment_process_background
 from app.settings import secrets
+from payments import signatures
 
 logger = logging.getLogger(__name__)
-
-
-def _verify_signature(token: str, raw_body: bytes, signature: str) -> bool:
-    if not token or not signature:
-        return False
-    secret = hashlib.sha256(token.encode()).digest()
-    digest = hmac.new(secret, raw_body, hashlib.sha256).hexdigest()
-    return hmac.compare_digest(digest, signature)
 
 
 async def cryptopay_webhook_handler(
@@ -38,7 +29,7 @@ async def cryptopay_webhook_handler(
     signature = request.headers.get("Crypto-Pay-Api-Signature", "")
     token = secrets.get("crypto_bot_token") or ""
 
-    if not _verify_signature(token, raw, signature):
+    if not signatures.verify_cryptopay_webhook(token, raw, signature):
         logger.warning("CryptoPay webhook: invalid signature")
         raise HTTPException(status_code=401, detail="invalid signature")
 

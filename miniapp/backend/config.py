@@ -108,6 +108,25 @@ _remna.set_config_provider(lambda: {
     "free_squad_id": get_rw_free_id(),
 })
 
+# Wire the shared payments package to the miniapp's config (replaces the local
+# miniapp.backend.payments package).
+import payments as _payments
+
+_payments.set_config_provider(lambda: _payments.PaymentsConfig(
+    apay_id=get_apay_id(),
+    apay_secret=get_apay_secret(),
+    apay_api_url=get_apay_api_url(),
+    crypto_bot_token=get_crypto_bot_token(),
+    crystal_login=get_crystal_login(),
+    crystal_secret=get_crystal_secret(),
+    crystal_salt=get_crystal_salt(),
+    crystal_webhook=get_crystal_webhook(),
+    platega_merchant_id=get_platega_merchant_id(),
+    platega_api_key=get_platega_api_key(),
+    platega_url=get_platega_url(),
+    platega_payment_method=get_platega_payment_method(),
+))
+
 
 def get_apay_api_url() -> str:
     return get_config().get("apay_api_url", "")

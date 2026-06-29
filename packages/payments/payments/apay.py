@@ -3,14 +3,14 @@ import logging
 
 import aiohttp
 
-from ..config import get_apay_api_url, get_apay_id, get_apay_secret
 from .base import Invoice, InvoiceRequest, PaymentError, PaymentProvider
+from .config import get_config
 
 logger = logging.getLogger(__name__)
 
 
 class APayProvider(PaymentProvider):
-    """SBP via APay. Mirrors app/api/a_pay.py PaymentProcessor."""
+    """SBP via APay."""
 
     name = "apay"
     payment_method = "SBP_APAY"
@@ -25,13 +25,14 @@ class APayProvider(PaymentProvider):
         return cls._session
 
     async def create_invoice(self, request: InvoiceRequest) -> Invoice:
-        client_id = get_apay_id()
-        secret = get_apay_secret()
-        api_url = get_apay_api_url()
+        cfg = get_config()
+        client_id = cfg.apay_id
+        secret = cfg.apay_secret
+        api_url = cfg.apay_api_url
         if not (client_id and secret and api_url):
             raise PaymentError("APay is not configured")
 
-        # APay expects the amount in kopecks (integer), like the bot path does.
+        # APay expects the amount in kopecks (integer).
         amount_minor = int(round(request.amount * 100))
         sign = hashlib.md5(
             f"{request.transaction_id}:{amount_minor}:{secret}".encode()

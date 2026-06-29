@@ -34,6 +34,12 @@ RUN pip install --no-cache-dir /tmp/common_db && rm -rf /tmp/common_db
 COPY packages/account_linking /tmp/account_linking
 RUN pip install --no-cache-dir --no-deps /tmp/account_linking && rm -rf /tmp/account_linking
 
+# Shared payment-gateway providers + webhook signature verification. Its deps
+# (aiohttp, aiosend) are already in the backend requirements, so --no-deps is
+# safe. See packages/payments.
+COPY packages/payments /tmp/payments
+RUN pip install --no-cache-dir --no-deps /tmp/payments && rm -rf /tmp/payments
+
 COPY miniapp/backend/ ./backend/
 COPY alembic ./alembic
 COPY alembic.ini ./alembic.ini

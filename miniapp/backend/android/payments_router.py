@@ -23,7 +23,7 @@ from sqlalchemy import text
 
 from ..database.session import async_session
 from ..notify_log import esc, notify_log
-from ..payments import (
+from payments import (
     InvoiceRequest,
     PaymentError,
     create_invoice,

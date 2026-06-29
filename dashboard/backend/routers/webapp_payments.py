@@ -1,9 +1,10 @@
 """Provider catalog mirror for the tariff constructor.
 
-The miniapp owns the actual `PaymentProvider` implementations. The dashboard
-constructor only needs the static metadata (name, payment_method, supported
-currencies, supported methods) to populate dropdowns. Keep this list in sync
-with `miniapp/backend/payments/*.py`.
+The shared `payments` package owns the actual `PaymentProvider`
+implementations. The dashboard constructor only needs the static metadata
+(name, payment_method, supported currencies, supported methods) to populate
+dropdowns. Keep this list in sync with the providers in
+`packages/payments/payments/*.py`.
 
 `methods` is a per-provider list of {value, label} pairs. Providers with a
 single fixed method expose `[{"value": "default", "label": "Default"}]` —

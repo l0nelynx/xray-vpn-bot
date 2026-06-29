@@ -2,13 +2,8 @@ import logging
 
 import aiohttp
 
-from ..config import (
-    get_platega_api_key,
-    get_platega_merchant_id,
-    get_platega_payment_method,
-    get_platega_url,
-)
 from .base import Invoice, InvoiceRequest, PaymentError, PaymentProvider
+from .config import get_config
 
 logger = logging.getLogger(__name__)
 
@@ -20,11 +15,11 @@ def _resolve_method(requested: str | None) -> int:
             return int(requested)
         except (TypeError, ValueError):
             logger.warning("Platega: ignoring non-numeric method %r", requested)
-    return get_platega_payment_method()
+    return get_config().platega_payment_method
 
 
 class PlategaProvider(PaymentProvider):
-    """Platega.io payment gateway. Mirrors app/api/platega.py PaymentProcessor."""
+    """Platega.io payment gateway."""
 
     name = "platega"
     payment_method = "PLATEGA"
@@ -39,9 +34,10 @@ class PlategaProvider(PaymentProvider):
         return cls._session
 
     async def create_invoice(self, request: InvoiceRequest) -> Invoice:
-        merchant_id = get_platega_merchant_id()
-        api_key = get_platega_api_key()
-        api_url = get_platega_url()
+        cfg = get_config()
+        merchant_id = cfg.platega_merchant_id
+        api_key = cfg.platega_api_key
+        api_url = cfg.platega_url
         method = _resolve_method(request.method)
 
         if not (merchant_id and api_key and api_url):
@@ -65,7 +61,7 @@ class PlategaProvider(PaymentProvider):
 
         try:
             async with self._get_session().post(
-                f"{api_url}/v2/transaction/process",
+                f"{api_url.rstrip('/')}/v2/transaction/process",
                 json=body,
                 headers=headers,
             ) as response:

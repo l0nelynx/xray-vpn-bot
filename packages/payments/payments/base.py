@@ -36,15 +36,15 @@ class Invoice:
 
 
 class PaymentProvider(ABC):
-    """Base class for all webapp payment providers.
+    """Base class for all payment providers.
 
     Each provider:
       1. Knows how to turn an InvoiceRequest into a hosted payment URL.
       2. Declares the currencies it supports — used by the dashboard
          constructor to gate provider/currency combinations.
-      3. Maps to a `payment_method` string compatible with the existing
-         shared transactions table, so existing bot-side webhooks
-         (in main.py) can deliver the subscription on confirmation.
+      3. Maps to a `payment_method` string compatible with the shared
+         transactions table, so the bot-side webhooks (main.py) can deliver
+         the subscription on confirmation.
     """
 
     name: ClassVar[str]

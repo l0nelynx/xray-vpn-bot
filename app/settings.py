@@ -68,3 +68,31 @@ _remna.set_config_provider(lambda: {
     "token": secrets.get("remnawave_token"),
     "free_squad_id": secrets.get("rw_free_id"),
 })
+
+# Wire the shared payments package to this service's settings (replaces the
+# per-gateway invoice-creation classes that used to live in app/api/*.py).
+import payments as _payments
+
+
+def _payments_config() -> "_payments.PaymentsConfig":
+    try:
+        platega_method = int(secrets.get("platega_payment_method", 2))
+    except (TypeError, ValueError):
+        platega_method = 2
+    return _payments.PaymentsConfig(
+        apay_id=secrets.get("apay_id"),
+        apay_secret=secrets.get("apay_secret", ""),
+        apay_api_url=secrets.get("apay_api_url", ""),
+        crypto_bot_token=secrets.get("crypto_bot_token", ""),
+        crystal_login=secrets.get("crystal_login", ""),
+        crystal_secret=secrets.get("crystal_secret", ""),
+        crystal_salt=secrets.get("crystal_salt", ""),
+        crystal_webhook=secrets.get("crystal_webhook", ""),
+        platega_merchant_id=secrets.get("platega_merchant_id", "") or "",
+        platega_api_key=secrets.get("platega_api_key", "") or "",
+        platega_url=secrets.get("platega_url", "https://app.platega.io"),
+        platega_payment_method=platega_method,
+    )
+
+
+_payments.set_config_provider(_payments_config)
