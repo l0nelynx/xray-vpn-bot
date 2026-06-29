@@ -1,8 +1,9 @@
 # Build context for this Dockerfile is the repository root.
 # Use:  docker build -f infra/docker/frontend.Dockerfile .
 #
-# Single web tier: builds BOTH SPAs (npm workspaces) and serves them with nginx,
-# reverse-proxying API/webhook traffic to the backend service containers.
+# Static web tier: builds BOTH SPAs (npm workspaces) and serves them with nginx.
+# All routing (static vs API vs webhooks) is owned by the edge nginx — this
+# container does not proxy to the backends. See README "Web tier & reverse proxy".
 
 # Stage 1: build both frontends from the workspace.
 FROM node:20-alpine AS build

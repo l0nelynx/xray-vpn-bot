@@ -27,7 +27,7 @@ frontends and their shared packages under `web/`, and all Dockerfiles under
 | `support-bot` | `ghcr.io/l0nelynx/support-bot` | Legacy standalone bot for user↔admin conversations (own SQLite). |
 | `dashboard` | `ghcr.io/l0nelynx/dashboard` | FastAPI admin **API** (port `8000`). |
 | `miniapp` | `ghcr.io/l0nelynx/miniapp` | FastAPI **API** for the Telegram MiniApp / web portal / Android (port `8001`). |
-| `frontend` | `ghcr.io/l0nelynx/frontend` | nginx serving both built SPAs and reverse-proxying API/webhook traffic to the backends (port `80`). |
+| `frontend` | `ghcr.io/l0nelynx/frontend` | nginx serving the two built SPAs as static files (port `80`). No proxying — routing lives in the edge nginx. |
 | `postgres` / `migrate` | `postgres:16` / `bot` image | Shared database and one-shot Alembic migrations. |
 
 The backends are **pure JSON APIs** — the React SPAs are built once and served by
@@ -40,44 +40,58 @@ Images are built by CI (`.github/workflows/build.yml` and `.gitlab-ci.yml`) and 
 
 ### Web tier & reverse proxy
 
-The `frontend` container (`infra/docker/frontend.Dockerfile` +
-`infra/docker/frontend.nginx.conf`) is the single web upstream. It bakes in the
-built dashboard and miniapp SPAs and routes by URL prefix (every API endpoint
-lives under `.../api`, so the static-vs-API split is unambiguous):
+Routing is owned by the **edge nginx**. The `frontend` container
+(`infra/docker/frontend.Dockerfile` + `infra/docker/frontend.nginx.conf`) only
+serves the two built SPAs as static files; the backends are pure JSON APIs. The
+edge routes by URL prefix — every API endpoint lives under `.../api`, so the
+static-vs-API split is unambiguous:
 
 | Path | Target |
 |------|--------|
 | `/bot/dashboard/api/…` | `dashboard:8000` (admin API) |
-| `/bot/dashboard/…` | dashboard SPA (static, SPA fallback) |
+| `/bot/dashboard/…` | `frontend:80` (dashboard SPA) |
 | `/bot/miniapp/api/…` | `miniapp:8001` (miniapp / web portal / android API) |
-| `/bot/miniapp/…` | miniapp SPA (static, SPA fallback) |
+| `/bot/miniapp/…` | `frontend:80` (miniapp SPA) |
 | `/bot/…` | `bot:5000` (payment webhooks, e.g. `/bot/apays_webhook`) |
-| `/` | miniapp SPA (public web portal entry) |
+| `/` | `frontend:80` (miniapp SPA — public web portal entry) |
 
-Your **edge nginx** (TLS / domain termination) only needs to forward everything
-to the `frontend` container — it no longer needs per-service `location` blocks:
+The edge nginx must share the `backend-network` so the upstream names resolve.
+`proxy_pass` directives without a trailing path preserve the original URI, so the
+`frontend` container receives the same `/bot/<app>/…` path it serves, and each
+backend receives its `/bot/<app>/api/…` path unchanged.
 
 ```nginx
+upstream frontend      { server frontend:80; }
+upstream dashboard_api { server dashboard:8000; }
+upstream miniapp_api   { server miniapp:8001; }
+upstream bot_api       { server bot:5000; }
+
 server {
     listen 443 ssl;
     server_name example.com;
     # ... ssl_certificate / ssl_certificate_key ...
 
-    location / {
-        proxy_pass http://frontend:80;          # the frontend container
-        proxy_set_header Host              $host;
-        proxy_set_header X-Real-IP         $remote_addr;
-        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
+    # Shared proxy headers.
+    proxy_set_header Host              $host;
+    proxy_set_header X-Real-IP         $remote_addr;
+    proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    # APIs — longest-prefix match wins, so these beat the SPA blocks below.
+    location /bot/dashboard/api/ { proxy_pass http://dashboard_api; }
+    location /bot/miniapp/api/   { proxy_pass http://miniapp_api; }
+
+    # SPAs (static) -> frontend container.
+    location /bot/dashboard/ { proxy_pass http://frontend; }
+    location /bot/miniapp/   { proxy_pass http://frontend; }
+
+    # Payment webhooks and other bot endpoints.
+    location /bot/ { proxy_pass http://bot_api; }
+
+    # Public web portal entry -> miniapp SPA.
+    location / { proxy_pass http://frontend; }
 }
 ```
-
-The edge nginx must share the `backend-network` with the `frontend` container so
-`frontend:80` resolves. The internal routing (static + API split) is owned by
-`frontend.nginx.conf`; if you prefer to keep routing in the edge nginx instead,
-mirror the prefix table above there and point each `/…/api/` at the matching
-backend while serving the SPAs from the `frontend` container.
 
 ## Dashboard
 

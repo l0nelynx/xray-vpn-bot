@@ -173,17 +173,14 @@ services:
     build:
       context: .
       dockerfile: infra/docker/frontend.Dockerfile
-    # Single web tier: serves both built SPAs and reverse-proxies API/webhook
-    # traffic to the backends. The edge nginx should proxy to `frontend:80`.
+    # Static-only web tier: serves both built SPAs. All routing lives in the edge
+    # nginx, which proxies static requests to `frontend:80` and API/webhooks
+    # straight to the backends — so this container has no backend dependency.
     networks:
       - backend-network
     ports:
       - '127.0.0.1:8088:80'
     restart: unless-stopped
-    depends_on:
-      - bot
-      - dashboard
-      - miniapp
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost/bot/miniapp/ >/dev/null 2>&1 || exit 1"]
       interval: 60s
