@@ -11,8 +11,10 @@ services:
       - ./pg_data:/var/lib/postgresql/data
     ports:
       - "127.0.0.1:5432:5432"
+    # Postgres lives only on the private data-network — it is NOT reachable
+    # from the edge (backend-network, where nginx is attached).
     networks:
-      - backend-network
+      - data-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-xray} -d ${POSTGRES_DB:-xray_vpn_bot}"]
       interval: 10s
@@ -34,7 +36,7 @@ services:
     environment:
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-xray}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-xray_vpn_bot}
     networks:
-      - backend-network
+      - data-network
     depends_on:
       postgres:
         condition: service_healthy
@@ -52,8 +54,10 @@ services:
       - /var/lib/marzban/certs/:/usr/src/app/uvicorn/ssl
       - ./config.yml:/usr/src/app/config.yml
       - ./dig_data.json:/usr/src/app/dig_data.json
+    # Edge (nginx proxies /bot/ here) + private data-network (Postgres).
     networks:
       - backend-network
+      - data-network
     ports:
        - '127.0.0.1:5000:5000'
 #      - "5000:5000"
@@ -83,6 +87,8 @@ services:
       - ./db:/usr/src/app/db
       - ./config.yml:/usr/src/app/config.yml
     restart: unless-stopped
+    # Legacy bot with its own SQLite DB — no Postgres access needed. Stays on
+    # the edge network only (outbound to Telegram).
     networks:
       - backend-network
     healthcheck:
@@ -105,6 +111,7 @@ services:
       - ./config.yml:/app/config.yml:ro
     networks:
       - backend-network
+      - data-network
     ports:
       - '127.0.0.1:8080:8000'
     environment:
@@ -134,6 +141,7 @@ services:
       - ./config.yml:/app/config.yml:ro
     networks:
       - backend-network
+      - data-network
       - mail-net
     environment:
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-xray}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-xray_vpn_bot}
@@ -156,11 +164,19 @@ services:
         limits:
           memory: 256M
 networks:
+  # Edge network — nginx is attached here and proxies to the app backends.
   backend-network:
     name: backend-network
     driver: bridge
     external: true
   mail-net:
-      name: mail-net
-      driver: bridge
-      external: true
+    name: mail-net
+    driver: bridge
+    external: true
+  # Private DB network — Postgres + the services that talk to it. internal:true
+  # means it has no gateway, so nothing here (notably Postgres) is exposed to
+  # the edge or the internet. The app backends are dual-homed (edge + data).
+  data-network:
+    name: data-network
+    driver: bridge
+    internal: true
