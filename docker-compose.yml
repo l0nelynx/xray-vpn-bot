@@ -232,4 +232,4 @@ networks:
   data-network:
     name: data-network
     driver: bridge
-    internal: true
+#    internal: true
