@@ -59,6 +59,7 @@ def _normalize_user(user: UserResponseDto) -> dict:
         ),
         "active_squads": active_squads,
         "email": getattr(user, "email", None),
+        "telegram_id": getattr(user, "telegram_id", None),
     }
 
 

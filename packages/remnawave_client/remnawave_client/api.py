@@ -87,6 +87,7 @@ async def resolve_remnawave_user(
     vless_uuid: str | None = None,
     email: str | None = None,
     username: str | None = None,
+    expected_telegram_id: int | None = None,
 ) -> dict | None:
     """Look up a Remnawave user via the strongest identifier available,
     falling back to weaker ones.
@@ -96,6 +97,14 @@ async def resolve_remnawave_user(
     — so try it first. Only fall back when it's missing or the upstream record
     was deleted/recreated out of band. Returns the normalized user dict, or
     None when every identifier we were given missed.
+
+    ``username`` is the weakest match: a Telegram @username can coincide with a
+    *different* person's panel account, which would leak their subscription URL.
+    When ``expected_telegram_id`` is given, a username match is only trusted if
+    the panel account is owned by that Telegram id (its ``telegram_id`` matches).
+    Accounts found by ``vless_uuid``/``email`` come from our own cached row and
+    are not re-checked; accounts whose panel ``telegram_id`` is unset are treated
+    as unverifiable and rejected on the username path.
     """
     if vless_uuid:
         user = await get_user_from_uuid(vless_uuid)
@@ -108,6 +117,13 @@ async def resolve_remnawave_user(
     if username:
         user = await get_user_from_username(username)
         if user:
+            if expected_telegram_id is not None:
+                owner = user.get("telegram_id")
+                try:
+                    if owner is None or int(owner) != int(expected_telegram_id):
+                        return None
+                except (TypeError, ValueError):
+                    return None
             return user
     return None
 

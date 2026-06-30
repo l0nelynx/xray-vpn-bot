@@ -79,10 +79,15 @@ async def get_me(tg: TgUser = Depends(get_tg_user)) -> MeResponse:
     if user.is_banned:
         return MeResponse(registered=True, user=user_info, links=links)
 
+    # Pass the trusted Telegram id so a username-only match (the weakest path)
+    # is accepted only when the panel account is actually owned by this user —
+    # otherwise a coincidental @username collision would expose a foreign
+    # subscription_url.
     rem_user = await resolve_remnawave_user(
         vless_uuid=user.vless_uuid,
         email=user.email,
         username=user.username,
+        expected_telegram_id=tg.tg_id,
     )
 
     if not rem_user:
