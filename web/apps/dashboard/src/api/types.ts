@@ -46,6 +46,25 @@ export interface OverviewStats {
   avg_order: number;
 }
 
+export interface MetricDelta {
+  value: number;
+  prev: number;
+}
+
+export interface SummaryStats {
+  period: string;
+  revenue: MetricDelta;
+  orders: MetricDelta;
+  new_users: MetricDelta;
+  avg_order: MetricDelta;
+  totals: {
+    total_users: number;
+    active_subs: number;
+    conversion: number;
+    revenue_all_time: number;
+  };
+}
+
 export interface RevenuePoint {
   date: string;
   revenue: number;

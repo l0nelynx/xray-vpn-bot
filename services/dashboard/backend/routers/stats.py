@@ -111,6 +111,112 @@ async def overview(_: str = Depends(get_current_user)):
     }
 
 
+def _prev_range(date_from: str | None, date_to: str | None):
+    """Equal-length window immediately preceding [date_from, date_to)."""
+    if not date_from or not date_to:
+        return None, None
+    f = datetime.fromisoformat(date_from)
+    t = datetime.fromisoformat(date_to)
+    delta = t - f
+    return (f - delta).isoformat(timespec="seconds"), f.isoformat(timespec="seconds")
+
+
+async def _revenue_in_range(session, rates, date_from, date_to) -> float:
+    q = (
+        select(Transaction.payment_method, func.sum(Transaction.amount).label("total"))
+        .where(
+            Transaction.order_status.in_(_repo_users.PAID_ORDER_STATUSES),
+            Transaction.amount != None,
+        )
+        .group_by(Transaction.payment_method)
+    )
+    if date_from:
+        q = q.where(Transaction.created_at >= date_from)
+    if date_to:
+        q = q.where(Transaction.created_at < date_to)
+    rows = await session.execute(q)
+    return sum(convert_to_rub(float(r.total or 0), r.payment_method, rates) for r in rows)
+
+
+async def _orders_in_range(session, date_from, date_to) -> int:
+    q = select(func.count()).select_from(Transaction).where(
+        Transaction.order_status.in_(_repo_users.PAID_ORDER_STATUSES)
+    )
+    if date_from:
+        q = q.where(Transaction.created_at >= date_from)
+    if date_to:
+        q = q.where(Transaction.created_at < date_to)
+    return await session.scalar(q) or 0
+
+
+async def _new_users_in_range(session, date_from, date_to) -> int:
+    """Count users whose first transaction timestamp falls in the window."""
+    sub = (
+        select(
+            Transaction.user_id,
+            func.min(Transaction.created_at).label("fd"),
+        )
+        .where(Transaction.created_at != None)
+        .group_by(Transaction.user_id)
+        .subquery()
+    )
+    q = select(func.count()).select_from(sub)
+    if date_from:
+        q = q.where(sub.c.fd >= date_from)
+    if date_to:
+        q = q.where(sub.c.fd < date_to)
+    return await session.scalar(q) or 0
+
+
+@router.get("/summary")
+async def summary(period: str = Query("month"), _: str = Depends(get_current_user)):
+    """Period-aware KPI bundle: each metric carries its current value and the
+    value for the equal-length previous window so the UI can show deltas. Plus
+    all-time context (users, active subs, conversion, lifetime revenue)."""
+    date_from, date_to = _period_range(period)
+    prev_from, prev_to = _prev_range(date_from, date_to)
+    now = datetime.now()
+    rates = await get_rates()
+
+    async with async_session() as session:
+        rev = await _revenue_in_range(session, rates, date_from, date_to)
+        rev_prev = await _revenue_in_range(session, rates, prev_from, prev_to)
+        orders = await _orders_in_range(session, date_from, date_to)
+        orders_prev = await _orders_in_range(session, prev_from, prev_to)
+        new_users = await _new_users_in_range(session, date_from, date_to)
+        new_users_prev = await _new_users_in_range(session, prev_from, prev_to)
+
+        total_users = await _repo_users.count_users(session)
+        active_subs = await _repo_users.count_paid_users(session, now=now)
+
+        method_rows = await session.execute(
+            select(Transaction.payment_method, func.sum(Transaction.amount).label("total"))
+            .where(Transaction.order_status.in_(_repo_users.PAID_ORDER_STATUSES))
+            .group_by(Transaction.payment_method)
+        )
+        revenue_all = sum(
+            convert_to_rub(float(r.total or 0), r.payment_method, rates) for r in method_rows
+        )
+
+    avg = round(rev / orders, 2) if orders else 0.0
+    avg_prev = round(rev_prev / orders_prev, 2) if orders_prev else 0.0
+    conversion = round(active_subs / total_users * 100, 1) if total_users else 0.0
+
+    return {
+        "period": period,
+        "revenue": {"value": round(rev, 2), "prev": round(rev_prev, 2)},
+        "orders": {"value": orders, "prev": orders_prev},
+        "new_users": {"value": new_users, "prev": new_users_prev},
+        "avg_order": {"value": avg, "prev": avg_prev},
+        "totals": {
+            "total_users": total_users,
+            "active_subs": active_subs,
+            "conversion": conversion,
+            "revenue_all_time": round(revenue_all, 2),
+        },
+    }
+
+
 @router.get("/revenue")
 async def revenue(
     period: str = Query("day"),
