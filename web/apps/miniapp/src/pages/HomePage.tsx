@@ -4,7 +4,6 @@ import { useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { MeResponse } from "../api/client";
 import SubscriptionCard from "../components/SubscriptionCard";
-import { openLink } from "../tg/webapp";
 
 interface Props {
   me: MeResponse;
@@ -58,7 +57,7 @@ export default function HomePage({ me, reload, refresh }: Props) {
               size="large"
               block
               icon={<LinkOutlined />}
-              onClick={() => openLink(sub.subscription_url!)}
+              onClick={() => navigate("/connect")}
             >
               Подключиться
             </Button>

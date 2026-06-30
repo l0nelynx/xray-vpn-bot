@@ -4,6 +4,7 @@ import BottomTabs from "./components/BottomTabs";
 import { useMe } from "./hooks/useMe";
 import BuyMenuPage from "./pages/BuyMenuPage";
 import BuySuccessPage from "./pages/BuySuccessPage";
+import ConnectPage from "./pages/ConnectPage";
 import DevicesPage from "./pages/DevicesPage";
 import FreeTrialPage from "./pages/FreeTrialPage";
 import AgreementPage from "./pages/AgreementPage";
@@ -64,6 +65,7 @@ function AppInner() {
         <Route path="/" element={<HomePage me={data} reload={reload} refresh={refresh} />} />
         <Route path="/buy" element={<BuyMenuPage />} />
         <Route path="/buy/success" element={<BuySuccessPage />} />
+        <Route path="/connect" element={<ConnectPage />} />
         <Route path="/devices" element={<DevicesPage />} />
         <Route path="/free/:mode" element={<FreeTrialPage />} />
         <Route path="/support" element={<SupportPage />} />

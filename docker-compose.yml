@@ -164,6 +164,10 @@ services:
         REGISTRY: ${REGISTRY-ghcr.io/l0nelynx/}
     volumes:
       - ./config.yml:/app/config.yml:ro
+      # Optional: override the /connect-page app catalog without a frontend
+      # rebuild. Copy services/miniapp/backend/connect/app_config.default.json,
+      # edit, and uncomment. See docs/connect-page.md.
+      # - ./app-config.json:/app/app-config.json:ro
     networks:
       - backend-network
       - data-network

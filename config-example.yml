@@ -240,3 +240,9 @@ discount: 5                                        # Extra discount (%) applied 
 # --- Web portal branding (superseded by `branding_name`; injected from DB config) ---
 # web_brand_name: "Cheeze Networks"
 # web_base_path: /bot/web
+
+# --- Connect page (app catalog) ---
+# Path to an operator override for the /connect-page app catalog. If the file
+# exists it is served instead of the bundled default. Mount it like config.yml
+# (see docker-compose.yml + docs/connect-page.md). Default /app/app-config.json.
+# connect_app_config_path: /app/app-config.json

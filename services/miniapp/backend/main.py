@@ -22,6 +22,7 @@ from .android import payments_router as android_payments_router
 from .android import promo_router as android_promo_router
 from .android import subscription_router as android_subscription_router
 from .android import support_router as android_support_router
+from .connect.router import router as connect_router
 from .routers import devices, free, me, menu, payments, promo, support
 from .web import web_router
 
@@ -107,6 +108,7 @@ app.include_router(android_subscription_router.router, prefix=BASE_PATH)
 app.include_router(android_promo_router.router, prefix=BASE_PATH)
 app.include_router(android_support_router.router, prefix=BASE_PATH)
 app.include_router(web_router.router, prefix=BASE_PATH)
+app.include_router(connect_router, prefix=BASE_PATH)
 
 
 @app.get("/health")

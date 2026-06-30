@@ -309,6 +309,20 @@ def get_expose_api_docs() -> bool:
     return bool(get_config().get("expose_api_docs", False))
 
 
+def get_connect_app_config_path() -> str:
+    """Path to an operator override for the /connect-page app catalog.
+
+    If the file exists it is served by `GET /api/connect/app-config` instead of
+    the bundled default; mount it like `config.yml` (see docs/connect-page.md).
+    Default `/app/app-config.json`; env `CONNECT_APP_CONFIG_PATH` overrides.
+    """
+    return (
+        os.environ.get("CONNECT_APP_CONFIG_PATH")
+        or get_config().get("connect_app_config_path")
+        or "/app/app-config.json"
+    )
+
+
 # --- Google Play IAP -------------------------------------------------------
 
 def get_google_play_package_name() -> str:

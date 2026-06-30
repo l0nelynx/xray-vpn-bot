@@ -214,3 +214,54 @@ export const free = {
   vpnStatus: () => api.get<FreeStatusResponse>("/free/vpn/status"),
   telemtStatus: () => api.get<FreeStatusResponse>("/free/telemt/status"),
 };
+
+// --- Connect page (app catalog) ------------------------------------------
+// Mirrors the Remnawave subscription-page app-config.json schema. Localized
+// strings are objects keyed by locale (en/ru/zh/fa/fr). Button links carry the
+// {{SUBSCRIPTION_LINK}} / {{USERNAME}} placeholders substituted on the client.
+
+export type LocalizedText = Record<string, string>;
+
+export type ConnectButtonType = "external" | "subscriptionLink" | "copyButton";
+
+export interface ConnectButton {
+  link: string;
+  text: LocalizedText;
+  type: ConnectButtonType;
+  svgIconKey?: string;
+}
+
+export interface ConnectBlock {
+  title: LocalizedText;
+  description?: LocalizedText;
+  buttons: ConnectButton[];
+  svgIconKey?: string;
+  svgIconColor?: string;
+}
+
+export interface ConnectApp {
+  name: string;
+  blocks: ConnectBlock[];
+  featured?: boolean;
+  svgIconKey?: string;
+}
+
+export interface ConnectPlatform {
+  apps: ConnectApp[];
+}
+
+export interface AppConfig {
+  locales: string[];
+  version: string;
+  uiConfig?: {
+    subscriptionInfoBlockType?: string;
+    installationGuidesBlockType?: string;
+  };
+  platforms: Record<string, ConnectPlatform>;
+  // svgIconKey -> raw SVG markup (brand logos + UI glyphs).
+  svgLibrary?: Record<string, string>;
+}
+
+export const connect = {
+  getAppConfig: () => api.get<AppConfig>("/connect/app-config"),
+};

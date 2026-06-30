@@ -796,3 +796,15 @@ h4.ant-typography, h5.ant-typography,
     width: calc(min(480px, 100vw) - 24px);
   }
 }
+
+/* Connect-page inline SVG icons from svgLibrary: scale to wrapper box */
+.lib-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.lib-icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
