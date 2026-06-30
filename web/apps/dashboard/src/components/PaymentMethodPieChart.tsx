@@ -44,11 +44,13 @@ export default function PaymentMethodPieChart() {
         label={{
           text: "method",
           position: "outside",
-          style: { fill: "rgba(255,255,255,0.7)", fontSize: isMobile ? 10 : 12 },
+          fill: "rgba(255,255,255,0.8)",
+          fontSize: isMobile ? 10 : 12,
         }}
         legend={{
           color: {
-            itemLabelFill: "rgba(255,255,255,0.7)",
+            itemLabelFill: "rgba(255,255,255,0.8)",
+            itemLabelFontSize: isMobile ? 11 : 12,
           },
         }}
         tooltip={{ title: "method", items: [{ channel: "y" }] }}

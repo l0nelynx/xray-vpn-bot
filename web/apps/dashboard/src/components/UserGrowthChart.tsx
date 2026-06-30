@@ -64,20 +64,18 @@ export default function UserGrowthChart({ period = "month" }: Props) {
         }}
         axis={{
           x: {
-            label: {
-              style: { fill: "rgba(255,255,255,0.65)", fontSize: isMobile ? 9 : 11 },
-              autoRotate: true,
-            },
-            line: { style: { stroke: "rgba(255,255,255,0.1)" } },
-            tick: null,
+            labelFill: "rgba(255,255,255,0.75)",
+            labelFontSize: isMobile ? 9 : 11,
+            labelAutoRotate: true,
+            labelAutoHide: true,
+            lineStroke: "rgba(255,255,255,0.12)",
+            tick: false,
           },
           y: {
-            label: {
-              style: { fill: "rgba(255,255,255,0.65)", fontSize: isMobile ? 9 : 11 },
-            },
-            grid: {
-              style: { stroke: "rgba(255,255,255,0.08)", lineDash: [3, 3] },
-            },
+            labelFill: "rgba(255,255,255,0.75)",
+            labelFontSize: isMobile ? 9 : 11,
+            gridStroke: "rgba(255,255,255,0.08)",
+            gridLineDash: [3, 3],
           },
         }}
         tooltip={{
