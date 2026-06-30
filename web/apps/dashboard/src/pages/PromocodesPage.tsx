@@ -16,17 +16,31 @@ import {
   Typography,
   App,
 } from "antd";
+import type { TableProps } from "antd";
 import {
   DeleteOutlined,
   GiftOutlined,
   PlusOutlined,
   ReloadOutlined,
+  SearchOutlined,
   SettingOutlined,
 } from "@ant-design/icons";
 import { api } from "../api/client";
 import useIsMobile from "../hooks/useIsMobile";
+import useDebounce from "../hooks/useDebounce";
+import MobileSortControl, { SortOrder } from "../components/MobileSortControl";
 
 type PromoType = "referral" | "promotional";
+
+const PROMO_SORT_OPTIONS = [
+  { value: "promo_code", label: "Code" },
+  { value: "promo_type", label: "Type" },
+  { value: "owner_username", label: "Owner" },
+  { value: "discount_percent", label: "Discount" },
+  { value: "usage_count", label: "Usage" },
+  { value: "days_purchased", label: "Days bought" },
+  { value: "days_rewarded", label: "Rewarded" },
+];
 
 interface PromoItem {
   promo_code: string;
@@ -59,20 +73,28 @@ function PromosTab() {
   const [items, setItems] = useState<PromoItem[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
+  const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [sort, setSort] = useState("id");
+  const [order, setOrder] = useState<SortOrder>("desc");
   const [createOpen, setCreateOpen] = useState(false);
   const [form] = Form.useForm();
+  const debouncedSearch = useDebounce(search, 400);
 
   const load = useCallback(() => {
     setLoading(true);
+    const url =
+      `/promos?page=${page}&per_page=20&sort=${sort}&order=${order}` +
+      `&type=${typeFilter}&search=${encodeURIComponent(debouncedSearch)}`;
     api
-      .get<PromosListResponse>(`/promos?page=${page}&per_page=20`)
+      .get<PromosListResponse>(url)
       .then((r) => {
         setItems(r.items);
         setTotal(r.total);
       })
       .catch((e: Error) => message.error(e.message || "Failed to load promos"))
       .finally(() => setLoading(false));
-  }, [page]);
+  }, [page, sort, order, typeFilter, debouncedSearch]);
 
   useEffect(() => {
     load();
@@ -110,11 +132,16 @@ function PromosTab() {
     }
   };
 
-  const columns = [
+  const sortOrderFor = (key: string) =>
+    sort === key ? (order === "asc" ? "ascend" : "descend") : null;
+
+  const columns: TableProps<PromoItem>["columns"] = [
     {
       title: "Code",
       dataIndex: "promo_code",
       key: "promo_code",
+      sorter: true,
+      sortOrder: sortOrderFor("promo_code"),
       render: (v: string) => <Typography.Text strong>{v}</Typography.Text>,
     },
     {
@@ -122,6 +149,8 @@ function PromosTab() {
       dataIndex: "promo_type",
       key: "promo_type",
       width: 120,
+      sorter: true,
+      sortOrder: sortOrderFor("promo_type"),
       render: (v: PromoType) =>
         v === "referral" ? (
           <Tag color="purple">Referral</Tag>
@@ -131,7 +160,9 @@ function PromosTab() {
     },
     {
       title: "Owner",
-      key: "owner",
+      key: "owner_username",
+      sorter: true,
+      sortOrder: sortOrderFor("owner_username"),
       render: (_: unknown, r: PromoItem) =>
         r.owner_username ? (
           <span>
@@ -149,30 +180,34 @@ function PromosTab() {
       dataIndex: "discount_percent",
       key: "discount_percent",
       width: 120,
+      sorter: true,
+      sortOrder: sortOrderFor("discount_percent"),
       render: (v: number | null) =>
-        v == null ? (
-          <Tag>default</Tag>
-        ) : (
-          <Tag color="green">{v}%</Tag>
-        ),
+        v == null ? <Tag>default</Tag> : <Tag color="green">{v}%</Tag>,
     },
     {
       title: "Usage",
       dataIndex: "usage_count",
       key: "usage_count",
       width: 80,
+      sorter: true,
+      sortOrder: sortOrderFor("usage_count"),
     },
     {
       title: "Days bought",
       dataIndex: "days_purchased",
       key: "days_purchased",
       width: 110,
+      sorter: true,
+      sortOrder: sortOrderFor("days_purchased"),
     },
     {
       title: "Rewarded",
       dataIndex: "days_rewarded",
       key: "days_rewarded",
       width: 110,
+      sorter: true,
+      sortOrder: sortOrderFor("days_rewarded"),
     },
     {
       title: "",
@@ -190,6 +225,15 @@ function PromosTab() {
       ),
     },
   ];
+
+  const handleTableChange: TableProps<PromoItem>["onChange"] = (_p, _f, sorter) => {
+    const s = Array.isArray(sorter) ? sorter[0] : sorter;
+    if (s && s.order) {
+      setSort(String(s.columnKey));
+      setOrder(s.order === "ascend" ? "asc" : "desc");
+    }
+    setPage(1);
+  };
 
   return (
     <div>
@@ -211,12 +255,54 @@ function PromosTab() {
           Refresh
         </Button>
       </div>
+
+      <div style={{ marginBottom: 16, display: "flex", flexWrap: "wrap", gap: 8 }}>
+        <Input
+          placeholder="Search by code or owner"
+          prefix={<SearchOutlined />}
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setPage(1);
+          }}
+          style={{ flex: 1, minWidth: isMobile ? "100%" : 220, maxWidth: isMobile ? "100%" : 280 }}
+          allowClear
+        />
+        <Select
+          value={typeFilter}
+          onChange={(v) => {
+            setTypeFilter(v);
+            setPage(1);
+          }}
+          style={{ width: isMobile ? "100%" : 160 }}
+          options={[
+            { value: "all", label: "All types" },
+            { value: "promotional", label: "Promotional" },
+            { value: "referral", label: "Referral" },
+          ]}
+        />
+      </div>
+
+      {isMobile && (
+        <MobileSortControl
+          options={PROMO_SORT_OPTIONS}
+          sort={sort}
+          order={order}
+          onChange={(s, o) => {
+            setSort(s);
+            setOrder(o);
+            setPage(1);
+          }}
+        />
+      )}
+
       <Card>
         <Table
           rowKey="promo_code"
           columns={columns}
           dataSource={items}
           loading={loading}
+          onChange={handleTableChange}
           size={isMobile ? "small" : "middle"}
           scroll={{ x: 700 }}
           pagination={{

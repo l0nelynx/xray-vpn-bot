@@ -5,13 +5,13 @@ from datetime import datetime
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import select, func, delete, exists
+from sqlalchemy import select, func, delete, exists, or_
 
 logger = logging.getLogger(__name__)
 
 from ..auth import get_current_user
 from ..config import get_bot_token, get_remnawave_url, get_remnawave_token
-from ..database.models import User, Transaction
+from ..database.models import User, Transaction, SupportTicket, Promo
 from ..database.session import async_session
 
 # Shared "paid user" predicate + count helpers — see
@@ -71,12 +71,15 @@ async def list_users(
         base = select(User, has_tx)
 
         if search:
+            like = f"%{search}%"
+            conds = [
+                User.username.ilike(like),
+                User.email.ilike(like),
+                User.vless_uuid.ilike(like),
+            ]
             if search.isdigit():
-                base = base.where(
-                    (User.username.ilike(f"%{search}%")) | (User.tg_id == int(search))
-                )
-            else:
-                base = base.where(User.username.ilike(f"%{search}%"))
+                conds.append(User.tg_id == int(search))
+            base = base.where(or_(*conds))
 
         active_paid_sq = _repo_users.active_paid_user_ids_subquery(now)
         if filter == "paid":
@@ -109,6 +112,7 @@ async def list_users(
                 "id": user.id,
                 "tg_id": user.tg_id,
                 "username": user.username,
+                "vless_uuid": user.vless_uuid,
                 "api_provider": user.api_provider,
                 "is_banned": bool(user.is_banned),
                 "is_paid": bool(is_paid),
@@ -134,6 +138,15 @@ async def get_user(tg_id: int, _: str = Depends(get_current_user)):
             select(func.sum(Transaction.amount)).where(Transaction.user_id == user.id)
         ) or 0
 
+        # The user's own promo/referral code (one row per owner tg_id), if any.
+        promo_code = await session.scalar(
+            select(Promo.promo_code).where(Promo.tg_id == user.tg_id)
+        )
+        # How many support tickets this user has opened.
+        tickets_count = await session.scalar(
+            select(func.count()).select_from(SupportTicket).where(SupportTicket.user_id == user.id)
+        ) or 0
+
         return {
             "id": user.id,
             "tg_id": user.tg_id,
@@ -146,6 +159,46 @@ async def get_user(tg_id: int, _: str = Depends(get_current_user)):
             "vip": bool(user.vip),
             "transactions_count": tx_count,
             "total_spent": float(total_spent),
+            "promo_code": promo_code,
+            "tickets_count": tickets_count,
+        }
+
+
+class UpdateIdentifiersRequest(BaseModel):
+    tg_id: int | None = None
+    username: str | None = None
+    vless_uuid: str | None = None
+
+
+@router.patch("/{tg_id}/identifiers")
+async def update_identifiers(
+    tg_id: int,
+    body: UpdateIdentifiersRequest,
+    _: str = Depends(get_current_user),
+):
+    """Edit a user's tg_id / username / vless_uuid. Empty string clears the
+    field (sets NULL); a missing field is left unchanged."""
+    async with async_session() as session:
+        user = await _repo_users.get_user_by_tg_id(session, tg_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        if body.username is not None:
+            user.username = body.username.strip().lstrip("@") or None
+        if body.vless_uuid is not None:
+            user.vless_uuid = body.vless_uuid.strip() or None
+        if body.tg_id is not None and body.tg_id != tg_id:
+            clash = await _repo_users.get_user_by_tg_id(session, body.tg_id)
+            if clash and clash.id != user.id:
+                raise HTTPException(status_code=409, detail="tg_id already in use by another user")
+            user.tg_id = body.tg_id
+
+        await session.commit()
+        return {
+            "ok": True,
+            "tg_id": user.tg_id,
+            "username": user.username,
+            "vless_uuid": user.vless_uuid,
         }
 
 

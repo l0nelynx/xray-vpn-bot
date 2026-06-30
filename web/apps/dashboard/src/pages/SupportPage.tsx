@@ -13,7 +13,7 @@ import {
   Card,
 } from "antd";
 import type { TableProps } from "antd";
-import { DeleteOutlined } from "@ant-design/icons";
+import { DeleteOutlined, UserOutlined } from "@ant-design/icons";
 import { api } from "../api/client";
 import {
   PaginatedResponse,
@@ -22,6 +22,7 @@ import {
 } from "../api/types";
 import useIsMobile from "../hooks/useIsMobile";
 import MobileSortControl, { SortOrder } from "../components/MobileSortControl";
+import UserDrawer from "../components/UserDrawer";
 
 const SORT_OPTIONS = [
   { value: "updated_at", label: "Updated" },
@@ -69,6 +70,10 @@ export default function SupportPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [reply, setReply] = useState("");
   const [sending, setSending] = useState(false);
+
+  // Nested user card (opened from within a ticket)
+  const [userTgId, setUserTgId] = useState<number | null>(null);
+  const [userOpen, setUserOpen] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -383,9 +388,30 @@ export default function SupportPage() {
         {detailLoading && <Spin />}
         {detail && (
           <>
-            <div style={{ marginBottom: 8, color: "rgba(255,255,255,0.6)" }}>
-              {detail.username ? `@${detail.username}` : detail.tg_id} ·{" "}
-              {detail.created_at}
+            <div
+              style={{
+                marginBottom: 12,
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                flexWrap: "wrap",
+              }}
+            >
+              <span style={{ color: "rgba(255,255,255,0.6)" }}>
+                {detail.username ? `@${detail.username}` : detail.tg_id} · {detail.created_at}
+              </span>
+              {detail.tg_id != null && (
+                <Button
+                  size="small"
+                  icon={<UserOutlined />}
+                  onClick={() => {
+                    setUserTgId(detail.tg_id);
+                    setUserOpen(true);
+                  }}
+                >
+                  Карточка пользователя
+                </Button>
+              )}
             </div>
 
             <div
@@ -465,6 +491,12 @@ export default function SupportPage() {
           </>
         )}
       </Drawer>
+
+      <UserDrawer
+        tgId={userTgId}
+        open={userOpen}
+        onClose={() => setUserOpen(false)}
+      />
     </div>
   );
 }

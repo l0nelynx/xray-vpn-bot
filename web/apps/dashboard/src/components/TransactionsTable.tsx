@@ -1,9 +1,11 @@
-import { Table, Select, DatePicker, Tag, Card, Button } from "antd";
+import { Table, Select, DatePicker, Tag, Card, Button, Input } from "antd";
+import { SearchOutlined } from "@ant-design/icons";
 import type { TableProps } from "antd";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "../api/client";
 import type { TransactionItem, PaginatedResponse } from "../api/types";
 import useIsMobile from "../hooks/useIsMobile";
+import useDebounce from "../hooks/useDebounce";
 import MobileSortControl, { SortOrder } from "./MobileSortControl";
 import { STATUS_COLORS } from "../utils/constants";
 
@@ -28,10 +30,12 @@ export default function TransactionsTable() {
   const [status, setStatus] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("");
   const [dateRange, setDateRange] = useState<[string, string]>(["", ""]);
+  const [search, setSearch] = useState("");
   const [sort, setSort] = useState("created_at");
   const [order, setOrder] = useState<SortOrder>("desc");
   const [loading, setLoading] = useState(false);
   const isMobile = useIsMobile();
+  const debouncedSearch = useDebounce(search, 400);
   const abortRef = useRef<AbortController | null>(null);
 
   const fetchData = useCallback(async () => {
@@ -46,6 +50,7 @@ export default function TransactionsTable() {
       if (paymentMethod) url += `&payment_method=${encodeURIComponent(paymentMethod)}`;
       if (dateRange[0]) url += `&date_from=${dateRange[0]}`;
       if (dateRange[1]) url += `&date_to=${dateRange[1]}`;
+      if (debouncedSearch) url += `&search=${encodeURIComponent(debouncedSearch)}`;
 
       const res = await api.get<PaginatedResponse<TransactionItem>>(url, controller.signal);
       setData(res.items);
@@ -56,7 +61,7 @@ export default function TransactionsTable() {
     } finally {
       setLoading(false);
     }
-  }, [page, perPage, status, paymentMethod, dateRange, sort, order]);
+  }, [page, perPage, status, paymentMethod, dateRange, debouncedSearch, sort, order]);
 
   useEffect(() => {
     fetchData();
@@ -155,6 +160,17 @@ export default function TransactionsTable() {
   return (
     <>
       <div style={{ marginBottom: 16, display: "flex", flexWrap: "wrap", gap: 8 }}>
+        <Input
+          placeholder="Search by username, TG ID or transaction ID"
+          prefix={<SearchOutlined />}
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setPage(1);
+          }}
+          style={{ width: isMobile ? "100%" : 280 }}
+          allowClear
+        />
         <Select
           value={status}
           onChange={(v) => {

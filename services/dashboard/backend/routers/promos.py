@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import select, func, delete
+from sqlalchemy import select, func, delete, or_
 
 from ..auth import get_current_user
 from ..database.models import Promo, PromoRedemption, User
@@ -36,13 +36,71 @@ class PromoSettingsRequest(BaseModel):
 async def list_promos(
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
+    sort: str = Query("id"),
+    order: str = Query("desc"),
+    search: str = Query(""),
+    type: str = Query("all"),
     _: str = Depends(get_current_user),
 ):
+    """Paginated promo catalog with per-column sort, type filter and
+    code/owner search. Mirrors the shared list_promos_paginated shape but
+    adds the dashboard-only controls."""
+    usage_sq = (
+        select(func.count())
+        .select_from(PromoRedemption)
+        .where(PromoRedemption.promo_code == Promo.promo_code)
+        .correlate(Promo)
+        .scalar_subquery()
+        .label("usage_count")
+    )
+    sort_columns = {
+        "id": Promo.id,
+        "promo_code": Promo.promo_code,
+        "promo_type": Promo.promo_type,
+        "owner_username": User.username,
+        "owner_tg_id": Promo.tg_id,
+        "usage_count": usage_sq,
+        "days_purchased": Promo.days_purchased,
+        "days_rewarded": Promo.days_rewarded,
+        "discount_percent": Promo.discount_percent,
+    }
+
     async with async_session() as session:
-        # Shared 1-based paginated query (counts redemptions for usage_count).
-        items, total = await _repo_promos.list_promos_paginated(
-            session, page, per_page
+        base = select(Promo, User.username, usage_sq).outerjoin(
+            User, Promo.tg_id == User.tg_id
         )
+
+        if type in _VALID_TYPES:
+            base = base.where(Promo.promo_type == type)
+        if search:
+            like = f"%{search.strip()}%"
+            conds = [Promo.promo_code.ilike(like), User.username.ilike(like)]
+            if search.strip().lstrip("-").isdigit():
+                conds.append(Promo.tg_id == int(search.strip()))
+            base = base.where(or_(*conds))
+
+        total = await session.scalar(
+            select(func.count()).select_from(base.subquery())
+        ) or 0
+
+        sort_col = sort_columns.get(sort, Promo.id)
+        base = base.order_by(sort_col.asc() if order == "asc" else sort_col.desc())
+
+        offset = (page - 1) * per_page
+        rows = (await session.execute(base.offset(offset).limit(per_page))).all()
+        items = [
+            {
+                "promo_code": promo.promo_code,
+                "promo_type": promo.promo_type,
+                "owner_username": owner_username,
+                "owner_tg_id": promo.tg_id,
+                "usage_count": usage_count or 0,
+                "days_purchased": promo.days_purchased,
+                "days_rewarded": promo.days_rewarded,
+                "discount_percent": promo.discount_percent,
+            }
+            for promo, owner_username, usage_count in rows
+        ]
     return {"items": items, "total": total, "page": page, "per_page": per_page}
 
 

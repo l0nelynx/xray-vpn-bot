@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_
 
 from ..auth import get_current_user
 from ..database.models import Transaction, User
@@ -85,6 +85,7 @@ async def list_transactions(
     payment_method: str = Query(""),
     date_from: str = Query(""),
     date_to: str = Query(""),
+    search: str = Query(""),
     sort: str = Query("created_at"),
     order: str = Query("desc"),
     _: str = Depends(get_current_user),
@@ -103,6 +104,15 @@ async def list_transactions(
             base = base.where(Transaction.created_at >= date_from)
         if date_to:
             base = base.where(Transaction.created_at <= date_to)
+        if search:
+            like = f"%{search.strip()}%"
+            conds = [
+                Transaction.username.ilike(like),
+                Transaction.transaction_id.ilike(like),
+            ]
+            if search.strip().isdigit():
+                conds.append(User.tg_id == int(search.strip()))
+            base = base.where(or_(*conds))
 
         count_q = select(func.count()).select_from(base.subquery())
         total = await session.scalar(count_q) or 0

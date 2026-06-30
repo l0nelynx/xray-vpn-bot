@@ -1,12 +1,13 @@
-import { Table, Tag, Button, Space, Popconfirm, Input, Select, Drawer, Descriptions, List, Card, App, Typography, Divider } from "antd";
+import { Table, Tag, Button, Space, Popconfirm, Input, Select, Card, App, Typography } from "antd";
 import type { TableProps } from "antd";
-import { SearchOutlined, StopOutlined, CheckOutlined, DeleteOutlined, EyeOutlined, CrownOutlined, SendOutlined, EditOutlined } from "@ant-design/icons";
+import { SearchOutlined, StopOutlined, CheckOutlined, DeleteOutlined, EyeOutlined, CrownOutlined } from "@ant-design/icons";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "../api/client";
-import type { UserItem, UserDetail, PaginatedResponse, TransactionItem } from "../api/types";
+import type { UserItem, PaginatedResponse } from "../api/types";
 import useIsMobile from "../hooks/useIsMobile";
 import useDebounce from "../hooks/useDebounce";
 import MobileSortControl, { SortOrder } from "./MobileSortControl";
+import UserDrawer from "./UserDrawer";
 
 const SORT_OPTIONS = [
   { value: "id", label: "ID" },
@@ -26,13 +27,8 @@ export default function UsersTable() {
   const [sort, setSort] = useState("id");
   const [order, setOrder] = useState<SortOrder>("desc");
   const [loading, setLoading] = useState(false);
+  const [drawerTgId, setDrawerTgId] = useState<number | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<UserDetail | null>(null);
-  const [userTx, setUserTx] = useState<TransactionItem[]>([]);
-  const [msgText, setMsgText] = useState("");
-  const [msgSending, setMsgSending] = useState(false);
-  const [emailInput, setEmailInput] = useState("");
-  const [emailSaving, setEmailSaving] = useState(false);
   const isMobile = useIsMobile();
   const debouncedSearch = useDebounce(search, 400);
   const abortRef = useRef<AbortController | null>(null);
@@ -100,45 +96,9 @@ export default function UsersTable() {
     }
   };
 
-  const openDrawer = async (tg_id: number) => {
-    const user = await api.get<UserDetail>(`/users/${tg_id}`);
-    const tx = await api.get<TransactionItem[]>(`/users/${tg_id}/transactions`);
-    setSelectedUser(user);
-    setUserTx(tx);
-    setMsgText("");
-    setEmailInput(user.email || "");
+  const openDrawer = (tg_id: number) => {
+    setDrawerTgId(tg_id);
     setDrawerOpen(true);
-  };
-
-  const handleSendMessage = async () => {
-    if (!selectedUser || !msgText.trim()) return;
-    setMsgSending(true);
-    try {
-      await api.post(`/users/${selectedUser.tg_id}/send-message`, { text: msgText });
-      message.success("Сообщение отправлено");
-      setMsgText("");
-    } catch {
-      message.error("Ошибка отправки");
-    } finally {
-      setMsgSending(false);
-    }
-  };
-
-  const handleSaveEmail = async () => {
-    if (!selectedUser || !emailInput.trim()) return;
-    setEmailSaving(true);
-    try {
-      const res = await api.patch<{ ok: boolean; rw_uuid: string | null }>(
-        `/users/${selectedUser.tg_id}/email`,
-        { email: emailInput.trim() }
-      );
-      message.success(res.rw_uuid ? `Email сохранён, UUID: ${res.rw_uuid}` : "Email сохранён");
-      setSelectedUser({ ...selectedUser, email: emailInput.trim() });
-    } catch {
-      message.error("Ошибка сохранения email");
-    } finally {
-      setEmailSaving(false);
-    }
   };
 
   const sortOrderFor = (key: string) =>
@@ -146,9 +106,30 @@ export default function UsersTable() {
 
   const columns: TableProps<UserItem>["columns"] = [
     { title: "ID", dataIndex: "id", key: "id", width: 60, sorter: true, sortOrder: sortOrderFor("id") },
-    { title: "TG ID", dataIndex: "tg_id", key: "tg_id", width: 140, sorter: true, sortOrder: sortOrderFor("tg_id") },
-    { title: "Username", dataIndex: "username", key: "username", sorter: true, sortOrder: sortOrderFor("username") },
-    { title: "Provider", dataIndex: "api_provider", key: "api_provider", width: 100, sorter: true, sortOrder: sortOrderFor("api_provider") },
+    { title: "TG ID", dataIndex: "tg_id", key: "tg_id", width: 130, sorter: true, sortOrder: sortOrderFor("tg_id") },
+    { title: "Username", dataIndex: "username", key: "username", width: 140, sorter: true, sortOrder: sortOrderFor("username") },
+    {
+      title: "Email",
+      dataIndex: "email",
+      key: "email",
+      width: 180,
+      render: (v: string | null) => v || "—",
+    },
+    {
+      title: "vless_uuid",
+      dataIndex: "vless_uuid",
+      key: "vless_uuid",
+      width: 150,
+      render: (v: string | null) =>
+        v ? (
+          <Typography.Text copyable={{ text: v }} style={{ fontSize: 11 }} ellipsis={{ tooltip: v }}>
+            {v}
+          </Typography.Text>
+        ) : (
+          "—"
+        ),
+    },
+    { title: "Provider", dataIndex: "api_provider", key: "api_provider", width: 90, sorter: true, sortOrder: sortOrderFor("api_provider") },
     {
       title: "Status",
       key: "is_paid",
@@ -166,7 +147,8 @@ export default function UsersTable() {
     {
       title: "Actions",
       key: "actions",
-      width: 220,
+      width: 200,
+      fixed: "right",
       render: (_: unknown, r: UserItem) => (
         <Space size="small">
           <Button size="small" icon={<EyeOutlined />} onClick={() => openDrawer(r.tg_id)} />
@@ -202,20 +184,20 @@ export default function UsersTable() {
   };
 
   const renderMobileCard = (user: UserItem) => (
-    <Card
-      key={user.id}
-      size="small"
-      style={{ marginBottom: 8 }}
-      styles={{ body: { padding: "12px" } }}
-    >
+    <Card key={user.id} size="small" style={{ marginBottom: 8 }} styles={{ body: { padding: "12px" } }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontWeight: 600, color: "rgba(255,255,255,0.88)", marginBottom: 4 }}>
             {user.username || "—"}
           </div>
-          <div style={{ fontSize: 12, color: "rgba(255,255,255,0.45)", marginBottom: 6 }}>
+          <div style={{ fontSize: 12, color: "rgba(255,255,255,0.45)", marginBottom: 4 }}>
             TG: {user.tg_id} · {user.api_provider}
           </div>
+          {user.email && (
+            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 6, wordBreak: "break-all" }}>
+              {user.email}
+            </div>
+          )}
           <Space size={4}>
             {user.vip && <Tag color="gold" style={{ margin: 0 }}>VIP</Tag>}
             {user.is_banned && <Tag color="red" style={{ margin: 0 }}>Banned</Tag>}
@@ -243,14 +225,14 @@ export default function UsersTable() {
     <>
       <div style={{ marginBottom: 16, display: "flex", flexWrap: "wrap", gap: 8 }}>
         <Input
-          placeholder="Search by username or TG ID"
+          placeholder="Search by username, email, UUID or TG ID"
           prefix={<SearchOutlined />}
           value={search}
           onChange={(e) => {
             setSearch(e.target.value);
             setPage(1);
           }}
-          style={{ flex: 1, minWidth: isMobile ? "100%" : 200, maxWidth: isMobile ? "100%" : 280 }}
+          style={{ flex: 1, minWidth: isMobile ? "100%" : 220, maxWidth: isMobile ? "100%" : 320 }}
           allowClear
         />
         <Select
@@ -315,93 +297,16 @@ export default function UsersTable() {
             showTotal: (t) => `Total: ${t}`,
           }}
           size="small"
-          scroll={{ x: 700 }}
+          scroll={{ x: 960 }}
         />
       )}
 
-      <Drawer
-        title={selectedUser ? `User: ${selectedUser.username || selectedUser.tg_id}` : "User"}
+      <UserDrawer
+        tgId={drawerTgId}
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
-        width={isMobile ? "100%" : 500}
-      >
-        {selectedUser && (
-          <>
-            <Descriptions column={1} bordered size="small">
-              <Descriptions.Item label="TG ID">{selectedUser.tg_id}</Descriptions.Item>
-              <Descriptions.Item label="Username">{selectedUser.username || "—"}</Descriptions.Item>
-              <Descriptions.Item label="Email">{selectedUser.email || "—"}</Descriptions.Item>
-              <Descriptions.Item label="Provider">{selectedUser.api_provider}</Descriptions.Item>
-              <Descriptions.Item label="Banned">{selectedUser.is_banned ? "Yes" : "No"}</Descriptions.Item>
-              <Descriptions.Item label="VIP">{selectedUser.vip ? "Yes" : "No"}</Descriptions.Item>
-              <Descriptions.Item label="Language">{selectedUser.language || "—"}</Descriptions.Item>
-              <Descriptions.Item label="Total Spent">{selectedUser.total_spent}</Descriptions.Item>
-              <Descriptions.Item label="Transactions">{selectedUser.transactions_count}</Descriptions.Item>
-            </Descriptions>
-
-            <h4 style={{ marginTop: 24, color: "rgba(255,255,255,0.85)" }}>Transactions</h4>
-            <List
-              size="small"
-              dataSource={userTx}
-              renderItem={(t) => (
-                <List.Item>
-                  <List.Item.Meta
-                    title={`${t.transaction_id} — ${t.order_status}`}
-                    description={`${t.payment_method || "—"} | ${t.amount ?? 0} | ${t.days_ordered}d | ${t.created_at || "—"}`}
-                  />
-                </List.Item>
-              )}
-            />
-
-            <Divider style={{ borderColor: "rgba(255,255,255,0.1)" }} />
-
-            <Typography.Text strong style={{ color: "rgba(255,255,255,0.85)" }}>
-              <EditOutlined style={{ marginRight: 6 }} />
-              Email пользователя
-            </Typography.Text>
-            <Space.Compact style={{ width: "100%", marginTop: 8 }}>
-              <Input
-                value={emailInput}
-                onChange={(e) => setEmailInput(e.target.value)}
-                placeholder="user@example.com"
-                onPressEnter={handleSaveEmail}
-              />
-              <Button
-                type="primary"
-                onClick={handleSaveEmail}
-                loading={emailSaving}
-                icon={<EditOutlined />}
-              >
-                Сохранить
-              </Button>
-            </Space.Compact>
-
-            <Divider style={{ borderColor: "rgba(255,255,255,0.1)" }} />
-
-            <Typography.Text strong style={{ color: "rgba(255,255,255,0.85)" }}>
-              <SendOutlined style={{ marginRight: 6 }} />
-              Сообщение пользователю
-            </Typography.Text>
-            <Input.TextArea
-              style={{ marginTop: 8 }}
-              rows={3}
-              value={msgText}
-              onChange={(e) => setMsgText(e.target.value)}
-              placeholder="Текст сообщения..."
-            />
-            <Button
-              type="primary"
-              style={{ marginTop: 8 }}
-              icon={<SendOutlined />}
-              loading={msgSending}
-              onClick={handleSendMessage}
-              disabled={!msgText.trim()}
-            >
-              Отправить
-            </Button>
-          </>
-        )}
-      </Drawer>
+        onChanged={fetchUsers}
+      />
     </>
   );
 }

@@ -2,6 +2,7 @@ export interface UserItem {
   id: number;
   tg_id: number;
   username: string | null;
+  vless_uuid: string | null;
   api_provider: string;
   is_banned: boolean;
   is_paid: boolean;
@@ -11,9 +12,10 @@ export interface UserItem {
 }
 
 export interface UserDetail extends UserItem {
-  vless_uuid: string | null;
   transactions_count: number;
   total_spent: number;
+  promo_code: string | null;
+  tickets_count: number;
 }
 
 export interface TransactionItem {
@@ -67,11 +69,13 @@ export interface OrderStatusStat {
 
 export interface PromoItem {
   promo_code: string;
+  promo_type: string;
   owner_username: string | null;
   owner_tg_id: number;
   usage_count: number;
   days_purchased: number;
   days_rewarded: number;
+  discount_percent: number | null;
 }
 
 export interface TariffPrice {
