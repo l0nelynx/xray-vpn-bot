@@ -112,17 +112,18 @@ export default function ConnectPage() {
       message[ok ? "success" : "error"](ok ? "Скопировано" : "Не удалось скопировать");
       return;
     }
-    // external (http/https store) OR subscriptionLink (custom scheme deep-link)
     if (/^https?:\/\//i.test(url)) {
+      // External http(s) link (App Store / Google Play) — open as-is.
       openLink(url);
     } else {
-      // Custom-scheme deep-link (rabbithole://, happ://…). tg.openLink only
-      // handles http(s), so navigate directly to let the OS open the app.
-      try {
-        window.location.href = url;
-      } catch {
-        openLink(url);
-      }
+      // Custom-scheme deep-link (happ://, rabbithole://…). tg.openLink only
+      // handles http(s) and the Mini App webview can't launch a custom scheme
+      // itself, so bounce through a static https redirector opened in the
+      // external browser, which then fires the scheme. The deep-link rides in
+      // the #fragment so the subscription URL never reaches server logs.
+      const redirector =
+        `${window.location.origin}/bot/miniapp/connect-open.html#${encodeURIComponent(url)}`;
+      openLink(redirector);
     }
   }
 

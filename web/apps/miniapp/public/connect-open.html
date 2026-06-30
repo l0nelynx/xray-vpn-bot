@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Открытие приложения…</title>
+  <style>
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background: #0e1116;
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
+    }
+    .wrap {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+      padding: 32px 24px;
+      box-sizing: border-box;
+      text-align: center;
+    }
+    h1 { font-size: 18px; font-weight: 600; margin: 0; }
+    p  { font-size: 14px; color: rgba(255,255,255,0.5); margin: 0; line-height: 1.5; max-width: 320px; }
+    a.btn {
+      display: inline-block;
+      padding: 14px 24px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #7C9CFF, #B47CFF);
+      color: #fff;
+      text-decoration: none;
+      font-size: 16px;
+      font-weight: 600;
+    }
+    a.btn:active { opacity: 0.85; }
+    .muted { font-size: 12px; color: rgba(255,255,255,0.35); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Открываем приложение…</h1>
+    <!-- href is set from the URL fragment below; tapping is a user gesture,
+         which iOS requires to launch custom-scheme links reliably. -->
+    <a id="go" class="btn">Открыть приложение</a>
+    <p>Если приложение не открылось автоматически — нажмите кнопку выше.</p>
+    <p class="muted">Не установлено? Вернитесь и установите приложение из списка.</p>
+  </div>
+  <script>
+    // The deep-link arrives in the URL #fragment, which is never sent to the
+    // server (keeps the user's subscription link out of access logs). We only
+    // ever put it into an anchor href / location.replace — never innerHTML —
+    // so there is no XSS surface even though this page is public.
+    (function () {
+      var raw = location.hash ? location.hash.slice(1) : "";
+      if (!raw) return;
+      var url;
+      try { url = decodeURIComponent(raw); } catch (e) { url = raw; }
+      var go = document.getElementById("go");
+      go.setAttribute("href", url);
+      // Auto-attempt (works on Android and most browsers); the button covers
+      // iOS where an automatic scheme navigation without a gesture is blocked.
+      try { location.replace(url); } catch (e) {}
+    })();
+  </script>
+</body>
+</html>
