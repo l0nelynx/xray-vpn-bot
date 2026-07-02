@@ -35,6 +35,7 @@ policy_url: "https://example.com/policy"          # [REQUIRED] Privacy policy pa
 admin_id: 123456789                                # [REQUIRED] Admin Telegram user ID (can use bot admin commands)
 admin_bot_token: "youradminbottoken"               # [optional] Separate admin bot token for broadcasts/log alerts; omit to disable
 logs_id: -1001234567890                            # [optional] Chat/channel ID for event log messages (registrations, invoices, deliveries). Omit → silent.
+web_id: -1001234567890                              # [optional] Chat/channel ID for web-portal partnership inquiries. Omit → silent.
 admin_logs_length: 20                              # [optional] Rows shown in the in-bot admin log panel (default: 20)
 
 

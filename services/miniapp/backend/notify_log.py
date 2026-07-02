@@ -16,7 +16,7 @@ import logging
 
 import httpx
 
-from .config import get_admin_bot_token, get_logs_id
+from .config import get_admin_bot_token, get_logs_id, get_web_id
 
 logger = logging.getLogger(__name__)
 
@@ -28,9 +28,13 @@ def esc(value: object) -> str:
     return html.escape(str(value), quote=False)
 
 
-async def notify_log(text: str, *, parse_mode: str = "HTML") -> None:
+async def _send(chat_id: int | None, text: str, *, parse_mode: str, tag: str) -> None:
+    """Send an HTML message via the admin bot, swallowing all failures.
+
+    Shared by notify_log/notify_web. If the token or target chat is missing
+    the call is a silent no-op — a Telegram outage must never block a flow.
+    """
     token = get_admin_bot_token()
-    chat_id = get_logs_id()
     if not token or chat_id is None:
         return
     url = f"https://api.telegram.org/bot{token}/sendMessage"
@@ -44,8 +48,16 @@ async def notify_log(text: str, *, parse_mode: str = "HTML") -> None:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             r = await client.post(url, json=payload)
         if r.status_code >= 400:
-            logger.warning(
-                "notify_log: telegram returned %s: %s", r.status_code, r.text[:200]
-            )
+            logger.warning("%s: telegram returned %s: %s", tag, r.status_code, r.text[:200])
     except Exception as exc:  # network, timeout, json — anything
-        logger.warning("notify_log: send failed: %s", exc)
+        logger.warning("%s: send failed: %s", tag, exc)
+
+
+async def notify_log(text: str, *, parse_mode: str = "HTML") -> None:
+    """Send to the event-log chat (`logs_id`)."""
+    await _send(get_logs_id(), text, parse_mode=parse_mode, tag="notify_log")
+
+
+async def notify_web(text: str, *, parse_mode: str = "HTML") -> None:
+    """Send to the web-portal chat (`web_id`) — partnership inquiries."""
+    await _send(get_web_id(), text, parse_mode=parse_mode, tag="notify_web")

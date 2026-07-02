@@ -296,6 +296,17 @@ def get_web_allowed_origins() -> list[str]:
     return [str(o).strip() for o in raw if o]
 
 
+def get_web_id() -> int | None:
+    """Chat ID for web-portal notifications (partnership inquiries submitted
+    from the public landing page). When unset → notifications are silently
+    skipped. Mirrors `logs_id` but targets a separate chat."""
+    value = get_config().get("web_id")
+    try:
+        return int(value) if value is not None and str(value).strip() != "" else None
+    except (TypeError, ValueError):
+        return None
+
+
 def get_expose_api_docs() -> bool:
     """Whether to serve the interactive Swagger UI and openapi.json.
 

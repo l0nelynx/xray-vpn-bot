@@ -54,7 +54,7 @@ from ..android.payments_router import _load_menu_rows, _load_node, _node_payload
 from ..android.schemas import AuthResponse, UserSummary
 from ..database.session import async_session
 from ..config import get_bot_token, get_tg_client_secret
-from ..notify_log import esc, notify_log
+from ..notify_log import esc, notify_log, notify_web
 from remnawave_client.api import get_user_from_username as _rw_get_by_username
 from payments import InvoiceRequest, PaymentError, create_invoice, get_provider
 from . import brute_force
@@ -127,6 +127,16 @@ class WebRegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
     invite_code: str = Field(min_length=1, max_length=20)
+
+
+class PartnershipInquiryRequest(BaseModel):
+    goal: str = Field(min_length=1, max_length=200)
+    description: str = Field(min_length=1, max_length=2000)
+    contact: str = Field(min_length=1, max_length=200)
+
+
+class PartnershipInquiryResponse(BaseModel):
+    ok: bool
 
 
 class WebMenuInvoice(BaseModel):
@@ -209,6 +219,34 @@ async def validate_invite(
         discount_percent=discount,
         promo_type=promo.promo_type,
     )
+
+
+@router.post("/partnership-inquiry", response_model=PartnershipInquiryResponse)
+@limiter.limit("3/hour")
+async def partnership_inquiry(
+    body: PartnershipInquiryRequest,
+    request: Request,
+) -> PartnershipInquiryResponse:
+    """Accept a business/partnership inquiry from the public landing page and
+    forward it to the `web_id` Telegram chat.
+
+    Unauthenticated + rate-limited (3/hour per IP). If `web_id` is not
+    configured the submission is accepted but silently dropped (notify_web
+    no-ops), so the landing form never surfaces a server misconfiguration.
+    """
+    ip = _client_ip(request)
+    goal = body.goal.strip()
+    description = body.description.strip()
+    contact = body.contact.strip()
+
+    await notify_web(
+        "🤝 <b>Partnership inquiry</b>\n"
+        f"<b>Goal:</b> {esc(goal)}\n"
+        f"<b>Contact:</b> {esc(contact)}\n"
+        f"<b>IP:</b> <code>{esc(ip)}</code>\n\n"
+        f"{esc(description)}"
+    )
+    return PartnershipInquiryResponse(ok=True)
 
 
 @router.post("/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
