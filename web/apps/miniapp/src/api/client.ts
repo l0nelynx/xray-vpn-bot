@@ -84,7 +84,7 @@ export interface DevicesResponse {
   devices: DeviceItem[];
 }
 
-export type PaymentProviderName = "apay" | "crystal" | "crypto" | "platega";
+export type PaymentProviderName = "apay" | "crystal" | "crypto" | "platega" | "paritypay";
 
 export interface ProviderInfo {
   name: PaymentProviderName;

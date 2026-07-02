@@ -194,6 +194,18 @@ platega_payment_method: 2                          # 2=SBP · 3=ERIP · 11=card 
 
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  PAYMENT GATEWAY: PARITYPAY                                                 ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+
+paritypay_shop_id: "your-paritypay-shop-uuid"      # ParityPay cassa (shop) UUID sent in every request
+paritypay_secret_1: "your_paritypay_secret_key_1"  # Secret key №1 — signs outgoing API requests (X-SIGNATURE)
+paritypay_secret_2: "your_paritypay_secret_key_2"  # Secret key №2 — verifies incoming webhooks
+paritypay_url: "https://api.paritypay.ru"          # ParityPay API base URL
+paritypay_webhook: ""                              # [optional] Public URL of /bot/paritypay_webhook; blank → set it in the ParityPay cassa settings
+paritypay_service: "sbp"                            # Default service when a node's method is unset: sbp or card
+
+
+# ╔══════════════════════════════════════════════════════════════════════════════╗
 # ║  CURRENCY RATES (dashboard — optional overrides)                            ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
 

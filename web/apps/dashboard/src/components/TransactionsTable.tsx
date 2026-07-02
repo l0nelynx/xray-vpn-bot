@@ -204,6 +204,7 @@ export default function TransactionsTable() {
             { value: "CRYSTAL_PAY", label: "Crystal Pay" },
             { value: "SBP_APAY", label: "SBP (A-Pay)" },
             { value: "PLATEGA", label: "Platega" },
+            { value: "PARITYPAY", label: "ParityPay" },
             { value: "FREE", label: "Free" },
           ]}
         />

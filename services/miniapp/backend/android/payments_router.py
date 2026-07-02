@@ -39,7 +39,7 @@ router = APIRouter(prefix="/api/android/payments", tags=["android-payments"])
 
 # Android exposes only fiat providers — Telegram-bound providers (CryptoBot)
 # don't make sense from a native app context.
-_ANDROID_PROVIDERS = ("apay", "platega")
+_ANDROID_PROVIDERS = ("apay", "platega", "paritypay")
 
 
 # --- Schemas ---------------------------------------------------------------

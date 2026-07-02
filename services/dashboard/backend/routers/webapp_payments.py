@@ -52,6 +52,15 @@ _PROVIDER_CATALOG = [
             {"value": "13", "label": "Crypto"},
         ],
     },
+    {
+        "name": "paritypay",
+        "payment_method": "PARITYPAY",
+        "currencies": ["RUB"],
+        "methods": [
+            {"value": "sbp", "label": "SBP"},
+            {"value": "card", "label": "Card"},
+        ],
+    },
 ]
 
 

@@ -125,6 +125,12 @@ _payments.set_config_provider(lambda: _payments.PaymentsConfig(
     platega_api_key=get_platega_api_key(),
     platega_url=get_platega_url(),
     platega_payment_method=get_platega_payment_method(),
+    paritypay_shop_id=get_paritypay_shop_id(),
+    paritypay_secret_1=get_paritypay_secret_1(),
+    paritypay_secret_2=get_paritypay_secret_2(),
+    paritypay_url=get_paritypay_url(),
+    paritypay_webhook=get_paritypay_webhook(),
+    paritypay_service=get_paritypay_service(),
 ))
 
 
@@ -150,6 +156,30 @@ def get_platega_payment_method() -> int:
         return int(value)
     except (TypeError, ValueError):
         return 2
+
+
+def get_paritypay_shop_id() -> str:
+    return get_config().get("paritypay_shop_id", "") or ""
+
+
+def get_paritypay_secret_1() -> str:
+    return get_config().get("paritypay_secret_1", "") or ""
+
+
+def get_paritypay_secret_2() -> str:
+    return get_config().get("paritypay_secret_2", "") or ""
+
+
+def get_paritypay_url() -> str:
+    return (get_config().get("paritypay_url") or "https://api.paritypay.ru").rstrip("/")
+
+
+def get_paritypay_webhook() -> str:
+    return get_config().get("paritypay_webhook", "") or ""
+
+
+def get_paritypay_service() -> str:
+    return get_config().get("paritypay_service", "sbp") or "sbp"
 
 
 def get_crystal_login() -> str:

@@ -56,3 +56,36 @@ def test_apay_invoice_sign_uses_integer_minor_units():
     amount_minor = int(round(50.0 * 100))
     expected = hashlib.md5(f"{tx}:{amount_minor}:{secret}".encode()).hexdigest()
     assert expected == hashlib.md5(f"{tx}:5000:{secret}".encode()).hexdigest()
+
+
+def test_paritypay_request_sign_matches_recipe():
+    """Request signing (secret key №1): keys sorted, values concatenated
+    (null -> ""), HMAC-SHA256. Mirrors the provider's documented PHP recipe."""
+    body = {"shop_id": "shop-1", "amount": 5000, "order_id": "ord-9", "comment": None}
+    secret1 = "key-one"
+    # sorted keys: amount, comment, order_id, shop_id
+    concat = "5000" + "" + "ord-9" + "shop-1"
+    expected = hmac.new(secret1.encode(), concat.encode(), hashlib.sha256).hexdigest()
+    assert signatures.sign_paritypay_request(body, secret1) == expected
+
+
+def test_paritypay_webhook_accepts_valid_and_rejects_tampered():
+    """Webhook verification (secret key №2) over the received body, including a
+    null field which must concatenate as an empty string."""
+    secret2 = "key-two"
+    body = {
+        "id": "pp-1",
+        "order_id": "ord-9",
+        "amount": "50.00",
+        "status": "PAID",
+        "custom_fields": None,
+    }
+    # sorted keys: amount, custom_fields, id, order_id, status
+    concat = "50.00" + "" + "pp-1" + "ord-9" + "PAID"
+    sig = hmac.new(secret2.encode(), concat.encode(), hashlib.sha256).hexdigest()
+
+    assert signatures.verify_paritypay_webhook(body, sig, secret2) is True
+    # Tampered amount, wrong key, and missing signature must all fail.
+    assert signatures.verify_paritypay_webhook({**body, "amount": "99.00"}, sig, secret2) is False
+    assert signatures.verify_paritypay_webhook(body, sig, "wrong-key") is False
+    assert signatures.verify_paritypay_webhook(body, "", secret2) is False

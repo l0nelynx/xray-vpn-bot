@@ -25,6 +25,7 @@ PAYMENT_CURRENCY: dict[str, str] = {
     "CRYSTAL_PAY": "RUB",
     "SBP_APAY": "RUB",
     "PLATEGA": "RUB",
+    "PARITYPAY": "RUB",
     "FREE": "RUB",
 }
 

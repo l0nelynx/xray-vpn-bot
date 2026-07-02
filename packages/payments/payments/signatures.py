@@ -48,3 +48,34 @@ def verify_platega_webhook(
         hmac.compare_digest(merchant_id_header or "", expected_merchant_id or "")
         and hmac.compare_digest(secret_header or "", expected_secret or "")
     )
+
+
+def _paritypay_sign(params: dict, secret: str) -> str:
+    """ParityPay signing recipe (both directions): sort params by key, concat the
+    *values* into one string, HMAC-SHA256 with the given secret.
+
+    A ``None`` value contributes an empty string, matching the provider's PHP
+    ``implode('', $params)`` semantics (null → "").
+    """
+    concatenated = "".join(
+        "" if params[k] is None else str(params[k]) for k in sorted(params)
+    )
+    return hmac.new(secret.encode(), concatenated.encode(), hashlib.sha256).hexdigest()
+
+
+def sign_paritypay_request(params: dict, secret1: str) -> str:
+    """Sign an outgoing ParityPay API request with **secret key №1**.
+
+    The result goes in the ``X-SIGNATURE`` header. ``params`` must be exactly the
+    (flat) JSON body being sent, so the provider's server-side re-sign matches.
+    """
+    return _paritypay_sign(params, secret1)
+
+
+def verify_paritypay_webhook(params: dict, signature: str, secret2: str) -> bool:
+    """Verify an incoming ParityPay webhook by re-signing the received body with
+    **secret key №2** and comparing to the ``X-SIGNATURE`` header."""
+    if not signature:
+        return False
+    expected = _paritypay_sign(params, secret2)
+    return hmac.compare_digest(expected, signature)

@@ -1,7 +1,7 @@
 """Shared payment-gateway layer used by the seller bot and the miniapp.
 
 Invoice creation goes through provider classes (APay, CrystalPay, CryptoPay,
-Platega) behind a small registry; webhook signature verification lives in
+Platega, ParityPay) behind a small registry; webhook signature verification lives in
 ``signatures``. Credentials are injected by the host service via
 ``set_config_provider`` (see ``config``) so this package has no dependency on
 ``app.settings`` or ``miniapp.backend.config``.

@@ -31,6 +31,13 @@ class PaymentsConfig:
     platega_api_key: str = ""
     platega_url: str = ""
     platega_payment_method: int = 2
+    # ParityPay
+    paritypay_shop_id: str = ""
+    paritypay_secret_1: str = ""   # signs outgoing API requests (X-SIGNATURE)
+    paritypay_secret_2: str = ""   # verifies incoming webhooks
+    paritypay_url: str = "https://api.paritypay.ru"
+    paritypay_webhook: str = ""    # public callback URL; blank → set in cassa
+    paritypay_service: str = "sbp"  # default service when node method is unset
 
 
 _provider: Optional[Callable[[], PaymentsConfig]] = None

@@ -14,6 +14,7 @@ from app.api.a_pay import payment_webhook_handler as apays_webhook_handler
 from app.api.crystal_pay import payment_webhook_handler as crystal_webhook_handler
 from app.api.crypto_pay import cryptopay_webhook_handler
 from app.api.platega import payment_webhook_handler as platega_webhook_handler
+from app.api.paritypay import payment_webhook_handler as paritypay_webhook_handler
 from app.admin import router as router_admin
 from app.handlers.base import router as router_base
 from app.handlers.devices import router as router_devices
@@ -88,6 +89,12 @@ async def payment_webhook_cryptopay(request: Request, background_tasks: Backgrou
 @limiter.limit("60/minute")
 async def payment_webhook_platega(request: Request, background_tasks: BackgroundTasks):
     return await platega_webhook_handler(request, background_tasks)
+
+
+@app_uvi.post("/bot/paritypay_webhook")
+@limiter.limit("60/minute")
+async def payment_webhook_paritypay(request: Request, background_tasks: BackgroundTasks):
+    return await paritypay_webhook_handler(request, background_tasks)
 
 
 async def on_startup(dispatcher, **kwargs):

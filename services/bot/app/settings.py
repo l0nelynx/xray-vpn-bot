@@ -111,6 +111,12 @@ def _payments_config() -> "_payments.PaymentsConfig":
         platega_api_key=secrets.get("platega_api_key", "") or "",
         platega_url=secrets.get("platega_url", "https://app.platega.io"),
         platega_payment_method=platega_method,
+        paritypay_shop_id=secrets.get("paritypay_shop_id", "") or "",
+        paritypay_secret_1=secrets.get("paritypay_secret_1", "") or "",
+        paritypay_secret_2=secrets.get("paritypay_secret_2", "") or "",
+        paritypay_url=secrets.get("paritypay_url", "https://api.paritypay.ru") or "https://api.paritypay.ru",
+        paritypay_webhook=secrets.get("paritypay_webhook", "") or "",
+        paritypay_service=secrets.get("paritypay_service", "sbp") or "sbp",
     )
 
 
