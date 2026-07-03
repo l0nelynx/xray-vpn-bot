@@ -3,19 +3,64 @@ import logging
 import uuid as _uuid
 from typing import Optional
 
+from pydantic import BaseModel, ConfigDict, Field
 from remnawave import RemnawaveSDK
 from remnawave.enums import TrafficLimitStrategy, UserStatus
 from remnawave.models import (
     CreateUserRequestDto,
     DeleteUserHwidDeviceRequestDto,
-    DeleteUserHwidDeviceResponseDto,
-    GetUserHwidDevicesResponseDto,
     UpdateUserRequestDto,
     UserResponseDto,
     UsersResponseDto,
 )
 
 logger = logging.getLogger(__name__)
+
+
+# --- HWID compatibility shim ------------------------------------------------
+#
+# The installed `remnawave` SDK (pinned remnawave>=2.8.0, currently 2.8.0)
+# still models device rows with a required `userUuid: UUID` field
+# (remnawave.models.hwid.HwidDeviceDto). Newer Remnawave panels return
+# `userId: int` instead, so `sdk.hwid.get_hwid_user()` /
+# `sdk.hwid.delete_hwid_to_user()` raise a pydantic ValidationError on every
+# call and we fall into the except branches below, returning None. A fix is
+# pending upstream (PR under review); until a fixed SDK version is released,
+# both HWID device calls bypass the typed SDK methods and go straight through
+# the SDK's own authenticated httpx client (`sdk.hwid.client`, a public
+# dataclass field — see rapid_api_client.RapidApi), parsing the response with
+# this tolerant local model instead.
+#
+# TODO: once `remnawave` ships a compatible HwidDeviceDto, delete this shim and
+# restore `self.sdk.hwid.get_hwid_user(...)` / `self.sdk.hwid.delete_hwid_to_user(...)`.
+class HwidDeviceCompat(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    hwid: str
+    user_uuid: Optional[_uuid.UUID] = Field(None, alias="userUuid")
+    user_id: Optional[int] = Field(None, alias="userId")
+    platform: Optional[str] = None
+    os_version: Optional[str] = Field(None, alias="osVersion")
+    device_model: Optional[str] = Field(None, alias="deviceModel")
+    user_agent: Optional[str] = Field(None, alias="userAgent")
+    created_at: Optional[datetime.datetime] = Field(None, alias="createdAt")
+    updated_at: Optional[datetime.datetime] = Field(None, alias="updatedAt")
+
+
+class HwidDevicesCompat(BaseModel):
+    total: float = 0
+    devices: list[HwidDeviceCompat] = []
+
+
+def _unwrap_response_envelope(data: object) -> object:
+    """Remnawave wraps every payload as {"response": {...}}; the SDK's own
+    _handle_response() unwraps this before pydantic validation (see
+    remnawave.rapid.client.BaseController._handle_response). Since we're
+    calling the httpx client directly (bypassing that method), replicate the
+    unwrap here so our compat model sees the same shape it normally would."""
+    if isinstance(data, dict) and "response" in data:
+        return data["response"]
+    return data
 
 
 _STATUS_MAP = {
@@ -314,25 +359,35 @@ class RemnawaveClient:
 
     async def get_user_hwid_devices(
         self, user_uuid: str
-    ) -> GetUserHwidDevicesResponseDto | None:
-        """Returns the raw SDK response (with .total and .devices). Consumers that
-        need a list of dicts should map each device themselves; the SDK DTO is
-        intentionally exposed because app/handlers/devices.py uses attribute
-        access on device fields including datetime objects."""
+    ) -> HwidDevicesCompat | None:
+        """Returns .total and .devices (see HwidDevicesCompat above for why this
+        bypasses self.sdk.hwid.get_hwid_user()). Consumers that need a list of
+        dicts should map each device themselves; the compat DTO is intentionally
+        exposed because app/handlers/devices.py uses attribute access on device
+        fields including datetime objects."""
         try:
-            response: GetUserHwidDevicesResponseDto = await self.sdk.hwid.get_hwid_user(user_uuid)
-            return response
+            response = await self.sdk.hwid.client.get(f"/hwid/devices/{user_uuid}")
+            response.raise_for_status()
+            data = _unwrap_response_envelope(response.json())
+            return HwidDevicesCompat.model_validate(data)
         except Exception as e:
             logger.error("Remnawave get_user_hwid_devices(%s) failed: %s", user_uuid, e)
             return None
 
     async def delete_user_hwid_device(
         self, user_uuid: str, hwid: str
-    ) -> DeleteUserHwidDeviceResponseDto | None:
+    ) -> HwidDevicesCompat | None:
+        """See get_user_hwid_devices — the delete response embeds the same
+        broken devices list, so it needs the same bypass."""
         try:
             request = DeleteUserHwidDeviceRequestDto(user_uuid=user_uuid, hwid=hwid)
-            response: DeleteUserHwidDeviceResponseDto = await self.sdk.hwid.delete_hwid_to_user(request)
-            return response
+            response = await self.sdk.hwid.client.post(
+                "/hwid/devices/delete",
+                json=request.model_dump(mode="json", by_alias=True),
+            )
+            response.raise_for_status()
+            data = _unwrap_response_envelope(response.json())
+            return HwidDevicesCompat.model_validate(data)
         except Exception as e:
             logger.error(
                 "Remnawave delete_user_hwid_device(%s, %s) failed: %s", user_uuid, hwid, e

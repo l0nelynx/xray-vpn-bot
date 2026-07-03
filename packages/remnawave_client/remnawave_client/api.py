@@ -21,13 +21,9 @@ Where app/ and miniapp historically diverged:
 import logging
 from typing import Callable, Optional
 
-from remnawave.models import (
-    DeleteUserHwidDeviceResponseDto,
-    GetUserHwidDevicesResponseDto,
-    UsersResponseDto,
-)
+from remnawave.models import UsersResponseDto
 
-from .client import RemnawaveClient, configure, get_default_client
+from .client import HwidDevicesCompat, RemnawaveClient, configure, get_default_client
 
 logger = logging.getLogger(__name__)
 
@@ -214,8 +210,8 @@ def _normalize_device(device) -> dict:
     }
 
 
-async def get_user_hwid_devices(user_uuid: str) -> GetUserHwidDevicesResponseDto | None:
-    """Raw SDK DTO (used by the seller bot, which reads ``.devices`` directly)."""
+async def get_user_hwid_devices(user_uuid: str) -> HwidDevicesCompat | None:
+    """Device list DTO (used by the seller bot, which reads ``.devices`` directly)."""
     return await _client().get_user_hwid_devices(user_uuid)
 
 
@@ -236,5 +232,5 @@ async def get_user_devices_count(user_uuid: str) -> int:
 
 async def delete_user_hwid_device(
     user_uuid: str, hwid: str
-) -> DeleteUserHwidDeviceResponseDto | None:
+) -> HwidDevicesCompat | None:
     return await _client().delete_user_hwid_device(user_uuid, hwid)
