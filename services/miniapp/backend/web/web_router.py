@@ -283,7 +283,7 @@ async def web_register(
 
     brute_force.clear(ip)
 
-    pwd_hash = android_security.hash_password(body.password)
+    pwd_hash = await android_security.hash_password(body.password)
     try:
         user_id = await android_repo.create_user_with_password(str(body.email), pwd_hash)
     except IntegrityError:
@@ -734,7 +734,7 @@ async def setup_email_request(
     from ..android import mailer, security as _sec
     from ..config import get_email_code_ttl_seconds
 
-    password_hash = _sec.hash_password(body.new_password)
+    password_hash = await _sec.hash_password(body.new_password)
     payload = _json.dumps({"email": new_email, "ph": password_hash})
 
     code = _sec.new_email_code()
@@ -880,7 +880,7 @@ async def setup_password_confirm(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail={"code": "code_invalid"})
 
     await android_repo.mark_code_used(row.id)
-    await android_repo.set_password(user.id, _sec.hash_password(body.new_password))
+    await android_repo.set_password(user.id, await _sec.hash_password(body.new_password))
     if not user.email_verified_at:
         await android_repo.mark_email_verified(user.id)
 

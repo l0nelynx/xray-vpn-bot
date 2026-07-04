@@ -234,7 +234,7 @@ async def password_reset_confirm(
         purpose=repo.PURPOSE_PASSWORD_RESET,
         presented_code=req.code,
     )
-    await repo.set_password(user.id, security.hash_password(req.new_password))
+    await repo.set_password(user.id, await security.hash_password(req.new_password))
     await repo.revoke_all_user_tokens(user.id)
     return SimpleStatus()
 

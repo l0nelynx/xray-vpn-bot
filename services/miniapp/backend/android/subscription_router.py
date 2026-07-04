@@ -169,7 +169,7 @@ async def migrate(req: MigrateRequest, request: Request) -> AuthResponse:
         user = await repo.find_user_by_email(rw_email)
 
     acc_email_normalized = str(req.acc_email).strip().lower()
-    pwd_hash = security.hash_password(req.password)
+    pwd_hash = await security.hash_password(req.password)
 
     if user is None:
         # Greenfield: build a brand new row with credentials and pre-bound

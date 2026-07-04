@@ -68,7 +68,7 @@ async def _issue_pair(
 @router.post("/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit("5/minute")
 async def register(req: RegisterRequest, request: Request) -> AuthResponse:
-    pwd_hash = security.hash_password(req.password)
+    pwd_hash = await security.hash_password(req.password)
     try:
         user_id = await repo.create_user_with_password(str(req.email), pwd_hash)
     except IntegrityError:
@@ -98,7 +98,7 @@ async def register(req: RegisterRequest, request: Request) -> AuthResponse:
 async def login(req: LoginRequest, request: Request) -> AuthResponse:
     user = await repo.find_user_by_email(str(req.email))
     # Always run verify to keep timing constant.
-    if not security.verify_password(
+    if not await security.verify_password(
         user.password_hash if user else None, req.password
     ):
         raise HTTPException(
@@ -111,7 +111,7 @@ async def login(req: LoginRequest, request: Request) -> AuthResponse:
             status_code=status.HTTP_403_FORBIDDEN, detail={"code": "banned"}
         )
     if security.needs_rehash(user.password_hash or ""):
-        await repo.set_password(user.id, security.hash_password(req.password))
+        await repo.set_password(user.id, await security.hash_password(req.password))
     tokens = await _issue_pair(user.id, request)
     return AuthResponse(tokens=tokens, user=_user_summary(user))
 
@@ -186,11 +186,11 @@ async def password_change(
     req: PasswordChangeRequest,
     user: repo.UserRow = Depends(deps.get_current_user),
 ) -> SimpleStatus:
-    if not security.verify_password(user.password_hash, req.current_password):
+    if not await security.verify_password(user.password_hash, req.current_password):
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, detail={"code": "invalid_credentials"}
         )
-    await repo.set_password(user.id, security.hash_password(req.new_password))
+    await repo.set_password(user.id, await security.hash_password(req.new_password))
     # Invalidate every existing session — client must re-login.
     await repo.revoke_all_user_tokens(user.id)
     return SimpleStatus()

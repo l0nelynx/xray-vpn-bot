@@ -6,6 +6,7 @@ keeps the raw value and presents it on /refresh.
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import secrets
@@ -33,15 +34,19 @@ _REFRESH_TOKEN_BYTES = 48  # 64 chars urlsafe-b64
 _DUMMY_HASH = _PH.hash("xray-vpn-bot/dummy/never-matches")
 
 
-def hash_password(plaintext: str) -> str:
-    return _PH.hash(plaintext)
+async def hash_password(plaintext: str) -> str:
+    # argon2id is deliberately slow (tens of ms) — run it off the event loop
+    # so one login/register/password-change doesn't stall every other
+    # request this single-worker process is serving (payment webhooks
+    # included) for the duration of the hash.
+    return await asyncio.to_thread(_PH.hash, plaintext)
 
 
-def verify_password(stored_hash: str | None, plaintext: str) -> bool:
+async def verify_password(stored_hash: str | None, plaintext: str) -> bool:
     """Constant-time check; returns False on missing or invalid hashes."""
     target = stored_hash or _DUMMY_HASH
     try:
-        _PH.verify(target, plaintext)
+        await asyncio.to_thread(_PH.verify, target, plaintext)
         return stored_hash is not None
     except (VerifyMismatchError, InvalidHashError, VerificationError):
         return False
