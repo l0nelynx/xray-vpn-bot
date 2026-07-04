@@ -9,11 +9,12 @@ algorithm, so the username stays consistent across signup, IAP, and reads.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from ..config import (
     get_agreement_url,
@@ -32,6 +33,7 @@ from remnawave_client.api import (
     resolve_remnawave_user,
 )
 from . import deps, iap_repo, repo
+from .auth_router import limiter
 from .provisioning import email_to_username
 from .schemas_data import (
     AndroidDeviceItem,
@@ -114,7 +116,9 @@ async def _resolve_remnawave_uuid(user: repo.UserRow) -> str | None:
 
 
 @router.get("/me", response_model=AndroidMeResponse)
+@limiter.limit("60/minute")
 async def get_me(
+    request: Request,
     user: repo.UserRow = Depends(deps.get_current_user),
 ) -> AndroidMeResponse:
     links = _links()
@@ -123,6 +127,11 @@ async def get_me(
     if not (user.vless_uuid or user.email):
         return AndroidMeResponse(user=summary, subscription=None, links=links)
 
+    # This IAP lookup only needs user.id, so start it now and let it run
+    # concurrently with the Remnawave round-trip below instead of stacking
+    # its (small but non-zero) latency on top afterwards.
+    iap_task = asyncio.create_task(iap_repo.find_user_active_subscription(user.id))
+
     rem_user = await resolve_remnawave_user(
         vless_uuid=user.vless_uuid,
         email=user.email,
@@ -130,6 +139,9 @@ async def get_me(
     )
 
     if not rem_user:
+        # Not used on this path, but await it so the task always settles
+        # cleanly rather than being abandoned mid-flight.
+        await iap_task
         return AndroidMeResponse(user=summary, subscription=None, links=links)
 
     uuid = rem_user.get("uuid")
@@ -140,7 +152,7 @@ async def get_me(
     # surface that — the Android UI uses `source` to decide whether to show
     # "manage in Google Play" vs in-bot extend buttons.
     source = "remnawave"
-    iap_row = await iap_repo.find_user_active_subscription(user.id)
+    iap_row = await iap_task
     if iap_row and iap_row.expiry_time:
         try:
             iap_expire_dt = datetime.fromisoformat(
@@ -170,7 +182,9 @@ async def get_me(
 
 
 @router.get("/devices", response_model=AndroidDevicesResponse)
+@limiter.limit("60/minute")
 async def list_devices(
+    request: Request,
     user: repo.UserRow = Depends(deps.get_current_user),
 ) -> AndroidDevicesResponse:
     uuid = await _resolve_remnawave_uuid(user)
@@ -198,7 +212,9 @@ async def remove_device(
 
 
 @router.get("/sessions", response_model=AndroidSessionsResponse)
+@limiter.limit("60/minute")
 async def list_sessions(
+    request: Request,
     user: repo.UserRow = Depends(deps.get_current_user),
 ) -> AndroidSessionsResponse:
     rows = await repo.list_active_sessions(user.id)

@@ -95,7 +95,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 350M
+          memory: 512M
   support-bot:
     container_name: support-bot
     image: ghcr.io/l0nelynx/support-bot:${IMAGE_TAG:-staging}
@@ -152,7 +152,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 384M
   miniapp:
     container_name: miniapp
     image: ghcr.io/l0nelynx/miniapp:${IMAGE_TAG:-staging}
@@ -172,6 +172,8 @@ services:
       - backend-network
       - data-network
       - mail-net
+    ports:
+      - '127.0.0.1:8001:8001'
     environment:
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-xray}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-xray_vpn_bot}
       - CONFIG_PATH=/app/config.yml
@@ -191,7 +193,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 384M
   frontend:
     container_name: frontend
     image: ghcr.io/l0nelynx/frontend:${IMAGE_TAG:-staging}

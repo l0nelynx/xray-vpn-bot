@@ -26,7 +26,17 @@ from ..config import (
     get_android_refresh_ttl_seconds,
 )
 
-_PH = PasswordHasher()
+# OWASP Password Storage Cheat Sheet argon2id option #2 (m=19 MiB, t=2, p=1)
+# — not argon2-cffi's default (m=64 MiB, t=3, p=4). parallelism=1 is the
+# deliberate choice here: OWASP recommends it specifically for server-side
+# hashing, since internal parallelism only speeds up a single guess for an
+# attacker, while for us it multiplies CPU contention on every concurrent
+# login (measured: 200 concurrent hashes at the old defaults took ~7.7s
+# combined vs ~1.5s at these params on an 8-core box — a load-test finding,
+# see loadtest/README.md). Existing hashes made with the old params keep
+# verifying fine (argon2 encodes its params in the hash string) and get
+# transparently rehashed via needs_rehash() on next successful login.
+_PH = PasswordHasher(time_cost=2, memory_cost=19456, parallelism=1)
 _REFRESH_TOKEN_BYTES = 48  # 64 chars urlsafe-b64
 
 # Single dummy hash used to pace requests on missing-account paths so the

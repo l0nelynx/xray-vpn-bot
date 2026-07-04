@@ -52,7 +52,17 @@ from common_db.models import (  # noqa: F401
 from app.database.url import async_db_url
 
 DB_URL = async_db_url(default_sqlite_path='db.sqlite3')
-engine = create_async_engine(url=DB_URL, pool_pre_ping=True)
+
+_pool_kwargs: dict = {}
+if not DB_URL.startswith("sqlite"):
+    # SQLAlchemy's asyncpg default is pool_size=5 + max_overflow=10 (15 max).
+    # Bump it so a burst of concurrent requests doesn't start queuing for a
+    # connection before CPU/memory are anywhere near their limits.
+    # pool_size/max_overflow are QueuePool-only kwargs — sqlite uses a
+    # different poolclass, hence the guard.
+    _pool_kwargs = {"pool_size": 10, "max_overflow": 10}
+
+engine = create_async_engine(url=DB_URL, pool_pre_ping=True, **_pool_kwargs)
 
 async_session = async_sessionmaker(engine)
 

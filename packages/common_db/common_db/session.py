@@ -26,11 +26,18 @@ def make_async_session(
     pool_pre_ping: bool = True,
     expire_on_commit: bool = False,
     connect_args: dict[str, Any] | None = None,
+    pool_size: int = 10,
+    max_overflow: int = 10,
 ) -> tuple[AsyncEngine, async_sessionmaker]:
     """Build (engine, async_session) for the current service.
 
     sqlite-specific connect args are applied automatically when the resolved
     URL is sqlite — services don't have to repeat that boilerplate.
+
+    pool_size/max_overflow default to 10/10 (vs SQLAlchemy's 5/10 default) —
+    headroom for a burst of concurrent requests before they start queuing for
+    a connection. Only applied for non-sqlite URLs: pool_size/max_overflow are
+    QueuePool-only kwargs and sqlite resolves to a different poolclass.
     """
     url = async_db_url(default_sqlite_path=default_sqlite_path)
 
@@ -38,11 +45,16 @@ def make_async_session(
     if url.startswith("sqlite") and not effective_connect_args:
         effective_connect_args = {"check_same_thread": False, "timeout": 30}
 
+    pool_kwargs: dict[str, Any] = {}
+    if not url.startswith("sqlite"):
+        pool_kwargs = {"pool_size": pool_size, "max_overflow": max_overflow}
+
     engine = create_async_engine(
         url,
         echo=echo,
         pool_pre_ping=pool_pre_ping,
         connect_args=effective_connect_args,
+        **pool_kwargs,
     )
     session_factory = async_sessionmaker(engine, expire_on_commit=expire_on_commit)
     return engine, session_factory
