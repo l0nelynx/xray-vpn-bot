@@ -15,3 +15,5 @@ alembic>=1.13.0
 asyncpg>=0.29
 psycopg2-binary>=2.9
 remnawave>=2.8.0
+python-multipart>=0.0.20
+Pillow>=11.0.0

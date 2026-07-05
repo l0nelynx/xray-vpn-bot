@@ -10,12 +10,12 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timedelta
 
-from sqlalchemy import event
+from sqlalchemy import event, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from common_db import Base
 import common_db.models  # noqa: F401  -- register on Base.metadata
-from common_db.models import SupportMessage, SupportTicket, User
+from common_db.models import SupportAttachment, SupportMessage, SupportTicket, User
 from common_db.repo import support as repo_support
 
 
@@ -68,6 +68,18 @@ async def _seed_ticket(
 
 
 _NEXT_MSG_ID = [1]
+_NEXT_ATT_ID = [1]
+
+
+def _next_attachment_id() -> int:
+    """SQLite + BigInteger PK doesn't auto-increment without INTEGER PRIMARY
+    KEY semantics (same issue _seed_message works around above); repo_support
+    .add_attachment() deliberately has no id param since real Postgres
+    auto-generates it, so tests assign one to the returned object before
+    commit."""
+    val = _NEXT_ATT_ID[0]
+    _NEXT_ATT_ID[0] += 1
+    return val
 
 
 async def _seed_message(
@@ -453,11 +465,12 @@ def test_delete_admin_message_removes_admin_row() -> None:
                 )
                 await session.commit()
             async with Session() as session:
-                ok = await repo_support.delete_admin_message(
+                result = await repo_support.delete_admin_message(
                     session, ticket_id=1, message_id=101
                 )
                 await session.commit()
-                assert ok is True
+                assert result.deleted is True
+                assert result.attachment_paths == []
             async with Session() as session:
                 msgs = await repo_support.list_messages_for_ticket(session, 1)
                 assert [m.text for m in msgs] == ["u-msg"]
@@ -488,11 +501,11 @@ def test_delete_admin_message_refuses_user_message() -> None:
                 )
                 await session.commit()
             async with Session() as session:
-                ok = await repo_support.delete_admin_message(
+                result = await repo_support.delete_admin_message(
                     session, ticket_id=1, message_id=200
                 )
                 await session.commit()
-                assert ok is False
+                assert result.deleted is False
             async with Session() as session:
                 msgs = await repo_support.list_messages_for_ticket(session, 1)
                 assert {m.text for m in msgs} == {"u-msg", "a-msg"}
@@ -519,11 +532,11 @@ def test_delete_admin_message_refuses_wrong_ticket() -> None:
                 )
                 await session.commit()
             async with Session() as session:
-                ok = await repo_support.delete_admin_message(
+                result = await repo_support.delete_admin_message(
                     session, ticket_id=1, message_id=300
                 )
                 await session.commit()
-                assert ok is False
+                assert result.deleted is False
             async with Session() as session:
                 msgs = await repo_support.list_messages_for_ticket(session, 2)
                 assert [m.text for m in msgs] == ["a-on-2"]
@@ -545,11 +558,162 @@ def test_delete_admin_message_missing_id_returns_false() -> None:
                 await _seed_ticket(session, ticket_id=1, user_id=1, created=now)
                 await session.commit()
             async with Session() as session:
-                ok = await repo_support.delete_admin_message(
+                result = await repo_support.delete_admin_message(
                     session, ticket_id=1, message_id=999999
                 )
-                assert ok is False
+                assert result.deleted is False
         finally:
             await engine.dispose()
+
+    _run(go())
+
+
+# --- attachments ------------------------------------------------------------
+
+
+def test_add_attachment_and_list_messages_eager_loads_it() -> None:
+    async def go() -> None:
+        engine = _make_engine()
+        try:
+            await _setup(engine)
+            Session = async_sessionmaker(engine, expire_on_commit=False)
+            now = datetime(2026, 7, 5, 12, 0, 0)
+            async with Session() as session:
+                await _seed_user(session)
+                await _seed_ticket(session, ticket_id=1, user_id=1, created=now)
+                msg = await _seed_message(
+                    session, ticket_id=1, sender="user", text="screenshot", created=now,
+                )
+                att = await repo_support.add_attachment(
+                    session,
+                    message_id=msg.id,
+                    original_filename="screenshot.png",
+                    stored_path=f"1/abc123.png",
+                    mime_type="image/png",
+                    size_bytes=1234,
+                    created_at=_iso(now),
+                )
+                att.id = _next_attachment_id()
+                await session.commit()
+            async with Session() as session:
+                msgs = await repo_support.list_messages_for_ticket(session, 1)
+                assert len(msgs) == 1
+                assert len(msgs[0].attachments) == 1
+                att = msgs[0].attachments[0]
+                assert att.original_filename == "screenshot.png"
+                assert att.stored_path == "1/abc123.png"
+                assert att.mime_type == "image/png"
+                assert att.size_bytes == 1234
+        finally:
+            await engine.dispose()
+
+    _run(go())
+
+
+def test_get_attachment_with_ticket_returns_ticket_and_owner() -> None:
+    async def go() -> None:
+        engine = _make_engine()
+        try:
+            await _setup(engine)
+            Session = async_sessionmaker(engine, expire_on_commit=False)
+            now = datetime(2026, 7, 5, 12, 0, 0)
+            async with Session() as session:
+                await _seed_user(session, user_id=7)
+                await _seed_ticket(session, ticket_id=42, user_id=7, created=now)
+                msg = await _seed_message(
+                    session, ticket_id=42, sender="user", text="pic", created=now,
+                )
+                att = await repo_support.add_attachment(
+                    session,
+                    message_id=msg.id,
+                    original_filename="a.jpg",
+                    stored_path="42/xyz.jpg",
+                    mime_type="image/jpeg",
+                    size_bytes=99,
+                    created_at=_iso(now),
+                )
+                att.id = _next_attachment_id()
+                await session.commit()
+                att_id = att.id
+            async with Session() as session:
+                row = await repo_support.get_attachment_with_ticket(session, att_id)
+                assert row is not None
+                assert row.ticket_id == 42
+                assert row.ticket_user_id == 7
+                assert row.attachment.stored_path == "42/xyz.jpg"
+        finally:
+            await engine.dispose()
+
+    _run(go())
+
+
+def test_get_attachment_with_ticket_missing_id_returns_none() -> None:
+    async def go() -> None:
+        engine = _make_engine()
+        try:
+            await _setup(engine)
+            Session = async_sessionmaker(engine, expire_on_commit=False)
+            async with Session() as session:
+                row = await repo_support.get_attachment_with_ticket(session, 999999)
+                assert row is None
+        finally:
+            await engine.dispose()
+
+    _run(go())
+
+
+def test_delete_admin_message_returns_attachment_paths_for_cleanup() -> None:
+    async def go() -> None:
+        engine = _make_engine()
+        # SQLite does not enforce foreign keys (or their ON DELETE actions)
+        # unless told to per-connection -- Postgres always enforces them.
+        # Enable it here (scoped to this test's own engine) so the
+        # ON DELETE CASCADE this test verifies actually fires, matching
+        # production behavior.
+        @event.listens_for(engine.sync_engine, "connect")
+        def _enable_fk(dbapi_conn, _record):
+            dbapi_conn.execute("PRAGMA foreign_keys=ON")
+
+        try:
+            await _setup(engine)
+            Session = async_sessionmaker(engine, expire_on_commit=False)
+            now = datetime(2026, 7, 5, 12, 0, 0)
+            async with Session() as session:
+                await _seed_user(session)
+                await _seed_ticket(session, ticket_id=1, user_id=1, created=now)
+                msg = await _seed_message(
+                    session, ticket_id=1, sender="admin", text="here", created=now,
+                    message_id=500,
+                )
+                att_a = await repo_support.add_attachment(
+                    session, message_id=msg.id, original_filename="a.png",
+                    stored_path="1/a.png", mime_type="image/png",
+                    size_bytes=10, created_at=_iso(now),
+                )
+                att_a.id = _next_attachment_id()
+                att_b = await repo_support.add_attachment(
+                    session, message_id=msg.id, original_filename="b.png",
+                    stored_path="1/b.png", mime_type="image/png",
+                    size_bytes=20, created_at=_iso(now),
+                )
+                att_b.id = _next_attachment_id()
+                await session.commit()
+            async with Session() as session:
+                result = await repo_support.delete_admin_message(
+                    session, ticket_id=1, message_id=500
+                )
+                await session.commit()
+                assert result.deleted is True
+                assert sorted(result.attachment_paths) == ["1/a.png", "1/b.png"]
+            async with Session() as session:
+                # ON DELETE CASCADE removed the attachment rows along with the message.
+                remaining = await session.scalar(
+                    select(SupportAttachment).where(SupportAttachment.message_id == 500)
+                )
+                assert remaining is None
+        finally:
+            await engine.dispose()
+
+    _run(go())
 
     _run(go())

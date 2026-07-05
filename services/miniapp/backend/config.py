@@ -364,6 +364,17 @@ def get_connect_app_config_path() -> str:
     )
 
 
+def get_support_uploads_dir() -> str:
+    """Filesystem directory for support-ticket image attachments.
+
+    Shared, read-write bind mount with the `dashboard` container (see
+    docker-compose.yml) — the admin needs to read images the user uploaded
+    here, and this service needs to read images the admin uploaded there.
+    Default matches the mount path in compose.
+    """
+    return get_config().get("support_uploads_dir") or "/app/support_uploads"
+
+
 # --- Google Play IAP -------------------------------------------------------
 
 def get_google_play_package_name() -> str:

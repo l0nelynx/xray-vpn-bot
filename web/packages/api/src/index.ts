@@ -34,25 +34,13 @@ export interface JsonClient {
   put: <T>(path: string, body?: unknown) => Promise<T>;
   patch: <T>(path: string, body?: unknown) => Promise<T>;
   delete: <T>(path: string) => Promise<T>;
+  /** multipart/form-data POST — used for file uploads. No Content-Type is set
+   * so the browser can add its own multipart boundary. */
+  postForm: <T>(path: string, form: FormData) => Promise<T>;
 }
 
 export function createJsonClient(opts: JsonClientOptions): JsonClient {
-  async function request<T>(
-    method: string,
-    path: string,
-    body?: unknown,
-    signal?: AbortSignal,
-  ): Promise<T> {
-    const headers: Record<string, string> = { ...(opts.getHeaders?.() ?? {}) };
-    if (body !== undefined) headers["Content-Type"] = "application/json";
-
-    const res = await fetch(`${opts.base}${path}`, {
-      method,
-      headers,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-      signal,
-    });
-
+  async function handleResponse<T>(res: Response): Promise<T> {
     if (!res.ok) {
       opts.onError?.(res.status);
       let detail = `HTTP ${res.status}`;
@@ -69,11 +57,43 @@ export function createJsonClient(opts: JsonClientOptions): JsonClient {
     return (await res.json()) as T;
   }
 
+  async function request<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+    signal?: AbortSignal,
+  ): Promise<T> {
+    const headers: Record<string, string> = { ...(opts.getHeaders?.() ?? {}) };
+    if (body !== undefined) headers["Content-Type"] = "application/json";
+
+    const res = await fetch(`${opts.base}${path}`, {
+      method,
+      headers,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+      signal,
+    });
+
+    return handleResponse<T>(res);
+  }
+
+  async function requestForm<T>(path: string, form: FormData): Promise<T> {
+    const headers: Record<string, string> = { ...(opts.getHeaders?.() ?? {}) };
+
+    const res = await fetch(`${opts.base}${path}`, {
+      method: "POST",
+      headers,
+      body: form,
+    });
+
+    return handleResponse<T>(res);
+  }
+
   return {
     get: <T>(path: string, signal?: AbortSignal) => request<T>("GET", path, undefined, signal),
     post: <T>(path: string, body?: unknown) => request<T>("POST", path, body),
     put: <T>(path: string, body?: unknown) => request<T>("PUT", path, body),
     patch: <T>(path: string, body?: unknown) => request<T>("PATCH", path, body),
     delete: <T>(path: string) => request<T>("DELETE", path),
+    postForm: <T>(path: string, form: FormData) => requestForm<T>(path, form),
   };
 }

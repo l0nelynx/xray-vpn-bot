@@ -6,10 +6,6 @@ class TicketCreate(BaseModel):
     message: str = Field(min_length=1, max_length=4000)
 
 
-class TicketReply(BaseModel):
-    text: str = Field(min_length=1, max_length=4000)
-
-
 class TicketSummary(BaseModel):
     id: int
     subject: str
@@ -19,11 +15,20 @@ class TicketSummary(BaseModel):
     last_message_preview: str
 
 
+class AttachmentOut(BaseModel):
+    id: int
+    filename: str
+    mime_type: str
+    size_bytes: int
+    url: str
+
+
 class MessageItem(BaseModel):
     id: int
     sender: str
     text: str
     created_at: str
+    attachments: list[AttachmentOut] = []
 
 
 class TicketDetail(BaseModel):

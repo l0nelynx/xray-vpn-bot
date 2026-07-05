@@ -35,6 +35,7 @@ CANONICAL_TABLES = frozenset({
     "promos",
     "refresh_tokens",
     "squad_profiles",
+    "support_attachments",
     "support_messages",
     "support_tickets",
     "tariff_plans",

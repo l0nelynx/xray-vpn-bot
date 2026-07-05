@@ -1,10 +1,10 @@
-import { createJsonClient } from "@xray/api";
+import { ApiError, createJsonClient } from "@xray/api";
 
 import { getInitData } from "../tg/webapp";
 
 const BASE = "/bot/miniapp/api";
 
-export { ApiError } from "@xray/api";
+export { ApiError };
 
 export const api = createJsonClient({
   base: BASE,
@@ -53,11 +53,20 @@ export interface TicketSummary {
   last_message_preview: string;
 }
 
+export interface AttachmentOut {
+  id: number;
+  filename: string;
+  mime_type: string;
+  size_bytes: number;
+  url: string;
+}
+
 export interface MessageItem {
   id: number;
   sender: string;
   text: string;
   created_at: string;
+  attachments: AttachmentOut[];
 }
 
 export interface TicketDetail {
@@ -67,6 +76,26 @@ export interface TicketDetail {
   created_at: string;
   updated_at: string;
   messages: MessageItem[];
+}
+
+export const support = {
+  addMessage: (ticketId: number, text: string, images: File[]) => {
+    const form = new FormData();
+    form.append("text", text);
+    for (const img of images) form.append("images", img);
+    return api.postForm<MessageItem>(`/support/tickets/${ticketId}/messages`, form);
+  },
+};
+
+/** Fetches an attachment as a blob with the same auth header as `api` —
+ * a plain <img src> can't carry X-Telegram-Init-Data, so callers build an
+ * object URL from this instead (see useAuthedImage). */
+export async function fetchAuthedBlob(url: string): Promise<Blob> {
+  const res = await fetch(`${BASE}${url}`, {
+    headers: { "X-Telegram-Init-Data": getInitData() },
+  });
+  if (!res.ok) throw new ApiError(res.status, `HTTP ${res.status}`);
+  return res.blob();
 }
 
 export interface DeviceItem {

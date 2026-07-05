@@ -24,6 +24,8 @@ COPY packages/payments /tmp/payments
 RUN pip install --no-cache-dir --no-deps /tmp/payments && rm -rf /tmp/payments
 COPY packages/subscription_delivery /tmp/subscription_delivery
 RUN pip install --no-cache-dir --no-deps /tmp/subscription_delivery && rm -rf /tmp/subscription_delivery
+COPY packages/support_attachments /tmp/support_attachments
+RUN pip install --no-cache-dir --no-deps /tmp/support_attachments && rm -rf /tmp/support_attachments
 
 COPY services/miniapp/backend/ ./backend/
 COPY alembic ./alembic

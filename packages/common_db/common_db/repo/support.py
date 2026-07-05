@@ -17,8 +17,9 @@ from typing import Iterable
 
 from sqlalchemy import delete, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
-from ..models import SupportMessage, SupportTicket
+from ..models import SupportAttachment, SupportMessage, SupportTicket
 
 
 # --- single-row lookups ---------------------------------------------------
@@ -117,10 +118,12 @@ async def list_user_tickets_with_last_message(
 async def list_messages_for_ticket(
     session: AsyncSession, ticket_id: int
 ) -> list[SupportMessage]:
-    """All messages on a ticket, oldest first (chat-log order)."""
+    """All messages on a ticket, oldest first (chat-log order), with
+    attachments eager-loaded (avoids 1+N when the caller renders images)."""
     result = await session.scalars(
         select(SupportMessage)
         .where(SupportMessage.ticket_id == ticket_id)
+        .options(selectinload(SupportMessage.attachments))
         .order_by(SupportMessage.created_at)
     )
     return list(result)
@@ -159,35 +162,121 @@ async def count_tickets_by_status(
     return (await session.scalar(stmt)) or 0
 
 
+# --- attachments ------------------------------------------------------------
+
+
+async def add_attachment(
+    session: AsyncSession,
+    *,
+    message_id: int,
+    original_filename: str,
+    stored_path: str,
+    mime_type: str,
+    size_bytes: int,
+    created_at: str,
+) -> SupportAttachment:
+    """Create one attachment row. Caller commits (called inside the same
+    transaction as the SupportMessage insert, per router)."""
+    att = SupportAttachment(
+        message_id=message_id,
+        original_filename=original_filename,
+        stored_path=stored_path,
+        mime_type=mime_type,
+        size_bytes=size_bytes,
+        created_at=created_at,
+    )
+    session.add(att)
+    return att
+
+
+@dataclass(frozen=True, slots=True)
+class AttachmentWithTicket:
+    """An attachment plus its parent ticket's id/owner, for the download
+    endpoint's ownership check (miniapp/android: does ticket.user_id match
+    the requester? dashboard: any admin may view)."""
+
+    attachment: SupportAttachment
+    ticket_id: int
+    ticket_user_id: int
+
+
+async def get_attachment_with_ticket(
+    session: AsyncSession, attachment_id: int
+) -> AttachmentWithTicket | None:
+    """Fetch an attachment plus its parent ticket's id/owner in one query."""
+    row = (
+        await session.execute(
+            select(SupportAttachment, SupportMessage.ticket_id, SupportTicket.user_id)
+            .join(SupportMessage, SupportMessage.id == SupportAttachment.message_id)
+            .join(SupportTicket, SupportTicket.id == SupportMessage.ticket_id)
+            .where(SupportAttachment.id == attachment_id)
+        )
+    ).first()
+    if not row:
+        return None
+    att, ticket_id, user_id = row
+    return AttachmentWithTicket(attachment=att, ticket_id=ticket_id, ticket_user_id=user_id)
+
+
 # --- mutations ------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class DeletedMessageResult:
+    """Result of deleting an admin message: whether a row was actually
+    deleted, and the relative stored_path of every attachment that was on
+    it (for the caller to unlink from disk after commit)."""
+
+    deleted: bool
+    attachment_paths: list[str]
 
 
 async def delete_admin_message(
     session: AsyncSession, ticket_id: int, message_id: int
-) -> bool:
-    """Hard-delete an admin-authored message from a ticket.
+) -> DeletedMessageResult:
+    """Hard-delete an admin-authored message (+ its attachment rows via
+    ON DELETE CASCADE) from a ticket.
 
     Filters on (id, ticket_id, sender='admin') in a single statement so
     you can't delete a user message, a message that belongs to a
     different ticket, or a non-existent row by guessing ids. Caller
     commits.
 
-    Returns True iff exactly one row was deleted.
+    Attachment paths are fetched *before* the delete (the cascade removes
+    the rows, not the files) so the caller can best-effort unlink them from
+    disk afterward — a stray file leak on disk is not a break-the-request
+    problem, the DB delete is authoritative.
     """
+    paths = list(
+        await session.scalars(
+            select(SupportAttachment.stored_path)
+            .join(SupportMessage, SupportMessage.id == SupportAttachment.message_id)
+            .where(
+                SupportMessage.id == message_id,
+                SupportMessage.ticket_id == ticket_id,
+                SupportMessage.sender == "admin",
+            )
+        )
+    )
     stmt = delete(SupportMessage).where(
         SupportMessage.id == message_id,
         SupportMessage.ticket_id == ticket_id,
         SupportMessage.sender == "admin",
     )
     result = await session.execute(stmt)
-    return (result.rowcount or 0) > 0
+    deleted = (result.rowcount or 0) > 0
+    return DeletedMessageResult(deleted=deleted, attachment_paths=paths if deleted else [])
 
 
 __all__ = [
+    "AttachmentWithTicket",
+    "DeletedMessageResult",
     "TicketWithLastMessage",
+    "add_attachment",
     "count_open_tickets_for_user",
     "count_tickets_by_status",
     "delete_admin_message",
+    "get_attachment_with_ticket",
     "get_ticket_by_id",
     "list_messages_for_ticket",
     "list_user_tickets",

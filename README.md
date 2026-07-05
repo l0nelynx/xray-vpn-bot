@@ -72,6 +72,11 @@ server {
     server_name example.com;
     # ... ssl_certificate / ssl_certificate_key ...
 
+    # Support-ticket image attachments (up to 3 images/message) can exceed
+    # nginx's 1MB default — without this, uploads silently 413 before they
+    # reach the containers.
+    client_max_body_size 20m;
+
     # Docker's embedded DNS — required for the runtime resolution below.
     resolver 127.0.0.11 valid=30s ipv6=off;
 

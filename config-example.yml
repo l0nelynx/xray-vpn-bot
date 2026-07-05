@@ -259,3 +259,10 @@ discount: 5                                        # Extra discount (%) applied 
 # exists it is served instead of the bundled default. Mount it like config.yml
 # (see docker-compose.yml + docs/connect-page.md). Default /app/app-config.json.
 # connect_app_config_path: /app/app-config.json
+
+# --- Support-ticket image attachments ---
+# Directory for uploaded ticket images. Shared, read-write bind mount between
+# the miniapp and dashboard containers (see docker-compose.yml +
+# docs/deployment.md — the host ./support_uploads directory must be writable
+# by uid 10001). Default /app/support_uploads.
+# support_uploads_dir: /app/support_uploads

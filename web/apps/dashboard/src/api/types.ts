@@ -250,11 +250,20 @@ export interface SupportTicketSummary {
   updated_at: string;
 }
 
+export interface SupportAttachmentOut {
+  id: number;
+  filename: string;
+  mime_type: string;
+  size_bytes: number;
+  url: string;
+}
+
 export interface SupportMessageItem {
   id: number;
   sender: string;
   text: string;
   created_at: string;
+  attachments: SupportAttachmentOut[];
 }
 
 export interface SupportTicketDetail extends SupportTicketSummary {

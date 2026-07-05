@@ -1,26 +1,27 @@
+import logging
 from datetime import datetime
+from pathlib import Path
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi.responses import FileResponse
+from pydantic import BaseModel
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 
 from ..auth import get_current_user
-from ..config import get_bot_token
+from ..config import get_bot_token, get_support_uploads_dir
 from ..database.models import SupportTicket, SupportMessage, User
 from ..database.session import async_session
 
 from common_db.repo import support as _repo_support
 from common_db.repo import users as _repo_users
+from support_attachments import AttachmentValidationError, validate_and_save_attachments
 
 router = APIRouter(prefix="/api/support", tags=["support"])
+logger = logging.getLogger(__name__)
 
 VALID_STATUSES = {"open", "in_progress", "closed"}
-
-
-class ReplyBody(BaseModel):
-    text: str = Field(..., min_length=1, max_length=4000)
 
 
 class StatusBody(BaseModel):
@@ -90,7 +91,9 @@ async def get_ticket(ticket_id: int, _: str = Depends(get_current_user)):
         stmt = (
             select(SupportTicket)
             .where(SupportTicket.id == ticket_id)
-            .options(selectinload(SupportTicket.messages))
+            .options(
+                selectinload(SupportTicket.messages).selectinload(SupportMessage.attachments)
+            )
         )
         ticket = await session.scalar(stmt)
         if not ticket:
@@ -107,37 +110,78 @@ async def get_ticket(ticket_id: int, _: str = Depends(get_current_user)):
             "created_at": ticket.created_at,
             "updated_at": ticket.updated_at,
             "messages": [
-                {"id": m.id, "sender": m.sender, "text": m.text, "created_at": m.created_at}
+                {
+                    "id": m.id,
+                    "sender": m.sender,
+                    "text": m.text,
+                    "created_at": m.created_at,
+                    "attachments": [
+                        {
+                            "id": a.id,
+                            "filename": a.original_filename,
+                            "mime_type": a.mime_type,
+                            "size_bytes": a.size_bytes,
+                            "url": f"/support/tickets/{ticket_id}/attachments/{a.id}",
+                        }
+                        for a in m.attachments
+                    ],
+                }
                 for m in messages
             ],
         }
 
 
 @router.post("/tickets/{ticket_id}/reply")
-async def reply_ticket(ticket_id: int, body: ReplyBody, _: str = Depends(get_current_user)):
-    text = body.text.strip()
-    if not text:
+async def reply_ticket(
+    ticket_id: int,
+    text: str = Form(default=""),
+    images: list[UploadFile] = File(default=[]),
+    _: str = Depends(get_current_user),
+):
+    text = text.strip()
+    if not text and not images:
         raise HTTPException(400, "empty text")
     async with async_session() as session:
         ticket = await _repo_support.get_ticket_by_id(session, ticket_id)
         if not ticket:
             raise HTTPException(404, "ticket not found")
         user = await _repo_users.get_user_by_id(session, ticket.user_id)
+
+        try:
+            saved = await validate_and_save_attachments(
+                images, uploads_dir=get_support_uploads_dir(), ticket_id=ticket_id
+            )
+        except AttachmentValidationError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
         now = _now_iso()
         msg = SupportMessage(ticket_id=ticket.id, sender="admin", text=text, created_at=now)
         session.add(msg)
+        await session.flush()
+        for s in saved:
+            await _repo_support.add_attachment(
+                session,
+                message_id=msg.id,
+                original_filename=s.original_filename,
+                stored_path=s.stored_path,
+                mime_type=s.mime_type,
+                size_bytes=s.size_bytes,
+                created_at=now,
+            )
         ticket.updated_at = now
         if ticket.status == "open":
             ticket.status = "in_progress"
         await session.commit()
         tg_id = user.tg_id if user else None
+        subject = ticket.subject
 
     if tg_id:
         token = get_bot_token()
         if token:
-            notify = (
-                f"💬 Ответ по обращению #{ticket_id}: <b>{ticket.subject}</b>\n\n{text}"
-            )
+            preview = text or ("(no text)" if saved else "")
+            notify = f"💬 Ответ по обращению #{ticket_id}: <b>{subject}</b>\n\n{preview}"
+            if saved:
+                notify += f"\n📷 {len(saved)} фото прикреплено"
             try:
                 async with httpx.AsyncClient(timeout=10.0) as client:
                     await client.post(
@@ -147,6 +191,22 @@ async def reply_ticket(ticket_id: int, body: ReplyBody, _: str = Depends(get_cur
             except Exception:
                 pass
     return {"ok": True}
+
+
+@router.get("/tickets/{ticket_id}/attachments/{attachment_id}")
+async def get_attachment(
+    ticket_id: int,
+    attachment_id: int,
+    _: str = Depends(get_current_user),
+):
+    async with async_session() as session:
+        row = await _repo_support.get_attachment_with_ticket(session, attachment_id)
+        if not row or row.ticket_id != ticket_id:
+            raise HTTPException(404, "attachment not found")
+    full_path = Path(get_support_uploads_dir()) / row.attachment.stored_path
+    if not full_path.is_file():
+        raise HTTPException(404, "file missing")
+    return FileResponse(full_path, media_type=row.attachment.mime_type)
 
 
 @router.patch("/tickets/{ticket_id}")
@@ -180,11 +240,18 @@ async def delete_admin_message(
         ticket = await _repo_support.get_ticket_by_id(session, ticket_id)
         if not ticket:
             raise HTTPException(404, "ticket not found")
-        deleted = await _repo_support.delete_admin_message(
+        result = await _repo_support.delete_admin_message(
             session, ticket_id=ticket_id, message_id=message_id
         )
-        if not deleted:
+        if not result.deleted:
             raise HTTPException(404, "message not found")
         ticket.updated_at = _now_iso()
         await session.commit()
+
+    uploads_dir = Path(get_support_uploads_dir())
+    for rel_path in result.attachment_paths:
+        try:
+            (uploads_dir / rel_path).unlink(missing_ok=True)
+        except OSError as exc:
+            logger.warning("failed to unlink attachment %s: %s", rel_path, exc)
     return {"ok": True}

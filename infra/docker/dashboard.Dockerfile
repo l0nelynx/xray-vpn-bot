@@ -15,6 +15,11 @@ RUN apk add --no-cache --virtual .build-deps gcc musl-dev postgresql-dev \
  && pip install --no-cache-dir -r requirements.txt \
  && apk del .build-deps
 
+# Shared with miniapp: same image-validation/save logic for support-ticket
+# attachments, so the two services can't drift on validation rules.
+COPY packages/support_attachments /tmp/support_attachments
+RUN pip install --no-cache-dir --no-deps /tmp/support_attachments && rm -rf /tmp/support_attachments
+
 COPY services/dashboard/backend/ ./backend/
 COPY alembic ./alembic
 COPY alembic.ini ./alembic.ini

@@ -45,6 +45,17 @@ def get_expose_api_docs() -> bool:
     return bool(get_config().get("expose_api_docs", False))
 
 
+def get_support_uploads_dir() -> str:
+    """Filesystem directory for support-ticket image attachments.
+
+    Shared, read-write bind mount with the `miniapp` container (see
+    docker-compose.yml) — this service needs to read images the user
+    uploaded via miniapp, and miniapp needs to read images the admin
+    uploads here. Default matches the mount path in compose.
+    """
+    return get_config().get("support_uploads_dir") or "/app/support_uploads"
+
+
 def get_telemt_server() -> str:
     return get_config().get("telemt_server", "")
 

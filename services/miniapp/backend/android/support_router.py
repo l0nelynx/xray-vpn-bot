@@ -7,17 +7,20 @@ User lookup is by user.id directly — no tg_id needed.
 import asyncio
 import logging
 from datetime import datetime, timezone
+from pathlib import Path
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi.responses import FileResponse
 
-from ..config import get_admin_bot_token, get_admin_id
+from ..config import get_admin_bot_token, get_admin_id, get_support_uploads_dir
 from ..database.models import SupportMessage, SupportTicket
 from ..database.session import async_session
-from ..schemas.support import MessageItem, TicketCreate, TicketDetail, TicketReply, TicketSummary
+from ..schemas.support import AttachmentOut, MessageItem, TicketCreate, TicketDetail, TicketSummary
 from . import deps
 from . import repo as android_repo
 from common_db.repo import support as _repo_support
+from support_attachments import AttachmentValidationError, validate_and_save_attachments
 
 router = APIRouter(prefix="/api/android/support", tags=["android-support"])
 logger = logging.getLogger(__name__)
@@ -48,17 +51,23 @@ async def _notify_admin(ticket_id: int, display_name: str | None, subject: str) 
         logger.warning("admin notification failed for ticket %s: %s", ticket_id, e)
 
 
-async def _notify_admin_reply(ticket_id: int, display_name: str | None, text: str) -> None:
+async def _notify_admin_reply(
+    ticket_id: int, display_name: str | None, text: str, image_count: int = 0
+) -> None:
     token = get_admin_bot_token()
     admin_id = get_admin_id()
     if not token or not admin_id:
         return
     preview = text if len(text) <= 300 else text[:297] + "..."
+    if not preview and image_count:
+        preview = "(no text)"
     body = (
         f"💬 New reply on ticket #{ticket_id}\n"
         f"From: {display_name or '—'}\n\n"
         f"{preview}"
     )
+    if image_count:
+        body += f"\n📷 {image_count} photo(s) attached"
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     try:
         async with httpx.AsyncClient(timeout=NOTIFY_TIMEOUT) as client:
@@ -97,7 +106,17 @@ async def get_ticket(
             raise HTTPException(status.HTTP_404_NOT_FOUND, "ticket not found")
         msgs = await _repo_support.list_messages_for_ticket(session, ticket.id)
         messages = [
-            MessageItem(id=m.id, sender=m.sender, text=m.text, created_at=m.created_at)
+            MessageItem(
+                id=m.id, sender=m.sender, text=m.text, created_at=m.created_at,
+                attachments=[
+                    AttachmentOut(
+                        id=a.id, filename=a.original_filename, mime_type=a.mime_type,
+                        size_bytes=a.size_bytes,
+                        url=f"/android/support/tickets/{ticket_id}/attachments/{a.id}",
+                    )
+                    for a in m.attachments
+                ],
+            )
             for m in msgs
         ]
         return TicketDetail(
@@ -169,11 +188,12 @@ async def create_ticket(
 )
 async def add_user_message(
     ticket_id: int,
-    body: TicketReply,
+    text: str = Form(default=""),
+    images: list[UploadFile] = File(default=[]),
     user: android_repo.UserRow = Depends(deps.get_current_user),
 ) -> MessageItem:
-    text = body.text.strip()
-    if not text:
+    text = text.strip()
+    if not text and not images:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "empty message")
     now = _now_iso()
     async with async_session() as session:
@@ -183,6 +203,13 @@ async def add_user_message(
         if ticket.status == "closed":
             raise HTTPException(status.HTTP_409_CONFLICT, "ticket is closed")
 
+        try:
+            saved = await validate_and_save_attachments(
+                images, uploads_dir=get_support_uploads_dir(), ticket_id=ticket_id
+            )
+        except AttachmentValidationError as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
         msg = SupportMessage(
             ticket_id=ticket.id,
             sender="user",
@@ -190,10 +217,51 @@ async def add_user_message(
             created_at=now,
         )
         session.add(msg)
-        ticket.updated_at = now
         await session.flush()
+
+        att_rows = [
+            await _repo_support.add_attachment(
+                session,
+                message_id=msg.id,
+                original_filename=s.original_filename,
+                stored_path=s.stored_path,
+                mime_type=s.mime_type,
+                size_bytes=s.size_bytes,
+                created_at=now,
+            )
+            for s in saved
+        ]
+        await session.flush()
+
+        ticket.updated_at = now
         msg_id = msg.id
         await session.commit()
+        attachments_out = [
+            AttachmentOut(
+                id=a.id, filename=a.original_filename, mime_type=a.mime_type,
+                size_bytes=a.size_bytes,
+                url=f"/android/support/tickets/{ticket_id}/attachments/{a.id}",
+            )
+            for a in att_rows
+        ]
 
-    asyncio.create_task(_notify_admin_reply(ticket_id, user.email, text))
-    return MessageItem(id=msg_id, sender="user", text=text, created_at=now)
+    asyncio.create_task(_notify_admin_reply(ticket_id, user.email, text, len(saved)))
+    return MessageItem(
+        id=msg_id, sender="user", text=text, created_at=now, attachments=attachments_out
+    )
+
+
+@router.get("/tickets/{ticket_id}/attachments/{attachment_id}")
+async def get_attachment(
+    ticket_id: int,
+    attachment_id: int,
+    user: android_repo.UserRow = Depends(deps.get_current_user),
+):
+    async with async_session() as session:
+        row = await _repo_support.get_attachment_with_ticket(session, attachment_id)
+        if not row or row.ticket_id != ticket_id or row.ticket_user_id != user.id:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "attachment not found")
+    full_path = Path(get_support_uploads_dir()) / row.attachment.stored_path
+    if not full_path.is_file():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "file missing")
+    return FileResponse(full_path, media_type=row.attachment.mime_type)

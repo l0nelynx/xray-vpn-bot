@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Typography,
   Table,
@@ -11,18 +11,40 @@ import {
   Spin,
   Popconfirm,
   Card,
+  Image,
+  Space,
 } from "antd";
 import type { TableProps } from "antd";
-import { DeleteOutlined, UserOutlined } from "@ant-design/icons";
+import { DeleteOutlined, PaperClipOutlined, UserOutlined } from "@ant-design/icons";
 import { api } from "../api/client";
 import {
   PaginatedResponse,
+  SupportAttachmentOut,
   SupportTicketDetail,
   SupportTicketSummary,
 } from "../api/types";
 import useIsMobile from "../hooks/useIsMobile";
+import { useAuthedImage } from "../hooks/useAuthedImage";
 import MobileSortControl, { SortOrder } from "../components/MobileSortControl";
 import UserDrawer from "../components/UserDrawer";
+
+const MAX_IMAGES = 3;
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
+function AttachmentThumb({ attachment }: { attachment: SupportAttachmentOut }) {
+  const objectUrl = useAuthedImage(attachment.url);
+  if (!objectUrl) {
+    return <div style={{ width: 80, height: 80, background: "rgba(255,255,255,0.06)", borderRadius: 6 }} />;
+  }
+  return (
+    <Image
+      src={objectUrl}
+      width={80}
+      height={80}
+      style={{ objectFit: "cover", borderRadius: 6 }}
+    />
+  );
+}
 
 const SORT_OPTIONS = [
   { value: "updated_at", label: "Updated" },
@@ -69,7 +91,17 @@ export default function SupportPage() {
   const [detail, setDetail] = useState<SupportTicketDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [reply, setReply] = useState("");
+  const [pendingImages, setPendingImages] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const pendingPreviewUrls = useMemo(
+    () => pendingImages.map((f) => URL.createObjectURL(f)),
+    [pendingImages],
+  );
+  useEffect(() => {
+    return () => pendingPreviewUrls.forEach((u) => URL.revokeObjectURL(u));
+  }, [pendingPreviewUrls]);
 
   // Nested user card (opened from within a ticket)
   const [userTgId, setUserTgId] = useState<number | null>(null);
@@ -118,6 +150,7 @@ export default function SupportPage() {
   const openTicket = (id: number) => {
     setOpenId(id);
     setReply("");
+    setPendingImages([]);
     loadDetail(id);
   };
 
@@ -125,14 +158,42 @@ export default function SupportPage() {
     setOpenId(null);
     setDetail(null);
     setReply("");
+    setPendingImages([]);
+  };
+
+  const onFilesSelected = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const incoming = Array.from(files);
+    const combined = [...pendingImages, ...incoming];
+    if (combined.length > MAX_IMAGES) {
+      message.error(`Up to ${MAX_IMAGES} images per message`);
+      return;
+    }
+    for (const f of incoming) {
+      if (f.size > MAX_IMAGE_BYTES) {
+        message.error(`File too large (max 5MB): ${f.name}`);
+        return;
+      }
+    }
+    setPendingImages(combined);
+  };
+
+  const removePendingImage = (idx: number) => {
+    setPendingImages((prev) => prev.filter((_, i) => i !== idx));
   };
 
   const sendReply = async () => {
-    if (!openId || !reply.trim()) return;
+    if (!openId) return;
+    const text = reply.trim();
+    if (!text && pendingImages.length === 0) return;
     setSending(true);
     try {
-      await api.post(`/support/tickets/${openId}/reply`, { text: reply.trim() });
+      const form = new FormData();
+      form.append("text", text);
+      for (const img of pendingImages) form.append("images", img);
+      await api.postForm(`/support/tickets/${openId}/reply`, form);
       setReply("");
+      setPendingImages([]);
       await loadDetail(openId);
       await load();
     } catch (e: any) {
@@ -466,7 +527,16 @@ export default function SupportPage() {
                       </Popconfirm>
                     )}
                   </div>
-                  <div style={{ whiteSpace: "pre-wrap" }}>{m.text}</div>
+                  {m.text && <div style={{ whiteSpace: "pre-wrap" }}>{m.text}</div>}
+                  {m.attachments && m.attachments.length > 0 && (
+                    <Image.PreviewGroup>
+                      <Space size={8} wrap style={{ marginTop: m.text ? 8 : 0 }}>
+                        {m.attachments.map((a) => (
+                          <AttachmentThumb key={a.id} attachment={a} />
+                        ))}
+                      </Space>
+                    </Image.PreviewGroup>
+                  )}
                 </div>
               ))}
             </div>
@@ -478,16 +548,58 @@ export default function SupportPage() {
               maxLength={4000}
               placeholder="Reply to user…"
             />
-            <Button
-              type="primary"
-              loading={sending}
-              disabled={!reply.trim()}
-              onClick={sendReply}
-              block={isMobile}
-              style={{ marginTop: 12 }}
-            >
-              Send reply
-            </Button>
+            {pendingImages.length > 0 && (
+              <Space size={8} wrap style={{ marginTop: 8 }}>
+                {pendingImages.map((f, idx) => (
+                  <div key={idx} style={{ position: "relative" }}>
+                    <img
+                      src={pendingPreviewUrls[idx]}
+                      width={64}
+                      height={64}
+                      style={{ objectFit: "cover", borderRadius: 6 }}
+                    />
+                    <Button
+                      size="small"
+                      danger
+                      shape="circle"
+                      style={{ position: "absolute", top: -8, right: -8 }}
+                      onClick={() => removePendingImage(idx)}
+                    >
+                      ×
+                    </Button>
+                  </div>
+                ))}
+              </Space>
+            )}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              style={{ display: "none" }}
+              onChange={(e) => {
+                onFilesSelected(e.target.files);
+                e.target.value = "";
+              }}
+            />
+            <Space style={{ marginTop: 12, width: isMobile ? "100%" : undefined }}>
+              <Button
+                icon={<PaperClipOutlined />}
+                onClick={() => fileInputRef.current?.click()}
+                disabled={pendingImages.length >= MAX_IMAGES}
+              >
+                Attach
+              </Button>
+              <Button
+                type="primary"
+                loading={sending}
+                disabled={!reply.trim() && pendingImages.length === 0}
+                onClick={sendReply}
+                block={isMobile}
+              >
+                Send reply
+              </Button>
+            </Space>
           </>
         )}
       </Drawer>

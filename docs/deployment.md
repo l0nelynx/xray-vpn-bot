@@ -93,6 +93,22 @@ For local debugging compose binds (loopback only):
 `bot :5000`, `dashboard :8080→8000`, `frontend :8088→80`. In production traffic
 goes through the edge nginx, not these host ports.
 
+## Support-ticket image attachments
+
+`miniapp` and `dashboard` share a read-write bind mount, `./support_uploads`,
+for images attached to support-ticket replies (up to 3 images/message, 5MB
+each). Before first use:
+
+```bash
+mkdir -p support_uploads
+chown 10001:10001 support_uploads   # both containers run as non-root uid 10001
+```
+
+The edge nginx's `client_max_body_size` must also be raised above the 1MB
+default — see the [README](../README.md) → "Web tier & reverse proxy" example
+(`client_max_body_size 20m;`). Without it, a 3-image reply silently 413s
+before reaching either container.
+
 ## Scaling & workers (single-worker constraint)
 
 Each backend runs as **one uvicorn worker in one container**. Several security

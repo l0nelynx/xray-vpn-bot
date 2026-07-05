@@ -11,7 +11,7 @@ from .google_play import GooglePlayPurchase, GooglePlaySku
 from .menus import MenuButton, MenuScreen, WebAppMenuNode
 from .promo_redemptions import PromoRedemption
 from .promos import Promo, PromoSettings
-from .support import SupportMessage, SupportTicket
+from .support import SupportAttachment, SupportMessage, SupportTicket
 from .system import BotFeatureFlags, CacheVersion, TelmtFreeParams
 from .tariffs import SquadProfile, TariffPlan, TariffPrice
 from .transactions import Transaction
@@ -30,6 +30,7 @@ __all__ = [
     # support
     "SupportTicket",
     "SupportMessage",
+    "SupportAttachment",
     # tariffs
     "SquadProfile",
     "TariffPlan",

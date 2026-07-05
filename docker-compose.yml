@@ -131,6 +131,10 @@ services:
         REGISTRY: ${REGISTRY-ghcr.io/l0nelynx/}
     volumes:
       - ./config.yml:/app/config.yml:ro
+      # Support-ticket image attachments — shared read-write with `miniapp`:
+      # admin (this container) reads images the user uploaded via miniapp;
+      # miniapp reads images the admin uploads here. See docs/deployment.md.
+      - ./support_uploads:/app/support_uploads
     networks:
       - backend-network
       - data-network
@@ -168,6 +172,10 @@ services:
       # rebuild. Copy services/miniapp/backend/connect/app_config.default.json,
       # edit, and uncomment. See docs/connect-page.md.
       # - ./app-config.json:/app/app-config.json:ro
+      # Support-ticket image attachments — shared read-write with `dashboard`:
+      # this container reads images the admin uploaded via the dashboard;
+      # dashboard reads images users upload here. See docs/deployment.md.
+      - ./support_uploads:/app/support_uploads
     networks:
       - backend-network
       - data-network

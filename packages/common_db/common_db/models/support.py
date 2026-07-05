@@ -52,5 +52,35 @@ class SupportMessage(Base):
     created_at: Mapped[str] = mapped_column(String(30))
 
     ticket: Mapped["SupportTicket"] = relationship(back_populates="messages")
+    attachments: Mapped[list["SupportAttachment"]] = relationship(
+        back_populates="message", cascade="all, delete-orphan"
+    )
 
     __table_args__ = (Index("ix_support_messages_ticket_id", "ticket_id"),)
+
+
+class SupportAttachment(Base):
+    """Image attached to a support-ticket reply (up to 3 per message).
+
+    The actual file lives on disk under a shared bind-mounted directory (see
+    `get_support_uploads_dir()` in the miniapp/dashboard configs) — this row
+    only tracks metadata + a path relative to that uploads root. `stored_path`
+    is deliberately relative (never an absolute host path) so it stays
+    portable across containers and never leaks filesystem layout in an API
+    response.
+    """
+    __tablename__ = "support_attachments"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    message_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("support_messages.id", ondelete="CASCADE")
+    )
+    original_filename: Mapped[str] = mapped_column(String(255))
+    stored_path: Mapped[str] = mapped_column(String(500))
+    mime_type: Mapped[str] = mapped_column(String(100))
+    size_bytes: Mapped[int] = mapped_column(BigInteger)
+    created_at: Mapped[str] = mapped_column(String(30))
+
+    message: Mapped["SupportMessage"] = relationship(back_populates="attachments")
+
+    __table_args__ = (Index("ix_support_attachments_message_id", "message_id"),)
