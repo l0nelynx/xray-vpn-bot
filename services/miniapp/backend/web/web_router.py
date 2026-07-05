@@ -101,6 +101,18 @@ def _fake_tg_id(user_id: int) -> int:
     return -int(user_id)
 
 
+def _promo_tg_id(user: android_repo.UserRow) -> int:
+    """Key used to look up this user's promo/discount state.
+
+    Promos are keyed by tg_id everywhere (miniapp, bot). A web account with a
+    linked Telegram must use that *real* tg_id here too, or it ends up
+    reading/writing a completely separate, synthetic row that miniapp/bot
+    never touch — the synthetic key is only for genuinely tg_id-less
+    web-only accounts.
+    """
+    return user.tg_id if user.tg_id is not None else _fake_tg_id(user.id)
+
+
 async def _resolve_discount_for_promo(promo) -> int:
     """Cascade: promo.discount_percent (incl. explicit 0) → PromoSettings default."""
     if promo.discount_percent is not None:
@@ -326,9 +338,9 @@ async def web_payments_menu(
     user: android_repo.UserRow = Depends(deps.get_current_user),
 ) -> WebMenuResponse:
     """Tariff tree with prices discounted by the user's active promo."""
-    fake_tg = _fake_tg_id(user.id)
+    promo_tg_id = _promo_tg_id(user)
     async with async_session() as session:
-        discount_info = await _repo_promos.get_effective_discount(session, fake_tg)
+        discount_info = await _repo_promos.get_effective_discount(session, promo_tg_id)
 
     discount_pct = discount_info.discount_percent if discount_info else 0
     promo_code = discount_info.promo_code if discount_info else None
@@ -409,9 +421,9 @@ async def web_invoice(
     if invoice_data["amount"] <= 0 or invoice_data["days"] <= 0:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail={"code": "node_misconfigured"})
 
-    fake_tg = _fake_tg_id(user.id)
+    promo_tg_id = _promo_tg_id(user)
     async with async_session() as session:
-        discount_info = await _repo_promos.get_effective_discount(session, fake_tg)
+        discount_info = await _repo_promos.get_effective_discount(session, promo_tg_id)
 
     discount_pct = discount_info.discount_percent if discount_info else 0
     original_amount = float(invoice_data["amount"])
@@ -423,7 +435,7 @@ async def web_invoice(
         amount=final_amount,
         currency=invoice_data["currency"],
         days=invoice_data["days"],
-        user_tg_id=fake_tg,
+        user_tg_id=promo_tg_id,
         username=user.email,
         description=body.description or f"WebUser:{user.id}",
         method=invoice_data["method"],
@@ -667,6 +679,14 @@ async def telegram_auth_exchange(
             status.HTTP_403_FORBIDDEN,
             detail={"code": "banned"},
         )
+
+    # Fallback paths 2/3 find the user by username/Remnawave-uuid without
+    # tg_id being set on the row yet — persist the link now. Telegram's own
+    # OIDC signature already proves ownership of this tg_id, so this is safe;
+    # never overwrite an existing link (path 1 already handles that case).
+    if tg_id is not None and user.tg_id is None:
+        await android_repo.set_user_tg_id(user.id, tg_id)
+        user.tg_id = tg_id
 
     if user.email_verified_at is None:
         await android_repo.mark_email_verified(user.id)
