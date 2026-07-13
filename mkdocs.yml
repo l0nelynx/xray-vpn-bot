@@ -57,17 +57,23 @@ markdown_extensions:
 nav:
   - Home: README.md
   - Getting started:
+      - Overview: getting-started.md
       - Deployment: deployment.md
-      - Architecture: architecture.md
-  - Platform:
+      - Configuration: configuration.md
+      - Local development: local-development.md
+  - Architecture: architecture.md
+  - Components:
+      - Seller bot: seller-bot.md
+      - Dashboard: dashboard.md
+      - MiniApp: miniapp.md
+      - Web portal: web-portal.md
+      - Android API: android-api.md
+  - Payments:
+      - Payment gateways: payment-gateways.md
+  - Operations:
       - Database: database.md
       - Integrations: integrations.md
-  - Clients:
-      - Android API: android-api.md
-      - Web portal: web-portal.md
       - Connect page: connect-page.md
-  - Development:
-      - Promo system reference: claude.md
 
 extra:
   social:

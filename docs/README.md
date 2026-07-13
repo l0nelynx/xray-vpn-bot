@@ -6,36 +6,54 @@ Telegram VPN subscription suite backed by **Remnawave**: seller bot, admin
 Dashboard, Telegram MiniApp, browser [web portal](https://github.com/l0nelynx/web-portal),
 and Android app — all on a shared PostgreSQL database.
 
-!!! tip "Quick start"
-    New to the project? Start with **[Deployment](deployment.md)** (Docker Compose,
-    `config.yml`, networks) then skim **[Architecture](architecture.md)** for the
-    big picture.
+!!! tip "New here?"
+    1. Read **[Getting started → Overview](getting-started.md)** for prerequisites and the big picture.
+    2. Follow **[Deployment](deployment.md)** to bring up Docker Compose.
+    3. Fill in **[Configuration](configuration.md)** (`config.yml` + `.env`).
+    4. Open the **[Dashboard](dashboard.md)** and build your tariff menu in **WebApp → Tariff Constructor**.
 
-    The repository [README on GitHub](https://github.com/l0nelynx/xray-vpn-bot/blob/main/README.md)
-    also has a copy-paste edge nginx config.
+## Documentation map
 
-## Guides
+### Getting started
 
-| Topic | Description |
-|-------|-------------|
-| [Architecture](architecture.md) | Repo layout, containers, shared packages, networking |
-| [Deployment](deployment.md) | Compose, images, migrations, CI, scaling notes |
-| [Database](database.md) | `common_db`, schema, Alembic (HEAD `0014`) |
-| [Integrations](integrations.md) | Remnawave webhooks, payment gateways, Telemt |
+| Guide | What you'll learn |
+|-------|-------------------|
+| [Overview](getting-started.md) | What the suite does, what you need before deploying |
+| [Deployment](deployment.md) | Docker Compose, networks, reverse proxy, first boot |
+| [Configuration](configuration.md) | Every `config.yml` key explained |
+| [Local development](local-development.md) | Run services without Docker, MkDocs preview |
 
-## Client APIs
+### Architecture & components
 
-| Topic | Description |
-|-------|-------------|
-| [Android API](android-api.md) | JWT auth, payments, IAP, support — full endpoint reference |
-| [Web portal](web-portal.md) | External SPA repo, CORS, Telegram OIDC |
-| [Connect page](connect-page.md) | `/connect-page` VPN app catalog override |
+| Guide | What you'll learn |
+|-------|-------------------|
+| [Architecture](architecture.md) | Repo layout, containers, networking, data flow |
+| [Seller bot](seller-bot.md) | Main Telegram bot, payment webhooks, admin bot |
+| [Dashboard](dashboard.md) | Admin UI: tariffs, users, stats, support, Telemt |
+| [MiniApp](miniapp.md) | Telegram WebApp: buy flow, subscription, support |
+| [Web portal](web-portal.md) | External browser SPA, CORS, Telegram OIDC |
+| [Android API](android-api.md) | JWT auth, Google Play IAP, account linking |
 
-## Development
+### Payments & operations
 
-| Topic | Description |
-|-------|-------------|
-| [Promo system reference](claude.md) | Promo/referral map (contributor notes) |
+| Guide | What you'll learn |
+|-------|-------------------|
+| [Payment gateways](payment-gateways.md) | Built-in gateways + **how to add your own** |
+| [Database](database.md) | `common_db`, schema, Alembic migrations |
+| [Integrations](integrations.md) | Remnawave webhooks, Telemt monitoring |
+| [Connect page](connect-page.md) | VPN app install catalog override |
+
+## Quick reference
+
+| Item | Value |
+|------|-------|
+| Dashboard URL | `https://your-domain/bot/dashboard/` |
+| MiniApp URL | `https://your-domain/bot/miniapp/` |
+| Dashboard API | `/bot/dashboard/api/` |
+| MiniApp API | `/bot/miniapp/api/` |
+| Payment webhooks | `/bot/*_webhook` → `bot:5000` |
+| Config file | `config.yml` (copy from `config-example.yml`) |
+| DB migrations | Alembic HEAD `0014_support_attachments` |
 
 ## Local preview
 
@@ -43,3 +61,6 @@ and Android app — all on a shared PostgreSQL database.
 pip install -r requirements-docs.txt
 mkdocs serve   # http://127.0.0.1:8000
 ```
+
+The site is deployed automatically on push to `main` via `.github/workflows/docs.yml`
+(GitHub Pages → Source: **GitHub Actions**).

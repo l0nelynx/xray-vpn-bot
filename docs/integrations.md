@@ -42,22 +42,15 @@ Other scopes are acknowledged with HTTP 200 but not processed.
 
 ## Payments
 
-Gateway logic is centralised in `packages/payments`:
-- **Providers** (`apay`, `crystal`, `crypto`, `platega`, `paritypay`) — create a
-  hosted invoice from a provider-agnostic `InvoiceRequest`.
-- **Signatures** (`payments.signatures`) — verify each gateway's webhook
-  (APay md5, CrystalPay sha1, CryptoBot HMAC-SHA256, Platega header check,
-  ParityPay HMAC-SHA256).
+Payment gateway setup, built-in providers, webhook routing, and a step-by-step
+guide for adding custom gateways are documented in
+**[Payment gateways](payment-gateways.md)**.
 
-Credentials are injected per service via `set_config_provider`. Flow: a client
-(MiniApp, web portal, Android, or legacy bot) creates an invoice with **`node_id`
-only** (server reads price from `webapp_menu_nodes`) → the user pays → the gateway
-calls the bot's `/bot/*_webhook` endpoint → the signature is verified → the
-subscription is delivered (and the transaction marked `delivered`).
+Quick summary: clients create invoices with **`node_id` only** → user pays at the
+gateway → bot verifies webhook signature → subscription delivered via Remnawave.
 
-Also supported: **Telegram Stars** (native Telegram invoices handled in the bot)
-and **Google Play IAP** (Android; verified via `google-api-python-client`, see
-[android-api.md](android-api.md)).
+Also supported outside `packages/payments`: **Telegram Stars** (legacy bot) and
+**Google Play IAP** (Android — see [android-api.md](android-api.md)).
 
 ## Server monitoring: Telemt
 
