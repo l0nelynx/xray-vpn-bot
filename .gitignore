@@ -1,16 +1,41 @@
+# Env / secrets
 .env
-.venv
-.idea
-XRAY-VPN-BOT.iml
-venv
-uvicorn
-Deprecated
-db.sqlite3
 config.yml
+
+# Editors / tooling
+.idea
+.claude
+.vscode
+*.iml
+
+# Python
+__pycache__
+*.py[cod]
+*.egg-info/
+.venv
+venv
+.pytest_cache
+.mypy_cache
+.ruff_cache
+
+# Node / frontend build output
+node_modules
+dist/
+
+# Runtime / data
+uvicorn
+db.sqlite3
+support.db
+dig_data.json
+
+# Legacy / local scratch
+Deprecated
 freekassa.py
 marz.py
-dig_data.json
-data.json
-support.db
 test.py
-./tests/run_sec.py
+.examples
+.res
+db
+loadtest
+pg_data
+

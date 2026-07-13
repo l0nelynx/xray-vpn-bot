@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "support-attachments"
+version = "0.1.0"
+description = "Shared validate+save logic for support-ticket image attachments, used by the miniapp (Telegram + Android/JWT routers) and dashboard backends."
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.116.1",
+    "Pillow>=11.0.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["support_attachments*"]

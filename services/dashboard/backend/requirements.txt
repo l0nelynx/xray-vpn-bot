@@ -1,0 +1,7 @@
+# Dashboard-specific deps. Common deps (fastapi, uvicorn, sqlalchemy, pydantic,
+# pyyaml, aiosqlite, alembic, asyncpg, psycopg2, remnawave) come from the shared
+# base image — see infra/docker/requirements-base.txt.
+# JWT: PyJWT (HS256). Replaced python-jose, which had CVE-2024-33663/33664 and
+# is no longer maintained; PyJWT is also what the miniapp service uses.
+pyjwt>=2.10.1
+httpx>=0.28.1

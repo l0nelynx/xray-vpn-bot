@@ -1,23 +1,89 @@
 services:
-  seller-bot:
-    container_name: seller-bot
-    image: ghcr.io/l0nelynx/seller-bot:${IMAGE_TAG:-staging}
+  postgres:
+    container_name: xray-postgres
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-xray}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      - POSTGRES_DB=${POSTGRES_DB:-xray_vpn_bot}
+    volumes:
+      - ./pg_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    # Postgres lives only on the private data-network — it is NOT reachable
+    # from the edge (backend-network, where nginx is attached).
+    networks:
+      - data-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-xray} -d ${POSTGRES_DB:-xray_vpn_bot}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+  # Build-only helper: the shared Python base image. Not started on `up`
+  # (profile `build`). Build it first:  docker compose --profile build build base
+  base:
+    image: ghcr.io/l0nelynx/python-base:${IMAGE_TAG:-staging}
     build:
       context: .
-      dockerfile: Dockerfile
-    volumes:
-      - type: bind
-        source: ./db/db.sqlite3
-        target: /usr/src/app/db.sqlite3
-      - /var/lib/marzban/certs/:/usr/src/app/uvicorn/ssl
-      - ./config.yml:/usr/src/app/config.yml
-      - ./dig_data.json:/usr/src/app/dig_data.json
+      dockerfile: infra/docker/base.Dockerfile
+    profiles: ["build"]
+    command: ["true"]
+  migrate:
+    container_name: xray-migrate
+    image: ghcr.io/l0nelynx/bot:${IMAGE_TAG:-staging}
+    build:
+      context: .
+      dockerfile: infra/docker/bot.Dockerfile
+      args:
+        BASE_IMAGE: ${REGISTRY-ghcr.io/l0nelynx/}python-base:${IMAGE_TAG:-staging}
+        REGISTRY: ${REGISTRY-ghcr.io/l0nelynx/}
+    command: ["python", "-c", "from migrations_runner import upgrade_to_head; upgrade_to_head()"]
+    restart: "no"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-xray}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-xray_vpn_bot}
     networks:
-      - backend-network
+      - data-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+  bot:
+    container_name: bot
+    image: ghcr.io/l0nelynx/bot:${IMAGE_TAG:-staging}
+    build:
+      context: .
+      dockerfile: infra/docker/bot.Dockerfile
+      args:
+        BASE_IMAGE: ${REGISTRY-ghcr.io/l0nelynx/}python-base:${IMAGE_TAG:-staging}
+        REGISTRY: ${REGISTRY-ghcr.io/l0nelynx/}
+    volumes:
+      - ./config.yml:/usr/src/app/config.yml
+    # Edge (nginx proxies /bot/ here) + private data-network (Postgres). The
+    # `seller-bot` network alias keeps the existing nginx upstream
+    # (proxy_pass http://seller-bot:5000) working after the rename to `bot`.
+    networks:
+      backend-network:
+        aliases:
+          - seller-bot
+      data-network: {}
     ports:
        - '127.0.0.1:5000:5000'
 #      - "5000:5000"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-xray}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-xray_vpn_bot}
     restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
       interval: 60s
@@ -27,19 +93,19 @@ services:
     deploy:
       resources:
         limits:
-          memory: 350M
+          memory: 512M
   support-bot:
     container_name: support-bot
     image: ghcr.io/l0nelynx/support-bot:${IMAGE_TAG:-staging}
     build:
       context: .
-      dockerfile: Dockerfile_support
+      dockerfile: infra/docker/support_bot.Dockerfile
     volumes:
-      - type: bind
-        source: ./db/db.sqlite3
-        target: /usr/src/app/db/db.sqlite3
+      - ./db:/usr/src/app/db
       - ./config.yml:/usr/src/app/config.yml
     restart: unless-stopped
+    # Legacy bot with its own SQLite DB — no Postgres access needed. Stays on
+    # the edge network only (outbound to Telegram).
     networks:
       - backend-network
     healthcheck:
@@ -55,20 +121,30 @@ services:
   dashboard:
     container_name: dashboard
     image: ghcr.io/l0nelynx/dashboard:${IMAGE_TAG:-staging}
-    build: ./dashboard
+    build:
+      context: .
+      dockerfile: infra/docker/dashboard.Dockerfile
+      args:
+        BASE_IMAGE: ${REGISTRY-ghcr.io/l0nelynx/}python-base:${IMAGE_TAG:-staging}
+        REGISTRY: ${REGISTRY-ghcr.io/l0nelynx/}
     volumes:
-      - type: bind
-        source: ./db/db.sqlite3
-        target: /app/db.sqlite3
       - ./config.yml:/app/config.yml:ro
+      # Support-ticket image attachments — shared read-write with `miniapp`:
+      # admin (this container) reads images the user uploaded via miniapp;
+      # miniapp reads images the admin uploads here. See docs/deployment.md.
+      - ./support_uploads:/app/support_uploads
     networks:
       - backend-network
+      - data-network
     ports:
       - '127.0.0.1:8080:8000'
     environment:
-      - DB_PATH=/app/db.sqlite3
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-xray}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-xray_vpn_bot}
       - CONFIG_PATH=/app/config.yml
     restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 60s
@@ -78,9 +154,90 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 384M
+  miniapp:
+    container_name: miniapp
+    image: ghcr.io/l0nelynx/miniapp:${IMAGE_TAG:-staging}
+    build:
+      context: .
+      dockerfile: infra/docker/miniapp.Dockerfile
+      args:
+        BASE_IMAGE: ${REGISTRY-ghcr.io/l0nelynx/}python-base:${IMAGE_TAG:-staging}
+        REGISTRY: ${REGISTRY-ghcr.io/l0nelynx/}
+    volumes:
+      - ./config.yml:/app/config.yml:ro
+      # Optional: override the /connect-page app catalog without a frontend
+      # rebuild. Copy services/miniapp/backend/connect/app_config.default.json,
+      # edit, and uncomment. See docs/connect-page.md.
+      # - ./app-config.json:/app/app-config.json:ro
+      # Support-ticket image attachments — shared read-write with `dashboard`:
+      # this container reads images the admin uploaded via the dashboard;
+      # dashboard reads images users upload here. See docs/deployment.md.
+      - ./support_uploads:/app/support_uploads
+    networks:
+      - backend-network
+      - data-network
+      - mail-net
+    ports:
+      - '127.0.0.1:8001:8001'
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-xray}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-xray_vpn_bot}
+      - CONFIG_PATH=/app/config.yml
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      bot:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+  frontend:
+    container_name: frontend
+    image: ghcr.io/l0nelynx/frontend:${IMAGE_TAG:-staging}
+    build:
+      context: .
+      dockerfile: infra/docker/frontend.Dockerfile
+    # Static-only web tier: serves both built SPAs. All routing lives in the edge
+    # nginx, which proxies static requests to `frontend:80` and API/webhooks
+    # straight to the backends — so this container has no backend dependency.
+    networks:
+      - backend-network
+    ports:
+      - '127.0.0.1:8088:80'
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost/bot/miniapp/ >/dev/null 2>&1 || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 64M
 networks:
+  # Edge network — nginx is attached here and proxies to the app backends.
   backend-network:
     name: backend-network
     driver: bridge
     external: true
+  mail-net:
+    name: mail-net
+    driver: bridge
+    external: true
+  # Private DB network — Postgres + the services that talk to it. App backends
+  # are dual-homed (edge + data). Postgres is not on backend-network, so it is
+  # not reachable from the edge nginx. `internal: true` (no gateway) is optional
+  # hardening — left off here so operators can reach Postgres on the host bind
+  # (127.0.0.1:5432) for backups/migrations; see docs/deployment.md.
+  data-network:
+    name: data-network
+    driver: bridge

@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "payments"
+version = "0.1.0"
+description = "Shared payment-gateway providers and webhook signature verification used by the seller bot and the miniapp."
+requires-python = ">=3.11"
+dependencies = [
+    "aiohttp>=3.9",
+    "aiosend>=3.0.5",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["payments*"]

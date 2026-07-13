@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "subscription-delivery"
+version = "0.1.0"
+description = "Shared Android paid-subscription delivery used by the seller bot (fiat webhooks) and the miniapp (Google Play IAP)."
+requires-python = ">=3.11"
+dependencies = [
+    "sqlalchemy>=2.0",
+    "remnawave-client",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["subscription_delivery*"]

@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "common-db"
+version = "0.1.0"
+description = "Shared SQLAlchemy Base, URL helpers and ORM models used by app/miniapp/dashboard."
+requires-python = ">=3.11"
+dependencies = [
+    "sqlalchemy>=2.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8",
+    "aiosqlite>=0.19",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["common_db*"]
