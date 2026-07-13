@@ -35,8 +35,7 @@ and Android app — all on a shared PostgreSQL database.
 
 | Topic | Description |
 |-------|-------------|
-| [Promo refactor plan](promo-refactor-plan.md) | Referral system roadmap |
-| [Promo system reference](claude.md) | Legacy promo map (contributor notes) |
+| [Promo system reference](claude.md) | Promo/referral map (contributor notes) |
 
 ## Local preview
 

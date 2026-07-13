@@ -67,7 +67,6 @@ nav:
       - Web portal: web-portal.md
       - Connect page: connect-page.md
   - Development:
-      - Promo refactor plan: promo-refactor-plan.md
       - Promo system reference: claude.md
 
 extra:
