@@ -114,8 +114,9 @@ Do not set `LOG_LEVEL` in compose — use config instead.
 Run the stack behind an edge nginx that terminates TLS and routes traffic to the
 backends and the `frontend` container. The exact, copy-pasteable config (using
 the Docker-DNS resolver pattern so nginx doesn't fail when a backend is briefly
-unresolvable) lives in the project [README](../README.md) → "Web tier & reverse
-proxy". The edge nginx must share `backend-network`.
+unresolvable) lives in the project
+[README on GitHub](https://github.com/l0nelynx/xray-vpn-bot/blob/main/README.md#web-tier--reverse-proxy).
+The edge nginx must share `backend-network`.
 
 If the web portal is hosted separately (Vercel), route only
 `/bot/miniapp/api/` to `miniapp:8001` and configure `web_allowed_origins` —
@@ -140,7 +141,8 @@ chown 10001:10001 support_uploads   # both containers run as non-root uid 10001
 ```
 
 The edge nginx's `client_max_body_size` must also be raised above the 1MB
-default — see the [README](../README.md) → "Web tier & reverse proxy" example
+default — see the
+[README on GitHub](https://github.com/l0nelynx/xray-vpn-bot/blob/main/README.md#web-tier--reverse-proxy)
 (`client_max_body_size 20m;`). Without it, a 3-image reply silently 413s
 before reaching either container.
 
@@ -173,3 +175,14 @@ one bucket (the nginx container IP) and the limits/guards stop being per-client.
 images to ghcr on pushes to `main` (`:latest`) and `develop` (`:staging`), plus
 immutable `:sha-…` / `:build-…` tags. Only changed services rebuild; `python-base`
 rebuilds only when its own inputs change and is otherwise reused.
+
+## Documentation site
+
+MkDocs Material builds `docs/` into a static site. Workflow: `.github/workflows/docs.yml`
+(deploys to the `gh-pages` branch on push to `main`).
+
+- **URL:** https://l0nelynx.github.io/xray-vpn-bot/
+- **Config:** `mkdocs.yml` (nav, theme)
+- **Local:** `pip install -r requirements-docs.txt && mkdocs serve`
+
+After the first deploy, enable **GitHub Pages → Source: Deploy from branch → `gh-pages` / `/ (root)`** in the repository settings if GitHub does not pick it up automatically.

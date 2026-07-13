@@ -135,4 +135,5 @@ The edge nginx terminates TLS and routes by URL prefix (every API path is under
 | `/` | `frontend:80` or external web portal host |
 
 The ready-to-use edge nginx config (with the Docker-DNS resolver pattern that
-avoids startup failures) is in the project [README](../README.md).
+avoids startup failures) is in the project
+[README on GitHub](https://github.com/l0nelynx/xray-vpn-bot/blob/main/README.md#web-tier--reverse-proxy).

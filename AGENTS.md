@@ -2,6 +2,7 @@
 
 ## Cursor Cloud specific instructions
 
+
 This repo is a Telegram VPN sales bot suite (Remnawave-backed) with three services. Standard setup/run commands live in `README.md`; this section only captures the non-obvious, durable gotchas for developing here in the cloud VM. The update script already installs dependencies on startup — do not re-run installs manually.
 
 ### Services (what runs where)
