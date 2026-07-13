@@ -58,6 +58,8 @@ backups. Also runs the FastAPI server that receives payment-gateway webhooks
 (`/bot/*_webhook`). Telegram polling is single-instance — the bot is **not**
 horizontally scalable. Entry point: `services/bot/main.py`.
 
+Full guide: **[seller-bot.md](seller-bot.md)**.
+
 ### Support bot
 Standalone two-way user↔admin messaging (text/media) via an aiogram FSM "Answer"
 flow. Uses its own SQLite under `./db/` — not on PostgreSQL. Legacy; will be
@@ -68,6 +70,8 @@ Admin web UI (no DB/code access needed): tariff constructor, dynamic menu
 builder, users, transactions & stats, promo codes, Telemt server control. JWT
 auth from `dashboard_login` / `dashboard_password`, tokens signed with
 `dashboard_secret`. Backend is API-only; the SPA is served by `frontend`.
+
+Full feature guide: **[dashboard.md](dashboard.md)**.
 
 ### MiniApp, web portal & Android API
 One FastAPI service (`miniapp`) backs three clients, all under `/bot/miniapp/api/`:
@@ -81,6 +85,8 @@ One FastAPI service (`miniapp`) backs three clients, all under `/bot/miniapp/api
 
 All payment invoice endpoints accept **`node_id` only** — tariff price/days are
 read from `webapp_menu_nodes`, never from the client.
+
+Full MiniApp guide: **[miniapp.md](miniapp.md)**.
 
 ### Frontend
 nginx image that bakes in both built SPAs (`web/apps/*`) and serves them as
@@ -107,7 +113,7 @@ defined once and consumed by every service:
 - Payments: gateways (CryptoBot, CrystalPay, Platega, APay, ParityPay) and
   Google Play IAP create invoices via `packages/payments`; confirmations hit the
   bot's webhook endpoints, which verify signatures (`payments.signatures`) and
-  deliver the subscription.
+  deliver the subscription. See **[payment-gateways.md](payment-gateways.md)**.
 
 ## Networking
 
