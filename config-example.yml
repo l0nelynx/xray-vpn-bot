@@ -1,6 +1,6 @@
 # Telegram VPN Bot — Configuration Template
 # Copy to config.yml and fill in your values. Never commit config.yml to git.
-# Shared by all four services: seller-bot, support-bot, dashboard, miniapp.
+# Shared by all backends: bot, support-bot, dashboard, miniapp.
 #
 # Required keys are marked [REQUIRED]. Keys with defaults are marked [optional].
 # Only fill in the payment gateway blocks you actually use.
@@ -40,7 +40,16 @@ admin_logs_length: 20                              # [optional] Rows shown in th
 
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  WEBHOOK SERVER (seller-bot)                                                ║
+# ║  LOGGING                                                                    ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+
+# Miniapp service log verbosity. Default: normal (= INFO).
+# Accepted: normal | debug | warning | error | critical
+# log_level: normal
+
+
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  WEBHOOK SERVER (bot)                                                       ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
 
 uvicorn_host: "0.0.0.0"                            # [optional] Uvicorn bind host (default: 0.0.0.0)
@@ -138,8 +147,10 @@ google_play_rtdn_token: ""                         # Shared secret for Play RTDN
 # ║  WEB PORTAL (CORS)                                                          ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
 
-# Allowed origins for the external web portal frontend (miniapp service).
-# Omit or leave empty to allow all origins (development only).
+# Allowed origins for the external web portal frontend (miniapp service CORS).
+# Required in production when the portal is hosted on a separate domain
+# (e.g. Vercel — see docs/web-portal.md). Omit → no CORS middleware (browser
+# cross-origin requests blocked; fine for Telegram MiniApp-only deploys).
 # web_allowed_origins:
 #   - https://web.yourdomain.com
 

@@ -66,9 +66,7 @@ services:
         BASE_IMAGE: ${REGISTRY-ghcr.io/l0nelynx/}python-base:${IMAGE_TAG:-staging}
         REGISTRY: ${REGISTRY-ghcr.io/l0nelynx/}
     volumes:
-      - /var/lib/marzban/certs/:/usr/src/app/uvicorn/ssl
       - ./config.yml:/usr/src/app/config.yml
-      - ./dig_data.json:/usr/src/app/dig_data.json
     # Edge (nginx proxies /bot/ here) + private data-network (Postgres). The
     # `seller-bot` network alias keeps the existing nginx upstream
     # (proxy_pass http://seller-bot:5000) working after the rename to `bot`.
@@ -185,7 +183,6 @@ services:
     environment:
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-xray}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-xray_vpn_bot}
       - CONFIG_PATH=/app/config.yml
-      - LOG_LEVEL=DEBUG
     restart: unless-stopped
     depends_on:
       migrate:
@@ -236,10 +233,11 @@ networks:
     name: mail-net
     driver: bridge
     external: true
-  # Private DB network — Postgres + the services that talk to it. internal:true
-  # means it has no gateway, so nothing here (notably Postgres) is exposed to
-  # the edge or the internet. The app backends are dual-homed (edge + data).
+  # Private DB network — Postgres + the services that talk to it. App backends
+  # are dual-homed (edge + data). Postgres is not on backend-network, so it is
+  # not reachable from the edge nginx. `internal: true` (no gateway) is optional
+  # hardening — left off here so operators can reach Postgres on the host bind
+  # (127.0.0.1:5432) for backups/migrations; see docs/deployment.md.
   data-network:
     name: data-network
     driver: bridge
-#    internal: true

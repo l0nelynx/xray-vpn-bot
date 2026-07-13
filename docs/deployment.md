@@ -9,6 +9,12 @@ for the container list and networking model.
 - A Telegram bot token (and optionally separate admin/support tokens).
 - A Remnawave URL + API token.
 - (Optional) payment-gateway credentials.
+- External Docker networks (create once):
+
+```bash
+docker network create backend-network   # edge — shared with reverse-proxy nginx
+docker network create mail-net          # SMTP egress for miniapp email verification
+```
 
 ## Configuration
 
@@ -19,10 +25,15 @@ Application config (tokens, Remnawave, dashboard creds, payment keys, branding):
 cp config-example.yml config.yml   # then edit
 ```
 
-It is mounted read-only into the backends (`bot`, `dashboard`, `miniapp`) and the
-`support-bot`. Key groups: branding, bot tokens, `remnawave_url` /
-`remnawave_token`, `dashboard_login` / `dashboard_password` / `dashboard_secret`,
-payment-gateway keys, `telemt_*`.
+Mounted read-only into `bot`, `dashboard`, `miniapp`; read-write for `support-bot`
+(legacy). Key groups: branding, bot tokens, `remnawave_url` / `remnawave_token`,
+`dashboard_login` / `dashboard_password` / `dashboard_secret`, `android_jwt_secret`,
+`log_level`, `web_allowed_origins`, payment-gateway keys, `telemt_*`.
+
+**Boot-time security checks:**
+- **dashboard** refuses weak `dashboard_secret` or password `admin`.
+- **miniapp** refuses missing/placeholder `android_jwt_secret`; requires
+  `google_play_rtdn_token` when Google Play IAP is enabled.
 
 ### `.env`
 Compose-level variables (`cp .env.example .env`):
@@ -41,17 +52,23 @@ IMAGE_TAG=staging
 
 ## Networks
 
-```bash
-docker network create backend-network    # external edge network (once)
-```
-`backend-network` (edge) is external and shared with the reverse-proxy nginx.
-`data-network` (private, `internal: true`) is created by compose and carries
-PostgreSQL — it has no gateway, so the DB is never exposed outward.
+- **`backend-network`** (external) — edge network shared with reverse-proxy nginx.
+  All app containers and `frontend` attach here.
+- **`data-network`** (compose-managed) — Postgres and DB-connected backends.
+  Postgres is **not** on `backend-network`, so the edge cannot reach the DB
+  directly. The network is **not** `internal: true` in the default compose file:
+  Postgres is also bound to `127.0.0.1:5432` on the host for backups and local
+  tools. For stricter isolation (no host gateway on `data-network`), uncomment
+  `internal: true` under `data-network` in `docker-compose.yml` and remove or
+  restrict the Postgres host port mapping.
+- **`mail-net`** (external) — used by `miniapp` for outbound SMTP.
 
 ## Images & build
 
 Backends share a `python-base` image (common deps built once). The `frontend`
-image builds both SPAs (npm workspaces) and serves them with nginx.
+image builds both in-repo SPAs (dashboard + miniapp; npm workspaces) and serves
+them with nginx. The browser **web portal** is a
+[separate repo](https://github.com/l0nelynx/web-portal) deployed independently.
 
 **Pull prebuilt images (default — from ghcr):**
 ```bash
@@ -70,14 +87,27 @@ docker compose up -d
 `.env` (empty). Image names become local (`bot:staging`, `python-base:staging`,
 …) and nothing is pulled. Then run the two build commands above.
 
-Startup order is enforced by `depends_on`: `postgres` (healthy) → `migrate`
-(completed) → `bot` / `dashboard` / `miniapp`. `frontend` is independent.
+Startup order: `postgres` (healthy) → `migrate` (completed) → `bot` / `dashboard`
+/ `miniapp`. `frontend` has no backend dependency.
+
+### Removed legacy mounts
+
+Older compose files mounted Marzban TLS certs (`/var/lib/marzban/certs/`) and
+`dig_data.json` into the bot container. **Neither is used by the current code**
+(SSL terminates at the edge nginx; `dig_data.json` has no references). They are
+not mounted in the current `docker-compose.yml`.
 
 ## Migrations
 
-Schema is managed exclusively by Alembic. The one-shot `migrate` container runs
-`alembic upgrade head` before the apps boot; they wait on it via
-`depends_on: service_completed_successfully`. See [database.md](database.md).
+Schema is managed exclusively by Alembic (HEAD: `0014_support_attachments`). The
+one-shot `migrate` container runs `alembic upgrade head` before the apps boot.
+See [database.md](database.md).
+
+## Logging
+
+Miniapp log verbosity is controlled by `log_level` in `config.yml` (default:
+`normal` = INFO). Accepted: `normal`, `debug`, `warning`, `error`, `critical`.
+Do not set `LOG_LEVEL` in compose — use config instead.
 
 ## Reverse proxy
 
@@ -87,11 +117,16 @@ the Docker-DNS resolver pattern so nginx doesn't fail when a backend is briefly
 unresolvable) lives in the project [README](../README.md) → "Web tier & reverse
 proxy". The edge nginx must share `backend-network`.
 
+If the web portal is hosted separately (Vercel), route only
+`/bot/miniapp/api/` to `miniapp:8001` and configure `web_allowed_origins` —
+see [web-portal.md](web-portal.md).
+
 ## Host ports
 
 For local debugging compose binds (loopback only):
-`bot :5000`, `dashboard :8080→8000`, `frontend :8088→80`. In production traffic
-goes through the edge nginx, not these host ports.
+`bot :5000`, `dashboard :8080→8000`, `miniapp :8001`, `frontend :8088→80`,
+`postgres :5432`. In production traffic goes through the edge nginx, not these
+host ports (except Postgres if you rely on local backups).
 
 ## Support-ticket image attachments
 
@@ -116,11 +151,13 @@ mechanisms keep state **in-process**, so this is load-bearing — do not add
 `--workers N` or run multiple replicas without first externalising that state:
 
 - **Rate limiting** (slowapi) and the **invite brute-force guard**
-  (`miniapp/.../web/brute_force.py`) — per-process counters.
-- **Dashboard login throttle** (`dashboard/.../login_guard.py`) — per-process.
-- **Telegram OIDC PKCE store** and the **JWKS cache** (`miniapp/.../web/web_router.py`)
-  — a multi-worker setup would route the callback to a worker that never saw the
-  `state`/`code_verifier`, so **Sign-in-with-Telegram would fail intermittently**.
+  (`services/miniapp/backend/web/brute_force.py`) — per-process counters.
+- **Dashboard login throttle** (`services/dashboard/backend/login_guard.py`) —
+  per-process.
+- **Telegram OIDC PKCE store** and the **JWKS cache**
+  (`services/miniapp/backend/web/web_router.py`) — a multi-worker setup would
+  route the callback to a worker that never saw the `state`/`code_verifier`, so
+  **Sign-in-with-Telegram would fail intermittently**.
 
 To scale horizontally, move this state to Postgres/Redis (e.g. slowapi with a
 Redis storage backend, a shared PKCE/throttle table) first.

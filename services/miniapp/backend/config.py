@@ -1,7 +1,18 @@
+import logging
 import os
 import yaml
 
 CONFIG_PATH = os.environ.get("CONFIG_PATH", "/app/config.yml")
+
+_LOG_LEVEL_ALIASES = {
+    "normal": logging.INFO,
+    "info": logging.INFO,
+    "debug": logging.DEBUG,
+    "warning": logging.WARNING,
+    "warn": logging.WARNING,
+    "error": logging.ERROR,
+    "critical": logging.CRITICAL,
+}
 
 _config = None
 
@@ -12,6 +23,23 @@ def get_config() -> dict:
         with open(CONFIG_PATH, "r", encoding="utf-8") as f:
             _config = yaml.safe_load(f) or {}
     return _config
+
+
+def get_log_level() -> int:
+    """Resolve logging level from config.yml ``log_level`` (default: ``normal``).
+
+    Accepted values: normal, info, debug, warning, error, critical.
+    Env ``LOG_LEVEL`` is a fallback for backwards compatibility.
+    """
+    raw = get_config().get("log_level") or os.environ.get("LOG_LEVEL") or "normal"
+    key = str(raw).strip().lower()
+    if key in _LOG_LEVEL_ALIASES:
+        return _LOG_LEVEL_ALIASES[key]
+    # Allow standard logging level names (e.g. INFO) as a last resort.
+    level = getattr(logging, key.upper(), None)
+    if isinstance(level, int):
+        return level
+    return logging.INFO
 
 
 def get_bot_token() -> str:

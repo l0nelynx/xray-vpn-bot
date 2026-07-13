@@ -117,13 +117,8 @@ export default function BuyMenuPage() {
       }
 
       const res = await payments.createInvoice({
-        provider: inv.provider,
-        amount: inv.amount,
-        currency: inv.currency,
-        days: inv.days,
-        tariff_slug: inv.tariff_slug ?? undefined,
+        node_id: selectedInvoice.id,
         description: selectedInvoice.text,
-        method: inv.method ?? undefined,
       });
       openLink(res.url);
       setPromoState((prev) =>

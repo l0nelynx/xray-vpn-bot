@@ -1,18 +1,18 @@
 import logging
-import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-
-logging.basicConfig(
-    level=os.environ.get("LOG_LEVEL", "INFO").upper(),
-    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
-)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 
-from .config import get_expose_api_docs, get_web_allowed_origins
+from .config import get_expose_api_docs, get_log_level, get_web_allowed_origins
+from .security_config import validate_security_config
+
+logging.basicConfig(
+    level=get_log_level(),
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+)
 from .android import auth_router as android_auth_router
 from .android import data_router as android_data_router
 from .android import email_router as android_email_router
@@ -50,7 +50,7 @@ def _run_migrations() -> None:
         if isinstance(lg, logging.Logger):
             lg.disabled = False
     logging.basicConfig(
-        level=os.environ.get("LOG_LEVEL", "INFO").upper(),
+        level=get_log_level(),
         format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
         force=True,
     )
@@ -58,6 +58,7 @@ def _run_migrations() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    validate_security_config()
     _run_migrations()
     yield
 

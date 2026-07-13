@@ -3,16 +3,17 @@
 Advanced Telegram bot suite for selling VPN subscriptions, backed by **Remnawave** and driven through a web **Dashboard** with a built-in tariff/menu builder.
 
 ## Features
-- 🔐 Sell VPN subscriptions via Telegram
-- 💳 Multiple payment gateways (CryptoBot, Crystal Pay, A-Pays)
+- 🔐 Sell VPN subscriptions via Telegram MiniApp and browser web portal
+- 💳 Multiple payment gateways (CryptoBot, Crystal Pay, A-Pays, Platega, ParityPay)
 - 🌐 Remnawave VPN API integration (internal + external squads)
 - 🧩 Web Dashboard with tariff constructor and menu builder
+- 📱 Android app API + Google Play IAP
 - 🛰️ Telemt server management from the Dashboard
-- 💬 Dedicated support bot
+- 💬 In-app support tickets (legacy standalone support bot optional)
 - 🛠️ Admin bot for broadcasts, moderation and logs
-- 📊 SQLite storage with async SQLAlchemy
+- 📊 PostgreSQL storage with shared SQLAlchemy ORM (`common_db`)
 - 🚀 FastAPI webhook endpoints for payments
-- 🐳 Docker Compose deployment (seller-bot + support-bot + dashboard)
+- 🐳 Docker Compose deployment (bot + dashboard + miniapp + frontend + postgres)
 - 🔄 Async aiogram 3.x architecture
 
 ## Architecture
@@ -26,13 +27,15 @@ frontends and their shared packages under `web/`, and all Dockerfiles under
 | `bot` | `ghcr.io/l0nelynx/bot` | Main user-facing Telegram bot + payment webhooks (port `5000`). Keeps a `seller-bot` network alias for backwards compatibility. |
 | `support-bot` | `ghcr.io/l0nelynx/support-bot` | Legacy standalone bot for user↔admin conversations (own SQLite). |
 | `dashboard` | `ghcr.io/l0nelynx/dashboard` | FastAPI admin **API** (port `8000`). |
-| `miniapp` | `ghcr.io/l0nelynx/miniapp` | FastAPI **API** for the Telegram MiniApp / web portal / Android (port `8001`). |
-| `frontend` | `ghcr.io/l0nelynx/frontend` | nginx serving the two built SPAs as static files (port `80`). No proxying — routing lives in the edge nginx. |
+| `miniapp` | `ghcr.io/l0nelynx/miniapp` | FastAPI **API** for MiniApp / web portal / Android (`8001`). |
+| `frontend` | `ghcr.io/l0nelynx/frontend` | nginx serving dashboard + miniapp SPAs (`80`). |
 | `postgres` / `migrate` | `postgres:16` / `bot` image | Shared database and one-shot Alembic migrations. |
 | `python-base` | `ghcr.io/l0nelynx/python-base` | Build-time base image: common Python deps + `common_db`/`remnawave_client`, shared by `bot`/`dashboard`/`miniapp` (not a runtime service). |
 
-The backends are **pure JSON APIs** — the React SPAs are built once and served by
-the `frontend` container, not by FastAPI.
+The backends are **pure JSON APIs** — the dashboard and Telegram MiniApp SPAs are
+built in this repo and served by the `frontend` container. The **browser web
+portal** frontend lives in a [separate repository](https://github.com/l0nelynx/web-portal)
+and calls the same miniapp API (see [docs/web-portal.md](docs/web-portal.md)).
 
 Images are built by CI (`.github/workflows/build.yml` and `.gitlab-ci.yml`) and published as:
 - `:latest` — built from `main`
@@ -112,7 +115,7 @@ server {
         proxy_pass http://$up$request_uri;
     }
 
-    # Public web portal entry -> miniapp SPA.
+    # Public entry — miniapp SPA and/or external web portal host.
     location / {
         set $up frontend:80;
         proxy_pass http://$up$request_uri;
@@ -122,7 +125,8 @@ server {
 
 ## Dashboard
 
-The Dashboard is a web app bundled with the project (`dashboard/`) that turns configuration into a UI workflow:
+The Dashboard is the admin SPA (`web/apps/dashboard/`) backed by
+`services/dashboard/backend/`:
 
 - **Tariff constructor** — create, reorder, price and toggle subscription plans without touching code. Changes propagate to the bot automatically.
 - **Menu builder** — design the bot's inline menus (screens, buttons, links) and edit them live.
@@ -173,19 +177,18 @@ dashboard_secret: <random string>
 
 > ⚠️ Add `config.yml` to `.gitignore` — it contains secrets.
 
-### 2. Prepare the database
+### 2. Environment
 
 ```bash
-mkdir -p db
-touch db/db.sqlite3
+cp .env.example .env
+# set POSTGRES_PASSWORD (required)
 ```
 
-### 3. Prepare the shared Docker network
-
-The compose file expects an external network named `backend-network` (typical when running behind a reverse proxy). Create it once:
+### 3. Prepare Docker networks
 
 ```bash
 docker network create backend-network
+docker network create mail-net
 ```
 
 ### 4. Launch
@@ -217,26 +220,17 @@ docker compose up -d
 Services:
 - Bot webhooks: `127.0.0.1:5000`
 - Dashboard API: `127.0.0.1:8080` (FastAPI listens on `:8000` inside the container)
-- Web (SPAs): `127.0.0.1:8088` (frontend container)
+- Miniapp API: `127.0.0.1:8001`
+- Web SPAs: `127.0.0.1:8088` (frontend container)
+- Postgres: `127.0.0.1:5432`
 
 Put a reverse proxy (nginx / Caddy / Traefik) in front to terminate TLS and expose the Dashboard at `/bot/dashboard` and the payment webhook endpoints on your public domain.
 
 ### Running locally (without Docker)
 
-```bash
-python -m venv venv
-# Windows:
-venv\Scripts\activate
-# Linux / macOS:
-source venv/bin/activate
-
-pip install -r requirements.txt
-python main.py &
-python support.py &
-wait
-```
-
-The Dashboard has its own stack (`dashboard/backend` + `dashboard/frontend`); see `dashboard/Dockerfile` for the reference build.
+See `services/bot/main.py`, `services/support_bot/support.py`, and per-service
+`requirements.txt` files under `infra/docker/`. Postgres (or SQLite fallback
+without `DATABASE_URL`) is required for the main bot and miniapp.
 
 ## Configuration Reference
 
@@ -275,7 +269,9 @@ The Dashboard has its own stack (`dashboard/backend` + `dashboard/frontend`); se
 |-----------|-------------|
 | `dashboard_login` | Dashboard admin login |
 | `dashboard_password` | Dashboard admin password |
-| `dashboard_secret` | JWT signing secret |
+| `dashboard_secret` | JWT signing secret (≥32 bytes; boot refuses weak defaults) |
+| `android_jwt_secret` | Miniapp/Android/web JWT secret (≥32 bytes; boot refuses placeholder) |
+| `log_level` | Miniapp logging: `normal` (default), `debug`, `warning`, `error` |
 
 ### Telemt
 
@@ -317,44 +313,32 @@ These values seed defaults on first launch only — after that, manage tariffs t
 
 ```
 .
-├── app/                          # Seller bot application code
-│   ├── admin/                    # Admin bot (broadcasts, bans, logs, migrations, ...)
-│   ├── api/                      # Payment gateway + Remnawave + Telemt clients
-│   │   ├── a_pay.py
-│   │   ├── crystal_pay.py
-│   │   ├── remnawave/
-│   │   └── telemt.py
-│   ├── database/                 # Async SQLAlchemy models & queries
-│   ├── handlers/                 # Bot command and callback handlers
-│   ├── keyboards/                # Inline/reply keyboards
-│   ├── locale/                   # Russian + English locale files
-│   ├── marzban/                  # (legacy) kept for migration purposes
-│   ├── settings.py               # Config loader + bot/uvicorn bootstrap
-│   └── tariffs.py                # Runtime tariff helpers
-├── dashboard/                    # Admin dashboard (React + FastAPI)
-│   ├── backend/                  # FastAPI app, routers, JWT auth
-│   ├── frontend/                 # React + Vite SPA
-│   └── Dockerfile
-├── db/                           # SQLite storage (mounted into containers)
-├── uvicorn/                      # Optional SSL artifacts
-├── main.py                       # Seller bot entry point
-├── support.py                    # Support bot entry point
-├── Dockerfile                    # Seller bot image
-├── Dockerfile_support            # Support bot image
-├── docker-compose.yml            # Full stack orchestration
-├── config-example.yml            # Example configuration
-├── config.yml                    # Your configuration (gitignored)
-├── requirements.txt              # Seller bot deps
-├── requirements_support.txt      # Support bot deps
-└── .github/workflows/build.yml   # CI: build & push to GHCR
+├── services/
+│   ├── bot/                    # Main Telegram bot + payment webhooks
+│   ├── dashboard/backend/      # FastAPI admin API
+│   ├── miniapp/backend/        # MiniApp / web portal / Android API
+│   └── support_bot/            # Legacy support bot (SQLite)
+├── web/
+│   ├── apps/dashboard/         # Admin React SPA
+│   ├── apps/miniapp/           # Telegram MiniApp React SPA
+│   └── packages/               # Shared frontend packages (@xray/ui, @xray/api)
+├── packages/                   # Shared Python packages (common_db, payments, …)
+├── infra/docker/               # Dockerfiles + frontend nginx config
+├── alembic/                    # Database migrations
+├── docker-compose.yml
+├── config-example.yml
+└── config.yml                  # Your secrets (gitignored)
 ```
+
+Browser web portal SPA: [github.com/l0nelynx/web-portal](https://github.com/l0nelynx/web-portal)
+(separate repo).
 
 ## Dependencies
 
 Core:
-- **aiogram** 3.21+ — async Telegram framework
-- **FastAPI** 0.116+ — webhook endpoints + Dashboard API
-- **SQLAlchemy** 2.0+ / **aiosqlite** — async ORM on SQLite
+- **aiogram** 3.x — async Telegram framework
+- **FastAPI** — webhook endpoints + admin/miniapp APIs
+- **SQLAlchemy** 2.0+ / **asyncpg** — async ORM on PostgreSQL
 - **uvicorn** / **slowapi** — ASGI server + rate limiting
 
 HTTP / data:
@@ -367,11 +351,14 @@ VPN integration:
 
 ## Troubleshooting
 
-**`config file not found`** — the container must mount `config.yml` at `/usr/src/app/config.yml` (seller/support) or `/app/config.yml` (dashboard). Check the `volumes:` in `docker-compose.yml`.
+**`config file not found`** — mount `config.yml` at `/usr/src/app/config.yml` (bot)
+or `/app/config.yml` (dashboard/miniapp). Check `volumes:` in `docker-compose.yml`.
 
-**`'token' is not set in config.yml`** — `config.yml` is loaded but missing the main bot token. Compare against `config-example.yml`.
+**`android_jwt_secret` / `dashboard_secret` boot error** — generate with
+`openssl rand -hex 32` and replace placeholder values in `config.yml`.
 
-**Payment webhooks not firing** — verify your reverse proxy forwards to port `5000` of the seller-bot container, and that `crystal_webhook` / A-Pays callback URLs point to the public domain (HTTPS).
+**Payment webhooks not firing** — verify your reverse proxy forwards `/bot/*` to
+port `5000` of the `bot` container, and that gateway callback URLs use HTTPS.
 
 **Remnawave connection failed** — verify `remnawave_url` includes `https://`, the API token is valid, and the squad UUIDs (`rw_free_id`, `rw_pro_id`, `rw_ext_*`) exist in the panel.
 

@@ -10,3 +10,5 @@ see the top-level [README](../README.md).
 - **[Database](database.md)** — `common_db`, schema overview, Alembic migrations.
 - **[Integrations](integrations.md)** — Remnawave, payment gateways, Telemt.
 - **[Android API](android-api.md)** — endpoint reference for the Android client.
+- **[Web portal](web-portal.md)** — external SPA repo, CORS, Telegram OIDC, API.
+- **[Connect page](connect-page.md)** — `/connect-page` app catalog override.

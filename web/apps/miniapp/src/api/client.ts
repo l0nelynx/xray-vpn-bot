@@ -126,13 +126,8 @@ export interface ProvidersResponse {
 }
 
 export interface InvoiceCreateRequest {
-  provider: PaymentProviderName;
-  amount: number;
-  currency: string;
-  days: number;
-  tariff_slug?: string;
+  node_id: number;
   description?: string;
-  method?: string;
 }
 
 export interface InvoiceResponse {

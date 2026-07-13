@@ -2,16 +2,11 @@ from pydantic import BaseModel, Field
 
 
 class InvoiceCreateRequest(BaseModel):
-    provider: str = Field(..., description="apay | crystal | crypto | platega")
-    amount: float = Field(..., gt=0)
-    currency: str = Field(..., description="RUB | USD | EUR | USDT | TON | ...")
-    days: int = Field(..., gt=0)
-    tariff_slug: str | None = None
+    """Client passes only the Tariff Constructor node id — price/days/provider
+    are resolved server-side from ``webapp_menu_nodes``."""
+
+    node_id: int = Field(..., ge=1)
     description: str | None = None
-    method: str | None = Field(
-        None,
-        description="Optional provider-specific payment method (e.g. Platega method id)",
-    )
 
 
 class InvoiceResponse(BaseModel):

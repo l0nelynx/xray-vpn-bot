@@ -27,7 +27,6 @@ uvicorn
 db.sqlite3
 support.db
 dig_data.json
-data.json
 
 # Legacy / local scratch
 Deprecated

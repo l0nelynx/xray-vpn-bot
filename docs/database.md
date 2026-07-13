@@ -43,9 +43,9 @@ The full, authoritative set lives in `packages/common_db/common_db/models/`.
 
 ## Migrations
 
-Schema changes go exclusively through **Alembic** (`alembic/versions/`). The
-one-shot `migrate` container runs `alembic upgrade head` on startup; the app
-services wait for it (`depends_on: service_completed_successfully`) and run no
+Schema changes go exclusively through **Alembic** (`alembic/versions/`). Current
+HEAD: **`0014_support_attachments`**. The one-shot `migrate` container runs
+`alembic upgrade head` on startup; the app services wait for it (`depends_on: service_completed_successfully`) and run no
 ad-hoc DDL of their own.
 
 - Autogenerate target is `common_db.Base.metadata` (`alembic/env.py`).
