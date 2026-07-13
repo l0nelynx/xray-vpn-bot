@@ -2,31 +2,43 @@
 
 ## Cursor Cloud specific instructions
 
-Telegram VPN sales bot suite, restructured into a monorepo: Python services under `services/` (`bot`, `dashboard/backend`, `miniapp/backend`, `support_bot`), shared Python packages under `packages/`, React SPAs under `web/apps/` (npm workspaces), Alembic migrations under `alembic/`, and Dockerfiles under `infra/docker/`. Standard commands live in `README.md` and `docs/`; this section only captures the non-obvious, durable setup/run caveats for the cloud VM. The startup update script already installs all Python + npm deps — don't reinstall manually.
 
-### Python env
-- Single venv at `.venv/` (installed by the update script): shared base (`infra/docker/requirements-base.txt`) + all `packages/*` editable + the three service `requirements.txt` + `pytest`/`aiosqlite`. The base file is the single source of version truth; service files carry only extras.
-- Benign install warning: `remnawave` pins `httpx<0.28` but the dashboard pulls `httpx 0.28.1`. In Docker they're separate images; in the single local venv httpx 0.28.1 wins. `remnawave` still imports and the full test suite passes, so this is safe for dev.
+This repo is a Telegram VPN sales bot suite (Remnawave-backed) with three services. Standard setup/run commands live in `README.md`; this section only captures the non-obvious, durable gotchas for developing here in the cloud VM. The update script already installs dependencies on startup — do not re-run installs manually.
 
-### Database = PostgreSQL (not SQLite)
-- The Alembic migrations are **not** SQLite-compatible (`0007_fix_init_sizes` does Postgres-only `ALTER COLUMN ... TYPE BIGINT`), so local dev must use Postgres even though the code has a SQLite fallback for tests.
-- Postgres 16 is installed as a system package. It is **not** auto-started (no systemd), so start it each session: `sudo pg_ctlcluster 16 main start`.
-- Dev role/DB (already created; persists in the snapshot): role `xray` / password `xraydevpass`, database `xray_vpn_bot`. App connection string: `DATABASE_URL=postgresql+asyncpg://xray:xraydevpass@localhost:5432/xray_vpn_bot` (migrations_runner auto-converts asyncpg→psycopg2 for Alembic).
-- Migrations auto-run on each backend's startup via `migrations_runner.upgrade_to_head()`. Default seed data (tariffs/menus/flags) is created **only** by the bot's `async_main()` — run it once after migrations if the dashboard shows no tariffs:
-  `cd services/bot && PYTHONPATH=/workspace DATABASE_URL=... ../../.venv/bin/python -c "import asyncio; from app.database.models import async_main; asyncio.run(async_main())"`
+### Services (what runs where)
+- **seller-bot** (`main.py`): main user bot + payment webhooks (uvicorn on `:5000`) + optional admin bot + CryptoBot polling.
+- **support-bot** (`support.py`): standalone support conversation bot (long-polling, no port).
+- **dashboard** (`dashboard/`): React (Vite) SPA + FastAPI backend admin panel, mounted at base path `/bot/dashboard`.
+- All three share **one SQLite file** (`db.sqlite3`). There is **no lint/test suite** in this repo; the only build step is the frontend (`npm run build` = `tsc && vite build`).
 
-### config.yml (gitignored) + symlinks
-- `config.yml` lives at the repo root (copy of `config-example.yml`) and holds secrets; it persists in the snapshot.
-- Boot-time security validation is strict: the dashboard refuses to start unless `dashboard_password` is set and not `"admin"`, and `dashboard_secret` is ≥32 bytes and not the built-in default; the miniapp requires `android_jwt_secret` ≥32 bytes and not the placeholder. Generate with `openssl rand -hex 32`.
-- The bot and support bot load `config.yml` **relative to their own dir**, so both are symlinked to the root config: `services/bot/config.yml` and `services/support_bot/config.yml` → `../../config.yml`. These symlinks are required for `pytest` too (test collection imports `app.settings`, which `SystemExit`s if the bot config is missing).
-- The support bot writes its own SQLite at `services/support_bot/db/support_bot.sqlite3`; ensure `services/support_bot/db/` exists before starting it.
+### Two separate Python venvs (do NOT merge)
+The root and dashboard requirements pin **conflicting** versions of `fastapi`/`pydantic`, so they are installed into two venvs by the update script:
+- `venv/` — seller-bot + support-bot (`requirements.txt`).
+- `dashboard/.venv/` — dashboard backend (`dashboard/backend/requirements.txt`).
+Frontend deps are in `dashboard/frontend/node_modules/`.
 
-### Running things (local dev; env vars go in the shell, not the update script)
-- Tests: `cd /workspace && .venv/bin/python -m pytest -q` (in-memory SQLite; ~314 pass, 1 Postgres-only test skips unless `COMMON_DB_PG_URL` is set). No env/config needed beyond the bot config symlink.
-- Dashboard API (`:8000`): `cd services/dashboard && CONFIG_PATH=/workspace/config.yml DATABASE_URL=... /workspace/.venv/bin/uvicorn backend.main:app --host 0.0.0.0 --port 8000` (set `EXPOSE_API_DOCS=1` for Swagger at `/bot/dashboard/api/docs`).
-- Miniapp API (`:8001`): `cd services/miniapp && CONFIG_PATH=/workspace/config.yml DATABASE_URL=... /workspace/.venv/bin/uvicorn backend.main:app --host 0.0.0.0 --port 8001`.
-- Bot (`:5000` webhooks + polling): `cd services/bot && DATABASE_URL=... CONFIG_PATH=/workspace/config.yml PYTHONPATH=/workspace /workspace/.venv/bin/python main.py`.
-- Frontends (npm workspaces, run from repo root): `npm run dev -w xray-vpn-dashboard -- --host 0.0.0.0 --port 5173` (SPA at `/bot/dashboard/`, proxies API to `:8000`) and `npm run dev -w xray-vpn-miniapp -- --host 0.0.0.0 --port 5174` (proxies to `:8001`). Build with `npm run build -w <name>`.
+### Local config + DB (required before anything runs)
+- `config.yml` is gitignored and must exist (copy from `config-example.yml`). Every service loads it at import and the seller-bot raises if `token` is missing.
+- Create the DB schema once with the seller-bot's initializer (also seeds default tariffs/menus that the dashboard displays):
+  `venv/bin/python -c "import asyncio; from app.database.models import async_main; asyncio.run(async_main())"`
+  This writes `db.sqlite3` in the repo root (the seller bot uses a **relative** `db.sqlite3` path = cwd).
 
-### Bot external limitation (not fixable in the VM)
-The bot needs a **real CryptoBot token** (validated by a live network call at import) and a **real Telegram token**. Even then, `start_bot` (`services/bot/app/handlers/events.py`) messages `admin_id` on launch, so `admin_id` must be a real Telegram chat that has messaged the bot — otherwise startup crashes with `TelegramBadRequest: chat not found` (after successfully authenticating and starting polling). The subscription/purchase flow additionally needs a reachable Remnawave panel. Full interactive bot E2E is therefore blocked in the VM; the dashboard + miniapp + tests are the fully-runnable surface.
+### Seller-bot cannot run/import without REAL payment + Telegram creds (external limitation)
+- `main.py` → `app/handlers/payments.py` runs `@cp.invoice_paid()` at **import time**. `cp` is created in `app/settings.py` only when `crypto_bot_token` is set, and `aiosend.CryptoPay(...)` **validates the token via a live network call on construction**. Therefore:
+  - empty `crypto_bot_token` → import fails with `NoneType has no attribute 'invoice_paid'`.
+  - fake `crypto_bot_token` → import fails with a `[401] getMe UNAUTHORIZED`.
+  - Running the seller-bot needs a **real CryptoBot API token** AND a **real Telegram bot token** (polling). These are not available in the cloud VM, so full seller-bot E2E is blocked here.
+- The DB init above works because `crypto_bot_token` is left empty and only `app.database.models` is imported (not `app.handlers.payments`).
+- support-bot imports fine with any correctly-formatted placeholder `support_token` (aiogram only checks token format at `Bot(...)`), but it still needs a real token to actually reach Telegram.
+
+### Running the dashboard locally (fully works without external creds)
+Backend (from `dashboard/`), pointing env vars at the repo-root config + DB (defaults point at container paths `/app/...`):
+```
+cd dashboard
+CONFIG_PATH=/workspace/config.yml DB_PATH=/workspace/db.sqlite3 .venv/bin/uvicorn backend.main:app --host 0.0.0.0 --port 8000
+```
+Frontend dev server (Vite, base `/bot/dashboard/`, proxies `/bot/dashboard/api` → `localhost:8000`):
+```
+cd dashboard/frontend && npm run dev -- --host 0.0.0.0
+```
+Open `http://localhost:5173/bot/dashboard/` and log in with `dashboard_login` / `dashboard_password` from `config.yml`. Changes made in the dashboard (tariffs/menus) are written to the shared `db.sqlite3` and picked up by the seller-bot via a version-polled cache (see `app/database/tariff_repository.py`).
