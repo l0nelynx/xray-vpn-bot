@@ -179,10 +179,13 @@ rebuilds only when its own inputs change and is otherwise reused.
 ## Documentation site
 
 MkDocs Material builds `docs/` into a static site. Workflow: `.github/workflows/docs.yml`
-(deploys to the `gh-pages` branch on push to `main`).
+(deploys via GitHub Actions → **Settings → Pages → Source: GitHub Actions**).
 
 - **URL:** https://l0nelynx.github.io/xray-vpn-bot/
 - **Config:** `mkdocs.yml` (nav, theme)
 - **Local:** `pip install -r requirements-docs.txt && mkdocs serve`
 
-After the first deploy, enable **GitHub Pages → Source: Deploy from branch → `gh-pages` / `/ (root)`** in the repository settings if GitHub does not pick it up automatically.
+**First-time setup:** repo **Settings → Pages → Build and deployment → Source → GitHub Actions**.
+Then re-run the *Deploy documentation* workflow (or push to `main`). A 404 usually means
+Pages is still set to «Deploy from branch» with the wrong branch, or Actions source was
+never enabled.
