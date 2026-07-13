@@ -83,6 +83,7 @@ interface ComposerState {
   segmentParams: Record<string, number>;
   targetTgIds: number[];
   users: ScanUser[];
+  totalCount?: number;
 }
 
 // ─────────────────────────────────────────────────────
@@ -149,11 +150,13 @@ function SegmentsTab({ onCompose }: SegmentsTabProps) {
   const goCompose = () => {
     if (!scanResult || !scanModal || selectedKeys.length === 0) return;
     const users = scanResult.users.filter((u) => selectedKeys.includes(u.tg_id));
+    const isAllUsers = scanModal.id === "all_users";
     onCompose({
       segmentId: scanModal.id,
       segmentParams: paramValues,
-      targetTgIds: users.map((u) => u.tg_id),
+      targetTgIds: isAllUsers ? [] : users.map((u) => u.tg_id),
       users,
+      totalCount: scanResult.total,
     });
     setScanModal(null);
     message.success("Аудитория передана в композер рассылки");
@@ -190,6 +193,12 @@ function SegmentsTab({ onCompose }: SegmentsTabProps) {
             <Card
               size="small"
               title={seg.title}
+              type={seg.id === "all_users" ? "inner" : undefined}
+              style={
+                seg.id === "all_users"
+                  ? { borderColor: "#1677ff" }
+                  : undefined
+              }
               extra={
                 <Button size="small" icon={<ScanOutlined />} onClick={() => openScan(seg)}>
                   Сканировать
@@ -316,8 +325,10 @@ function ComposerTab({ initial, onClear, onLaunched }: ComposerTabProps) {
     }
   }, [initial]);
 
+  const isAllUsers = audience?.segmentId === "all_users";
+
   const launch = async () => {
-    if (!audience || audience.targetTgIds.length === 0) {
+    if (!audience || (!isAllUsers && audience.targetTgIds.length === 0)) {
       message.warning("Выберите аудиторию на вкладке «Сегменты»");
       return;
     }
@@ -337,7 +348,11 @@ function ComposerTab({ initial, onClear, onLaunched }: ComposerTabProps) {
         bonus_traffic_gb: bonusTraffic && bonusTraffic > 0 ? bonusTraffic : null,
         target_tg_ids: audience.targetTgIds,
       });
-      message.success(`Кампания запущена для ${audience.targetTgIds.length} пользователей`);
+      message.success(
+        isAllUsers
+          ? `Кампания поставлена в очередь (${audience.totalCount ?? "все"} пользователей)`
+          : `Кампания поставлена в очередь для ${audience.targetTgIds.length} пользователей`
+      );
       setText("");
       setName("");
       setBonusDays(null);
@@ -359,11 +374,17 @@ function ComposerTab({ initial, onClear, onLaunched }: ComposerTabProps) {
           <Alert
             type="info"
             showIcon
-            message={`Аудитория: ${audience.targetTgIds.length} пользователей`}
+            message={`Аудитория: ${
+              audience.segmentId === "all_users"
+                ? audience.totalCount ?? "все"
+                : audience.targetTgIds.length
+            } пользователей`}
             description={
-              audience.segmentId
-                ? `Сегмент: ${audience.segmentId}`
-                : undefined
+              audience.segmentId === "all_users"
+                ? "Массовая рассылка всем незабаненным пользователям с tg_id"
+                : audience.segmentId
+                  ? `Сегмент: ${audience.segmentId}`
+                  : undefined
             }
             action={
               <Button size="small" onClick={() => { setAudience(null); onClear(); }}>
@@ -426,17 +447,21 @@ function ComposerTab({ initial, onClear, onLaunched }: ComposerTabProps) {
 
         <Popconfirm
           title="Запустить кампанию?"
-          description={`Получателей: ${audience?.targetTgIds.length ?? 0}`}
+          description={`Получателей: ${
+            audience?.segmentId === "all_users"
+              ? audience?.totalCount ?? "все"
+              : audience?.targetTgIds.length ?? 0
+          }`}
           onConfirm={launch}
           okText="Запустить"
           cancelText="Отмена"
-          disabled={!audience?.targetTgIds.length}
+          disabled={!audience || (!isAllUsers && !audience.targetTgIds.length)}
         >
           <Button
             type="primary"
             icon={<SendOutlined />}
             loading={loading}
-            disabled={!audience?.targetTgIds.length}
+            disabled={!audience || (!isAllUsers && !audience.targetTgIds.length)}
           >
             Запустить кампанию
           </Button>
@@ -474,6 +499,7 @@ function HistoryTab() {
   const statusColor = (s: string) => {
     if (s === "completed") return "green";
     if (s === "running") return "processing";
+    if (s === "queued") return "blue";
     if (s === "failed") return "red";
     return "default";
   };

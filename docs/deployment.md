@@ -92,7 +92,7 @@ docker compose logs bot --tail 20
 Startup order:
 
 ```
-postgres (healthy) → migrate (completed) → bot / dashboard / miniapp → frontend
+postgres (healthy) → migrate (completed) → bot / dashboard / crm-worker / miniapp → frontend
 ```
 
 Check health endpoints:
@@ -132,10 +132,12 @@ See [Payment gateways](payment-gateways.md).
 | Container | Image | Internal port | Host port (debug) |
 |-----------|-------|---------------|-------------------|
 | `postgres` | `postgres:16-alpine` | `5432` | `127.0.0.1:5432` |
+| `redis` | `redis:7-alpine` | `6379` | — (internal) |
 | `migrate` | `bot` image | — | one-shot |
 | `bot` | `ghcr.io/l0nelynx/bot` | `5000` | `127.0.0.1:5000` |
 | `support-bot` | `support-bot` | — | no port |
 | `dashboard` | `dashboard` | `8000` | `127.0.0.1:8080` |
+| `crm-worker` | `dashboard` image | — | ARQ worker (no port) |
 | `miniapp` | `miniapp` | `8001` | `127.0.0.1:8001` |
 | `frontend` | `frontend` | `80` | `127.0.0.1:8088` |
 
@@ -154,7 +156,13 @@ Postgres is **not** on this network — the edge cannot reach the database direc
 
 ### data-network (compose-managed)
 
-`postgres`, `bot`, `dashboard`, `miniapp`, `migrate`.
+`postgres`, `redis`, `bot`, `dashboard`, `crm-worker`, `miniapp`, `migrate`.
+
+CRM mass broadcasts are enqueued by the `dashboard` API into Redis and executed
+by the `crm-worker` container. If `crm-worker` or `redis` is down, campaign
+launch returns HTTP 503.
+
+Set `REDIS_URL` in `.env` (default in compose: `redis://redis:6379/0`).
 
 Postgres binds `127.0.0.1:5432` on the host for backups and local tools. The
 network is not `internal: true` by default. For stricter isolation, uncomment

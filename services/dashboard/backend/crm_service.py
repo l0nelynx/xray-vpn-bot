@@ -17,6 +17,7 @@ from remnawave_client.segmentation import (
     DEFAULT_TORRENT_DAYS,
     DEFAULT_TRAFFIC_THRESHOLD,
     PREVIEW_LIMIT,
+    SEGMENT_ALL_USERS,
     SEGMENT_DEVICE_LIMIT,
     SEGMENT_EXPIRED,
     SEGMENT_EXPIRING_SOON,
@@ -80,6 +81,11 @@ async def scan_segment(
             session, max_age_hours=invoice_max_age_hours
         )
         rows = [_scan_user_row(u, {"order_status": "created"}) for u in users]
+        return rows[:PREVIEW_LIMIT], len(rows), None
+
+    if segment_id == SEGMENT_ALL_USERS:
+        users = await seg_repo.get_broadcast_eligible_users(session)
+        rows = [_scan_user_row(u) for u in users]
         return rows[:PREVIEW_LIMIT], len(rows), None
 
     local_users = await seg_repo.get_remnawave_broadcast_users(session)
@@ -194,6 +200,12 @@ async def apply_campaign_perks(
 
 def segment_catalog() -> list[dict[str, Any]]:
     return [
+        {
+            "id": SEGMENT_ALL_USERS,
+            "title": "Все пользователи",
+            "description": "Все незабаненные пользователи с tg_id (массовая рассылка)",
+            "params": [],
+        },
         {
             "id": SEGMENT_NEVER_CONNECTED,
             "title": "Не подключались",

@@ -90,3 +90,27 @@ def test_users_with_unpaid_invoices() -> None:
             await engine.dispose()
 
     _run(go())
+
+
+def test_get_broadcast_eligible_users() -> None:
+    async def go() -> None:
+        engine = _make_engine()
+        try:
+            await _setup(engine)
+            Session = async_sessionmaker(engine, expire_on_commit=False)
+            async with Session() as session:
+                session.add_all([
+                    User(id=1, tg_id=100, username="ok", is_banned=False),
+                    User(id=2, tg_id=200, username="banned", is_banned=True),
+                    User(id=3, tg_id=None, username="android", is_banned=False),
+                    User(id=4, tg_id=400, username="also_ok", is_banned=False),
+                ])
+                await session.flush()
+
+                users = await seg_repo.get_broadcast_eligible_users(session)
+                tg_ids = {u.tg_id for u in users}
+                assert tg_ids == {100, 400}
+        finally:
+            await engine.dispose()
+
+    _run(go())

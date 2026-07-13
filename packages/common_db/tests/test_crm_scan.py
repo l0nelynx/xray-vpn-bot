@@ -108,3 +108,38 @@ def test_scan_expiring_soon_segment() -> None:
             await engine.dispose()
 
     _run(go())
+
+
+def test_scan_all_users_segment() -> None:
+    import pytest
+
+    crm_service = pytest.importorskip("dashboard.backend.crm_service")
+    scan_segment = crm_service.scan_segment
+    from remnawave_client.segmentation import SEGMENT_ALL_USERS
+
+    async def go() -> None:
+        engine = _make_engine()
+        try:
+            await _setup(engine)
+            Session = async_sessionmaker(engine, expire_on_commit=False)
+            async with Session() as session:
+                session.add_all([
+                    User(id=1, tg_id=1001, username="u1", is_banned=False),
+                    User(id=2, tg_id=1002, username="u2", is_banned=False),
+                    User(id=3, tg_id=None, username="no_tg", is_banned=False),
+                    User(id=4, tg_id=1004, username="banned", is_banned=True),
+                ])
+                await session.flush()
+
+                users, total, warning = await scan_segment(
+                    session,
+                    FakeRwClient(),
+                    SEGMENT_ALL_USERS,
+                )
+                assert warning is None
+                assert total == 2
+                assert {u["tg_id"] for u in users} == {1001, 1002}
+        finally:
+            await engine.dispose()
+
+    _run(go())

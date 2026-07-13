@@ -14,6 +14,7 @@ from typing import Any
 from remnawave.models import UserResponseDto
 
 SEGMENT_NEVER_CONNECTED = "never_connected"
+SEGMENT_ALL_USERS = "all_users"
 SEGMENT_EXPIRED = "expired"
 SEGMENT_LIMITED = "limited"
 SEGMENT_TRAFFIC_LOW = "traffic_low"
@@ -24,6 +25,7 @@ SEGMENT_DEVICE_LIMIT = "device_limit"
 
 SEGMENT_IDS = frozenset({
     SEGMENT_NEVER_CONNECTED,
+    SEGMENT_ALL_USERS,
     SEGMENT_EXPIRED,
     SEGMENT_LIMITED,
     SEGMENT_TRAFFIC_LOW,

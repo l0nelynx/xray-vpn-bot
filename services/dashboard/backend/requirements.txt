@@ -5,3 +5,4 @@
 # is no longer maintained; PyJWT is also what the miniapp service uses.
 pyjwt>=2.10.1
 httpx>=0.28.1
+arq>=0.26.1

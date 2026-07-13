@@ -25,6 +25,25 @@ services:
       resources:
         limits:
           memory: 512M
+  redis:
+    container_name: xray-redis
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    volumes:
+      - ./redis_data:/data
+    networks:
+      - data-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    deploy:
+      resources:
+        limits:
+          memory: 128M
   # Build-only helper: the shared Python base image. Not started on `up`
   # (profile `build`). Build it first:  docker compose --profile build build base
   base:
@@ -141,16 +160,47 @@ services:
     environment:
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-xray}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-xray_vpn_bot}
       - CONFIG_PATH=/app/config.yml
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
     restart: unless-stopped
     depends_on:
       migrate:
         condition: service_completed_successfully
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 60s
       timeout: 10s
       retries: 3
       start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+  crm-worker:
+    container_name: crm-worker
+    image: ghcr.io/l0nelynx/dashboard:${IMAGE_TAG:-staging}
+    build:
+      context: .
+      dockerfile: infra/docker/dashboard.Dockerfile
+      args:
+        BASE_IMAGE: ${REGISTRY-ghcr.io/l0nelynx/}python-base:${IMAGE_TAG:-staging}
+        REGISTRY: ${REGISTRY-ghcr.io/l0nelynx/}
+    command: ["arq", "backend.worker.WorkerSettings"]
+    volumes:
+      - ./config.yml:/app/config.yml:ro
+    networks:
+      - data-network
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-xray}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-xray_vpn_bot}
+      - CONFIG_PATH=/app/config.yml
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
     deploy:
       resources:
         limits:

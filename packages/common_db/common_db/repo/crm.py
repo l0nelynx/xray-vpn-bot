@@ -28,7 +28,7 @@ async def create_campaign(
     target_tg_ids: list[int] | None = None,
 ) -> CrmCampaign:
     params = dict(segment_params)
-    if target_tg_ids is not None:
+    if target_tg_ids:
         params["target_tg_ids"] = target_tg_ids
 
     campaign = CrmCampaign(
@@ -90,6 +90,27 @@ async def update_campaign_status(
         campaign.started_at = _now_iso()
     if completed:
         campaign.completed_at = _now_iso()
+    await session.flush()
+
+
+async def queue_campaign(session: AsyncSession, campaign: CrmCampaign) -> None:
+    campaign.status = "queued"
+    await session.flush()
+
+
+async def update_campaign_progress(
+    session: AsyncSession,
+    campaign: CrmCampaign,
+    *,
+    messages_sent: int,
+    messages_failed: int,
+    perks_applied: int,
+    perks_failed: int,
+) -> None:
+    campaign.messages_sent = messages_sent
+    campaign.messages_failed = messages_failed
+    campaign.perks_applied = perks_applied
+    campaign.perks_failed = perks_failed
     await session.flush()
 
 

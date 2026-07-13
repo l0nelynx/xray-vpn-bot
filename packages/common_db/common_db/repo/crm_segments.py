@@ -9,6 +9,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..models import Transaction, User
 
 
+async def get_broadcast_eligible_users(session: AsyncSession) -> list[User]:
+    """All non-banned users with a Telegram id (mass broadcast audience)."""
+    result = await session.scalars(
+        select(User).where(
+            User.tg_id.is_not(None),
+            User.is_banned != True,  # noqa: E712
+        )
+    )
+    return list(result)
+
+
 async def get_remnawave_broadcast_users(session: AsyncSession) -> list[User]:
     """Local users eligible for Telegram CRM actions."""
     result = await session.scalars(

@@ -2,22 +2,21 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 
-import httpx
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
+from remnawave_client.segmentation import SEGMENT_ALL_USERS
 
 from common_db.repo import crm as crm_repo
-from common_db.repo.users import get_users_by_tg_ids
 
 from ..auth import get_current_user
 from ..config import get_remnawave_token, get_remnawave_url
-from ..crm_service import apply_campaign_perks, scan_segment, segment_catalog
+from ..crm_runner import resolve_targets
+from ..crm_service import scan_segment, segment_catalog
 from ..database.session import async_session
-from .tg_admin import _tg_send, _tg_url
+from ..tasks.crm import enqueue_campaign
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/crm", tags=["crm"])
@@ -31,6 +30,31 @@ def _rw_client():
         token=get_remnawave_token(),
         free_squad_id="",
     )
+
+
+def _validate_audience(body: "CreateCampaignRequest") -> None:
+    if body.segment_type == SEGMENT_ALL_USERS:
+        return
+    if not body.target_tg_ids:
+        raise HTTPException(400, "target_tg_ids is required")
+
+
+async def _schedule_campaign(
+    request: Request,
+    campaign_id: int,
+    *,
+    total_hint: int | None = None,
+) -> dict:
+    pool = getattr(request.app.state, "arq_pool", None)
+    try:
+        await enqueue_campaign(pool, campaign_id)
+    except RuntimeError as exc:
+        raise HTTPException(503, str(exc)) from exc
+    return {
+        "status": "queued",
+        "total": total_hint,
+        "campaign_id": campaign_id,
+    }
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -96,6 +120,10 @@ class CampaignDetail(CampaignSummary):
 
 class ExecuteRequest(BaseModel):
     target_tg_ids: list[int] | None = None
+
+
+class LaunchResponse(CampaignSummary):
+    queue_status: str = "queued"
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -194,8 +222,13 @@ async def create_campaign(
 ):
     if not body.message_text.strip():
         raise HTTPException(400, "message_text is required")
-    if not body.target_tg_ids:
-        raise HTTPException(400, "target_tg_ids is required")
+    _validate_audience(body)
+
+    store_targets = (
+        None
+        if body.segment_type == SEGMENT_ALL_USERS
+        else body.target_tg_ids
+    )
 
     async with async_session() as session:
         campaign = await crm_repo.create_campaign(
@@ -208,215 +241,52 @@ async def create_campaign(
             bonus_days=body.bonus_days,
             bonus_traffic_gb=body.bonus_traffic_gb,
             created_by=user,
-            target_tg_ids=body.target_tg_ids,
+            target_tg_ids=store_targets,
         )
         await session.commit()
         summary = _campaign_summary(campaign)
     return summary
-
-
-async def _resolve_targets(
-    campaign,
-    override_tg_ids: list[int] | None,
-) -> list[int]:
-    if override_tg_ids:
-        return override_tg_ids
-    params = json.loads(campaign.segment_params or "{}")
-    stored = params.get("target_tg_ids")
-    if stored:
-        return list(stored)
-    return []
-
-
-async def _run_campaign(campaign_id: int, override_tg_ids: list[int] | None = None):
-    rw = _rw_client()
-    crm_by_uuid: dict[str, dict] = {}
-    try:
-        for u in await rw.get_all_users_for_crm():
-            if u.get("uuid"):
-                crm_by_uuid[u["uuid"]] = u
-    except Exception as exc:
-        logger.error("CRM campaign %s: bulk RW fetch failed: %s", campaign_id, exc)
-
-    bot_username = ""
-    async with async_session() as session:
-        campaign = await crm_repo.get_campaign(session, campaign_id)
-        if not campaign:
-            return
-
-        tg_ids = await _resolve_targets(campaign, override_tg_ids)
-        if not tg_ids:
-            await crm_repo.update_campaign_status(
-                session, campaign, status="failed", completed=True
-            )
-            await session.commit()
-            return
-
-        await crm_repo.update_campaign_status(
-            session,
-            campaign,
-            status="running",
-            total_targets=len(tg_ids),
-            started=True,
-        )
-        await session.commit()
-
-        message_text = campaign.message_text
-        attach_button = campaign.attach_button
-        bonus_days = campaign.bonus_days
-        bonus_traffic_gb = campaign.bonus_traffic_gb
-
-    if attach_button:
-        try:
-            async with httpx.AsyncClient(timeout=5) as client:
-                r = await client.get(_tg_url("getMe"))
-            if r.status_code == 200:
-                bot_username = r.json().get("result", {}).get("username", "")
-        except Exception:
-            pass
-
-    reply_markup = None
-    if attach_button and bot_username:
-        reply_markup = {
-            "inline_keyboard": [[
-                {"text": "Открыть бота", "url": f"https://t.me/{bot_username}"}
-            ]]
-        }
-
-    async with async_session() as session:
-        users = await get_users_by_tg_ids(session, tg_ids)
-        user_by_tg = {u.tg_id: u for u in users if u.tg_id is not None}
-
-    sent = failed = perks_ok = perks_fail = 0
-
-    for i, tg_id in enumerate(tg_ids):
-        db_user = user_by_tg.get(tg_id)
-        perk_status = "skipped"
-        message_status = "failed"
-        error_parts: list[str] = []
-
-        if not db_user:
-            failed += 1
-            async with async_session() as session:
-                await crm_repo.add_delivery(
-                    session,
-                    campaign_id=campaign_id,
-                    tg_id=tg_id,
-                    vless_uuid=None,
-                    perk_status="skipped",
-                    message_status="failed",
-                    error="user not found",
-                )
-                await session.commit()
-            continue
-
-        crm_user = crm_by_uuid.get(db_user.vless_uuid or "")
-        has_perks = bool(bonus_days or bonus_traffic_gb)
-
-        if has_perks and db_user.vless_uuid:
-            ok, perk_err = await apply_campaign_perks(
-                rw,
-                db_user,
-                crm_user,
-                bonus_days=bonus_days,
-                bonus_traffic_gb=bonus_traffic_gb,
-            )
-            if ok:
-                perks_ok += 1
-                perk_status = "applied"
-            else:
-                perks_fail += 1
-                perk_status = "failed"
-                if perk_err:
-                    error_parts.append(perk_err)
-        elif has_perks:
-            perks_fail += 1
-            perk_status = "failed"
-            error_parts.append("no vless_uuid for perks")
-
-        ok_msg = await _tg_send(tg_id, message_text, reply_markup)
-        if ok_msg:
-            sent += 1
-            message_status = "sent"
-        else:
-            failed += 1
-            error_parts.append("telegram send failed")
-
-        async with async_session() as session:
-            await crm_repo.add_delivery(
-                session,
-                campaign_id=campaign_id,
-                tg_id=tg_id,
-                vless_uuid=db_user.vless_uuid,
-                perk_status=perk_status,
-                message_status=message_status,
-                error="; ".join(error_parts) if error_parts else None,
-            )
-            await session.commit()
-
-        if (i + 1) % 25 == 0:
-            await asyncio.sleep(1)
-
-    async with async_session() as session:
-        campaign = await crm_repo.get_campaign(session, campaign_id)
-        if campaign:
-            await crm_repo.update_campaign_status(
-                session,
-                campaign,
-                status="completed",
-                messages_sent=sent,
-                messages_failed=failed,
-                perks_applied=perks_ok,
-                perks_failed=perks_fail,
-                completed=True,
-            )
-            await session.commit()
-
-    logger.info(
-        "CRM campaign %s done: sent=%d failed=%d perks_ok=%d perks_fail=%d",
-        campaign_id,
-        sent,
-        failed,
-        perks_ok,
-        perks_fail,
-    )
 
 
 @router.post("/campaigns/{campaign_id}/execute")
 async def execute_campaign(
     campaign_id: int,
     body: ExecuteRequest,
-    background_tasks: BackgroundTasks,
+    request: Request,
     _: str = Depends(get_current_user),
 ):
     async with async_session() as session:
         campaign = await crm_repo.get_campaign(session, campaign_id)
         if not campaign:
             raise HTTPException(404, "Campaign not found")
-        if campaign.status == "running":
-            raise HTTPException(409, "Campaign is already running")
-        tg_ids = await _resolve_targets(campaign, body.target_tg_ids)
-        total = len(tg_ids)
+        if campaign.status in ("queued", "running"):
+            raise HTTPException(409, "Campaign is already queued or running")
+        tg_ids = await resolve_targets(session, campaign, body.target_tg_ids)
+        if not tg_ids:
+            raise HTTPException(400, "No target users")
+        await crm_repo.queue_campaign(session, campaign)
         await session.commit()
+        total = len(tg_ids)
 
-    if not total:
-        raise HTTPException(400, "No target users")
-
-    background_tasks.add_task(_run_campaign, campaign_id, body.target_tg_ids)
-    return {"status": "started", "total": total}
+    return await _schedule_campaign(request, campaign_id, total_hint=total)
 
 
-@router.post("/campaigns/launch", response_model=CampaignSummary)
+@router.post("/campaigns/launch", response_model=LaunchResponse)
 async def launch_campaign(
     body: CreateCampaignRequest,
-    background_tasks: BackgroundTasks,
+    request: Request,
     user: str = Depends(get_current_user),
 ):
-    """Create a campaign and start execution in one step."""
+    """Create a campaign and enqueue execution."""
     if not body.message_text.strip():
         raise HTTPException(400, "message_text is required")
-    if not body.target_tg_ids:
-        raise HTTPException(400, "target_tg_ids is required")
+    _validate_audience(body)
+
+    store_targets = (
+        None
+        if body.segment_type == SEGMENT_ALL_USERS
+        else body.target_tg_ids
+    )
 
     async with async_session() as session:
         campaign = await crm_repo.create_campaign(
@@ -429,10 +299,16 @@ async def launch_campaign(
             bonus_days=body.bonus_days,
             bonus_traffic_gb=body.bonus_traffic_gb,
             created_by=user,
-            target_tg_ids=body.target_tg_ids,
+            target_tg_ids=store_targets,
         )
+        tg_ids = await resolve_targets(session, campaign, None)
+        if not tg_ids:
+            raise HTTPException(400, "No target users")
+        campaign.total_targets = len(tg_ids)
+        await crm_repo.queue_campaign(session, campaign)
         await session.commit()
         summary = _campaign_summary(campaign)
+        total = len(tg_ids)
 
-    background_tasks.add_task(_run_campaign, summary.id, None)
-    return summary
+    await _schedule_campaign(request, summary.id, total_hint=total)
+    return LaunchResponse(**summary.model_dump(), queue_status="queued")
