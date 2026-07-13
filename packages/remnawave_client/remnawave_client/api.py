@@ -139,6 +139,10 @@ async def get_all_users() -> UsersResponseDto:
     return await _client().get_all_users()
 
 
+async def get_all_users_for_crm() -> list[dict]:
+    return await _client().get_all_users_for_crm()
+
+
 async def get_user_from_username(username: str) -> dict | None:
     return await _client().get_user_by_username(username)
 

@@ -12,6 +12,8 @@ from common_db import Base  # noqa: F401  (legacy: dashboard code referenced Bas
 from common_db.models import (  # noqa: F401
     BotFeatureFlags,
     CacheVersion,
+    CrmCampaign,
+    CrmCampaignDelivery,
     DisabledUser,
     EmailVerification,
     GooglePlayPurchase,
@@ -39,6 +41,8 @@ __all__ = [
     "Base",
     "BotFeatureFlags",
     "CacheVersion",
+    "CrmCampaign",
+    "CrmCampaignDelivery",
     "DisabledUser",
     "EmailVerification",
     "GooglePlayPurchase",

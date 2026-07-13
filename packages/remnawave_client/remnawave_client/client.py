@@ -153,6 +153,18 @@ class RemnawaveClient:
         logger.info("Remnawave total users: %s", response.total)
         return response
 
+    async def get_all_users_for_crm(self) -> list[dict]:
+        """Bulk-fetch every panel user normalized for CRM segmentation."""
+        from .segmentation import normalize_user_for_crm
+
+        response = await self.get_all_users()
+        raw_users = (
+            getattr(response, "users", None)
+            or getattr(response, "root", None)
+            or []
+        )
+        return [normalize_user_for_crm(u) for u in raw_users]
+
     async def get_user_by_username(self, username: str) -> dict | None:
         try:
             response = await self.sdk.users.get_user_by_username(username)

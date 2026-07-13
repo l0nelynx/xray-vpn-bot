@@ -13,7 +13,7 @@ from .auth import (
     verify_credentials,
 )
 from .config import get_expose_api_docs
-from .routers import users, transactions, stats, promos, tariffs, menus, squads, telemt, store, support, webapp_menu, webapp_payments, settings, tg_admin
+from .routers import users, transactions, stats, promos, tariffs, menus, squads, telemt, store, support, webapp_menu, webapp_payments, settings, tg_admin, crm
 
 BASE_PATH = "/bot/dashboard"
 
@@ -73,6 +73,7 @@ app.include_router(webapp_menu.router, prefix=BASE_PATH)
 app.include_router(webapp_payments.router, prefix=BASE_PATH)
 app.include_router(settings.router, prefix=BASE_PATH)
 app.include_router(tg_admin.router, prefix=BASE_PATH)
+app.include_router(crm.router, prefix=BASE_PATH)
 
 
 @app.get("/health")
