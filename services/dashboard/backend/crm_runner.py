@@ -14,7 +14,7 @@ from remnawave_client.segmentation import SEGMENT_ALL_USERS
 from .config import get_remnawave_token, get_remnawave_url
 from .crm_service import apply_campaign_perks
 from .database.session import async_session
-from .telegram import tg_bot_username, tg_send
+from .telegram import tg_bot_username, tg_bot_open_url, tg_send
 
 logger = logging.getLogger(__name__)
 
@@ -100,7 +100,7 @@ async def execute_crm_campaign(
             if bot_username:
                 reply_markup = {
                     "inline_keyboard": [[
-                        {"text": "Открыть бота", "url": f"https://t.me/{bot_username}"}
+                        {"text": "Открыть бота", "url": tg_bot_open_url(bot_username)}
                     ]]
                 }
 

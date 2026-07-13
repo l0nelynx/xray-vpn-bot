@@ -13,6 +13,11 @@ def tg_url(method: str) -> str:
     return f"https://api.telegram.org/bot{get_bot_token()}/{method}"
 
 
+def tg_bot_open_url(username: str) -> str:
+    """Deep link that re-triggers /start when opened from an existing bot chat."""
+    return f"https://t.me/{username}?start="
+
+
 async def tg_send(chat_id: int, text: str, reply_markup: dict | None = None) -> bool:
     payload: dict = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
     if reply_markup:

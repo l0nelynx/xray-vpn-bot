@@ -24,7 +24,7 @@ from ..config import (
 )
 from ..database.models import DisabledUser, Transaction, User
 from ..database.session import async_session
-from ..telegram import tg_send, tg_url
+from ..telegram import tg_send, tg_url, tg_bot_open_url
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/tg-admin", tags=["tg-admin"])
@@ -95,7 +95,7 @@ async def channel_post(body: ChannelPostRequest, _: str = Depends(get_current_us
                 username = r.json().get("result", {}).get("username", "")
                 if username:
                     reply_markup = {"inline_keyboard": [[
-                        {"text": "Открыть бота", "url": f"https://t.me/{username}"}
+                        {"text": "Открыть бота", "url": tg_bot_open_url(username)}
                     ]]}
         except Exception:
             pass
