@@ -19,6 +19,19 @@ router = APIRouter(prefix="/api/free", tags=["free"])
 logger = logging.getLogger(__name__)
 
 
+async def _persist_rw_uuid(user: User, rw_user: dict | None) -> None:
+    if not rw_user or not rw_user.get("uuid"):
+        return
+    async with async_session() as session:
+        await _repo_users.persist_remnawave_uuid(
+            session,
+            tg_id=user.tg_id,
+            vless_uuid=str(rw_user["uuid"]),
+            username=user.username,
+        )
+        await session.commit()
+
+
 class SubscribeStateResponse(BaseModel):
     subscribed: bool
     news_url: str
@@ -68,6 +81,7 @@ async def free_vpn_status(tg: TgUser = Depends(get_tg_user)) -> FreeStatusRespon
     free_squad = get_rw_free_id() or None
     existing = await get_user_from_username(user.username)
     if existing and existing.get("uuid"):
+        await _persist_rw_uuid(user, existing)
         squads = {s.lower() for s in existing.get("active_squads", [])}
         is_free = bool(free_squad and free_squad.lower() in squads)
         is_active_pro = existing.get("status") == "active" and existing.get("data_limit") is None
@@ -114,6 +128,7 @@ async def free_claim(tg: TgUser = Depends(get_tg_user)) -> ClaimResponse:
         is_free = bool(free_squad and free_squad.lower() in squads)
         is_active_pro = existing.get("status") == "active" and existing.get("data_limit") is None
         if is_active_pro or is_free:
+            await _persist_rw_uuid(user, existing)
             return ClaimResponse(
                 ok=True,
                 subscription_url=existing.get("subscription_url"),
@@ -130,6 +145,7 @@ async def free_claim(tg: TgUser = Depends(get_tg_user)) -> ClaimResponse:
         )
         if not updated:
             return ClaimResponse(ok=False, detail="update_failed")
+        await _persist_rw_uuid(user, updated)
         return ClaimResponse(
             ok=True,
             subscription_url=updated.get("subscription_url"),
@@ -147,6 +163,7 @@ async def free_claim(tg: TgUser = Depends(get_tg_user)) -> ClaimResponse:
     )
     if not created:
         return ClaimResponse(ok=False, detail="create_failed")
+    await _persist_rw_uuid(user, created)
     return ClaimResponse(
         ok=True,
         subscription_url=created.get("subscription_url"),

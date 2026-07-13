@@ -45,8 +45,13 @@ async def resolve_user(tg_id: int, username: str) -> tuple[str, dict | int]:
     # Пробуем RemnaWave (основной и единственный провайдер)
     info = await get_user_info(username, api="remnawave")
     if info != 404:
-        if api_provider != "remnawave":
-            await rq.update_user_api_info(tg_id, username, api_provider="remnawave")
+        uuid = info.get("uuid")
+        await rq.update_user_api_info(
+            tg_id=tg_id,
+            username=username,
+            vless_uuid=str(uuid) if uuid else None,
+            api_provider="remnawave",
+        )
         return "remnawave", info
 
     # DISABLED: Marzban fallback removed — Remnawave is the only API
@@ -426,7 +431,13 @@ async def detect_user_api_provider(tg_id: int,username: str) -> str:
         if not user_info:
             user_info = await rem.get_user_from_username(username)
         if user_info:
-            await rq.update_user_api_info(tg_id, username, api_provider="remnawave")
+            uuid = user_info.get("uuid")
+            await rq.update_user_api_info(
+                tg_id,
+                username,
+                vless_uuid=str(uuid) if uuid else None,
+                api_provider="remnawave",
+            )
             return "remnawave"
     except Exception as e:
         logger.warning("RemnaWave provider detection failed for tg_id=%s: %s", tg_id, e)

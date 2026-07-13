@@ -105,3 +105,56 @@ def test_matches_expiring_soon() -> None:
 def test_bonus_traffic_limit_gb() -> None:
     current = 10 * 1024 ** 3
     assert bonus_traffic_limit_gb(current, 5) == 15
+
+
+def test_normalize_status_from_sdk_strenum() -> None:
+    """SDK UserStatus is StrEnum with uppercase values (LIMITED, ACTIVE, ...)."""
+    from enum import StrEnum
+
+    class UserStatus(StrEnum):
+        LIMITED = "LIMITED"
+        ACTIVE = "ACTIVE"
+
+    expire = datetime.now(timezone.utc) + timedelta(days=5)
+
+    class FakeUser:
+        uuid = "11111111-2222-3333-4444-555555555555"
+        status = UserStatus.LIMITED
+        expire_at = expire
+        used_traffic_bytes = 0
+        traffic_limit_bytes = 10 * 1024 ** 3
+        telegram_id = 42
+        username = "limited_user"
+
+    out = normalize_user_for_crm(FakeUser())
+    assert out["status"] == "limited"
+    assert matches_rw_segment(out, SEGMENT_LIMITED)
+    assert not matches_rw_segment(out, SEGMENT_EXPIRED)
+
+
+def test_normalize_first_connected_from_user_traffic() -> None:
+    """SDK 2.8 nests firstConnectedAt under userTraffic, not on the user root."""
+    from enum import StrEnum
+
+    class UserStatus(StrEnum):
+        ACTIVE = "ACTIVE"
+
+    connected = datetime.now(timezone.utc)
+    expire = connected + timedelta(days=30)
+
+    class FakeTraffic:
+        first_connected_at = connected
+
+    class FakeUser:
+        uuid = "22222222-3333-4444-5555-666666666666"
+        status = UserStatus.ACTIVE
+        expire_at = expire
+        used_traffic_bytes = 0
+        traffic_limit_bytes = 0
+        user_traffic = FakeTraffic()
+        telegram_id = 1
+        username = "connected"
+
+    out = normalize_user_for_crm(FakeUser())
+    assert out["first_connected_at"] == connected
+    assert not matches_rw_segment(out, SEGMENT_NEVER_CONNECTED)

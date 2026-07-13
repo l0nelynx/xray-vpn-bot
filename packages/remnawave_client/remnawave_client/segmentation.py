@@ -69,12 +69,24 @@ def _get_attr(obj: Any, *names: str) -> Any:
 
 
 def _status_value(user: Any) -> str | None:
+    """Normalize Remnawave ``UserStatus`` (StrEnum, e.g. ``LIMITED``) to lowercase str."""
     raw = _get_attr(user, "status")
     if raw is None:
         return None
     if hasattr(raw, "value"):
         return str(raw.value).lower()
     return str(raw).lower()
+
+
+def _first_connected_at(user: Any) -> Any:
+    """Read firstConnectedAt from SDK v2.8+ ``userTraffic`` or legacy top-level fields."""
+    val = _get_attr(user, "first_connected_at", "firstConnectedAt", "first_connected")
+    if val is not None:
+        return val
+    traffic = _get_attr(user, "user_traffic", "userTraffic")
+    if traffic is not None:
+        return _get_attr(traffic, "first_connected_at", "firstConnectedAt")
+    return None
 
 
 def normalize_user_for_crm(user: UserResponseDto | dict) -> dict:
@@ -95,7 +107,7 @@ def normalize_user_for_crm(user: UserResponseDto | dict) -> dict:
     used_bytes = int(_get_attr(user, "used_traffic_bytes", "usedTrafficBytes") or 0)
     limit_bytes = int(_get_attr(user, "traffic_limit_bytes", "trafficLimitBytes") or 0)
 
-    first_connected = _get_attr(user, "first_connected_at", "firstConnectedAt")
+    first_connected = _first_connected_at(user)
     hwid_limit = _get_attr(user, "hwid_device_limit", "hwidDeviceLimit")
 
     hwid_devices = _get_attr(user, "hwid_devices", "hwidDevices") or []

@@ -372,3 +372,31 @@ def test_get_users_by_tg_ids_returns_matches() -> None:
             await engine.dispose()
 
     _run(go())
+
+
+def test_persist_remnawave_uuid() -> None:
+    async def go() -> None:
+        engine = _make_engine()
+        try:
+            await _setup(engine)
+            Session = async_sessionmaker(engine, expire_on_commit=False)
+            async with Session() as session:
+                session.add(User(id=1, tg_id=100, username="free_user"))
+                await session.commit()
+            async with Session() as session:
+                ok = await repo_users.persist_remnawave_uuid(
+                    session,
+                    tg_id=100,
+                    vless_uuid="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+                    username="free_user",
+                )
+                await session.commit()
+                assert ok is True
+                user = await repo_users.get_user_by_tg_id(session, 100)
+                assert user is not None
+                assert user.vless_uuid == "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+                assert user.api_provider == "remnawave"
+        finally:
+            await engine.dispose()
+
+    _run(go())
