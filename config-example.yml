@@ -56,6 +56,7 @@ uvicorn_port: 5000                                 # [optional] Uvicorn bind por
 
 remnawave_url: "https://panel.example.com"         # [REQUIRED] Remnawave panel base URL
 remnawave_token: "your-remnawave-api-token"        # [REQUIRED] Remnawave API token (long-lived JWT from panel settings)
+remnawave_webhook_secret: "your-webhook-secret-here"  # [optional] HMAC secret for inbound panel webhooks; must match panel WEBHOOK_SECRET_HEADER (a-z, A-Z, 0-9 only). Generate: python -c "import secrets; print(secrets.token_hex(32))"
 
 # Squad UUIDs — find in Remnawave panel → Squads
 rw_free_id: "uuid-of-free-squad"                   # [REQUIRED] Internal squad for FREE plan users

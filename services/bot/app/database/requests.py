@@ -59,6 +59,20 @@ async def get_user_by_username(username: str):
         return await _repo_users.get_user_by_username(session, username)
 
 
+async def get_user_by_vless_uuid(vless_uuid: str) -> dict | None:
+    """Lookup local user by Remnawave VLESS UUID (for inbound panel webhooks)."""
+    if not vless_uuid:
+        return None
+    async with async_session() as session:
+        user = await _repo_users.get_user_by_vless_uuid(session, vless_uuid)
+        if not user:
+            return None
+        return {
+            "tg_id": user.tg_id,
+            "is_banned": bool(user.is_banned),
+        }
+
+
 async def create_user_with_info(tg_id: int, username: str, vless_uuid: str = None, api_provider: str = "remnawave"):
     """
     Создает нового пользователя с полной информацией

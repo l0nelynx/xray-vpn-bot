@@ -18,6 +18,16 @@ from .api import set_config_provider
 from .client import RemnawaveClient, configure, get_default_client
 from .operations import apply_extend, apply_new_user, apply_update
 from .scenarios import SubscriptionScenario, SubscriptionType, resolve_scenario
+from . import webhooks
+from .webhooks import (
+    RemnawaveWebhookPayload,
+    extract_vless_uuid,
+    is_torrent_block_report,
+    parse_webhook,
+    torrent_block_ip,
+    torrent_block_minutes,
+    verify_webhook_signature,
+)
 
 __all__ = [
     "RemnawaveClient",
@@ -31,4 +41,12 @@ __all__ = [
     "apply_new_user",
     "apply_extend",
     "apply_update",
+    "webhooks",
+    "RemnawaveWebhookPayload",
+    "verify_webhook_signature",
+    "parse_webhook",
+    "extract_vless_uuid",
+    "is_torrent_block_report",
+    "torrent_block_minutes",
+    "torrent_block_ip",
 ]

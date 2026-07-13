@@ -82,6 +82,17 @@ async def get_user_by_username(
     return await session.scalar(select(User).where(User.username == username))
 
 
+async def get_user_by_vless_uuid(
+    session: AsyncSession, vless_uuid: str
+) -> User | None:
+    """Reverse lookup: Remnawave user UUID → local User row."""
+    if not vless_uuid:
+        return None
+    return await session.scalar(
+        select(User).where(User.vless_uuid == vless_uuid)
+    )
+
+
 # --- "is paid" predicates -------------------------------------------------
 
 

@@ -556,3 +556,10 @@ msg_sub_clean_reactivation_error = (
 )
 
 msg_sub_clean_not_disabled = "Your subscription was not suspended."
+
+torrent_traffic_warning = (
+    "⚠️ <b>Torrent traffic detected</b>\n\n"
+    "Access from IP {ip} will be restricted for <b>{minutes} min</b>.\n\n"
+    "To avoid blocks, add your torrent client to <b>bypass/exclusions</b> "
+    "in your VPN app."
+)

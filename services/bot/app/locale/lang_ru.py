@@ -553,3 +553,10 @@ msg_sub_clean_reactivation_error = (
 )
 
 msg_sub_clean_not_disabled = "Ваша подписка не была приостановлена."
+
+torrent_traffic_warning = (
+    "⚠️ <b>Обнаружен torrent-трафик</b>\n\n"
+    "Доступ с IP {ip} будет ограничен на <b>{minutes} мин</b>.\n\n"
+    "Чтобы избежать блокировок, добавьте torrent-клиент в <b>исключения</b> "
+    "(split tunneling) в вашем VPN-приложении."
+)
