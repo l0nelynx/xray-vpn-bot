@@ -34,3 +34,9 @@ Deprecated
 freekassa.py
 marz.py
 test.py
+.examples
+.res
+db
+loadtest
+pg_data
+
