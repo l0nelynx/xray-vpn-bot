@@ -75,7 +75,8 @@ Invoice creation matches Android/MiniApp security: the client sends only
 2. Set `web_allowed_origins` and `tg_client_secret` in `config.yml`; restart miniapp.
 3. Build/deploy [web-portal](https://github.com/l0nelynx/web-portal) with API base
    URL pointing at `https://your-domain/bot/miniapp/api`.
-4. Edge nginx must route `/bot/miniapp/api/` → `miniapp:8001` (see [README](../README.md)).
+4. Edge nginx must route `/bot/miniapp/api/` → `miniapp:8001` (see
+   [edge nginx example](https://github.com/l0nelynx/xray-vpn-bot/blob/main/README.md#web-tier--reverse-proxy)).
 
 ## Local development
 
