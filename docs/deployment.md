@@ -65,6 +65,14 @@ directory for support-ticket image attachments.
     docker compose up -d
     ```
 
+    Verify Compose picked up `.env` (image lines must show your registry, not
+  hardcoded `ghcr.io`):
+
+    ```bash
+    docker compose config | grep 'image:'
+    # expect: image: docker.io/l0nelynx/bot:staging
+    ```
+
     Images are published to **GHCR** and **Docker Hub** (public). Set `REGISTRY`
     and `IMAGE_TAG` in `.env` — see [Image versioning](#image-versioning).
 
@@ -79,6 +87,14 @@ directory for support-ticket image attachments.
     ```bash
     docker compose pull
     docker compose up -d
+    ```
+
+    Verify Compose picked up `.env` (image lines must show your registry, not
+  hardcoded `ghcr.io`):
+
+    ```bash
+    docker compose config | grep 'image:'
+    # expect: image: docker.io/l0nelynx/bot:staging
     ```
 
 === "Build locally"
