@@ -27,6 +27,23 @@ from remnawave_client import (
 _notify = admin_bot or bot
 
 
+async def _persist_vless_uuid(
+    user_id: int,
+    username: str,
+    uuid: str | None,
+) -> None:
+    if not uuid:
+        return
+    import app.database.requests as rq
+
+    await rq.update_user_api_info(
+        tg_id=user_id,
+        username=username,
+        vless_uuid=str(uuid),
+        api_provider="remnawave",
+    )
+
+
 def _parse_squad_slug(slug: str) -> Optional[dict]:
     """Parse "sid:<squad_id>:esid:<external_squad_id>" produced by the
     WebApp Tariff Constructor. Returns None if the slug is not in this format.
@@ -377,6 +394,8 @@ async def _handle_extend_subscription(
         db_user = await rq_extend.get_full_username_info(username)
         target_uuid = (db_user or {}).get("vless_uuid")
     if not target_uuid:
+        target_uuid = user_info.get("uuid")
+    if not target_uuid:
         logging.warning(f"User {username} not found in DB for extend")
         return {"days": expire_day, "link": sub_link}
 
@@ -414,6 +433,12 @@ async def _handle_extend_subscription(
 
     await _send_response(message, response_text, sub_link, user_id, lang)
 
+    await _persist_vless_uuid(
+        user_id,
+        username,
+        target_uuid or (buyer_info or {}).get("uuid"),
+    )
+
     return {"days": final_expire_day, "link": sub_link}
 
 
@@ -447,6 +472,11 @@ async def _handle_update_subscription(
     if not target_uuid:
         db_user = await rq_update.get_full_username_info(username)
         target_uuid = (db_user or {}).get("vless_uuid")
+    if not target_uuid:
+        from app.handlers.tools import get_user_info
+        rw_info = await get_user_info(username)
+        if rw_info != 404:
+            target_uuid = rw_info.get("uuid")
     if not target_uuid:
         logging.warning(f"User {username} not found in DB for update")
         return {"days": 0, "link": None}
@@ -483,6 +513,12 @@ async def _handle_update_subscription(
 
     await _send_response(message, response_text, sub_link, user_id, lang)
 
+    await _persist_vless_uuid(
+        user_id,
+        username,
+        target_uuid or (buyer_info or {}).get("uuid"),
+    )
+
     return {"days": expire_day, "link": sub_link}
 
 
@@ -515,6 +551,11 @@ async def _handle_limited(
     elif message is None:
         user_id = None
         logging.warning(f"Cannot send limited message: message={message}")
+
+    if isinstance(message, Message):
+        await _persist_vless_uuid(message.from_user.id, username, user_info.get("uuid"))
+    elif isinstance(message, CallbackQuery):
+        await _persist_vless_uuid(message.from_user.id, username, user_info.get("uuid"))
 
     return {"days": expire_day, "limited": True}
 
@@ -550,6 +591,9 @@ async def _handle_already_active(
     )
 
     await _send_response(message, response_text, sub_link, user_id, lang)
+
+    if user_id:
+        await _persist_vless_uuid(user_id, username, user_info.get("uuid"))
 
     return {"days": expire_day, "link": sub_link, "already_active": True}
 

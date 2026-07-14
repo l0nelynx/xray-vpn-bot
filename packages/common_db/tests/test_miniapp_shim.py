@@ -18,6 +18,8 @@ miniapp_url = pytest.importorskip("miniapp.backend.database.url")
 
 SHIMMED_MODEL_NAMES = [
     "CacheVersion",
+    "CrmCampaign",
+    "CrmCampaignDelivery",
     "DisabledUser",
     "EmailVerification",
     "GooglePlayPurchase",

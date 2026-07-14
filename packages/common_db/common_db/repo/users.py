@@ -206,6 +206,27 @@ async def get_users_by_tg_ids(
     return list(result)
 
 
+async def persist_remnawave_uuid(
+    session: AsyncSession,
+    *,
+    tg_id: int,
+    vless_uuid: str,
+    username: str | None = None,
+) -> bool:
+    """Write Remnawave uuid onto the local user row (CRM / delivery join key)."""
+    if not vless_uuid:
+        return False
+    user = await get_user_by_tg_id(session, tg_id)
+    if not user:
+        return False
+    user.vless_uuid = str(vless_uuid)
+    user.api_provider = "remnawave"
+    if username:
+        user.username = username
+    await session.flush()
+    return True
+
+
 __all__ = [
     "PAID_ORDER_STATUSES",
     "active_paid_user_ids_subquery",
@@ -217,6 +238,7 @@ __all__ = [
     "get_user_by_tg_id",
     "get_user_by_username",
     "get_users_by_tg_ids",
+    "persist_remnawave_uuid",
     "user_has_active_paid_transaction",
     "user_has_any_transaction",
 ]

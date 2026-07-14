@@ -65,8 +65,29 @@ directory for support-ticket image attachments.
     docker compose up -d
     ```
 
-    Images from `ghcr.io/l0nelynx/` — tag controlled by `IMAGE_TAG` in `.env`
-    (`latest` from `main`, `staging` from `develop`).
+    Verify Compose picked up `.env` (image lines must show your registry, not
+  hardcoded `ghcr.io`):
+
+    ```bash
+    docker compose config | grep 'image:'
+    # expect: image: docker.io/<dockerhub-username>/bot:staging
+    ```
+
+    Images are published to **GHCR** and **Docker Hub** (public). Set `REGISTRY`
+    and `IMAGE_TAG` in `.env` — see [Image versioning](#image-versioning).
+
+=== "Pull from Docker Hub"
+
+    ```bash
+    # .env — <dockerhub-username> must match DOCKERHUB_USERNAME in GitHub Actions secrets
+    REGISTRY=docker.io/<dockerhub-username>/
+    IMAGE_TAG=staging          # or 1.0.0 / 1.0.0.154
+    ```
+
+    ```bash
+    docker compose config | grep 'image:'
+    # expect: image: docker.io/<dockerhub-username>/bot:staging
+    ```
 
 === "Build locally"
 
@@ -92,7 +113,7 @@ docker compose logs bot --tail 20
 Startup order:
 
 ```
-postgres (healthy) → migrate (completed) → bot / dashboard / miniapp → frontend
+postgres (healthy) → migrate (completed) → bot / dashboard / crm-worker / miniapp → frontend
 ```
 
 Check health endpoints:
@@ -127,15 +148,49 @@ See [Payment gateways](payment-gateways.md).
 2. Create squad profiles → build Tariff Constructor tree → set promos
 3. Test purchase via MiniApp
 
+## Image versioning
+
+CI (`.github/workflows/build.yml`) builds on push to `develop` / `main` and on
+git tags `v*.*.*`. Images are pushed to **both** registries with identical tags:
+
+- `ghcr.io/l0nelynx/<service>`
+- `docker.io/<dockerhub-username>/<service>` (same name as `DOCKERHUB_USERNAME` in CI)
+
+Services: `python-base`, `bot`, `support-bot`, `dashboard`, `miniapp`, `frontend`.
+
+The application version is stored in the root `VERSION` file. CI adds a monotonic
+build number on `develop` (`github.run_number`).
+
+| Source | Example tags | Recommended `IMAGE_TAG` |
+|--------|--------------|-------------------------|
+| `develop` | `staging`, `1.0.0.<build>`, `sha-abc1234` | `staging` or pin `1.0.0.<build>` |
+| `main` | `latest`, `1.0.0`, `sha-abc1234` | `1.0.0` (avoid floating `latest` in prod) |
+| tag `v1.0.0` | `1.0.0`, `1.0`, `1`, `latest` | `1.0.0` |
+
+**Release flow (automated):** Actions → **Bump and Release** → choose `patch` /
+`minor` / `major`. The workflow bumps `VERSION` on `main`, creates git tag
+`vX.Y.Z`, and opens a GitHub Release. CI (`build.yml`) then builds and pushes
+all images with that version tag.
+
+**Release flow (manual tag):** push tag `v1.0.0` — the same workflow creates the
+GitHub Release; `build.yml` builds container images.
+
+**Dev flow:** each `develop` push publishes `<version>.<build>` plus moving
+`staging`. The bare semver tag (e.g. `1.0.0`) is **not** pushed from `develop` —
+only `main` and release tags `v*.*.*` own it, so a dev build cannot overwrite a
+production release.
+
 ## Containers
 
 | Container | Image | Internal port | Host port (debug) |
 |-----------|-------|---------------|-------------------|
 | `postgres` | `postgres:16-alpine` | `5432` | `127.0.0.1:5432` |
+| `redis` | `redis:7-alpine` | `6379` | — (internal) |
 | `migrate` | `bot` image | — | one-shot |
 | `bot` | `ghcr.io/l0nelynx/bot` | `5000` | `127.0.0.1:5000` |
 | `support-bot` | `support-bot` | — | no port |
 | `dashboard` | `dashboard` | `8000` | `127.0.0.1:8080` |
+| `crm-worker` | `dashboard` image | — | ARQ worker (no port) |
 | `miniapp` | `miniapp` | `8001` | `127.0.0.1:8001` |
 | `frontend` | `frontend` | `80` | `127.0.0.1:8088` |
 
@@ -154,7 +209,13 @@ Postgres is **not** on this network — the edge cannot reach the database direc
 
 ### data-network (compose-managed)
 
-`postgres`, `bot`, `dashboard`, `miniapp`, `migrate`.
+`postgres`, `redis`, `bot`, `dashboard`, `crm-worker`, `miniapp`, `migrate`.
+
+CRM mass broadcasts are enqueued by the `dashboard` API into Redis and executed
+by the `crm-worker` container. If `crm-worker` or `redis` is down, campaign
+launch returns HTTP 503.
+
+Set `REDIS_URL` in `.env` (default in compose: `redis://redis:6379/0`).
 
 Postgres binds `127.0.0.1:5432` on the host for backups and local tools. The
 network is not `internal: true` by default. For stricter isolation, uncomment

@@ -22,6 +22,8 @@ app_url = pytest.importorskip("app.database.url")
 
 SHIMMED_MODEL_NAMES = [
     "CacheVersion",
+    "CrmCampaign",
+    "CrmCampaignDelivery",
     "DisabledUser",
     "EmailVerification",
     "GooglePlayPurchase",

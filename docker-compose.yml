@@ -25,10 +25,29 @@ services:
       resources:
         limits:
           memory: 512M
+  redis:
+    container_name: xray-redis
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    volumes:
+      - ./redis_data:/data
+    networks:
+      - data-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    deploy:
+      resources:
+        limits:
+          memory: 128M
   # Build-only helper: the shared Python base image. Not started on `up`
   # (profile `build`). Build it first:  docker compose --profile build build base
   base:
-    image: ghcr.io/l0nelynx/python-base:${IMAGE_TAG:-staging}
+    image: ${REGISTRY:-ghcr.io/l0nelynx/}python-base:${IMAGE_TAG:-staging}
     build:
       context: .
       dockerfile: infra/docker/base.Dockerfile
@@ -36,13 +55,13 @@ services:
     command: ["true"]
   migrate:
     container_name: xray-migrate
-    image: ghcr.io/l0nelynx/bot:${IMAGE_TAG:-staging}
+    image: ${REGISTRY:-ghcr.io/l0nelynx/}bot:${IMAGE_TAG:-staging}
     build:
       context: .
       dockerfile: infra/docker/bot.Dockerfile
       args:
-        BASE_IMAGE: ${REGISTRY-ghcr.io/l0nelynx/}python-base:${IMAGE_TAG:-staging}
-        REGISTRY: ${REGISTRY-ghcr.io/l0nelynx/}
+        BASE_IMAGE: ${REGISTRY:-ghcr.io/l0nelynx/}python-base:${IMAGE_TAG:-staging}
+        REGISTRY: ${REGISTRY:-ghcr.io/l0nelynx/}
     command: ["python", "-c", "from migrations_runner import upgrade_to_head; upgrade_to_head()"]
     restart: "no"
     environment:
@@ -58,13 +77,13 @@ services:
           memory: 256M
   bot:
     container_name: bot
-    image: ghcr.io/l0nelynx/bot:${IMAGE_TAG:-staging}
+    image: ${REGISTRY:-ghcr.io/l0nelynx/}bot:${IMAGE_TAG:-staging}
     build:
       context: .
       dockerfile: infra/docker/bot.Dockerfile
       args:
-        BASE_IMAGE: ${REGISTRY-ghcr.io/l0nelynx/}python-base:${IMAGE_TAG:-staging}
-        REGISTRY: ${REGISTRY-ghcr.io/l0nelynx/}
+        BASE_IMAGE: ${REGISTRY:-ghcr.io/l0nelynx/}python-base:${IMAGE_TAG:-staging}
+        REGISTRY: ${REGISTRY:-ghcr.io/l0nelynx/}
     volumes:
       - ./config.yml:/usr/src/app/config.yml
     # Edge (nginx proxies /bot/ here) + private data-network (Postgres). The
@@ -96,7 +115,7 @@ services:
           memory: 512M
   support-bot:
     container_name: support-bot
-    image: ghcr.io/l0nelynx/support-bot:${IMAGE_TAG:-staging}
+    image: ${REGISTRY:-ghcr.io/l0nelynx/}support-bot:${IMAGE_TAG:-staging}
     build:
       context: .
       dockerfile: infra/docker/support_bot.Dockerfile
@@ -120,13 +139,13 @@ services:
           memory: 128M
   dashboard:
     container_name: dashboard
-    image: ghcr.io/l0nelynx/dashboard:${IMAGE_TAG:-staging}
+    image: ${REGISTRY:-ghcr.io/l0nelynx/}dashboard:${IMAGE_TAG:-staging}
     build:
       context: .
       dockerfile: infra/docker/dashboard.Dockerfile
       args:
-        BASE_IMAGE: ${REGISTRY-ghcr.io/l0nelynx/}python-base:${IMAGE_TAG:-staging}
-        REGISTRY: ${REGISTRY-ghcr.io/l0nelynx/}
+        BASE_IMAGE: ${REGISTRY:-ghcr.io/l0nelynx/}python-base:${IMAGE_TAG:-staging}
+        REGISTRY: ${REGISTRY:-ghcr.io/l0nelynx/}
     volumes:
       - ./config.yml:/app/config.yml:ro
       # Support-ticket image attachments — shared read-write with `miniapp`:
@@ -141,10 +160,13 @@ services:
     environment:
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-xray}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-xray_vpn_bot}
       - CONFIG_PATH=/app/config.yml
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
     restart: unless-stopped
     depends_on:
       migrate:
         condition: service_completed_successfully
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 60s
@@ -155,15 +177,43 @@ services:
       resources:
         limits:
           memory: 384M
+  crm-worker:
+    container_name: crm-worker
+    image: ${REGISTRY:-ghcr.io/l0nelynx/}dashboard:${IMAGE_TAG:-staging}
+    build:
+      context: .
+      dockerfile: infra/docker/dashboard.Dockerfile
+      args:
+        BASE_IMAGE: ${REGISTRY:-ghcr.io/l0nelynx/}python-base:${IMAGE_TAG:-staging}
+        REGISTRY: ${REGISTRY:-ghcr.io/l0nelynx/}
+    command: ["arq", "backend.worker.WorkerSettings"]
+    volumes:
+      - ./config.yml:/app/config.yml:ro
+    networks:
+      - data-network
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-xray}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-xray_vpn_bot}
+      - CONFIG_PATH=/app/config.yml
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 384M
   miniapp:
     container_name: miniapp
-    image: ghcr.io/l0nelynx/miniapp:${IMAGE_TAG:-staging}
+    image: ${REGISTRY:-ghcr.io/l0nelynx/}miniapp:${IMAGE_TAG:-staging}
     build:
       context: .
       dockerfile: infra/docker/miniapp.Dockerfile
       args:
-        BASE_IMAGE: ${REGISTRY-ghcr.io/l0nelynx/}python-base:${IMAGE_TAG:-staging}
-        REGISTRY: ${REGISTRY-ghcr.io/l0nelynx/}
+        BASE_IMAGE: ${REGISTRY:-ghcr.io/l0nelynx/}python-base:${IMAGE_TAG:-staging}
+        REGISTRY: ${REGISTRY:-ghcr.io/l0nelynx/}
     volumes:
       - ./config.yml:/app/config.yml:ro
       # Optional: override the /connect-page app catalog without a frontend
@@ -201,7 +251,7 @@ services:
           memory: 384M
   frontend:
     container_name: frontend
-    image: ghcr.io/l0nelynx/frontend:${IMAGE_TAG:-staging}
+    image: ${REGISTRY:-ghcr.io/l0nelynx/}frontend:${IMAGE_TAG:-staging}
     build:
       context: .
       dockerfile: infra/docker/frontend.Dockerfile

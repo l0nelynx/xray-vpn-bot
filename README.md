@@ -37,10 +37,17 @@ built in this repo and served by the `frontend` container. The **browser web
 portal** frontend lives in a [separate repository](https://github.com/l0nelynx/web-portal)
 and calls the same miniapp API (see [docs/web-portal.md](docs/web-portal.md)).
 
-Images are built by CI (`.github/workflows/build.yml` and `.gitlab-ci.yml`) and published as:
-- `:latest` — built from `main`
-- `:staging` — built from `develop`
-- `:sha-<short>` / `:build-<n>` — immutable per-build tags
+Images are built by CI (`.github/workflows/build.yml` and `.gitlab-ci.yml`) and
+published to **GHCR** and **Docker Hub** (`ghcr.io/l0nelynx/*` and
+`docker.io/<dockerhub-username>/*` — hub namespace = `DOCKERHUB_USERNAME` secret):
+
+| Branch / event | Tags | Use |
+|----------------|------|-----|
+| `develop` | `staging`, `1.x.x.<build>`, `sha-<short>` | dev / staging servers |
+| `main` | `latest`, `1.x.x`, `sha-<short>` | production (`IMAGE_TAG` = semver, not `latest`) |
+| git tag `v1.x.x` | `1.x.x`, `1.x`, `1`, `latest`, `sha-<short>` | release pin |
+
+Application version lives in the root `VERSION` file.
 
 **Documentation site:** [l0nelynx.github.io/xray-vpn-bot](https://l0nelynx.github.io/xray-vpn-bot/)
 (built from `docs/` via MkDocs on push to `main`).

@@ -16,6 +16,8 @@ from common_db import Base  # noqa: F401  (legacy: miniapp code may reference Ba
 from common_db.models import (  # noqa: F401
     BotFeatureFlags,
     CacheVersion,
+    CrmCampaign,
+    CrmCampaignDelivery,
     DisabledUser,
     EmailVerification,
     GooglePlayPurchase,
@@ -43,6 +45,8 @@ __all__ = [
     "Base",
     "BotFeatureFlags",
     "CacheVersion",
+    "CrmCampaign",
+    "CrmCampaignDelivery",
     "DisabledUser",
     "EmailVerification",
     "GooglePlayPurchase",

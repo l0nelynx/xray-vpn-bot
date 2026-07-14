@@ -44,63 +44,6 @@ interface ExecuteResult {
 }
 
 // ─────────────────────────────────────────────────────
-// Broadcast tab
-// ─────────────────────────────────────────────────────
-function BroadcastTab() {
-  const { message } = App.useApp();
-  const [text, setText] = useState("");
-  const [attachButton, setAttachButton] = useState(false);
-  const [loading, setLoading] = useState(false);
-
-  const send = async () => {
-    if (!text.trim()) {
-      message.warning("Введите текст рассылки");
-      return;
-    }
-    setLoading(true);
-    try {
-      const res = await api.post<{ status: string; total: number }>(
-        "/tg-admin/broadcast",
-        { text, attach_button: attachButton }
-      );
-      message.success(`Рассылка запущена для ${res.total} пользователей`);
-      setText("");
-    } catch {
-      message.error("Ошибка запуска рассылки");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <Card title="Рассылка всем пользователям" style={{ maxWidth: 700 }}>
-      <Space direction="vertical" style={{ width: "100%" }} size={12}>
-        <TextArea
-          rows={6}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder="Текст сообщения (HTML-разметка поддерживается)"
-        />
-        <Checkbox checked={attachButton} onChange={(e) => setAttachButton(e.target.checked)}>
-          Прикрепить кнопку «Открыть бота»
-        </Checkbox>
-        <Popconfirm
-          title="Запустить рассылку?"
-          description="Сообщение будет отправлено всем пользователям бота."
-          onConfirm={send}
-          okText="Да, запустить"
-          cancelText="Отмена"
-        >
-          <Button type="primary" icon={<SendOutlined />} loading={loading}>
-            Запустить рассылку
-          </Button>
-        </Popconfirm>
-      </Space>
-    </Card>
-  );
-}
-
-// ─────────────────────────────────────────────────────
 // Channel post tab
 // ─────────────────────────────────────────────────────
 function ChannelPostTab() {
@@ -306,11 +249,6 @@ function CleanTab({
 // ─────────────────────────────────────────────────────
 export default function TgAdminPage() {
   const items = [
-    {
-      key: "broadcast",
-      label: "Рассылка",
-      children: <BroadcastTab />,
-    },
     {
       key: "channel",
       label: "Пост в канал",

@@ -70,9 +70,10 @@ async def ensure_free_subscription(user_id: int, email: str) -> str | None:
     client = _rw_client()
 
     existing_uuid = await repo.get_user_vless_uuid(user_id)
-    user_info = None
-    if existing_uuid:
-        user_info = await client.get_user_by_username(username)
+    user_info = await client.get_user_by_username(username)
+    if user_info and user_info.get("uuid") and not existing_uuid:
+        await repo.set_user_vless_uuid(user_id, str(user_info["uuid"]))
+        existing_uuid = str(user_info["uuid"])
 
     scenario = resolve_scenario(user_info, SubscriptionType.FREE)
 

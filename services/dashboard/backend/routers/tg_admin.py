@@ -1,30 +1,30 @@
-"""TG Admin router — broadcast, channel posts, sub-clean, telemt-clean.
+"""TG Admin router — channel posts, sub-clean, telemt-clean.
 
 All Telegram API calls go directly via httpx (same pattern as support.py).
 Remnawave calls use remnawave_client (installed in dashboard/Dockerfile).
 """
 
 import asyncio
-import json
 import logging
 import re
 from datetime import datetime
 
 import httpx
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import select
 
 from common_db.repo.users import PAID_ORDER_STATUSES
 
 from ..auth import get_current_user
 from ..config import (
-    get_bot_token, get_news_id, get_news_url,
+    get_news_id, get_news_url,
     get_remnawave_token, get_remnawave_url,
     get_telemt_header, get_telemt_server,
 )
 from ..database.models import DisabledUser, Transaction, User
 from ..database.session import async_session
+from ..telegram import tg_send, tg_url, tg_bot_open_url
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/tg-admin", tags=["tg-admin"])
@@ -34,29 +34,13 @@ router = APIRouter(prefix="/api/tg-admin", tags=["tg-admin"])
 # Helpers
 # ──────────────────────────────────────────────────────────────────────────────
 
-def _tg_url(method: str) -> str:
-    return f"https://api.telegram.org/bot{get_bot_token()}/{method}"
-
-
-async def _tg_send(chat_id: int, text: str, reply_markup: dict | None = None) -> bool:
-    payload: dict = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
-    if reply_markup:
-        payload["reply_markup"] = json.dumps(reply_markup)
-    try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            r = await client.post(_tg_url("sendMessage"), json=payload)
-            return r.status_code == 200
-    except Exception:
-        return False
-
-
 async def _check_subscribed(tg_id: int, news_id: int, sem: asyncio.Semaphore) -> bool:
     """Return True if user is subscribed to the channel (or on API error — safer)."""
     async with sem:
         try:
             async with httpx.AsyncClient(timeout=8) as client:
                 r = await client.get(
-                    _tg_url("getChatMember"),
+                    tg_url("getChatMember"),
                     params={"chat_id": news_id, "user_id": tg_id},
                 )
             if r.status_code != 200:
@@ -85,72 +69,6 @@ def _rw_client():
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Broadcast
-# ──────────────────────────────────────────────────────────────────────────────
-
-class BroadcastRequest(BaseModel):
-    text: str
-    attach_button: bool = False
-
-
-async def _run_broadcast(text: str, bot_username: str):
-    async with async_session() as session:
-        rows = await session.execute(
-            select(User.tg_id).where(User.tg_id.is_not(None), User.is_banned != True)
-        )
-        tg_ids = [r[0] for r in rows.fetchall()]
-
-    reply_markup = None
-    if bot_username:
-        reply_markup = {"inline_keyboard": [[
-            {"text": "Открыть бота", "url": f"https://t.me/{bot_username}"}
-        ]]}
-
-    sent = failed = 0
-    for i, tg_id in enumerate(tg_ids):
-        ok = await _tg_send(tg_id, text, reply_markup)
-        if ok:
-            sent += 1
-        else:
-            failed += 1
-        # ~30 msg/s to different users; sleep every 25 to stay under rate limit
-        if (i + 1) % 25 == 0:
-            await asyncio.sleep(1)
-
-    logger.info("Broadcast done: sent=%d failed=%d", sent, failed)
-
-
-@router.post("/broadcast")
-async def broadcast(
-    body: BroadcastRequest,
-    background_tasks: BackgroundTasks,
-    _: str = Depends(get_current_user),
-):
-    if not body.text.strip():
-        raise HTTPException(400, "Text is required")
-
-    bot_username = ""
-    if body.attach_button:
-        try:
-            async with httpx.AsyncClient(timeout=5) as client:
-                r = await client.get(_tg_url("getMe"))
-            if r.status_code == 200:
-                bot_username = r.json().get("result", {}).get("username", "")
-        except Exception:
-            pass
-
-    async with async_session() as session:
-        total = await session.scalar(
-            select(func.count()).select_from(User).where(
-                User.tg_id.is_not(None), User.is_banned != True
-            )
-        ) or 0
-
-    background_tasks.add_task(_run_broadcast, body.text, bot_username)
-    return {"status": "started", "total": total}
-
-
-# ──────────────────────────────────────────────────────────────────────────────
 # Channel post
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -172,17 +90,17 @@ async def channel_post(body: ChannelPostRequest, _: str = Depends(get_current_us
     if body.attach_button:
         try:
             async with httpx.AsyncClient(timeout=5) as client:
-                r = await client.get(_tg_url("getMe"))
+                r = await client.get(tg_url("getMe"))
             if r.status_code == 200:
                 username = r.json().get("result", {}).get("username", "")
                 if username:
                     reply_markup = {"inline_keyboard": [[
-                        {"text": "Открыть бота", "url": f"https://t.me/{username}"}
+                        {"text": "Открыть бота", "url": tg_bot_open_url(username)}
                     ]]}
         except Exception:
             pass
 
-    ok = await _tg_send(int(news_id), body.text, reply_markup)
+    ok = await tg_send(int(news_id), body.text, reply_markup)
     if not ok:
         raise HTTPException(502, "Failed to post to channel")
     return {"ok": True}
@@ -300,7 +218,7 @@ async def sub_clean_execute(body: SubCleanExecuteRequest, _: str = Depends(get_c
             errors += 1
             continue
 
-        ok = await _tg_send(
+        ok = await tg_send(
             tg_id,
             (
                 "<b>Доступ к VPN приостановлен</b>\n\n"
@@ -437,7 +355,7 @@ async def telemt_clean_execute(body: TelmtCleanExecuteRequest, _: str = Depends(
 
         db_user = db_users.get(username)
         if db_user and db_user.tg_id:
-            ok = await _tg_send(
+            ok = await tg_send(
                 db_user.tg_id,
                 (
                     "<b>Доступ к Telemt удалён</b>\n\n"

@@ -20,6 +20,7 @@ import {
   MessageOutlined,
   MobileOutlined,
   GiftOutlined,
+  CustomerServiceOutlined,
   RobotOutlined,
 } from "@ant-design/icons";
 import { api, clearToken } from "../api/client";
@@ -44,6 +45,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/webapp/tariffs": "Tariff Constructor",
   "/webapp/settings": "Settings",
   "/tg-admin": "TG Admin",
+  "/crm": "CRM",
 };
 
 function buildMenuItems(legacyEnabled: boolean): ItemType[] {
@@ -84,6 +86,7 @@ function buildMenuItems(legacyEnabled: boolean): ItemType[] {
         { key: "/store", icon: <ShopOutlined />, label: "Store" },
         { key: "/support", icon: <MessageOutlined />, label: "Support" },
         { key: "/promocodes", icon: <GiftOutlined />, label: "Promocodes" },
+        { key: "/crm", icon: <CustomerServiceOutlined />, label: "CRM" },
         { key: "/tg-admin", icon: <RobotOutlined />, label: "TG Admin" },
       ],
     } as ItemType,

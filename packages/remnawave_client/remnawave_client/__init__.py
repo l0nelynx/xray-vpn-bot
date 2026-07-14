@@ -17,7 +17,28 @@ from . import api
 from .api import set_config_provider
 from .client import RemnawaveClient, configure, get_default_client
 from .operations import apply_extend, apply_new_user, apply_update
+from .perks import apply_crm_bonus_days, apply_crm_bonus_traffic
 from .scenarios import SubscriptionScenario, SubscriptionType, resolve_scenario
+from .segmentation import (
+    DEFAULT_DAYS_THRESHOLD,
+    DEFAULT_INVOICE_MAX_AGE_HOURS,
+    DEFAULT_TORRENT_DAYS,
+    DEFAULT_TRAFFIC_THRESHOLD,
+    PREVIEW_LIMIT,
+    SEGMENT_ALL_USERS,
+    SEGMENT_DEVICE_LIMIT,
+    SEGMENT_EXPIRED,
+    SEGMENT_EXPIRING_SOON,
+    SEGMENT_LIMITED,
+    SEGMENT_NEVER_CONNECTED,
+    SEGMENT_TORRENT,
+    SEGMENT_TRAFFIC_LOW,
+    SEGMENT_UNPAID_INVOICE,
+    matches_rw_segment,
+    normalize_user_for_crm,
+    segment_meta,
+)
+from .torrent_blocker import collect_torrent_user_uuids, fetch_torrent_blocker_reports
 from . import webhooks
 from .webhooks import (
     RemnawaveWebhookPayload,
@@ -41,6 +62,27 @@ __all__ = [
     "apply_new_user",
     "apply_extend",
     "apply_update",
+    "apply_crm_bonus_days",
+    "apply_crm_bonus_traffic",
+    "DEFAULT_DAYS_THRESHOLD",
+    "DEFAULT_INVOICE_MAX_AGE_HOURS",
+    "DEFAULT_TORRENT_DAYS",
+    "DEFAULT_TRAFFIC_THRESHOLD",
+    "PREVIEW_LIMIT",
+    "SEGMENT_ALL_USERS",
+    "SEGMENT_DEVICE_LIMIT",
+    "SEGMENT_EXPIRED",
+    "SEGMENT_EXPIRING_SOON",
+    "SEGMENT_LIMITED",
+    "SEGMENT_NEVER_CONNECTED",
+    "SEGMENT_TORRENT",
+    "SEGMENT_TRAFFIC_LOW",
+    "SEGMENT_UNPAID_INVOICE",
+    "matches_rw_segment",
+    "normalize_user_for_crm",
+    "segment_meta",
+    "collect_torrent_user_uuids",
+    "fetch_torrent_blocker_reports",
     "webhooks",
     "RemnawaveWebhookPayload",
     "verify_webhook_signature",

@@ -148,10 +148,52 @@ class RemnawaveClient:
 
     # ----- read -----
 
+    async def _fetch_users_page(
+        self, *, start: int = 0, size: int = 500
+    ) -> UsersResponseDto:
+        """Paginated users list — works across SDK versions."""
+        users_ctrl = self.sdk.users
+        fetch_v2 = getattr(users_ctrl, "get_all_users_v2", None)
+        if fetch_v2 is not None:
+            return await fetch_v2(start=start, size=size)
+        try:
+            return await users_ctrl.get_all_users(start=start, size=size)
+        except TypeError:
+            if start != 0:
+                raise
+            return await users_ctrl.get_all_users()
+
     async def get_all_users(self) -> UsersResponseDto:
-        response: UsersResponseDto = await self.sdk.users.get_all_users_v2()
+        response = await self._fetch_users_page()
         logger.info("Remnawave total users: %s", response.total)
         return response
+
+    async def get_all_users_for_crm(self) -> list[dict]:
+        """Bulk-fetch every panel user normalized for CRM segmentation."""
+        from .segmentation import normalize_user_for_crm
+
+        page_size = 500
+        start = 0
+        total: int | None = None
+        normalized: list[dict] = []
+
+        while True:
+            response = await self._fetch_users_page(start=start, size=page_size)
+            raw_users = (
+                getattr(response, "users", None)
+                or getattr(response, "root", None)
+                or []
+            )
+            if total is None:
+                total = int(getattr(response, "total", None) or len(raw_users))
+                logger.info("Remnawave total users: %s", total)
+
+            normalized.extend(normalize_user_for_crm(u) for u in raw_users)
+            start += len(raw_users)
+            if not raw_users or start >= total:
+                break
+
+        return normalized
 
     async def get_user_by_username(self, username: str) -> dict | None:
         try:

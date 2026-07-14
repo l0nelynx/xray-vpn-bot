@@ -15,6 +15,7 @@ import SupportPage from "./pages/SupportPage";
 import WebAppTariffsPage from "./pages/WebAppTariffsPage";
 import WebAppSettingsPage from "./pages/WebAppSettingsPage";
 import TgAdminPage from "./pages/TgAdminPage";
+import CrmPage from "./pages/CrmPage";
 import PromocodesPage from "./pages/PromocodesPage";
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -50,6 +51,7 @@ export default function App() {
         <Route path="webapp/tariffs" element={<WebAppTariffsPage />} />
         <Route path="webapp/settings" element={<WebAppSettingsPage />} />
         <Route path="tg-admin" element={<TgAdminPage />} />
+        <Route path="crm" element={<CrmPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
