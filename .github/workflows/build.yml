@@ -121,7 +121,6 @@ jobs:
           elif [[ "$REF" == refs/heads/develop ]]; then
             BASE_TAG="staging"
             add_tag "${VERSION}.${BUILD}"
-            add_tag "$VERSION"
             add_tag "staging"
           else
             echo "Unsupported ref: $REF" >&2
