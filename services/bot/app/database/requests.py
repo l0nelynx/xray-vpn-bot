@@ -439,16 +439,12 @@ async def update_delivery_status(transaction_id: str, new_delivery_status: int) 
 
 async def cleanup_stale_transactions(hours: int = 24) -> int:
     """Удаляет транзакции со статусом 'created', у которых created_at старше hours часов или отсутствует."""
-    cutoff = (datetime.now() - timedelta(hours=hours)).isoformat(timespec='seconds')
+    from common_db.repo import transactions as _repo_transactions
+
     async with async_session() as session:
-        result = await session.execute(
-            delete(Transaction).where(
-                Transaction.order_status == 'created',
-                (Transaction.created_at == None) | (Transaction.created_at < cutoff),  # noqa: E711
-            )
-        )
+        deleted = await _repo_transactions.cleanup_stale_transactions(session, hours=hours)
         await session.commit()
-        return result.rowcount
+        return deleted
 
 
 async def get_user_transactions_detailed(tg_id: int) -> list[dict]:

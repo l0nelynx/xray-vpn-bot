@@ -21,9 +21,6 @@ _notify = admin_bot or bot
 async def start_bot():
     await _notify.send_message(secrets.get('admin_id'), 'Бот запущен')
     await async_main()
-    cleaned = await rq.cleanup_stale_transactions(hours=24)
-    if cleaned:
-        logger.info(f"Cleaned {cleaned} stale 'created' transactions")
 
 
 async def userlist():

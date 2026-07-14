@@ -1,5 +1,5 @@
-import { Table, Select, DatePicker, Tag, Card, Button, Input } from "antd";
-import { SearchOutlined } from "@ant-design/icons";
+import { Table, Select, DatePicker, Tag, Card, Button, Input, Popconfirm, App } from "antd";
+import { DeleteOutlined, SearchOutlined } from "@ant-design/icons";
 import type { TableProps } from "antd";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "../api/client";
@@ -24,6 +24,7 @@ const SORT_OPTIONS = [
 ];
 
 export default function TransactionsTable() {
+  const { message } = App.useApp();
   const [data, setData] = useState<TransactionItem[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -35,6 +36,7 @@ export default function TransactionsTable() {
   const [sort, setSort] = useState("created_at");
   const [order, setOrder] = useState<SortOrder>("desc");
   const [loading, setLoading] = useState(false);
+  const [cleaning, setCleaning] = useState(false);
   const isMobile = useIsMobile();
   const debouncedSearch = useDebounce(search, 400);
   const abortRef = useRef<AbortController | null>(null);
@@ -68,6 +70,22 @@ export default function TransactionsTable() {
     fetchData();
     return () => abortRef.current?.abort();
   }, [fetchData]);
+
+  const cleanupStale = async () => {
+    setCleaning(true);
+    try {
+      const res = await api.post<{ deleted: number; hours: number }>(
+        "/transactions/cleanup-stale?hours=168"
+      );
+      message.success(`Deleted ${res.deleted} stale created transactions (older than 7 days)`);
+      setPage(1);
+      await fetchData();
+    } catch {
+      message.error("Failed to clean up transactions");
+    } finally {
+      setCleaning(false);
+    }
+  };
 
   const sortOrderFor = (key: string) =>
     sort === key ? (order === "asc" ? "ascend" : "descend") : null;
@@ -223,6 +241,22 @@ export default function TransactionsTable() {
             setPage(1);
           }}
         />
+        <Popconfirm
+          title="Clean up stale transactions?"
+          description="Delete all created transactions older than 7 days (or without a timestamp)."
+          onConfirm={cleanupStale}
+          okText="Delete"
+          cancelText="Cancel"
+        >
+          <Button
+            danger
+            icon={<DeleteOutlined />}
+            loading={cleaning}
+            style={{ marginLeft: isMobile ? 0 : "auto" }}
+          >
+            Clean stale
+          </Button>
+        </Popconfirm>
       </div>
 
       {isMobile ? (

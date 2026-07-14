@@ -1,11 +1,30 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 from sqlalchemy import select, func, or_
+
+from common_db.repo import transactions as transactions_repo
 
 from ..auth import get_current_user
 from ..database.models import Transaction, User
 from ..database.session import async_session
 
 router = APIRouter(prefix="/api/transactions", tags=["transactions"])
+
+
+class CleanupStaleResponse(BaseModel):
+    deleted: int
+    hours: int
+
+
+@router.post("/cleanup-stale", response_model=CleanupStaleResponse)
+async def cleanup_stale_transactions(
+    hours: int = Query(168, ge=1, le=8760, description="Delete created transactions older than this many hours"),
+    _: str = Depends(get_current_user),
+):
+    async with async_session() as session:
+        deleted = await transactions_repo.cleanup_stale_transactions(session, hours=hours)
+        await session.commit()
+    return CleanupStaleResponse(deleted=deleted, hours=hours)
 
 
 @router.get("/recent")
