@@ -31,6 +31,7 @@ async def _persist_vless_uuid(
     user_id: int,
     username: str,
     uuid: str | None,
+    rw_id: int | None = None,
 ) -> None:
     if not uuid:
         return
@@ -41,6 +42,7 @@ async def _persist_vless_uuid(
         username=username,
         vless_uuid=str(uuid),
         api_provider="remnawave",
+        rw_id=rw_id,
     )
 
 
@@ -337,6 +339,7 @@ async def _handle_new_user(
             username=username,
             vless_uuid=buyer_info["uuid"],
             api_provider="remnawave",
+            rw_id=buyer_info.get("rw_id"),
         )
 
     expire_day = await get_user_days(buyer_info)
@@ -437,6 +440,7 @@ async def _handle_extend_subscription(
         user_id,
         username,
         target_uuid or (buyer_info or {}).get("uuid"),
+        rw_id=(buyer_info or {}).get("rw_id"),
     )
 
     return {"days": final_expire_day, "link": sub_link}
@@ -517,6 +521,7 @@ async def _handle_update_subscription(
         user_id,
         username,
         target_uuid or (buyer_info or {}).get("uuid"),
+        rw_id=(buyer_info or {}).get("rw_id"),
     )
 
     return {"days": expire_day, "link": sub_link}
@@ -553,9 +558,13 @@ async def _handle_limited(
         logging.warning(f"Cannot send limited message: message={message}")
 
     if isinstance(message, Message):
-        await _persist_vless_uuid(message.from_user.id, username, user_info.get("uuid"))
+        await _persist_vless_uuid(
+            message.from_user.id, username, user_info.get("uuid"), user_info.get("rw_id"),
+        )
     elif isinstance(message, CallbackQuery):
-        await _persist_vless_uuid(message.from_user.id, username, user_info.get("uuid"))
+        await _persist_vless_uuid(
+            message.from_user.id, username, user_info.get("uuid"), user_info.get("rw_id"),
+        )
 
     return {"days": expire_day, "limited": True}
 
@@ -593,7 +602,9 @@ async def _handle_already_active(
     await _send_response(message, response_text, sub_link, user_id, lang)
 
     if user_id:
-        await _persist_vless_uuid(user_id, username, user_info.get("uuid"))
+        await _persist_vless_uuid(
+            user_id, username, user_info.get("uuid"), user_info.get("rw_id"),
+        )
 
     return {"days": expire_day, "link": sub_link, "already_active": True}
 

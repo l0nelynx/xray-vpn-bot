@@ -124,6 +124,80 @@ async def list_users(
     return {"items": users, "total": total, "page": page, "per_page": per_page}
 
 
+@router.post("/backfill-rw-ids")
+async def backfill_rw_ids(_: str = Depends(get_current_user)):
+    """Temporary bulk backfill: map local vless_uuid -> Remnawave panel id."""
+    rw_url = get_remnawave_url()
+    rw_token = get_remnawave_token()
+    if not rw_url or not rw_token:
+        raise HTTPException(status_code=503, detail="Remnawave not configured")
+
+    from remnawave_client import configure
+
+    rw = configure(base_url=rw_url, token=rw_token, free_squad_id="")
+
+    async with async_session() as session:
+        result = await session.execute(
+            select(User.id, User.vless_uuid).where(
+                User.vless_uuid.isnot(None),
+                User.vless_uuid != "",
+                User.rw_id.is_(None),
+            )
+        )
+        candidates = list(result.all())
+
+    local_candidates = len(candidates)
+    if not local_candidates:
+        return {
+            "local_candidates": 0,
+            "updated": 0,
+            "not_found_on_panel": 0,
+            "errors": 0,
+        }
+
+    try:
+        panel_users = await rw.get_all_users_for_crm()
+    except Exception as exc:
+        logger.exception("backfill_rw_ids: Remnawave fetch failed")
+        raise HTTPException(status_code=502, detail=f"Remnawave fetch failed: {exc}") from exc
+
+    uuid_to_rw_id: dict[str, int] = {}
+    for panel_user in panel_users:
+        panel_uuid = panel_user.get("uuid")
+        panel_rw_id = panel_user.get("rw_id")
+        if panel_uuid and panel_rw_id is not None:
+            uuid_to_rw_id[str(panel_uuid).lower()] = int(panel_rw_id)
+
+    updated = 0
+    not_found_on_panel = 0
+    errors = 0
+
+    async with async_session() as session:
+        for user_id, vless_uuid in candidates:
+            rw_id = uuid_to_rw_id.get((vless_uuid or "").lower())
+            if rw_id is None:
+                not_found_on_panel += 1
+                continue
+            try:
+                user = await session.get(User, user_id)
+                if user is None:
+                    errors += 1
+                    continue
+                user.rw_id = rw_id
+                updated += 1
+            except Exception:
+                logger.exception("backfill_rw_ids: failed for user id=%s", user_id)
+                errors += 1
+        await session.commit()
+
+    return {
+        "local_candidates": local_candidates,
+        "updated": updated,
+        "not_found_on_panel": not_found_on_panel,
+        "errors": errors,
+    }
+
+
 @router.get("/{tg_id}")
 async def get_user(tg_id: int, _: str = Depends(get_current_user)):
     async with async_session() as session:
@@ -339,6 +413,9 @@ async def update_email(tg_id: int, body: UpdateEmailRequest, _: str = Depends(ge
                 if user:
                     user.vless_uuid = rw_uuid
                     user.api_provider = "remnawave"
+                    rw_id = rw_user.get("rw_id")
+                    if rw_id is not None:
+                        user.rw_id = rw_id
                     await session.commit()
     except Exception as exc:
         logger.warning("RW email lookup failed for %s: %s", email, exc)

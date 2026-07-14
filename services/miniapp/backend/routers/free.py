@@ -28,6 +28,7 @@ async def _persist_rw_uuid(user: User, rw_user: dict | None) -> None:
             tg_id=user.tg_id,
             vless_uuid=str(rw_user["uuid"]),
             username=user.username,
+            rw_id=rw_user.get("rw_id"),
         )
         await session.commit()
 

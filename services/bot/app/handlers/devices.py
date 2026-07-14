@@ -35,6 +35,7 @@ async def _get_user_uuid(tg_id: int, username: str) -> str | None:
             username=username,
             vless_uuid=rw_user["uuid"],
             api_provider="remnawave",
+            rw_id=rw_user.get("rw_id"),
         )
         logger.info("Resolved and saved uuid for user %s (tg_id=%s)", username, tg_id)
         return rw_user["uuid"]

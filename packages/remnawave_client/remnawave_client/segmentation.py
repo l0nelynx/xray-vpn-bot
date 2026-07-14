@@ -130,8 +130,17 @@ def normalize_user_for_crm(user: UserResponseDto | dict) -> dict:
     if limit_bytes > 0:
         traffic_ratio = used_bytes / limit_bytes
 
+    rw_id_raw = _get_attr(user, "id")
+    rw_id: int | None = None
+    if rw_id_raw is not None:
+        try:
+            rw_id = int(rw_id_raw)
+        except (TypeError, ValueError):
+            rw_id = None
+
     return {
         "uuid": str(uuid) if uuid else None,
+        "rw_id": rw_id,
         "status": status,
         "expire_ts": expire_ts,
         "days_left": days_left,

@@ -32,6 +32,9 @@ class User(Base):
     # VLESS UUID assigned by the VPN provider.
     vless_uuid: Mapped[str] = mapped_column(String(100), nullable=True)
 
+    # Remnawave panel numeric user id (int64). Nullable until backfilled.
+    rw_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+
     # API provider key. Python default ≠ DB server_default by design — see
     # module docstring. Don't change without an explicit Alembic migration.
     api_provider: Mapped[str] = mapped_column(

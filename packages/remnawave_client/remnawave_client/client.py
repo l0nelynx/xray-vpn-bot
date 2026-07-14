@@ -71,6 +71,20 @@ _STATUS_MAP = {
 }
 
 
+def _extract_rw_id(user: UserResponseDto | dict) -> int | None:
+    """Remnawave panel numeric user id from SDK DTO or raw dict."""
+    if isinstance(user, dict):
+        raw = user.get("id")
+    else:
+        raw = getattr(user, "id", None)
+    if raw is None:
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
+
+
 def _normalize_user(user: UserResponseDto) -> dict:
     """SDK user DTO -> normalized dict shared across consumers.
 
@@ -91,6 +105,7 @@ def _normalize_user(user: UserResponseDto) -> dict:
 
     return {
         "uuid": str(user.uuid) if user.uuid else None,
+        "rw_id": _extract_rw_id(user),
         "expire": expire_ts,
         "subscription_url": user.subscription_url,
         "status": user.status.value.lower() if user.status else None,
@@ -293,6 +308,7 @@ class RemnawaveClient:
             expire_ts = int(response.expire_at.timestamp()) if response.expire_at else None
             return {
                 "uuid": str(response.uuid) if response.uuid else None,
+                "rw_id": _extract_rw_id(response),
                 "expire": expire_ts,
                 "subscription_url": response.subscription_url,
                 "status": "active",
@@ -373,6 +389,7 @@ class RemnawaveClient:
             )
             return {
                 "uuid": str(response.uuid) if response.uuid else None,
+                "rw_id": _extract_rw_id(response),
                 "expire": expire_ts,
                 "subscription_url": response.subscription_url,
                 "status": response.status.value.lower() if response.status else None,

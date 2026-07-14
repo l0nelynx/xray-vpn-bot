@@ -75,6 +75,7 @@ async def admin_email_save(message: Message, state: FSMContext):
                     username=info.get("username"),
                     vless_uuid=rw_user["uuid"],
                     api_provider="remnawave",
+                    rw_id=rw_user.get("rw_id"),
                 )
                 await message.answer(
                     f"Пользователь найден в RemnaWave по email.\n"

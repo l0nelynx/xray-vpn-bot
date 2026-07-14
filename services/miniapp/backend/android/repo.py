@@ -407,12 +407,20 @@ async def get_user_vless_uuid(user_id: int) -> str | None:
     return row[0] if row else None
 
 
-async def set_user_vless_uuid(user_id: int, uuid: str) -> None:
+async def set_user_vless_uuid(
+    user_id: int, uuid: str, rw_id: int | None = None,
+) -> None:
     async with async_session() as s:
-        await s.execute(
-            text("UPDATE users SET vless_uuid = :u WHERE id = :i"),
-            {"u": uuid, "i": user_id},
-        )
+        if rw_id is not None:
+            await s.execute(
+                text("UPDATE users SET vless_uuid = :u, rw_id = :r WHERE id = :i"),
+                {"u": uuid, "r": rw_id, "i": user_id},
+            )
+        else:
+            await s.execute(
+                text("UPDATE users SET vless_uuid = :u WHERE id = :i"),
+                {"u": uuid, "i": user_id},
+            )
         await s.commit()
 
 

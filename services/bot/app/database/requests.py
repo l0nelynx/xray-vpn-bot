@@ -98,7 +98,13 @@ async def create_user_with_info(tg_id: int, username: str, vless_uuid: str = Non
         return new_user
 
 
-async def update_user_api_info(tg_id: int = 0, username: str = 0, vless_uuid: str = None, api_provider: str = None):
+async def update_user_api_info(
+    tg_id: int = 0,
+    username: str = 0,
+    vless_uuid: str = None,
+    api_provider: str = None,
+    rw_id: int | None = None,
+):
     """
     Обновляет информацию пользователя об API провайдере
 
@@ -107,6 +113,7 @@ async def update_user_api_info(tg_id: int = 0, username: str = 0, vless_uuid: st
         username (str): Telegram username
         vless_uuid (str): UUID для VLESS конфигурации
         api_provider (str): Провайдер API (marzban или remnawave)
+        rw_id: Remnawave panel numeric user id
 
     Returns:
         bool: True если успешно, False если пользователь не найден
@@ -122,6 +129,8 @@ async def update_user_api_info(tg_id: int = 0, username: str = 0, vless_uuid: st
             user.vless_uuid = f"{vless_uuid}"
         if api_provider is not None:
             user.api_provider = api_provider
+        if rw_id is not None:
+            user.rw_id = rw_id
 
         await session.commit()
         return True
