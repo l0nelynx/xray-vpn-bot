@@ -8,6 +8,7 @@ import useIsMobile from "../hooks/useIsMobile";
 import useDebounce from "../hooks/useDebounce";
 import MobileSortControl, { SortOrder } from "./MobileSortControl";
 import { STATUS_COLORS } from "../utils/constants";
+import { makePaginatedTableChange } from "../utils/tableChange";
 
 const { RangePicker } = DatePicker;
 
@@ -107,14 +108,14 @@ export default function TransactionsTable() {
     },
   ];
 
-  const handleTableChange: TableProps<TransactionItem>["onChange"] = (_p, _f, sorter) => {
-    const s = Array.isArray(sorter) ? sorter[0] : sorter;
-    if (s && s.order) {
-      setSort(String(s.field));
-      setOrder(s.order === "ascend" ? "asc" : "desc");
-    }
-    setPage(1);
-  };
+  const handleTableChange = makePaginatedTableChange<TransactionItem>({
+    page,
+    sort,
+    order,
+    setPage,
+    setSort,
+    setOrder,
+  });
 
   const renderMobileCard = (tx: TransactionItem) => (
     <Card
@@ -264,7 +265,6 @@ export default function TransactionsTable() {
             current: page,
             pageSize: perPage,
             total,
-            onChange: setPage,
             showSizeChanger: false,
             showTotal: (t) => `Total: ${t}`,
           }}

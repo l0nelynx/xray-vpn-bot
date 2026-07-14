@@ -27,6 +27,7 @@ import useIsMobile from "../hooks/useIsMobile";
 import { useAuthedImage } from "../hooks/useAuthedImage";
 import MobileSortControl, { SortOrder } from "../components/MobileSortControl";
 import UserDrawer from "../components/UserDrawer";
+import { makePaginatedTableChange } from "../utils/tableChange";
 
 const MAX_IMAGES = 3;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -264,14 +265,16 @@ export default function SupportPage() {
     { title: "Updated", dataIndex: "updated_at", key: "updated_at", width: 170, sorter: true, sortOrder: sortOrderFor("updated_at") },
   ];
 
-  const handleTableChange: TableProps<SupportTicketSummary>["onChange"] = (_p, _f, sorter) => {
-    const s = Array.isArray(sorter) ? sorter[0] : sorter;
-    if (s && s.order) {
-      setSort(String(s.columnKey));
-      setOrder(s.order === "ascend" ? "asc" : "desc");
-    }
-    setPage(1);
-  };
+  const handleTableChange = makePaginatedTableChange<SupportTicketSummary>({
+    page,
+    sort,
+    order,
+    setPage,
+    setSort,
+    setOrder,
+    perPage,
+    setPerPage,
+  });
 
   const renderMobileCard = (t: SupportTicketSummary) => {
     const who = t.username ? `@${t.username}` : t.tg_id ? String(t.tg_id) : "—";
@@ -418,10 +421,6 @@ export default function SupportPage() {
             pageSize: perPage,
             total,
             showSizeChanger: true,
-            onChange: (p, ps) => {
-              setPage(p);
-              setPerPage(ps);
-            },
           }}
         />
       )}

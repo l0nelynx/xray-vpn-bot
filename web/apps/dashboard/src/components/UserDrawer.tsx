@@ -16,7 +16,7 @@ interface Props {
 
 /**
  * Reusable user card. Fetches the user detail + transactions for `tgId` and
- * renders the account info, identifier editor (tg_id/username/vless_uuid),
+ * renders the account info, identifier editor (tg_id/username/vless_uuid/rw_id),
  * email editor, promo/ticket stats, transaction history and a send-message box.
  * Used by the Users table and the Support ticket view.
  */
@@ -32,6 +32,7 @@ export default function UserDrawer({ tgId, open, onClose, onChanged }: Props) {
   const [editTgId, setEditTgId] = useState("");
   const [editUsername, setEditUsername] = useState("");
   const [editUuid, setEditUuid] = useState("");
+  const [editRwId, setEditRwId] = useState("");
   const [idSaving, setIdSaving] = useState(false);
 
   const [emailInput, setEmailInput] = useState("");
@@ -50,6 +51,7 @@ export default function UserDrawer({ tgId, open, onClose, onChanged }: Props) {
       setEditTgId(String(u.tg_id));
       setEditUsername(u.username || "");
       setEditUuid(u.vless_uuid || "");
+      setEditRwId(u.rw_id != null ? String(u.rw_id) : "");
       setEmailInput(u.email || "");
       setMsgText("");
     } catch {
@@ -71,14 +73,26 @@ export default function UserDrawer({ tgId, open, onClose, onChanged }: Props) {
       message.error("TG ID должен быть числом");
       return;
     }
+    const rwIdTrimmed = editRwId.trim();
+    if (rwIdTrimmed && !/^\d+$/.test(rwIdTrimmed)) {
+      message.error("rw_id должен быть числом");
+      return;
+    }
     setIdSaving(true);
     try {
-      const res = await api.patch<{ ok: boolean; tg_id: number; username: string | null; vless_uuid: string | null }>(
+      const res = await api.patch<{
+        ok: boolean;
+        tg_id: number;
+        username: string | null;
+        vless_uuid: string | null;
+        rw_id: number | null;
+      }>(
         `/users/${user.tg_id}/identifiers`,
         {
           tg_id: newTgId ? Number(newTgId) : undefined,
           username: editUsername,
           vless_uuid: editUuid,
+          rw_id: rwIdTrimmed ? Number(rwIdTrimmed) : null,
         }
       );
       message.success("Сохранено");
@@ -97,11 +111,14 @@ export default function UserDrawer({ tgId, open, onClose, onChanged }: Props) {
     if (!user || !emailInput.trim()) return;
     setEmailSaving(true);
     try {
-      const res = await api.patch<{ ok: boolean; rw_uuid: string | null }>(
+      const res = await api.patch<{ ok: boolean; rw_uuid: string | null; rw_id: number | null }>(
         `/users/${user.tg_id}/email`,
         { email: emailInput.trim() }
       );
-      message.success(res.rw_uuid ? `Email сохранён, UUID: ${res.rw_uuid}` : "Email сохранён");
+      const parts = ["Email сохранён"];
+      if (res.rw_uuid) parts.push(`UUID: ${res.rw_uuid}`);
+      if (res.rw_id != null) parts.push(`rw_id: ${res.rw_id}`);
+      message.success(parts.join(", "));
       await load(user.tg_id);
       onChanged?.();
     } catch {
@@ -146,6 +163,7 @@ export default function UserDrawer({ tgId, open, onClose, onChanged }: Props) {
                 {user.vless_uuid || "—"}
               </Typography.Text>
             </Descriptions.Item>
+            <Descriptions.Item label="rw_id">{user.rw_id ?? "—"}</Descriptions.Item>
             <Descriptions.Item label="Provider">{user.api_provider}</Descriptions.Item>
             <Descriptions.Item label="Промокод">
               {user.promo_code ? <Tag color="purple" icon={<GiftOutlined />}>{user.promo_code}</Tag> : "—"}
@@ -183,6 +201,13 @@ export default function UserDrawer({ tgId, open, onClose, onChanged }: Props) {
               value={editUuid}
               onChange={(e) => setEditUuid(e.target.value)}
               placeholder="vless_uuid"
+              allowClear
+            />
+            <Input
+              addonBefore="rw_id"
+              value={editRwId}
+              onChange={(e) => setEditRwId(e.target.value)}
+              placeholder="Remnawave panel user id"
               allowClear
             />
             <Button type="primary" icon={<EditOutlined />} loading={idSaving} onClick={handleSaveIdentifiers}>

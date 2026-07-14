@@ -3,6 +3,7 @@ export interface UserItem {
   tg_id: number;
   username: string | null;
   vless_uuid: string | null;
+  rw_id: number | null;
   api_provider: string;
   is_banned: boolean;
   is_paid: boolean;

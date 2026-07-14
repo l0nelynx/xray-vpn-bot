@@ -41,6 +41,7 @@ _USER_SORT_COLUMNS = {
     "tg_id": User.tg_id,
     "username": User.username,
     "api_provider": User.api_provider,
+    "rw_id": User.rw_id,
 }
 
 
@@ -78,7 +79,9 @@ async def list_users(
                 User.vless_uuid.ilike(like),
             ]
             if search.isdigit():
-                conds.append(User.tg_id == int(search))
+                search_int = int(search)
+                conds.append(User.tg_id == search_int)
+                conds.append(User.rw_id == search_int)
             base = base.where(or_(*conds))
 
         active_paid_sq = _repo_users.active_paid_user_ids_subquery(now)
@@ -113,6 +116,7 @@ async def list_users(
                 "tg_id": user.tg_id,
                 "username": user.username,
                 "vless_uuid": user.vless_uuid,
+                "rw_id": user.rw_id,
                 "api_provider": user.api_provider,
                 "is_banned": bool(user.is_banned),
                 "is_paid": bool(is_paid),
@@ -226,6 +230,7 @@ async def get_user(tg_id: int, _: str = Depends(get_current_user)):
             "tg_id": user.tg_id,
             "username": user.username,
             "vless_uuid": user.vless_uuid,
+            "rw_id": user.rw_id,
             "api_provider": user.api_provider,
             "email": user.email,
             "is_banned": bool(user.is_banned),
@@ -242,6 +247,7 @@ class UpdateIdentifiersRequest(BaseModel):
     tg_id: int | None = None
     username: str | None = None
     vless_uuid: str | None = None
+    rw_id: int | None = None
 
 
 @router.patch("/{tg_id}/identifiers")
@@ -250,7 +256,7 @@ async def update_identifiers(
     body: UpdateIdentifiersRequest,
     _: str = Depends(get_current_user),
 ):
-    """Edit a user's tg_id / username / vless_uuid. Empty string clears the
+    """Edit a user's tg_id / username / vless_uuid / rw_id. Empty string clears the
     field (sets NULL); a missing field is left unchanged."""
     async with async_session() as session:
         user = await _repo_users.get_user_by_tg_id(session, tg_id)
@@ -261,6 +267,8 @@ async def update_identifiers(
             user.username = body.username.strip().lstrip("@") or None
         if body.vless_uuid is not None:
             user.vless_uuid = body.vless_uuid.strip() or None
+        if "rw_id" in body.model_fields_set:
+            user.rw_id = body.rw_id
         if body.tg_id is not None and body.tg_id != tg_id:
             clash = await _repo_users.get_user_by_tg_id(session, body.tg_id)
             if clash and clash.id != user.id:
@@ -273,6 +281,7 @@ async def update_identifiers(
             "tg_id": user.tg_id,
             "username": user.username,
             "vless_uuid": user.vless_uuid,
+            "rw_id": user.rw_id,
         }
 
 
@@ -402,22 +411,23 @@ async def update_email(tg_id: int, body: UpdateEmailRequest, _: str = Depends(ge
         await session.commit()
 
     rw_uuid = None
+    rw_id = None
     try:
         from remnawave_client import configure
         rw = configure(base_url=get_remnawave_url(), token=get_remnawave_token(), free_squad_id="")
         rw_user = await rw.get_user_by_email(email)
         if rw_user and rw_user.get("uuid"):
             rw_uuid = str(rw_user["uuid"])
+            rw_id = rw_user.get("rw_id")
             async with async_session() as session:
                 user = await _repo_users.get_user_by_tg_id(session, tg_id)
                 if user:
                     user.vless_uuid = rw_uuid
                     user.api_provider = "remnawave"
-                    rw_id = rw_user.get("rw_id")
                     if rw_id is not None:
-                        user.rw_id = rw_id
+                        user.rw_id = int(rw_id)
                     await session.commit()
     except Exception as exc:
         logger.warning("RW email lookup failed for %s: %s", email, exc)
 
-    return {"ok": True, "email": email, "rw_uuid": rw_uuid}
+    return {"ok": True, "email": email, "rw_uuid": rw_uuid, "rw_id": rw_id}

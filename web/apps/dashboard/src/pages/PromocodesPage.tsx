@@ -29,6 +29,7 @@ import { api } from "../api/client";
 import useIsMobile from "../hooks/useIsMobile";
 import useDebounce from "../hooks/useDebounce";
 import MobileSortControl, { SortOrder } from "../components/MobileSortControl";
+import { makePaginatedTableChange } from "../utils/tableChange";
 
 type PromoType = "referral" | "promotional";
 
@@ -226,14 +227,14 @@ function PromosTab() {
     },
   ];
 
-  const handleTableChange: TableProps<PromoItem>["onChange"] = (_p, _f, sorter) => {
-    const s = Array.isArray(sorter) ? sorter[0] : sorter;
-    if (s && s.order) {
-      setSort(String(s.columnKey));
-      setOrder(s.order === "ascend" ? "asc" : "desc");
-    }
-    setPage(1);
-  };
+  const handleTableChange = makePaginatedTableChange<PromoItem>({
+    page,
+    sort,
+    order,
+    setPage,
+    setSort,
+    setOrder,
+  });
 
   return (
     <div>
@@ -309,7 +310,6 @@ function PromosTab() {
             current: page,
             pageSize: 20,
             total,
-            onChange: setPage,
             showSizeChanger: false,
           }}
         />

@@ -8,10 +8,12 @@ import useIsMobile from "../hooks/useIsMobile";
 import useDebounce from "../hooks/useDebounce";
 import MobileSortControl, { SortOrder } from "./MobileSortControl";
 import UserDrawer from "./UserDrawer";
+import { makePaginatedTableChange } from "../utils/tableChange";
 
 const SORT_OPTIONS = [
   { value: "id", label: "ID" },
   { value: "tg_id", label: "TG ID" },
+  { value: "rw_id", label: "RW ID" },
   { value: "username", label: "Username" },
   { value: "api_provider", label: "Provider" },
   { value: "is_paid", label: "Paid status" },
@@ -130,6 +132,15 @@ export default function UsersTable() {
   const columns: TableProps<UserItem>["columns"] = [
     { title: "ID", dataIndex: "id", key: "id", width: 60, sorter: true, sortOrder: sortOrderFor("id") },
     { title: "TG ID", dataIndex: "tg_id", key: "tg_id", width: 130, sorter: true, sortOrder: sortOrderFor("tg_id") },
+    {
+      title: "rw_id",
+      dataIndex: "rw_id",
+      key: "rw_id",
+      width: 90,
+      sorter: true,
+      sortOrder: sortOrderFor("rw_id"),
+      render: (v: number | null) => v ?? "—",
+    },
     { title: "Username", dataIndex: "username", key: "username", width: 140, sorter: true, sortOrder: sortOrderFor("username") },
     {
       title: "Email",
@@ -197,14 +208,14 @@ export default function UsersTable() {
     },
   ];
 
-  const handleTableChange: TableProps<UserItem>["onChange"] = (_p, _f, sorter) => {
-    const s = Array.isArray(sorter) ? sorter[0] : sorter;
-    if (s && s.order) {
-      setSort(String(s.columnKey));
-      setOrder(s.order === "ascend" ? "asc" : "desc");
-    }
-    setPage(1);
-  };
+  const handleTableChange = makePaginatedTableChange<UserItem>({
+    page,
+    sort,
+    order,
+    setPage,
+    setSort,
+    setOrder,
+  });
 
   const renderMobileCard = (user: UserItem) => (
     <Card key={user.id} size="small" style={{ marginBottom: 8 }} styles={{ body: { padding: "12px" } }}>
@@ -214,7 +225,8 @@ export default function UsersTable() {
             {user.username || "—"}
           </div>
           <div style={{ fontSize: 12, color: "rgba(255,255,255,0.45)", marginBottom: 4 }}>
-            TG: {user.tg_id} · {user.api_provider}
+            TG: {user.tg_id}
+            {user.rw_id != null ? ` · RW: ${user.rw_id}` : ""} · {user.api_provider}
           </div>
           {user.email && (
             <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 6, wordBreak: "break-all" }}>
@@ -248,7 +260,7 @@ export default function UsersTable() {
     <>
       <div style={{ marginBottom: 16, display: "flex", flexWrap: "wrap", gap: 8 }}>
         <Input
-          placeholder="Search by username, email, UUID or TG ID"
+          placeholder="Search by username, email, UUID, rw_id or TG ID"
           prefix={<SearchOutlined />}
           value={search}
           onChange={(e) => {
@@ -328,12 +340,11 @@ export default function UsersTable() {
             current: page,
             pageSize: perPage,
             total,
-            onChange: setPage,
             showSizeChanger: false,
             showTotal: (t) => `Total: ${t}`,
           }}
           size="small"
-          scroll={{ x: 960 }}
+          scroll={{ x: 1050 }}
         />
       )}
 
