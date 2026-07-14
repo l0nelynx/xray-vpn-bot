@@ -171,7 +171,7 @@ build number on `develop` (`github.run_number`).
 
 | Source | Example tags | Recommended `IMAGE_TAG` |
 |--------|--------------|-------------------------|
-| `develop` | `staging`, `1.0.0`, `1.0.0.<build>`, `sha-abc1234` | `staging` or pin `1.0.0.<build>` |
+| `develop` | `staging`, `1.0.0.<build>`, `sha-abc1234` | `staging` or pin `1.0.0.<build>` |
 | `main` | `latest`, `1.0.0`, `sha-abc1234` | `1.0.0` (avoid floating `latest` in prod) |
 | tag `v1.0.0` | `1.0.0`, `1.0`, `1`, `latest` | `1.0.0` |
 
@@ -183,8 +183,10 @@ all images with that version tag.
 **Release flow (manual tag):** push tag `v1.0.0` — the same workflow creates the
 GitHub Release; `build.yml` builds container images.
 
-**Dev flow:** keep `VERSION` on `develop` (e.g. `1.0.0` or `1.1.0-dev`); each
-push publishes `<version>.<build>` plus moving `staging`.
+**Dev flow:** each `develop` push publishes `<version>.<build>` plus moving
+`staging`. The bare semver tag (e.g. `1.0.0`) is **not** pushed from `develop` —
+only `main` and release tags `v*.*.*` own it, so a dev build cannot overwrite a
+production release.
 
 ## Containers
 
