@@ -13,6 +13,7 @@ from remnawave_client.segmentation import SEGMENT_ALL_USERS
 
 from .config import get_remnawave_token, get_remnawave_url
 from .crm_service import apply_campaign_perks
+from .crm_variables import build_message_context, render_crm_message
 from .database.session import async_session
 from .telegram import tg_bot_username, tg_bot_open_url, tg_send
 
@@ -86,6 +87,7 @@ async def execute_crm_campaign(
             attach_button = campaign.attach_button
             bonus_days = campaign.bonus_days
             bonus_traffic_gb = campaign.bonus_traffic_gb
+            event_id = getattr(campaign, "event_id", None)
 
         try:
             for u in await rw.get_all_users_for_crm():
@@ -154,9 +156,23 @@ async def execute_crm_campaign(
                     perk_status = "failed"
                     error_parts.append("no vless_uuid for perks")
 
-                if await tg_send(tg_id, message_text, reply_markup):
+                ctx = build_message_context(
+                    username=db_user.username,
+                    crm_user=crm_user,
+                )
+                personalized = render_crm_message(message_text, ctx)
+
+                if await tg_send(tg_id, personalized, reply_markup):
                     sent += 1
                     message_status = "sent"
+                    if event_id:
+                        async with async_session() as session:
+                            from common_db.repo import crm_events as events_repo
+
+                            await events_repo.record_event_delivery(
+                                session, event_id=event_id, tg_id=tg_id
+                            )
+                            await session.commit()
                 else:
                     failed += 1
                     error_parts.append("telegram send failed")

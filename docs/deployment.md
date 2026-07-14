@@ -217,6 +217,21 @@ launch returns HTTP 503.
 
 Set `REDIS_URL` in `.env` (default in compose: `redis://redis:6379/0`).
 
+### CRM scheduled events (UTC)
+
+Automated CRM events (`crm_events` table) are polled by the `crm-worker` ARQ
+cron job `tick_crm_events` every **15 minutes** (UTC). Event schedules use
+**UTC** time (`run_at_time`, e.g. `01:00`).
+
+- Postgres holds `next_run_at` — survives Redis restarts.
+- At fire time the worker performs a **fresh segment scan** (not frozen tg_ids).
+- Repeat policy (`always` / `once` / `cooldown`) filters recipients before
+  creating a campaign linked via `event_id`.
+- Manual run: `POST /bot/dashboard/api/crm/events/{id}/run-now` from the
+  dashboard **События** tab.
+
+Ensure `crm-worker` is running for both manual campaigns and scheduled events.
+
 Postgres binds `127.0.0.1:5432` on the host for backups and local tools. The
 network is not `internal: true` by default. For stricter isolation, uncomment
 `internal: true` under `data-network` in `docker-compose.yml` and remove the

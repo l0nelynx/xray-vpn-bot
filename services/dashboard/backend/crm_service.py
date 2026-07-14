@@ -73,6 +73,7 @@ async def scan_segment(
     traffic_threshold: float = DEFAULT_TRAFFIC_THRESHOLD,
     invoice_max_age_hours: int = DEFAULT_INVOICE_MAX_AGE_HOURS,
     torrent_days: int = DEFAULT_TORRENT_DAYS,
+    preview_limit: int | None = PREVIEW_LIMIT,
 ) -> tuple[list[dict], int, str | None]:
     """Return (preview_users, total_count, warning)."""
 
@@ -81,12 +82,14 @@ async def scan_segment(
             session, max_age_hours=invoice_max_age_hours
         )
         rows = [_scan_user_row(u, {"order_status": "created"}) for u in users]
-        return rows[:PREVIEW_LIMIT], len(rows), None
+        preview = rows if preview_limit is None else rows[:preview_limit]
+        return preview, len(rows), None
 
     if segment_id == SEGMENT_ALL_USERS:
         users = await seg_repo.get_broadcast_eligible_users(session)
         rows = [_scan_user_row(u) for u in users]
-        return rows[:PREVIEW_LIMIT], len(rows), None
+        preview = rows if preview_limit is None else rows[:preview_limit]
+        return preview, len(rows), None
 
     local_users = await seg_repo.get_remnawave_broadcast_users(session)
     if not local_users:
@@ -148,7 +151,8 @@ async def scan_segment(
                 "могут попасть в сегмент. Обновите панель Remnawave."
             )
 
-    return matched[:PREVIEW_LIMIT], len(matched), warning
+    preview = matched if preview_limit is None else matched[:preview_limit]
+    return preview, len(matched), warning
 
 
 async def apply_campaign_perks(

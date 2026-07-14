@@ -26,6 +26,7 @@ async def create_campaign(
     bonus_traffic_gb: int | None,
     created_by: str,
     target_tg_ids: list[int] | None = None,
+    event_id: int | None = None,
 ) -> CrmCampaign:
     params = dict(segment_params)
     if target_tg_ids:
@@ -41,6 +42,7 @@ async def create_campaign(
         bonus_traffic_gb=bonus_traffic_gb,
         status="draft",
         total_targets=len(target_tg_ids) if target_tg_ids else 0,
+        event_id=event_id,
         created_at=_now_iso(),
         created_by=created_by,
     )

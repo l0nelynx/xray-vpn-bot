@@ -7,13 +7,16 @@ import {
   Checkbox,
   Col,
   Descriptions,
+  Drawer,
   Form,
   Input,
   InputNumber,
   Modal,
   Popconfirm,
   Row,
+  Select,
   Space,
+  Switch,
   Table,
   Tabs,
   Tag,
@@ -21,8 +24,10 @@ import {
 } from "antd";
 import type { TableRowSelection } from "antd/es/table/interface";
 import {
+  CalendarOutlined,
   CustomerServiceOutlined,
   HistoryOutlined,
+  InfoCircleOutlined,
   ScanOutlined,
   SendOutlined,
 } from "@ant-design/icons";
@@ -85,6 +90,61 @@ interface ComposerState {
   users: ScanUser[];
   totalCount?: number;
 }
+
+interface MessageTemplate {
+  id: string;
+  segment_id: string;
+  title: string;
+  message_text: string;
+  suggested_bonus_days: number | null;
+  suggested_bonus_traffic_gb: number | null;
+  attach_button: boolean;
+}
+
+interface CrmVariable {
+  key: string;
+  label: string;
+  description: string;
+  example: string;
+}
+
+interface CrmEventRow {
+  id: number;
+  name: string;
+  enabled: boolean;
+  segment_type: string | null;
+  segment_params: Record<string, number>;
+  run_at_time: string;
+  frequency: string;
+  weekday: number | null;
+  message_text: string;
+  attach_button: boolean;
+  bonus_days: number | null;
+  bonus_traffic_gb: number | null;
+  repeat_policy: string;
+  repeat_cooldown_days: number;
+  last_run_at: string | null;
+  next_run_at: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by: string;
+}
+
+const WEEKDAYS = [
+  { value: 0, label: "Пн" },
+  { value: 1, label: "Вт" },
+  { value: 2, label: "Ср" },
+  { value: 3, label: "Чт" },
+  { value: 4, label: "Пт" },
+  { value: 5, label: "Сб" },
+  { value: 6, label: "Вс" },
+];
+
+const REPEAT_POLICIES = [
+  { value: "always", label: "Всегда" },
+  { value: "once", label: "Один раз" },
+  { value: "cooldown", label: "Cooldown" },
+];
 
 // ─────────────────────────────────────────────────────
 // Segments tab
@@ -318,12 +378,57 @@ function ComposerTab({ initial, onClear, onLaunched }: ComposerTabProps) {
   const [bonusTraffic, setBonusTraffic] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [audience, setAudience] = useState<ComposerState | null>(initial);
+  const [templates, setTemplates] = useState<MessageTemplate[]>([]);
+  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
+  const [variablesOpen, setVariablesOpen] = useState(false);
+  const [variables, setVariables] = useState<CrmVariable[]>([]);
 
   useEffect(() => {
     if (initial) {
       setAudience(initial);
+      setSelectedTemplate(null);
     }
   }, [initial]);
+
+  useEffect(() => {
+    api
+      .get<{ variables: CrmVariable[] }>("/crm/variables")
+      .then((r) => setVariables(r.variables))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!audience?.segmentId) {
+      setTemplates([]);
+      return;
+    }
+    api
+      .get<{ templates: MessageTemplate[] }>(
+        `/crm/templates?segment_id=${encodeURIComponent(audience.segmentId)}`
+      )
+      .then((r) => setTemplates(r.templates))
+      .catch(() => setTemplates([]));
+  }, [audience?.segmentId]);
+
+  const applyTemplate = (templateId: string) => {
+    const tpl = templates.find((t) => t.id === templateId);
+    if (!tpl) return;
+    setSelectedTemplate(templateId);
+    setText(tpl.message_text);
+    setAttachButton(tpl.attach_button);
+    setBonusDays(tpl.suggested_bonus_days);
+    setBonusTraffic(tpl.suggested_bonus_traffic_gb);
+  };
+
+  const copyVariable = async (key: string) => {
+    const token = `{{${key}}}`;
+    try {
+      await navigator.clipboard.writeText(token);
+      message.success(`Скопировано: ${token}`);
+    } catch {
+      message.error("Не удалось скопировать");
+    }
+  };
 
   const isAllUsers = audience?.segmentId === "all_users";
 
@@ -405,12 +510,41 @@ function ComposerTab({ initial, onClear, onLaunched }: ComposerTabProps) {
           onChange={(e) => setName(e.target.value)}
         />
 
+        {audience?.segmentId && templates.length > 0 && (
+          <Select
+            allowClear
+            placeholder="Шаблон сообщения"
+            style={{ width: "100%" }}
+            value={selectedTemplate}
+            onChange={(v) => {
+              if (v) applyTemplate(v);
+              else setSelectedTemplate(null);
+            }}
+            options={templates.map((t) => ({ value: t.id, label: t.title }))}
+          />
+        )}
+
+        <Space style={{ width: "100%", justifyContent: "space-between" }}>
+          <Typography.Text type="secondary">Текст сообщения (HTML)</Typography.Text>
+          <Button
+            size="small"
+            icon={<InfoCircleOutlined />}
+            onClick={() => setVariablesOpen(true)}
+          >
+            Переменные
+          </Button>
+        </Space>
+
         <TextArea
           rows={6}
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="Текст сообщения (HTML)"
+          placeholder="Привет, {{username}}! Осталось {{days_left}} дн."
         />
+
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          Подстановки: {"{{username}}"}, {"{{days_left}}"}, {"{{traffic_left}}"}, {"{{hwid_devices}}"}
+        </Typography.Text>
 
         <Checkbox
           checked={attachButton}
@@ -467,6 +601,44 @@ function ComposerTab({ initial, onClear, onLaunched }: ComposerTabProps) {
           </Button>
         </Popconfirm>
       </Space>
+
+      <Modal
+        title="Переменные сообщения"
+        open={variablesOpen}
+        onCancel={() => setVariablesOpen(false)}
+        footer={null}
+        width={560}
+      >
+        <Typography.Paragraph type="secondary">
+          Нажмите на переменную, чтобы скопировать в буфер обмена.
+        </Typography.Paragraph>
+        <Table
+          rowKey="key"
+          size="small"
+          pagination={false}
+          dataSource={variables}
+          onRow={(row) => ({
+            onClick: () => copyVariable(row.key),
+            style: { cursor: "pointer" },
+          })}
+          columns={[
+            {
+              title: "Переменная",
+              key: "key",
+              render: (_: unknown, r: CrmVariable) => (
+                <Typography.Text code>{`{{${r.key}}}`}</Typography.Text>
+              ),
+            },
+            { title: "Описание", dataIndex: "label", key: "label" },
+            {
+              title: "Пример",
+              dataIndex: "example",
+              key: "example",
+              render: (v: string) => <Typography.Text type="secondary">{v}</Typography.Text>,
+            },
+          ]}
+        />
+      </Modal>
     </Card>
   );
 }
@@ -562,6 +734,422 @@ function HistoryTab() {
 }
 
 // ─────────────────────────────────────────────────────
+// Events tab (UTC schedule)
+// ─────────────────────────────────────────────────────
+
+function EventsTab() {
+  const { message } = App.useApp();
+  const [loading, setLoading] = useState(false);
+  const [events, setEvents] = useState<CrmEventRow[]>([]);
+  const [segments, setSegments] = useState<SegmentDef[]>([]);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [editing, setEditing] = useState<CrmEventRow | null>(null);
+  const [form] = Form.useForm();
+  const [templates, setTemplates] = useState<MessageTemplate[]>([]);
+  const [variablesOpen, setVariablesOpen] = useState(false);
+  const [variables, setVariables] = useState<CrmVariable[]>([]);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await api.get<{ events: CrmEventRow[] }>("/crm/events");
+      setEvents(res.events);
+    } catch {
+      message.error("Не удалось загрузить события");
+    } finally {
+      setLoading(false);
+    }
+  }, [message]);
+
+  useEffect(() => {
+    load();
+    api
+      .get<{ segments: SegmentDef[] }>("/crm/segments")
+      .then((r) => setSegments(r.segments))
+      .catch(() => {});
+    api
+      .get<{ variables: CrmVariable[] }>("/crm/variables")
+      .then((r) => setVariables(r.variables))
+      .catch(() => {});
+  }, [load]);
+
+  const openCreate = () => {
+    setEditing(null);
+    form.resetFields();
+    form.setFieldsValue({
+      enabled: true,
+      run_at_time: "01:00",
+      frequency: "daily",
+      repeat_policy: "cooldown",
+      repeat_cooldown_days: 7,
+      attach_button: true,
+      segment_params: {},
+    });
+    setTemplates([]);
+    setDrawerOpen(true);
+  };
+
+  const openEdit = (row: CrmEventRow) => {
+    setEditing(row);
+    form.setFieldsValue({
+      ...row,
+      segment_params: row.segment_params || {},
+    });
+    if (row.segment_type) {
+      api
+        .get<{ templates: MessageTemplate[] }>(
+          `/crm/templates?segment_id=${encodeURIComponent(row.segment_type)}`
+        )
+        .then((r) => setTemplates(r.templates))
+        .catch(() => setTemplates([]));
+    }
+    setDrawerOpen(true);
+  };
+
+  const onSegmentChange = (segmentId: string) => {
+    const seg = segments.find((s) => s.id === segmentId);
+    const defaults: Record<string, number> = {};
+    seg?.params.forEach((p) => {
+      defaults[p.name] = p.default;
+    });
+    form.setFieldValue("segment_params", defaults);
+    api
+      .get<{ templates: MessageTemplate[] }>(
+        `/crm/templates?segment_id=${encodeURIComponent(segmentId)}`
+      )
+      .then((r) => setTemplates(r.templates))
+      .catch(() => setTemplates([]));
+  };
+
+  const applyTemplate = (templateId: string) => {
+    const tpl = templates.find((t) => t.id === templateId);
+    if (!tpl) return;
+    form.setFieldsValue({
+      message_text: tpl.message_text,
+      attach_button: tpl.attach_button,
+      bonus_days: tpl.suggested_bonus_days,
+      bonus_traffic_gb: tpl.suggested_bonus_traffic_gb,
+    });
+  };
+
+  const saveEvent = async () => {
+    const values = await form.validateFields();
+    const payload = {
+      ...values,
+      bonus_days: values.bonus_days && values.bonus_days > 0 ? values.bonus_days : null,
+      bonus_traffic_gb:
+        values.bonus_traffic_gb && values.bonus_traffic_gb > 0
+          ? values.bonus_traffic_gb
+          : null,
+      weekday: values.frequency === "weekly" ? values.weekday : null,
+    };
+    try {
+      if (editing) {
+        await api.patch(`/crm/events/${editing.id}`, payload);
+        message.success("Событие обновлено");
+      } else {
+        await api.post("/crm/events", payload);
+        message.success("Событие создано");
+      }
+      setDrawerOpen(false);
+      load();
+    } catch {
+      message.error("Ошибка сохранения");
+    }
+  };
+
+  const toggleEnabled = async (row: CrmEventRow, enabled: boolean) => {
+    try {
+      await api.patch(`/crm/events/${row.id}`, { enabled });
+      load();
+    } catch {
+      message.error("Не удалось изменить статус");
+    }
+  };
+
+  const runNow = async (row: CrmEventRow) => {
+    try {
+      const res = await api.post<{ status: string; total?: number; campaign_id?: number }>(
+        `/crm/events/${row.id}/run-now`
+      );
+      if (res.status === "empty") {
+        message.info("Аудитория пуста после фильтра повторов");
+      } else {
+        message.success(
+          res.total
+            ? `Запущено: ${res.total} получателей (кампания #${res.campaign_id})`
+            : "Событие запущено"
+        );
+      }
+      load();
+    } catch {
+      message.error("Ошибка запуска");
+    }
+  };
+
+  const deleteEvent = async (row: CrmEventRow) => {
+    try {
+      await api.delete(`/crm/events/${row.id}`);
+      message.success("Удалено");
+      load();
+    } catch {
+      message.error("Ошибка удаления");
+    }
+  };
+
+  const copyVariable = async (key: string) => {
+    try {
+      await navigator.clipboard.writeText(`{{${key}}}`);
+      message.success(`Скопировано: {{${key}}}`);
+    } catch {
+      message.error("Не удалось скопировать");
+    }
+  };
+
+  const scheduleLabel = (row: CrmEventRow) => {
+    const wd =
+      row.frequency === "weekly" && row.weekday != null
+        ? WEEKDAYS.find((d) => d.value === row.weekday)?.label
+        : null;
+    const freq = row.frequency === "weekly" ? `еженед. (${wd})` : "ежедн.";
+    return `${row.run_at_time} UTC, ${freq}`;
+  };
+
+  const columns = [
+    { title: "ID", dataIndex: "id", key: "id", width: 60 },
+    { title: "Название", dataIndex: "name", key: "name", ellipsis: true },
+    {
+      title: "Сегмент",
+      dataIndex: "segment_type",
+      key: "segment_type",
+      render: (v: string | null) => v ?? "—",
+    },
+    {
+      title: "Расписание (UTC)",
+      key: "schedule",
+      render: (_: unknown, r: CrmEventRow) => scheduleLabel(r),
+    },
+    {
+      title: "Повтор",
+      key: "repeat",
+      render: (_: unknown, r: CrmEventRow) =>
+        r.repeat_policy === "cooldown"
+          ? `cooldown ${r.repeat_cooldown_days}д`
+          : r.repeat_policy,
+    },
+    {
+      title: "Вкл",
+      key: "enabled",
+      width: 70,
+      render: (_: unknown, r: CrmEventRow) => (
+        <Switch checked={r.enabled} onChange={(v) => toggleEnabled(r, v)} size="small" />
+      ),
+    },
+    {
+      title: "След. запуск",
+      dataIndex: "next_run_at",
+      key: "next_run_at",
+      width: 160,
+      render: (v: string | null) => v ?? "—",
+    },
+    {
+      title: "",
+      key: "actions",
+      width: 200,
+      render: (_: unknown, r: CrmEventRow) => (
+        <Space size="small">
+          <Button size="small" onClick={() => openEdit(r)}>
+            Изм.
+          </Button>
+          <Button size="small" type="primary" onClick={() => runNow(r)}>
+            Сейчас
+          </Button>
+          <Popconfirm title="Удалить событие?" onConfirm={() => deleteEvent(r)}>
+            <Button size="small" danger>
+              Del
+            </Button>
+          </Popconfirm>
+        </Space>
+      ),
+    },
+  ];
+
+  const selectedSegment = Form.useWatch("segment_type", form);
+  const selectedFrequency = Form.useWatch("frequency", form);
+  const selectedRepeat = Form.useWatch("repeat_policy", form);
+  const segmentDef = segments.find((s) => s.id === selectedSegment);
+
+  return (
+    <>
+      <Card
+        title="События по расписанию (UTC)"
+        extra={
+          <Space>
+            <Button onClick={load} loading={loading}>
+              Обновить
+            </Button>
+            <Button type="primary" onClick={openCreate}>
+              Новое событие
+            </Button>
+          </Space>
+        }
+      >
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message="Время запуска указывается в UTC. Poller проверяет расписание каждые 15 минут."
+        />
+        <Table
+          rowKey="id"
+          loading={loading}
+          columns={columns}
+          dataSource={events}
+          size="small"
+          pagination={{ pageSize: 20 }}
+        />
+      </Card>
+
+      <Drawer
+        title={editing ? `Событие #${editing.id}` : "Новое событие"}
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        width={520}
+        destroyOnHidden
+        extra={
+          <Button type="primary" onClick={saveEvent}>
+            Сохранить
+          </Button>
+        }
+      >
+        <Form form={form} layout="vertical">
+          <Form.Item name="name" label="Название">
+            <Input placeholder="Например: LIMITED — утреннее напоминание" />
+          </Form.Item>
+          <Form.Item name="enabled" label="Включено" valuePropName="checked">
+            <Switch />
+          </Form.Item>
+          <Form.Item
+            name="segment_type"
+            label="Сегмент"
+            rules={[{ required: true, message: "Выберите сегмент" }]}
+          >
+            <Select
+              options={segments.map((s) => ({ value: s.id, label: s.title }))}
+              onChange={onSegmentChange}
+            />
+          </Form.Item>
+          {segmentDef && segmentDef.params.length > 0 && (
+            <Form.Item label="Параметры сегмента">
+              <Space wrap>
+                {segmentDef.params.map((p) => (
+                  <Form.Item
+                    key={p.name}
+                    name={["segment_params", p.name]}
+                    label={p.label}
+                    style={{ marginBottom: 0 }}
+                  >
+                    <InputNumber
+                      min={p.min}
+                      max={p.max}
+                      step={p.type === "float" ? 0.05 : 1}
+                    />
+                  </Form.Item>
+                ))}
+              </Space>
+            </Form.Item>
+          )}
+          <Form.Item name="run_at_time" label="Время запуска (UTC)" rules={[{ required: true }]}>
+            <Input placeholder="01:00" />
+          </Form.Item>
+          <Form.Item name="frequency" label="Частота" rules={[{ required: true }]}>
+            <Select
+              options={[
+                { value: "daily", label: "Ежедневно" },
+                { value: "weekly", label: "Еженедельно" },
+              ]}
+            />
+          </Form.Item>
+          {selectedFrequency === "weekly" && (
+            <Form.Item name="weekday" label="День недели" rules={[{ required: true }]}>
+              <Select options={WEEKDAYS} />
+            </Form.Item>
+          )}
+          {templates.length > 0 && (
+            <Form.Item label="Шаблон">
+              <Select
+                allowClear
+                placeholder="Выберите шаблон"
+                options={templates.map((t) => ({ value: t.id, label: t.title }))}
+                onChange={(v) => v && applyTemplate(v)}
+              />
+            </Form.Item>
+          )}
+          <Space style={{ width: "100%", justifyContent: "space-between" }}>
+            <Typography.Text>Сообщение (HTML)</Typography.Text>
+            <Button size="small" onClick={() => setVariablesOpen(true)}>
+              Переменные
+            </Button>
+          </Space>
+          <Form.Item
+            name="message_text"
+            rules={[{ required: true, message: "Введите текст" }]}
+          >
+            <Input.TextArea rows={5} placeholder="Привет, {{username}}!" />
+          </Form.Item>
+          <Form.Item name="attach_button" valuePropName="checked">
+            <Checkbox>Кнопка «Открыть бота»</Checkbox>
+          </Form.Item>
+          <Space wrap>
+            <Form.Item name="bonus_days" label="Бонус дней">
+              <InputNumber min={0} max={365} />
+            </Form.Item>
+            <Form.Item name="bonus_traffic_gb" label="Бонус ГБ">
+              <InputNumber min={0} max={1000} />
+            </Form.Item>
+          </Space>
+          <Form.Item name="repeat_policy" label="Политика повторов">
+            <Select options={REPEAT_POLICIES} />
+          </Form.Item>
+          {selectedRepeat === "cooldown" && (
+            <Form.Item name="repeat_cooldown_days" label="Cooldown (дней)">
+              <InputNumber min={1} max={365} />
+            </Form.Item>
+          )}
+        </Form>
+      </Drawer>
+
+      <Modal
+        title="Переменные"
+        open={variablesOpen}
+        onCancel={() => setVariablesOpen(false)}
+        footer={null}
+      >
+        <Table
+          rowKey="key"
+          size="small"
+          pagination={false}
+          dataSource={variables}
+          onRow={(row) => ({
+            onClick: () => copyVariable(row.key),
+            style: { cursor: "pointer" },
+          })}
+          columns={[
+            {
+              title: "Ключ",
+              render: (_: unknown, r: CrmVariable) => (
+                <Typography.Text code>{`{{${r.key}}}`}</Typography.Text>
+              ),
+            },
+            { title: "Описание", dataIndex: "label" },
+          ]}
+        />
+      </Modal>
+    </>
+  );
+}
+
+// ─────────────────────────────────────────────────────
 // Page
 // ─────────────────────────────────────────────────────
 
@@ -600,6 +1188,15 @@ export default function CrmPage() {
           onLaunched={() => setActiveTab("history")}
         />
       ),
+    },
+    {
+      key: "events",
+      label: (
+        <span>
+          <CalendarOutlined /> События
+        </span>
+      ),
+      children: <EventsTab />,
     },
     {
       key: "history",

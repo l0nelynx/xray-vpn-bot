@@ -13,10 +13,15 @@ from common_db.repo import crm as crm_repo
 
 from ..auth import get_current_user
 from ..config import get_remnawave_token, get_remnawave_url
+from ..crm_event_runner import run_crm_event
 from ..crm_runner import resolve_targets
 from ..crm_service import scan_segment, segment_catalog
+from ..crm_templates import get_template, list_templates
+from ..crm_variables import build_message_context, render_crm_message, variable_catalog
 from ..database.session import async_session
 from ..tasks.crm import enqueue_campaign
+
+from common_db.repo import crm_events as events_repo
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/crm", tags=["crm"])
@@ -124,6 +129,186 @@ class ExecuteRequest(BaseModel):
 
 class LaunchResponse(CampaignSummary):
     queue_status: str = "queued"
+
+
+class MessagePreviewRequest(BaseModel):
+    message_text: str
+    sample_tg_id: int | None = None
+
+
+class MessagePreviewResponse(BaseModel):
+    rendered_text: str
+    sample_tg_id: int | None = None
+
+
+class CrmEventCreate(BaseModel):
+    name: str = ""
+    enabled: bool = True
+    segment_type: str
+    segment_params: dict = Field(default_factory=dict)
+    run_at_time: str = "01:00"
+    frequency: str = Field(default="daily", pattern="^(daily|weekly)$")
+    weekday: int | None = Field(default=None, ge=0, le=6)
+    message_text: str
+    attach_button: bool = False
+    bonus_days: int | None = Field(default=None, ge=0, le=365)
+    bonus_traffic_gb: int | None = Field(default=None, ge=0, le=1000)
+    repeat_policy: str = Field(default="cooldown", pattern="^(always|once|cooldown)$")
+    repeat_cooldown_days: int = Field(default=7, ge=1, le=365)
+
+
+class CrmEventUpdate(BaseModel):
+    name: str | None = None
+    enabled: bool | None = None
+    segment_type: str | None = None
+    segment_params: dict | None = None
+    run_at_time: str | None = None
+    frequency: str | None = Field(default=None, pattern="^(daily|weekly)$")
+    weekday: int | None = Field(default=None, ge=0, le=6)
+    message_text: str | None = None
+    attach_button: bool | None = None
+    bonus_days: int | None = Field(default=None, ge=0, le=365)
+    bonus_traffic_gb: int | None = Field(default=None, ge=0, le=1000)
+    repeat_policy: str | None = Field(default=None, pattern="^(always|once|cooldown)$")
+    repeat_cooldown_days: int | None = Field(default=None, ge=1, le=365)
+
+
+class CrmEventSummary(BaseModel):
+    id: int
+    name: str
+    enabled: bool
+    segment_type: str | None
+    segment_params: dict
+    run_at_time: str
+    frequency: str
+    weekday: int | None
+    message_text: str
+    attach_button: bool
+    bonus_days: int | None
+    bonus_traffic_gb: int | None
+    repeat_policy: str
+    repeat_cooldown_days: int
+    last_run_at: str | None
+    next_run_at: str | None
+    created_at: str
+    updated_at: str
+    created_by: str
+
+
+def _validate_run_at_time(value: str) -> None:
+    parts = value.split(":")
+    if len(parts) != 2:
+        raise HTTPException(400, "run_at_time must be HH:MM (UTC)")
+    try:
+        h, m = int(parts[0]), int(parts[1])
+    except ValueError as exc:
+        raise HTTPException(400, "run_at_time must be HH:MM (UTC)") from exc
+    if not (0 <= h <= 23 and 0 <= m <= 59):
+        raise HTTPException(400, "run_at_time must be HH:MM (UTC)")
+
+
+def _validate_event_schedule(body: CrmEventCreate | CrmEventUpdate) -> None:
+    if isinstance(body, CrmEventCreate):
+        _validate_run_at_time(body.run_at_time)
+        if body.frequency == "weekly" and body.weekday is None:
+            raise HTTPException(400, "weekday is required for weekly frequency")
+        if body.repeat_policy == "cooldown" and not body.repeat_cooldown_days:
+            raise HTTPException(400, "repeat_cooldown_days is required for cooldown policy")
+    else:
+        if body.run_at_time is not None:
+            _validate_run_at_time(body.run_at_time)
+        if body.frequency == "weekly" and body.weekday is None:
+            raise HTTPException(400, "weekday is required for weekly frequency")
+
+
+def _event_summary(e) -> CrmEventSummary:
+    return CrmEventSummary(
+        id=e.id,
+        name=e.name,
+        enabled=e.enabled,
+        segment_type=e.segment_type,
+        segment_params=json.loads(e.segment_params or "{}"),
+        run_at_time=e.run_at_time,
+        frequency=e.frequency,
+        weekday=e.weekday,
+        message_text=e.message_text,
+        attach_button=e.attach_button,
+        bonus_days=e.bonus_days,
+        bonus_traffic_gb=e.bonus_traffic_gb,
+        repeat_policy=e.repeat_policy,
+        repeat_cooldown_days=e.repeat_cooldown_days,
+        last_run_at=e.last_run_at,
+        next_run_at=e.next_run_at,
+        created_at=e.created_at,
+        updated_at=e.updated_at,
+        created_by=e.created_by,
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Variables & templates
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+@router.get("/variables")
+async def list_variables(_: str = Depends(get_current_user)):
+    return {"variables": variable_catalog()}
+
+
+@router.get("/templates")
+async def list_message_templates(
+    segment_id: str | None = None,
+    _: str = Depends(get_current_user),
+):
+    return {"templates": list_templates(segment_id=segment_id)}
+
+
+@router.get("/templates/{template_id}")
+async def get_message_template(template_id: str, _: str = Depends(get_current_user)):
+    tpl = get_template(template_id)
+    if not tpl:
+        raise HTTPException(404, "Template not found")
+    return tpl
+
+
+@router.post("/messages/preview", response_model=MessagePreviewResponse)
+async def preview_message(
+    body: MessagePreviewRequest,
+    _: str = Depends(get_current_user),
+):
+    if not body.message_text.strip():
+        raise HTTPException(400, "message_text is required")
+
+    rw = _rw_client()
+    crm_by_uuid: dict[str, dict] = {}
+    try:
+        for u in await rw.get_all_users_for_crm():
+            if u.get("uuid"):
+                crm_by_uuid[u["uuid"]] = u
+    except Exception as exc:
+        logger.warning("Preview: RW fetch failed: %s", exc)
+
+    username = None
+    crm_user = None
+    meta: dict = {}
+
+    if body.sample_tg_id:
+        async with async_session() as session:
+            from common_db.repo.users import get_users_by_tg_ids
+
+            users = await get_users_by_tg_ids(session, [body.sample_tg_id])
+            if users:
+                db_user = users[0]
+                username = db_user.username
+                if db_user.vless_uuid:
+                    crm_user = crm_by_uuid.get(db_user.vless_uuid)
+
+    ctx = build_message_context(username=username, crm_user=crm_user, meta=meta)
+    rendered = render_crm_message(body.message_text, ctx)
+    return MessagePreviewResponse(
+        rendered_text=rendered,
+        sample_tg_id=body.sample_tg_id,
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -312,3 +497,150 @@ async def launch_campaign(
 
     await _schedule_campaign(request, summary.id, total_hint=total)
     return LaunchResponse(**summary.model_dump(), queue_status="queued")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Scheduled events (UTC)
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+@router.get("/events")
+async def list_events(_: str = Depends(get_current_user)):
+    async with async_session() as session:
+        rows = await events_repo.list_events(session)
+        await session.commit()
+    return {"events": [_event_summary(e) for e in rows]}
+
+
+@router.post("/events", response_model=CrmEventSummary)
+async def create_event(
+    body: CrmEventCreate,
+    user: str = Depends(get_current_user),
+):
+    if not body.message_text.strip():
+        raise HTTPException(400, "message_text is required")
+    _validate_event_schedule(body)
+
+    async with async_session() as session:
+        event = await events_repo.create_event(
+            session,
+            name=body.name or f"Event {body.segment_type}",
+            segment_type=body.segment_type,
+            segment_params=body.segment_params,
+            run_at_time=body.run_at_time,
+            frequency=body.frequency,
+            weekday=body.weekday,
+            message_text=body.message_text,
+            attach_button=body.attach_button,
+            bonus_days=body.bonus_days,
+            bonus_traffic_gb=body.bonus_traffic_gb,
+            repeat_policy=body.repeat_policy,
+            repeat_cooldown_days=body.repeat_cooldown_days,
+            created_by=user,
+            enabled=body.enabled,
+        )
+        await session.commit()
+        summary = _event_summary(event)
+    return summary
+
+
+@router.get("/events/{event_id}", response_model=CrmEventSummary)
+async def get_event(event_id: int, _: str = Depends(get_current_user)):
+    async with async_session() as session:
+        event = await events_repo.get_event(session, event_id)
+        if not event:
+            raise HTTPException(404, "Event not found")
+        summary = _event_summary(event)
+        await session.commit()
+    return summary
+
+
+@router.patch("/events/{event_id}", response_model=CrmEventSummary)
+async def update_event(
+    event_id: int,
+    body: CrmEventUpdate,
+    _: str = Depends(get_current_user),
+):
+    _validate_event_schedule(body)
+
+    async with async_session() as session:
+        event = await events_repo.get_event(session, event_id)
+        if not event:
+            raise HTTPException(404, "Event not found")
+
+        updates: dict = {}
+        for field in (
+            "name",
+            "enabled",
+            "segment_type",
+            "message_text",
+            "attach_button",
+            "bonus_days",
+            "bonus_traffic_gb",
+            "run_at_time",
+            "frequency",
+            "weekday",
+            "repeat_policy",
+            "repeat_cooldown_days",
+        ):
+            val = getattr(body, field)
+            if val is not None:
+                updates[field] = val
+        if body.segment_params is not None:
+            updates["segment_params"] = json.dumps(body.segment_params)
+
+        schedule_changed = any(
+            k in updates
+            for k in ("run_at_time", "frequency", "weekday")
+        )
+        await events_repo.update_event(session, event, **updates)
+
+        if schedule_changed:
+            event.next_run_at = events_repo.compute_next_run_at(
+                run_at_time=event.run_at_time,
+                frequency=event.frequency,
+                weekday=event.weekday,
+            )
+
+        await session.commit()
+        summary = _event_summary(event)
+    return summary
+
+
+@router.delete("/events/{event_id}")
+async def delete_event(event_id: int, _: str = Depends(get_current_user)):
+    async with async_session() as session:
+        event = await events_repo.get_event(session, event_id)
+        if not event:
+            raise HTTPException(404, "Event not found")
+        await events_repo.delete_event(session, event)
+        await session.commit()
+    return {"status": "deleted"}
+
+
+@router.post("/events/{event_id}/run-now")
+async def run_event_now(
+    event_id: int,
+    request: Request,
+    _: str = Depends(get_current_user),
+):
+    pool = getattr(request.app.state, "arq_pool", None)
+    try:
+        result = await run_crm_event(event_id, arq_pool=pool, force=True)
+    except RuntimeError as exc:
+        raise HTTPException(503, str(exc)) from exc
+    if result.get("status") == "not_found":
+        raise HTTPException(404, "Event not found")
+    return result
+
+
+@router.get("/events/{event_id}/campaigns")
+async def list_event_campaigns(event_id: int, _: str = Depends(get_current_user)):
+    async with async_session() as session:
+        event = await events_repo.get_event(session, event_id)
+        if not event:
+            raise HTTPException(404, "Event not found")
+        all_campaigns = await crm_repo.list_campaigns(session, limit=200)
+        related = [c for c in all_campaigns if c.event_id == event_id]
+        await session.commit()
+    return {"campaigns": [_campaign_summary(c) for c in related]}
