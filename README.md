@@ -39,7 +39,7 @@ and calls the same miniapp API (see [docs/web-portal.md](docs/web-portal.md)).
 
 Images are built by CI (`.github/workflows/build.yml` and `.gitlab-ci.yml`) and
 published to **GHCR** and **Docker Hub** (`ghcr.io/l0nelynx/*` and
-`docker.io/l0nelynx/*`):
+`docker.io/<dockerhub-username>/*` — hub namespace = `DOCKERHUB_USERNAME` secret):
 
 | Branch / event | Tags | Use |
 |----------------|------|-----|

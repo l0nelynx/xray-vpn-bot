@@ -70,7 +70,7 @@ directory for support-ticket image attachments.
 
     ```bash
     docker compose config | grep 'image:'
-    # expect: image: docker.io/l0nelynx/bot:staging
+    # expect: image: docker.io/<dockerhub-username>/bot:staging
     ```
 
     Images are published to **GHCR** and **Docker Hub** (public). Set `REGISTRY`
@@ -79,22 +79,14 @@ directory for support-ticket image attachments.
 === "Pull from Docker Hub"
 
     ```bash
-    # .env
-    REGISTRY=docker.io/l0nelynx/
-    IMAGE_TAG=1.0.0          # or staging / 1.0.0-dev.42
+    # .env — <dockerhub-username> must match DOCKERHUB_USERNAME in GitHub Actions secrets
+    REGISTRY=docker.io/<dockerhub-username>/
+    IMAGE_TAG=staging          # or 1.0.0 / 1.0.0.154
     ```
-
-    ```bash
-    docker compose pull
-    docker compose up -d
-    ```
-
-    Verify Compose picked up `.env` (image lines must show your registry, not
-  hardcoded `ghcr.io`):
 
     ```bash
     docker compose config | grep 'image:'
-    # expect: image: docker.io/l0nelynx/bot:staging
+    # expect: image: docker.io/<dockerhub-username>/bot:staging
     ```
 
 === "Build locally"
@@ -162,7 +154,7 @@ CI (`.github/workflows/build.yml`) builds on push to `develop` / `main` and on
 git tags `v*.*.*`. Images are pushed to **both** registries with identical tags:
 
 - `ghcr.io/l0nelynx/<service>`
-- `docker.io/l0nelynx/<service>`
+- `docker.io/<dockerhub-username>/<service>` (same name as `DOCKERHUB_USERNAME` in CI)
 
 Services: `python-base`, `bot`, `support-bot`, `dashboard`, `miniapp`, `frontend`.
 
