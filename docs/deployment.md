@@ -155,15 +155,20 @@ build number on `develop` (`github.run_number`).
 
 | Source | Example tags | Recommended `IMAGE_TAG` |
 |--------|--------------|-------------------------|
-| `develop` | `staging`, `1.0.0-dev`, `1.0.0-dev.142`, `sha-abc1234` | `staging` or pin `1.0.0-dev.142` |
+| `develop` | `staging`, `1.0.0`, `1.0.0.<build>`, `sha-abc1234` | `staging` or pin `1.0.0.<build>` |
 | `main` | `latest`, `1.0.0`, `sha-abc1234` | `1.0.0` (avoid floating `latest` in prod) |
 | tag `v1.0.0` | `1.0.0`, `1.0`, `1`, `latest` | `1.0.0` |
 
-**Release flow:** bump `VERSION` on `main` to `1.0.0`, merge, create git tag
-`v1.0.0`, wait for CI, deploy with `IMAGE_TAG=1.0.0`.
+**Release flow (automated):** Actions → **Bump and Release** → choose `patch` /
+`minor` / `major`. The workflow bumps `VERSION` on `main`, creates git tag
+`vX.Y.Z`, and opens a GitHub Release. CI (`build.yml`) then builds and pushes
+all images with that version tag.
 
-**Dev flow:** keep `VERSION` as `1.0.0-dev` on `develop`; each push publishes
-`1.0.0-dev.<build>` plus moving `staging`.
+**Release flow (manual tag):** push tag `v1.0.0` — the same workflow creates the
+GitHub Release; `build.yml` builds container images.
+
+**Dev flow:** keep `VERSION` on `develop` (e.g. `1.0.0` or `1.1.0-dev`); each
+push publishes `<version>.<build>` plus moving `staging`.
 
 ## Containers
 

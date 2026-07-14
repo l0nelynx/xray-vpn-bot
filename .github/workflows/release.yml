@@ -1,0 +1,139 @@
+name: Bump and Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Semver bump (applied to VERSION on main)
+        required: true
+        type: choice
+        default: patch
+        options:
+          - patch
+          - minor
+          - major
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-pipeline
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.bump.outputs.version }}
+      tag: ${{ steps.bump.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - id: bump
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          BUMP="${{ github.event.inputs.bump }}"
+          CURRENT="$(tr -d '[:space:]' < VERSION)"
+          BASE="${CURRENT%%-*}"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE"
+
+          case "$BUMP" in
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH + 1)) ;;
+            *) echo "Unknown bump type: $BUMP" >&2; exit 1 ;;
+          esac
+
+          NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          TAG="v${NEW_VERSION}"
+
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists" >&2
+            exit 1
+          fi
+
+          printf '%s\n' "$NEW_VERSION" > VERSION
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add VERSION
+          git commit -m "chore: release ${TAG}"
+          git tag -a "$TAG" -m "Release ${TAG}"
+          git push origin main
+          git push origin "$TAG"
+
+          echo "version=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+  release:
+    needs: bump
+    if: always() && (needs.bump.result == 'success' || needs.bump.result == 'skipped')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            VERSION="${{ needs.bump.outputs.version }}"
+            TAG="${{ needs.bump.outputs.tag }}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+            VERSION="${TAG#v}"
+          fi
+
+          if [[ -z "$VERSION" || -z "$TAG" ]]; then
+            echo "Could not resolve release version" >&2
+            exit 1
+          fi
+
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Skip if GitHub Release already exists
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "${{ steps.meta.outputs.tag }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Release ${{ steps.meta.outputs.tag }} already exists — skipping."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create GitHub Release
+        if: steps.check.outputs.exists == 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: Release ${{ steps.meta.outputs.tag }}
+          generate_release_notes: true
+          body: |
+            ## Container images
+
+            Tag `${{ steps.meta.outputs.version }}` is published to GHCR and Docker Hub for all services.
+
+            | Service | Pull (GHCR) | Pull (Docker Hub) |
+            |---------|-------------|-------------------|
+            | bot | `ghcr.io/${{ github.repository_owner }}/bot:${{ steps.meta.outputs.version }}` | `docker.io/${{ secrets.DOCKERHUB_USERNAME }}/bot:${{ steps.meta.outputs.version }}` |
+            | support-bot | `ghcr.io/${{ github.repository_owner }}/support-bot:${{ steps.meta.outputs.version }}` | `docker.io/${{ secrets.DOCKERHUB_USERNAME }}/support-bot:${{ steps.meta.outputs.version }}` |
+            | dashboard | `ghcr.io/${{ github.repository_owner }}/dashboard:${{ steps.meta.outputs.version }}` | `docker.io/${{ secrets.DOCKERHUB_USERNAME }}/dashboard:${{ steps.meta.outputs.version }}` |
+            | miniapp | `ghcr.io/${{ github.repository_owner }}/miniapp:${{ steps.meta.outputs.version }}` | `docker.io/${{ secrets.DOCKERHUB_USERNAME }}/miniapp:${{ steps.meta.outputs.version }}` |
+            | frontend | `ghcr.io/${{ github.repository_owner }}/frontend:${{ steps.meta.outputs.version }}` | `docker.io/${{ secrets.DOCKERHUB_USERNAME }}/frontend:${{ steps.meta.outputs.version }}` |
+            | python-base | `ghcr.io/${{ github.repository_owner }}/python-base:${{ steps.meta.outputs.version }}` | `docker.io/${{ secrets.DOCKERHUB_USERNAME }}/python-base:${{ steps.meta.outputs.version }}` |
+
+            **Deploy:** set `IMAGE_TAG=${{ steps.meta.outputs.version }}` in `.env` and run `docker compose pull`.

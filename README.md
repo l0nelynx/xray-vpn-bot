@@ -43,7 +43,7 @@ published to **GHCR** and **Docker Hub** (`ghcr.io/l0nelynx/*` and
 
 | Branch / event | Tags | Use |
 |----------------|------|-----|
-| `develop` | `staging`, `1.x.x-dev`, `1.x.x-dev.<build>`, `sha-<short>` | dev / staging servers |
+| `develop` | `staging`, `1.x.x`, `1.x.x.<build>`, `sha-<short>` | dev / staging servers |
 | `main` | `latest`, `1.x.x`, `sha-<short>` | production (`IMAGE_TAG` = semver, not `latest`) |
 | git tag `v1.x.x` | `1.x.x`, `1.x`, `1`, `latest`, `sha-<short>` | release pin |
 
