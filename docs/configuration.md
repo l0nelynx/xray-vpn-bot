@@ -14,7 +14,7 @@ Compose-level variables live in **`.env`** (`cp .env.example .env`).
 | `POSTGRES_PASSWORD` | **Yes** | — | Compose refuses to start if empty |
 | `POSTGRES_DB` | No | `xray_vpn_bot` | Database name |
 | `IMAGE_TAG` | No | `staging` | Image tag — see [Deployment](deployment.md#image-versioning). Examples: `staging`, `1.0.0-dev.42`, `1.0.0` |
-| `REGISTRY` | No | `ghcr.io/l0nelynx/` | Image registry prefix (`docker.io/l0nelynx/` or empty for local builds) |
+| `REGISTRY` | No | `ghcr.io/l0nelynx/` | Image registry prefix. For Docker Hub use `docker.io/<your-dockerhub-username>/` — **must match** the `DOCKERHUB_USERNAME` GitHub secret (not necessarily the GitHub org name). Empty = local builds only. |
 
 `DATABASE_URL` is composed automatically:
 
