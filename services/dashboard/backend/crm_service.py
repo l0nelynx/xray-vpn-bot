@@ -74,6 +74,7 @@ async def scan_segment(
     invoice_max_age_hours: int = DEFAULT_INVOICE_MAX_AGE_HOURS,
     torrent_days: int = DEFAULT_TORRENT_DAYS,
     preview_limit: int | None = PREVIEW_LIMIT,
+    user_type: str = seg_repo.USER_TYPE_ALL,
 ) -> tuple[list[dict], int, str | None]:
     """Return (preview_users, total_count, warning)."""
 
@@ -81,17 +82,20 @@ async def scan_segment(
         users = await seg_repo.users_with_unpaid_invoices(
             session, max_age_hours=invoice_max_age_hours
         )
+        users = await seg_repo.filter_users_by_type(session, users, user_type)
         rows = [_scan_user_row(u, {"order_status": "created"}) for u in users]
         preview = rows if preview_limit is None else rows[:preview_limit]
         return preview, len(rows), None
 
     if segment_id == SEGMENT_ALL_USERS:
         users = await seg_repo.get_broadcast_eligible_users(session)
+        users = await seg_repo.filter_users_by_type(session, users, user_type)
         rows = [_scan_user_row(u) for u in users]
         preview = rows if preview_limit is None else rows[:preview_limit]
         return preview, len(rows), None
 
     local_users = await seg_repo.get_remnawave_broadcast_users(session)
+    local_users = await seg_repo.filter_users_by_type(session, local_users, user_type)
     if not local_users:
         return [], 0, None
 
@@ -203,36 +207,48 @@ async def apply_campaign_perks(
 
 
 def segment_catalog() -> list[dict[str, Any]]:
+    user_type_param = {
+        "name": "user_type",
+        "label": "Тип пользователя",
+        "type": "select",
+        "default": seg_repo.USER_TYPE_ALL,
+        "options": seg_repo.USER_TYPE_OPTIONS,
+    }
+    common_filters = [user_type_param]
+
+    def _params(extra: list[dict] | None = None) -> list[dict]:
+        return list(extra or []) + common_filters
+
     return [
         {
             "id": SEGMENT_ALL_USERS,
             "title": "Все пользователи",
             "description": "Все незабаненные пользователи с tg_id (массовая рассылка)",
-            "params": [],
+            "params": _params(),
         },
         {
             "id": SEGMENT_NEVER_CONNECTED,
             "title": "Не подключались",
             "description": "Пользователи с подпиской, но без firstConnectedAt в Remnawave",
-            "params": [],
+            "params": _params(),
         },
         {
             "id": SEGMENT_EXPIRED,
             "title": "Expired",
             "description": "Статус подписки expired",
-            "params": [],
+            "params": _params(),
         },
         {
             "id": SEGMENT_LIMITED,
             "title": "LIMITED",
             "description": "Статус подписки limited (трафик исчерпан)",
-            "params": [],
+            "params": _params(),
         },
         {
             "id": SEGMENT_TRAFFIC_LOW,
             "title": "Скоро кончится трафик",
             "description": "Использовано ≥ порога от лимита трафика",
-            "params": [
+            "params": _params([
                 {
                     "name": "traffic_threshold",
                     "label": "Порог использования (0.5–0.95)",
@@ -241,13 +257,13 @@ def segment_catalog() -> list[dict[str, Any]]:
                     "min": 0.5,
                     "max": 0.95,
                 }
-            ],
+            ]),
         },
         {
             "id": SEGMENT_EXPIRING_SOON,
             "title": "Скоро истечёт подписка",
             "description": "Осталось ≤ N дней до expire_at",
-            "params": [
+            "params": _params([
                 {
                     "name": "days_threshold",
                     "label": "Дней до истечения",
@@ -256,13 +272,13 @@ def segment_catalog() -> list[dict[str, Any]]:
                     "min": 1,
                     "max": 30,
                 }
-            ],
+            ]),
         },
         {
             "id": SEGMENT_UNPAID_INVOICE,
             "title": "Неоплаченный инвойс",
             "description": "Транзакции со статусом created",
-            "params": [
+            "params": _params([
                 {
                     "name": "invoice_max_age_hours",
                     "label": "Макс. возраст инвойса (часы)",
@@ -271,13 +287,13 @@ def segment_catalog() -> list[dict[str, Any]]:
                     "min": 1,
                     "max": 168,
                 }
-            ],
+            ]),
         },
         {
             "id": SEGMENT_TORRENT,
             "title": "Torrent Reports",
             "description": "Пользователи из отчётов torrent-blocker",
-            "params": [
+            "params": _params([
                 {
                     "name": "torrent_days",
                     "label": "Период (дней)",
@@ -286,12 +302,12 @@ def segment_catalog() -> list[dict[str, Any]]:
                     "min": 1,
                     "max": 90,
                 }
-            ],
+            ]),
         },
         {
             "id": SEGMENT_DEVICE_LIMIT,
             "title": "Лимит устройств",
             "description": "Число устройств ≥ hwidDeviceLimit",
-            "params": [],
+            "params": _params(),
         },
     ]

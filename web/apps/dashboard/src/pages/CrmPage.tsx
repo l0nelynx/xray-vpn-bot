@@ -35,14 +35,22 @@ import { api } from "../api/client";
 
 const { TextArea } = Input;
 
+interface SegmentParamOption {
+  value: string;
+  label: string;
+}
+
 interface SegmentParam {
   name: string;
   label: string;
-  type: "int" | "float";
-  default: number;
+  type: "int" | "float" | "select";
+  default: number | string;
   min?: number;
   max?: number;
+  options?: SegmentParamOption[];
 }
+
+type SegmentParams = Record<string, number | string>;
 
 interface SegmentDef {
   id: string;
@@ -85,7 +93,7 @@ interface CampaignSummary {
 
 interface ComposerState {
   segmentId: string | null;
-  segmentParams: Record<string, number>;
+  segmentParams: SegmentParams;
   targetTgIds: number[];
   users: ScanUser[];
   totalCount?: number;
@@ -113,7 +121,7 @@ interface CrmEventRow {
   name: string;
   enabled: boolean;
   segment_type: string | null;
-  segment_params: Record<string, number>;
+  segment_params: SegmentParams;
   run_at_time: string;
   frequency: string;
   weekday: number | null;
@@ -146,6 +154,44 @@ const REPEAT_POLICIES = [
   { value: "cooldown", label: "Cooldown" },
 ];
 
+function segmentParamDefaults(seg: SegmentDef): SegmentParams {
+  const defaults: SegmentParams = {};
+  seg.params.forEach((p) => {
+    defaults[p.name] = p.default;
+  });
+  return defaults;
+}
+
+function SegmentParamField({
+  param,
+  value,
+  onChange,
+}: {
+  param: SegmentParam;
+  value?: number | string;
+  onChange: (v: number | string) => void;
+}) {
+  if (param.type === "select") {
+    return (
+      <Select
+        style={{ minWidth: 160 }}
+        value={(value as string) ?? (param.default as string)}
+        options={param.options}
+        onChange={onChange}
+      />
+    );
+  }
+  return (
+    <InputNumber
+      min={param.min}
+      max={param.max}
+      step={param.type === "float" ? 0.05 : 1}
+      value={value as number | undefined}
+      onChange={(v) => onChange(v ?? (param.default as number))}
+    />
+  );
+}
+
 // ─────────────────────────────────────────────────────
 // Segments tab
 // ─────────────────────────────────────────────────────
@@ -158,7 +204,7 @@ function SegmentsTab({ onCompose }: SegmentsTabProps) {
   const { message } = App.useApp();
   const [segments, setSegments] = useState<SegmentDef[]>([]);
   const [scanModal, setScanModal] = useState<SegmentDef | null>(null);
-  const [paramValues, setParamValues] = useState<Record<string, number>>({});
+  const [paramValues, setParamValues] = useState<SegmentParams>({});
   const [scanning, setScanning] = useState(false);
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [selectedKeys, setSelectedKeys] = useState<number[]>([]);
@@ -171,11 +217,7 @@ function SegmentsTab({ onCompose }: SegmentsTabProps) {
   }, [message]);
 
   const openScan = (seg: SegmentDef) => {
-    const defaults: Record<string, number> = {};
-    seg.params.forEach((p) => {
-      defaults[p.name] = p.default;
-    });
-    setParamValues(defaults);
+    setParamValues(segmentParamDefaults(seg));
     setScanResult(null);
     setSelectedKeys([]);
     setScanModal(seg);
@@ -283,15 +325,13 @@ function SegmentsTab({ onCompose }: SegmentsTabProps) {
           <Form layout="inline" style={{ marginBottom: 16 }}>
             {scanModal.params.map((p) => (
               <Form.Item key={p.name} label={p.label}>
-                <InputNumber
-                  min={p.min}
-                  max={p.max}
-                  step={p.type === "float" ? 0.05 : 1}
+                <SegmentParamField
+                  param={p}
                   value={paramValues[p.name]}
                   onChange={(v) =>
                     setParamValues((prev) => ({
                       ...prev,
-                      [p.name]: v ?? p.default,
+                      [p.name]: v,
                     }))
                   }
                 />
@@ -808,11 +848,7 @@ function EventsTab() {
 
   const onSegmentChange = (segmentId: string) => {
     const seg = segments.find((s) => s.id === segmentId);
-    const defaults: Record<string, number> = {};
-    seg?.params.forEach((p) => {
-      defaults[p.name] = p.default;
-    });
-    form.setFieldValue("segment_params", defaults);
+    form.setFieldValue("segment_params", seg ? segmentParamDefaults(seg) : {});
     api
       .get<{ templates: MessageTemplate[] }>(
         `/crm/templates?segment_id=${encodeURIComponent(segmentId)}`
@@ -1049,11 +1085,15 @@ function EventsTab() {
                     label={p.label}
                     style={{ marginBottom: 0 }}
                   >
-                    <InputNumber
-                      min={p.min}
-                      max={p.max}
-                      step={p.type === "float" ? 0.05 : 1}
-                    />
+                    {p.type === "select" ? (
+                      <Select style={{ minWidth: 160 }} options={p.options} />
+                    ) : (
+                      <InputNumber
+                        min={p.min}
+                        max={p.max}
+                        step={p.type === "float" ? 0.05 : 1}
+                      />
+                    )}
                   </Form.Item>
                 ))}
               </Space>

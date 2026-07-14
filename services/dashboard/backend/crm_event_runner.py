@@ -37,6 +37,7 @@ def _scan_kwargs(params: dict) -> dict:
         "invoice_max_age_hours": int(params.get("invoice_max_age_hours", 48)),
         "torrent_days": int(params.get("torrent_days", 7)),
         "preview_limit": None,
+        "user_type": params.get("user_type", "all"),
     }
 
 

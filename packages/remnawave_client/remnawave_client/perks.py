@@ -19,6 +19,11 @@ def _client(client: Optional[RemnawaveClient]) -> RemnawaveClient:
     return client or get_default_client()
 
 
+def is_free_tier_user(crm_user: dict) -> bool:
+    """FREE subscriptions carry a traffic cap; PAID is typically unlimited."""
+    return int(crm_user.get("traffic_limit_bytes") or 0) > 0
+
+
 async def apply_crm_bonus_days(
     *,
     user_uuid: str,
@@ -36,6 +41,8 @@ async def apply_crm_bonus_days(
 
     try:
         if status == "active":
+            if is_free_tier_user(crm_user):
+                await rw.reset_user_traffic(user_uuid)
             current_days = int(crm_user.get("days_left") or 0)
             result = await apply_extend(
                 user_uuid=user_uuid,

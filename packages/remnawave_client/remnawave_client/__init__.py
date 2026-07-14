@@ -17,7 +17,7 @@ from . import api
 from .api import set_config_provider
 from .client import RemnawaveClient, configure, get_default_client
 from .operations import apply_extend, apply_new_user, apply_update
-from .perks import apply_crm_bonus_days, apply_crm_bonus_traffic
+from .perks import apply_crm_bonus_days, apply_crm_bonus_traffic, is_free_tier_user
 from .scenarios import SubscriptionScenario, SubscriptionType, resolve_scenario
 from .segmentation import (
     DEFAULT_DAYS_THRESHOLD,
@@ -64,6 +64,7 @@ __all__ = [
     "apply_update",
     "apply_crm_bonus_days",
     "apply_crm_bonus_traffic",
+    "is_free_tier_user",
     "DEFAULT_DAYS_THRESHOLD",
     "DEFAULT_INVOICE_MAX_AGE_HOURS",
     "DEFAULT_TORRENT_DAYS",

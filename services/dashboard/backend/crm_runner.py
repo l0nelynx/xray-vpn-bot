@@ -39,6 +39,9 @@ async def resolve_targets(
         return override_tg_ids
     if campaign.segment_type == SEGMENT_ALL_USERS:
         users = await seg_repo.get_broadcast_eligible_users(session)
+        params = json.loads(campaign.segment_params or "{}")
+        user_type = params.get("user_type", seg_repo.USER_TYPE_ALL)
+        users = await seg_repo.filter_users_by_type(session, users, user_type)
         return [u.tg_id for u in users if u.tg_id is not None]
     params = json.loads(campaign.segment_params or "{}")
     stored = params.get("target_tg_ids")

@@ -72,6 +72,7 @@ class ScanParams(BaseModel):
     traffic_threshold: float = Field(default=0.8, ge=0.5, le=0.95)
     invoice_max_age_hours: int = Field(default=48, ge=1, le=168)
     torrent_days: int = Field(default=7, ge=1, le=90)
+    user_type: str = Field(default="all", pattern="^(all|free|paid_vip)$")
 
 
 class ScanUser(BaseModel):
@@ -341,6 +342,7 @@ async def segment_scan(
             traffic_threshold=body.traffic_threshold,
             invoice_max_age_hours=body.invoice_max_age_hours,
             torrent_days=body.torrent_days,
+            user_type=body.user_type,
         )
 
     return ScanResponse(
