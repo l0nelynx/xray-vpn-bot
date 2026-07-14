@@ -232,6 +232,22 @@ cron job `tick_crm_events` every **15 minutes** (UTC). Event schedules use
 
 Ensure `crm-worker` is running for both manual campaigns and scheduled events.
 
+### CRM conditions → actions model
+
+Since migration `0018_crm_conditions_actions`, campaigns and scheduled events store
+audience rules in `conditions_json` and side effects in `actions_json`. The
+dashboard **Кампании** / **События** tabs edit these lists; flat columns
+(`segment_type`, `message_text`, `bonus_days`, …) are kept as a mirror for
+history and legacy API clients.
+
+- **Conditions (AND):** one `segment`, optional `user_type`, optional
+  `tg_allowlist` after preview scan.
+- **Actions (ordered):** Remnawave perks (`rw_bonus_days`, `rw_bonus_traffic`,
+  `rw_reset_traffic`) run before Telegram (`send_message`, `attach_button`).
+  At least one enabled action is required; message is optional.
+- Deploy **dashboard frontend and backend together** when changing CRM shape.
+  The API still accepts legacy flat bodies via an adapter for one–two releases.
+
 Postgres binds `127.0.0.1:5432` on the host for backups and local tools. The
 network is not `internal: true` by default. For stricter isolation, uncomment
 `internal: true` under `data-network` in `docker-compose.yml` and remove the

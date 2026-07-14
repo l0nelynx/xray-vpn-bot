@@ -15,7 +15,7 @@ import SupportPage from "./pages/SupportPage";
 import WebAppTariffsPage from "./pages/WebAppTariffsPage";
 import WebAppSettingsPage from "./pages/WebAppSettingsPage";
 import TgAdminPage from "./pages/TgAdminPage";
-import CrmPage from "./pages/CrmPage";
+import CrmPage from "./pages/crm/CrmPage";
 import PromocodesPage from "./pages/PromocodesPage";
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {

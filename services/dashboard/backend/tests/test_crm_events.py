@@ -1,12 +1,16 @@
-"""Tests for CRM events repeat policy and schedule helpers."""
+"""Tests for CRM events repeat policy, schedule helpers, and conditions/actions payload."""
 from __future__ import annotations
 
 from datetime import datetime
+
+import pytest
+from fastapi import HTTPException
 
 from common_db.repo.crm_events import (
     compute_next_run_at,
     filter_tg_ids_by_repeat_policy,
 )
+from dashboard.backend.routers.crm import CrmEventCreate, _event_payload
 
 
 def test_filter_repeat_always() -> None:
@@ -61,3 +65,28 @@ def test_compute_next_run_at_weekly() -> None:
         from_dt=base,
     )
     assert nxt.startswith("2026-07-20T09:00:00")
+
+
+def test_event_payload_actions_without_message() -> None:
+    body = CrmEventCreate(
+        name="rw-only",
+        conditions=[
+            {"type": "segment", "segment_id": "limited", "params": {}},
+        ],
+        actions=[
+            {"type": "rw_reset_traffic", "enabled": True, "order": 12},
+        ],
+    )
+    conditions, actions, flat = _event_payload(body, is_create=True)
+    assert len(conditions) == 1
+    assert actions[0]["type"] == "rw_reset_traffic"
+    assert flat["message_text"] == ""
+
+
+def test_event_payload_requires_actions_on_create() -> None:
+    body = CrmEventCreate(
+        conditions=[{"type": "segment", "segment_id": "limited", "params": {}}],
+        actions=[],
+    )
+    with pytest.raises(HTTPException, match="actions required"):
+        _event_payload(body, is_create=True)

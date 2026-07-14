@@ -2,18 +2,17 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from datetime import datetime, timedelta, timezone
 
 from arq import ArqRedis
-from remnawave_client.segmentation import SEGMENT_ALL_USERS
 
 from common_db.repo import crm as crm_repo
 from common_db.repo import crm_events as events_repo
 
 from .config import get_remnawave_token, get_remnawave_url
-from .crm_service import scan_segment
+from .crm_conditions import evaluate_conditions_full
+from .crm_model_adapter import get_actions, get_conditions, sync_flat_from_model
 from .database.session import async_session
 from .tasks.crm import enqueue_campaign
 
@@ -30,24 +29,13 @@ def _rw_client():
     )
 
 
-def _scan_kwargs(params: dict) -> dict:
-    return {
-        "days_threshold": int(params.get("days_threshold", 3)),
-        "traffic_threshold": float(params.get("traffic_threshold", 0.8)),
-        "invoice_max_age_hours": int(params.get("invoice_max_age_hours", 48)),
-        "torrent_days": int(params.get("torrent_days", 7)),
-        "preview_limit": None,
-        "user_type": params.get("user_type", "all"),
-    }
-
-
 async def run_crm_event(
     event_id: int,
     *,
     arq_pool: ArqRedis | None = None,
     force: bool = False,
 ) -> dict:
-    """Execute one scheduled CRM event: scan → filter → campaign → queue."""
+    """Execute one scheduled CRM event: evaluate conditions → campaign → queue."""
     rw = _rw_client()
 
     async with async_session() as session:
@@ -57,17 +45,11 @@ async def run_crm_event(
         if not event.enabled and not force:
             return {"status": "disabled", "event_id": event_id}
 
-        params = json.loads(event.segment_params or "{}")
-        segment_type = event.segment_type or ""
-        scan_kw = _scan_kwargs(params)
+        conditions = get_conditions(event)
+        actions = get_actions(event)
+        flat = sync_flat_from_model(conditions=conditions, actions=actions)
 
-        users, total, warning = await scan_segment(
-            session,
-            rw,
-            segment_type,
-            **scan_kw,
-        )
-        tg_ids = [u["tg_id"] for u in users if u.get("tg_id") is not None]
+        tg_ids, warning = await evaluate_conditions_full(session, rw, conditions)
 
         ever_sent: set[int] = set()
         recent_sent: set[int] = set()
@@ -96,28 +78,36 @@ async def run_crm_event(
             logger.info(
                 "CRM event %s: empty audience after repeat filter (scan=%d)",
                 event_id,
-                total,
+                len(tg_ids),
             )
             return {
                 "status": "empty",
                 "event_id": event_id,
-                "scan_total": total,
+                "scan_total": len(tg_ids),
                 "warning": warning,
             }
 
-        store_targets = None if segment_type == SEGMENT_ALL_USERS else filtered
+        # Store frozen audience on the campaign (runner uses target_tg_ids fast path)
+        campaign_conditions = [
+            c for c in conditions if c.get("type") != "tg_allowlist"
+        ]
+        campaign_conditions.append(
+            {"type": "tg_allowlist", "tg_ids": filtered}
+        )
 
         campaign = await crm_repo.create_campaign(
             session,
             name=event.name or f"Event #{event_id}",
-            segment_type=segment_type,
-            segment_params=params,
-            message_text=event.message_text,
-            attach_button=event.attach_button,
-            bonus_days=event.bonus_days,
-            bonus_traffic_gb=event.bonus_traffic_gb,
+            conditions=campaign_conditions,
+            actions=actions,
+            segment_type=flat.get("segment_type"),
+            segment_params=dict(flat.get("segment_params") or {}),
+            message_text=flat.get("message_text") or "",
+            attach_button=bool(flat.get("attach_button")),
+            bonus_days=flat.get("bonus_days"),
+            bonus_traffic_gb=flat.get("bonus_traffic_gb"),
             created_by="system",
-            target_tg_ids=store_targets,
+            target_tg_ids=filtered,
             event_id=event_id,
         )
         campaign.total_targets = len(filtered)
