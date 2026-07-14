@@ -6,13 +6,12 @@ on:
     branches:
       - main
       - develop
+    tags:
+      - 'v*.*.*'
     paths-ignore:
       - 'docs/**'
       - '**.md'
 
-# ─────────────────────────────────────────────────────────────────
-# Job 1: detect which services were affected by this push
-# ─────────────────────────────────────────────────────────────────
 jobs:
   detect:
     if: "!startsWith(github.event.head_commit.message, 'docs:')"
@@ -24,35 +23,40 @@ jobs:
       miniapp:     ${{ steps.filter.outputs.miniapp }}
       frontend:    ${{ steps.filter.outputs.frontend }}
       base:        ${{ steps.filter.outputs.base }}
-      # shared — triggers bot + dashboard + miniapp (not support-bot)
       shared:      ${{ steps.filter.outputs.shared }}
-      # meta — workflow files changed, rebuild everything
       meta:        ${{ steps.filter.outputs.meta }}
+      release:     ${{ steps.release.outputs.release }}
     steps:
       - uses: actions/checkout@v4
+
+      - id: release
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - uses: dorny/paths-filter@v3
         id: filter
         with:
           filters: |
-            # Cross-service shared code (common_db, remnawave_client, alembic)
-            # Affects bot, dashboard and miniapp — not support-bot.
             shared:
               - 'packages/**'
               - 'alembic/**'
               - 'alembic.ini'
               - 'migrations_runner.py'
 
-            # Shared Python base image (common deps + common_db/remnawave_client).
             base:
               - 'infra/docker/base.Dockerfile'
               - 'infra/docker/requirements-base.txt'
               - 'packages/common_db/**'
               - 'packages/remnawave_client/**'
 
-            # Workflow files changed — rebuild all images to be safe
             meta:
               - '.github/workflows/**'
+              - '.github/actions/**'
+              - 'VERSION'
 
             bot:
               - 'services/bot/**'
@@ -62,8 +66,6 @@ jobs:
               - 'services/support_bot/**'
               - 'infra/docker/support_bot.Dockerfile'
 
-            # Backends are now pure JSON APIs — the SPAs live in the `frontend`
-            # image, so frontend source no longer rebuilds these.
             dashboard:
               - 'services/dashboard/**'
               - 'infra/docker/dashboard.Dockerfile'
@@ -72,7 +74,6 @@ jobs:
               - 'services/miniapp/**'
               - 'infra/docker/miniapp.Dockerfile'
 
-            # Single web tier: both SPAs (npm workspaces) + nginx reverse proxy.
             frontend:
               - 'web/**'
               - 'package.json'
@@ -80,68 +81,93 @@ jobs:
               - 'infra/docker/frontend.Dockerfile'
               - 'infra/docker/frontend.nginx.conf'
 
-# ─────────────────────────────────────────────────────────────────
-# Shared build steps — each job sets SERVICE/DOCKERFILE env vars
-# and the steps below are identical across all four services.
-# ─────────────────────────────────────────────────────────────────
-
-  # Shared base image. Rebuilt ONLY when its own inputs change (base.Dockerfile,
-  # requirements-base.txt, common_db, remnawave_client) or on workflow changes.
-  # When it's skipped, the backend jobs below still run and reuse the
-  # already-published python-base from the registry via their FROM.
-  build-base:
+  version:
     needs: detect
+    runs-on: ubuntu-latest
+    outputs:
+      tags_meta: ${{ steps.calc.outputs.tags_meta }}
+      base_tag:  ${{ steps.calc.outputs.base_tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: calc
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          VERSION="$(tr -d '[:space:]' < VERSION)"
+          BUILD="${{ github.run_number }}"
+          SHORT_SHA="${GITHUB_SHA::7}"
+          REF="${{ github.ref }}"
+
+          TAGS_META=""
+          add_tag() {
+            TAGS_META+="type=raw,value=${1}"$'\n'
+          }
+
+          if [[ "$REF" == refs/tags/v* ]]; then
+            VER="${REF#refs/tags/v}"
+            MINOR="${VER%.*}"
+            MAJOR="${VER%%.*}"
+            BASE_TAG="$VER"
+            add_tag "$VER"
+            add_tag "$MINOR"
+            add_tag "$MAJOR"
+            add_tag "latest"
+          elif [[ "$REF" == refs/heads/main ]]; then
+            BASE_TAG="latest"
+            add_tag "$VERSION"
+            add_tag "latest"
+          elif [[ "$REF" == refs/heads/develop ]]; then
+            BASE_TAG="staging"
+            add_tag "${VERSION}.${BUILD}"
+            add_tag "$VERSION"
+            add_tag "staging"
+          else
+            echo "Unsupported ref: $REF" >&2
+            exit 1
+          fi
+
+          add_tag "sha-${SHORT_SHA}"
+
+          {
+            echo "base_tag=${BASE_TAG}"
+            echo "tags_meta<<EOF"
+            printf '%s' "$TAGS_META"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+  build-base:
+    needs: [detect, version]
     if: |
+      needs.detect.outputs.release == 'true' ||
       needs.detect.outputs.base == 'true' ||
       needs.detect.outputs.meta == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
-    env:
-      SERVICE:    python-base
-      DOCKERFILE: ./infra/docker/base.Dockerfile
-      CONTEXT:    ./
     steps:
       - uses: actions/checkout@v4
 
-      - uses: docker/login-action@v3
+      - uses: ./.github/actions/docker-build
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository_owner }}/${{ env.SERVICE }}
-          tags: |
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
-            type=raw,value=staging,enable=${{ github.ref == 'refs/heads/develop' }}
-            type=sha,prefix=sha-,format=short
-            type=raw,value=build-${{ github.run_number }}
-
-      - uses: docker/build-push-action@v5
-        with:
-          context:    ${{ env.CONTEXT }}
-          file:       ${{ env.DOCKERFILE }}
-          push:       true
-          tags:       ${{ steps.meta.outputs.tags }}
-          labels:     ${{ steps.meta.outputs.labels }}
-          build-args: |
-            BASE_IMAGE=${{ env.BASE_IMAGE }}
-
+          service: python-base
+          dockerfile: ./infra/docker/base.Dockerfile
+          context: ./
+          tags_meta: ${{ needs.version.outputs.tags_meta }}
+          ghcr_owner: ${{ github.repository_owner }}
+          dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}
+          dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}
 
   build-bot:
-    needs: [detect, build-base]
-    # Runs on bot/shared/meta changes. `build-base` may be skipped (base
-    # unchanged) — !cancelled() + base.result != 'failure' lets this run anyway
-    # and reuse the published python-base; if base build failed, skip.
+    needs: [detect, version, build-base]
     if: >-
       ${{ !cancelled()
           && needs.detect.result == 'success'
           && needs['build-base'].result != 'failure'
-          && (needs.detect.outputs.bot == 'true'
+          && (needs.detect.outputs.release == 'true'
+              || needs.detect.outputs.bot == 'true'
               || needs.detect.outputs.shared == 'true'
               || needs.detect.outputs.base == 'true'
               || needs.detect.outputs.meta == 'true') }}
@@ -149,92 +175,51 @@ jobs:
     permissions:
       contents: read
       packages: write
-    env:
-      SERVICE:    bot
-      DOCKERFILE: ./infra/docker/bot.Dockerfile
-      CONTEXT:    ./
-      BASE_IMAGE: ghcr.io/${{ github.repository_owner }}/python-base:${{ github.ref == 'refs/heads/main' && 'latest' || 'staging' }}
     steps:
       - uses: actions/checkout@v4
 
-      - uses: docker/login-action@v3
+      - uses: ./.github/actions/docker-build
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository_owner }}/${{ env.SERVICE }}
-          tags: |
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
-            type=raw,value=staging,enable=${{ github.ref == 'refs/heads/develop' }}
-            type=sha,prefix=sha-,format=short
-            type=raw,value=build-${{ github.run_number }}
-
-      - uses: docker/build-push-action@v5
-        with:
-          context:    ${{ env.CONTEXT }}
-          file:       ${{ env.DOCKERFILE }}
-          push:       true
-          tags:       ${{ steps.meta.outputs.tags }}
-          labels:     ${{ steps.meta.outputs.labels }}
-          build-args: |
-            BASE_IMAGE=${{ env.BASE_IMAGE }}
-
+          service: bot
+          dockerfile: ./infra/docker/bot.Dockerfile
+          context: ./
+          tags_meta: ${{ needs.version.outputs.tags_meta }}
+          ghcr_owner: ${{ github.repository_owner }}
+          dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}
+          dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}
+          base_image: ghcr.io/${{ github.repository_owner }}/python-base:${{ needs.version.outputs.base_tag }}
 
   build-support-bot:
-    needs: detect
-    # support-bot has no shared packages dependency — only its own files trigger it
+    needs: [detect, version]
     if: |
+      needs.detect.outputs.release == 'true' ||
       needs.detect.outputs.support_bot == 'true' ||
-      needs.detect.outputs.meta        == 'true'
+      needs.detect.outputs.meta == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
-    env:
-      SERVICE:    support-bot
-      DOCKERFILE: ./infra/docker/support_bot.Dockerfile
-      CONTEXT:    ./
     steps:
       - uses: actions/checkout@v4
 
-      - uses: docker/login-action@v3
+      - uses: ./.github/actions/docker-build
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository_owner }}/${{ env.SERVICE }}
-          tags: |
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
-            type=raw,value=staging,enable=${{ github.ref == 'refs/heads/develop' }}
-            type=sha,prefix=sha-,format=short
-            type=raw,value=build-${{ github.run_number }}
-
-      - uses: docker/build-push-action@v5
-        with:
-          context:    ${{ env.CONTEXT }}
-          file:       ${{ env.DOCKERFILE }}
-          push:       true
-          tags:       ${{ steps.meta.outputs.tags }}
-          labels:     ${{ steps.meta.outputs.labels }}
-          build-args: |
-            BASE_IMAGE=${{ env.BASE_IMAGE }}
-
+          service: support-bot
+          dockerfile: ./infra/docker/support_bot.Dockerfile
+          context: ./
+          tags_meta: ${{ needs.version.outputs.tags_meta }}
+          ghcr_owner: ${{ github.repository_owner }}
+          dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}
+          dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}
 
   build-dashboard:
-    needs: [detect, build-base]
+    needs: [detect, version, build-base]
     if: >-
       ${{ !cancelled()
           && needs.detect.result == 'success'
           && needs['build-base'].result != 'failure'
-          && (needs.detect.outputs.dashboard == 'true'
+          && (needs.detect.outputs.release == 'true'
+              || needs.detect.outputs.dashboard == 'true'
               || needs.detect.outputs.shared == 'true'
               || needs.detect.outputs.base == 'true'
               || needs.detect.outputs.meta == 'true') }}
@@ -242,93 +227,51 @@ jobs:
     permissions:
       contents: read
       packages: write
-    env:
-      SERVICE:    dashboard
-      DOCKERFILE: ./infra/docker/dashboard.Dockerfile
-      CONTEXT:    ./
-      BASE_IMAGE: ghcr.io/${{ github.repository_owner }}/python-base:${{ github.ref == 'refs/heads/main' && 'latest' || 'staging' }}
     steps:
       - uses: actions/checkout@v4
 
-      - uses: docker/login-action@v3
+      - uses: ./.github/actions/docker-build
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository_owner }}/${{ env.SERVICE }}
-          tags: |
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
-            type=raw,value=staging,enable=${{ github.ref == 'refs/heads/develop' }}
-            type=sha,prefix=sha-,format=short
-            type=raw,value=build-${{ github.run_number }}
-
-      - uses: docker/build-push-action@v5
-        with:
-          context:    ${{ env.CONTEXT }}
-          file:       ${{ env.DOCKERFILE }}
-          push:       true
-          tags:       ${{ steps.meta.outputs.tags }}
-          labels:     ${{ steps.meta.outputs.labels }}
-          build-args: |
-            BASE_IMAGE=${{ env.BASE_IMAGE }}
-
+          service: dashboard
+          dockerfile: ./infra/docker/dashboard.Dockerfile
+          context: ./
+          tags_meta: ${{ needs.version.outputs.tags_meta }}
+          ghcr_owner: ${{ github.repository_owner }}
+          dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}
+          dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}
+          base_image: ghcr.io/${{ github.repository_owner }}/python-base:${{ needs.version.outputs.base_tag }}
 
   build-frontend:
-    needs: detect
-    # The web tier depends only on web/** and its Dockerfile/nginx conf — not on
-    # the python `shared` packages.
+    needs: [detect, version]
     if: |
+      needs.detect.outputs.release == 'true' ||
       needs.detect.outputs.frontend == 'true' ||
-      needs.detect.outputs.meta     == 'true'
+      needs.detect.outputs.meta == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
-    env:
-      SERVICE:    frontend
-      DOCKERFILE: ./infra/docker/frontend.Dockerfile
-      CONTEXT:    ./
     steps:
       - uses: actions/checkout@v4
 
-      - uses: docker/login-action@v3
+      - uses: ./.github/actions/docker-build
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository_owner }}/${{ env.SERVICE }}
-          tags: |
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
-            type=raw,value=staging,enable=${{ github.ref == 'refs/heads/develop' }}
-            type=sha,prefix=sha-,format=short
-            type=raw,value=build-${{ github.run_number }}
-
-      - uses: docker/build-push-action@v5
-        with:
-          context:    ${{ env.CONTEXT }}
-          file:       ${{ env.DOCKERFILE }}
-          push:       true
-          tags:       ${{ steps.meta.outputs.tags }}
-          labels:     ${{ steps.meta.outputs.labels }}
-          build-args: |
-            BASE_IMAGE=${{ env.BASE_IMAGE }}
-
+          service: frontend
+          dockerfile: ./infra/docker/frontend.Dockerfile
+          context: ./
+          tags_meta: ${{ needs.version.outputs.tags_meta }}
+          ghcr_owner: ${{ github.repository_owner }}
+          dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}
+          dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}
 
   build-miniapp:
-    needs: [detect, build-base]
+    needs: [detect, version, build-base]
     if: >-
       ${{ !cancelled()
           && needs.detect.result == 'success'
           && needs['build-base'].result != 'failure'
-          && (needs.detect.outputs.miniapp == 'true'
+          && (needs.detect.outputs.release == 'true'
+              || needs.detect.outputs.miniapp == 'true'
               || needs.detect.outputs.shared == 'true'
               || needs.detect.outputs.base == 'true'
               || needs.detect.outputs.meta == 'true') }}
@@ -336,36 +279,16 @@ jobs:
     permissions:
       contents: read
       packages: write
-    env:
-      SERVICE:    miniapp
-      DOCKERFILE: ./infra/docker/miniapp.Dockerfile
-      CONTEXT:    ./
-      BASE_IMAGE: ghcr.io/${{ github.repository_owner }}/python-base:${{ github.ref == 'refs/heads/main' && 'latest' || 'staging' }}
     steps:
       - uses: actions/checkout@v4
 
-      - uses: docker/login-action@v3
+      - uses: ./.github/actions/docker-build
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository_owner }}/${{ env.SERVICE }}
-          tags: |
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
-            type=raw,value=staging,enable=${{ github.ref == 'refs/heads/develop' }}
-            type=sha,prefix=sha-,format=short
-            type=raw,value=build-${{ github.run_number }}
-
-      - uses: docker/build-push-action@v5
-        with:
-          context:    ${{ env.CONTEXT }}
-          file:       ${{ env.DOCKERFILE }}
-          push:       true
-          tags:       ${{ steps.meta.outputs.tags }}
-          labels:     ${{ steps.meta.outputs.labels }}
-          build-args: |
-            BASE_IMAGE=${{ env.BASE_IMAGE }}
+          service: miniapp
+          dockerfile: ./infra/docker/miniapp.Dockerfile
+          context: ./
+          tags_meta: ${{ needs.version.outputs.tags_meta }}
+          ghcr_owner: ${{ github.repository_owner }}
+          dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}
+          dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}
+          base_image: ghcr.io/${{ github.repository_owner }}/python-base:${{ needs.version.outputs.base_tag }}

@@ -65,8 +65,21 @@ directory for support-ticket image attachments.
     docker compose up -d
     ```
 
-    Images from `ghcr.io/l0nelynx/` — tag controlled by `IMAGE_TAG` in `.env`
-    (`latest` from `main`, `staging` from `develop`).
+    Images are published to **GHCR** and **Docker Hub** (public). Set `REGISTRY`
+    and `IMAGE_TAG` in `.env` — see [Image versioning](#image-versioning).
+
+=== "Pull from Docker Hub"
+
+    ```bash
+    # .env
+    REGISTRY=docker.io/l0nelynx/
+    IMAGE_TAG=1.0.0          # or staging / 1.0.0-dev.42
+    ```
+
+    ```bash
+    docker compose pull
+    docker compose up -d
+    ```
 
 === "Build locally"
 
@@ -126,6 +139,31 @@ See [Payment gateways](payment-gateways.md).
 1. Open `https://your-domain/bot/dashboard/`
 2. Create squad profiles → build Tariff Constructor tree → set promos
 3. Test purchase via MiniApp
+
+## Image versioning
+
+CI (`.github/workflows/build.yml`) builds on push to `develop` / `main` and on
+git tags `v*.*.*`. Images are pushed to **both** registries with identical tags:
+
+- `ghcr.io/l0nelynx/<service>`
+- `docker.io/l0nelynx/<service>`
+
+Services: `python-base`, `bot`, `support-bot`, `dashboard`, `miniapp`, `frontend`.
+
+The application version is stored in the root `VERSION` file. CI adds a monotonic
+build number on `develop` (`github.run_number`).
+
+| Source | Example tags | Recommended `IMAGE_TAG` |
+|--------|--------------|-------------------------|
+| `develop` | `staging`, `1.0.0-dev`, `1.0.0-dev.142`, `sha-abc1234` | `staging` or pin `1.0.0-dev.142` |
+| `main` | `latest`, `1.0.0`, `sha-abc1234` | `1.0.0` (avoid floating `latest` in prod) |
+| tag `v1.0.0` | `1.0.0`, `1.0`, `1`, `latest` | `1.0.0` |
+
+**Release flow:** bump `VERSION` on `main` to `1.0.0`, merge, create git tag
+`v1.0.0`, wait for CI, deploy with `IMAGE_TAG=1.0.0`.
+
+**Dev flow:** keep `VERSION` as `1.0.0-dev` on `develop`; each push publishes
+`1.0.0-dev.<build>` plus moving `staging`.
 
 ## Containers
 
