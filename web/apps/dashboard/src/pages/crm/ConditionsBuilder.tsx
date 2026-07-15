@@ -3,22 +3,33 @@ import {
   Button,
   Card,
   Checkbox,
+  Collapse,
   Descriptions,
   Form,
+  Input,
   InputNumber,
   Select,
   Space,
+  Switch,
   Table,
   Tag,
   Typography,
 } from "antd";
 import type { TableRowSelection } from "antd/es/table/interface";
 import { ScanOutlined } from "@ant-design/icons";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../../api/client";
 import useIsMobile from "../../hooks/useIsMobile";
-import { getSegmentCondition, segmentParamDefaults } from "./helpers";
-import type { CrmCondition, ScanResult, ScanUser, SegmentDef, SegmentParams } from "./types";
+import { fetchInternalSquads, normalizeRwTag } from "./api";
+import { getSegmentCondition, segmentParamDefaults, upsertRwCondition } from "./helpers";
+import type {
+  CrmCondition,
+  InternalSquadOption,
+  ScanResult,
+  ScanUser,
+  SegmentDef,
+  SegmentParams,
+} from "./types";
 import { USER_TYPE_OPTIONS } from "./types";
 
 interface ConditionsBuilderProps {
@@ -84,9 +95,19 @@ export default function ConditionsBuilder({
   const isMobile = useIsMobile();
   const [scanning, setScanning] = useState(false);
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
+  const [internalSquads, setInternalSquads] = useState<InternalSquadOption[]>([]);
+
+  useEffect(() => {
+    fetchInternalSquads()
+      .then(setInternalSquads)
+      .catch(() => {});
+  }, []);
 
   const segmentCond = getSegmentCondition(conditions);
   const userTypeCond = conditions.find((c) => c.type === "user_type");
+  const rwSquadCond = conditions.find((c) => c.type === "rw_internal_squad");
+  const rwTrafficCond = conditions.find((c) => c.type === "rw_traffic_limit");
+  const rwTagCond = conditions.find((c) => c.type === "rw_tag");
   const segmentDef = segmentTypes.find((s) => s.id === segmentCond?.segment_id);
 
   const updateSegment = (patch: Partial<CrmCondition>) => {
@@ -108,6 +129,50 @@ export default function ConditionsBuilder({
     } else {
       onChange([...conditions, { type: "user_type", value }]);
     }
+  };
+
+  const toggleRwSquad = (enabled: boolean) => {
+    if (!enabled) {
+      onChange(upsertRwCondition(conditions, "rw_internal_squad", null));
+      return;
+    }
+    const first = internalSquads[0]?.uuid;
+    if (!first) {
+      message.warning("Internal squads не загружены");
+      return;
+    }
+    onChange(
+      upsertRwCondition(conditions, "rw_internal_squad", {
+        type: "rw_internal_squad",
+        squad_id: rwSquadCond?.squad_id || first,
+      })
+    );
+  };
+
+  const toggleRwTraffic = (enabled: boolean) => {
+    if (!enabled) {
+      onChange(upsertRwCondition(conditions, "rw_traffic_limit", null));
+      return;
+    }
+    onChange(
+      upsertRwCondition(conditions, "rw_traffic_limit", {
+        type: "rw_traffic_limit",
+        limit_gb: rwTrafficCond?.limit_gb ?? 5,
+      })
+    );
+  };
+
+  const toggleRwTag = (enabled: boolean) => {
+    if (!enabled) {
+      onChange(upsertRwCondition(conditions, "rw_tag", null));
+      return;
+    }
+    onChange(
+      upsertRwCondition(conditions, "rw_tag", {
+        type: "rw_tag",
+        tag: rwTagCond?.tag || "",
+      })
+    );
   };
 
   const onSegmentIdChange = (segmentId: string) => {
@@ -236,6 +301,113 @@ export default function ConditionsBuilder({
             />
           </Form.Item>
         </Form>
+
+        <Collapse
+          items={[
+            {
+              key: "remnawave",
+              label: "1.3 Remnawave (опционально)",
+              children: (
+                <Space direction="vertical" style={{ width: "100%" }} size={12}>
+                  <div>
+                    <Space wrap style={{ marginBottom: 8 }}>
+                      <Switch
+                        size="small"
+                        checked={!!rwSquadCond}
+                        onChange={toggleRwSquad}
+                      />
+                      <Typography.Text>Internal Squad</Typography.Text>
+                    </Space>
+                    {rwSquadCond && (
+                      <Select
+                        showSearch
+                        optionFilterProp="label"
+                        placeholder="Выберите squad"
+                        style={{ width: "100%" }}
+                        value={rwSquadCond.squad_id}
+                        options={internalSquads.map((s) => ({
+                          value: s.uuid,
+                          label: s.name,
+                        }))}
+                        onChange={(squad_id) =>
+                          onChange(
+                            upsertRwCondition(conditions, "rw_internal_squad", {
+                              type: "rw_internal_squad",
+                              squad_id,
+                            })
+                          )
+                        }
+                      />
+                    )}
+                  </div>
+
+                  <div>
+                    <Space wrap style={{ marginBottom: 8 }}>
+                      <Switch
+                        size="small"
+                        checked={!!rwTrafficCond}
+                        onChange={toggleRwTraffic}
+                      />
+                      <Typography.Text>Traffic Limit (ГБ)</Typography.Text>
+                    </Space>
+                    {rwTrafficCond && (
+                      <>
+                        <InputNumber
+                          min={0}
+                          max={10000}
+                          style={{ width: "100%" }}
+                          value={rwTrafficCond.limit_gb}
+                          onChange={(v) =>
+                            onChange(
+                              upsertRwCondition(conditions, "rw_traffic_limit", {
+                                type: "rw_traffic_limit",
+                                limit_gb: v ?? 0,
+                              })
+                            )
+                          }
+                        />
+                        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                          0 = безлимит
+                        </Typography.Text>
+                      </>
+                    )}
+                  </div>
+
+                  <div>
+                    <Space wrap style={{ marginBottom: 8 }}>
+                      <Switch
+                        size="small"
+                        checked={!!rwTagCond}
+                        onChange={toggleRwTag}
+                      />
+                      <Typography.Text>Tag</Typography.Text>
+                    </Space>
+                    {rwTagCond && (
+                      <>
+                        <Input
+                          placeholder="PROMO_1"
+                          style={{ width: "100%" }}
+                          value={rwTagCond.tag || ""}
+                          onChange={(e) =>
+                            onChange(
+                              upsertRwCondition(conditions, "rw_tag", {
+                                type: "rw_tag",
+                                tag: normalizeRwTag(e.target.value),
+                              })
+                            )
+                          }
+                        />
+                        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                          UPPERCASE, без пробелов
+                        </Typography.Text>
+                      </>
+                    )}
+                  </div>
+                </Space>
+              ),
+            },
+          ]}
+        />
 
         <Button
           type="primary"

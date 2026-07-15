@@ -62,6 +62,26 @@ export function getSegmentCondition(conditions: CrmCondition[]): CrmCondition | 
   return conditions.find((c) => c.type === "segment");
 }
 
+const RW_CONDITION_TYPES = new Set([
+  "rw_internal_squad",
+  "rw_traffic_limit",
+  "rw_tag",
+]);
+
+export function stripRwConditions(conditions: CrmCondition[]): CrmCondition[] {
+  return conditions.filter((c) => !RW_CONDITION_TYPES.has(c.type));
+}
+
+export function upsertRwCondition(
+  conditions: CrmCondition[],
+  type: string,
+  payload: CrmCondition | null
+): CrmCondition[] {
+  const base = conditions.filter((c) => c.type !== type);
+  if (!payload) return base;
+  return [...base, payload];
+}
+
 export function actionSummary(actions: CrmAction[]): string {
   const parts: string[] = [];
   for (const a of actions.filter((x) => x.enabled)) {

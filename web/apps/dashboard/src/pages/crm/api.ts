@@ -51,6 +51,17 @@ export async function deleteEvent(id: number): Promise<void> {
   await api.delete(`/crm/events/${id}`);
 }
 
+export async function fetchInternalSquads(): Promise<{ uuid: string; name: string }[]> {
+  const res = await api.get<{ squads: { uuid: string; name: string }[] }>(
+    "/crm/remnawave/internal-squads"
+  );
+  return res.squads;
+}
+
+export function normalizeRwTag(tag: string): string {
+  return tag.trim().toUpperCase().replace(/\s+/g, "");
+}
+
 export async function runEventNow(
   id: number
 ): Promise<{ status: string; total?: number; campaign_id?: number }> {

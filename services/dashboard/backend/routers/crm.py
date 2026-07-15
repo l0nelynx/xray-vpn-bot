@@ -426,6 +426,13 @@ async def preview_message(
 # ──────────────────────────────────────────────────────────────────────────────
 
 
+@router.get("/remnawave/internal-squads")
+async def list_remna_internal_squads(_: str = Depends(get_current_user)):
+    rw = _rw_client()
+    squads = await rw.get_internal_squads()
+    return {"squads": squads}
+
+
 @router.get("/conditions/types")
 async def list_condition_types(_: str = Depends(get_current_user)):
     return {

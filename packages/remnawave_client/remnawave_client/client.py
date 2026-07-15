@@ -183,6 +183,64 @@ class RemnawaveClient:
         logger.info("Remnawave total users: %s", response.total)
         return response
 
+    async def get_internal_squads(self) -> list[dict]:
+        """List internal squads from Remnawave panel."""
+        from .segmentation import _get_attr
+
+        try:
+            response = await self.sdk.users.client.get("/internal-squads")
+            response.raise_for_status()
+            data = _unwrap_response_envelope(response.json())
+            items: list = []
+            if isinstance(data, list):
+                items = data
+            elif isinstance(data, dict):
+                for key in ("internalSquads", "internal_squads", "squads", "root"):
+                    raw = data.get(key)
+                    if isinstance(raw, list):
+                        items = raw
+                        break
+            squads: list[dict] = []
+            for item in items:
+                uuid = _get_attr(item, "uuid", "id")
+                if not uuid:
+                    continue
+                squads.append({
+                    "uuid": str(uuid),
+                    "name": _get_attr(item, "name", "title") or str(uuid),
+                })
+            return squads
+        except Exception as e:
+            logger.error("Remnawave get_internal_squads failed: %s", e)
+            return []
+
+    async def get_users_by_tag(self, tag: str) -> list[dict]:
+        """Fetch panel users with the given tag (uppercase, no spaces)."""
+        from .segmentation import normalize_user_for_crm
+
+        normalized = tag.strip().upper().replace(" ", "")
+        if not normalized:
+            return []
+        try:
+            response = await self.sdk.users.client.get(
+                f"/users/by-tag/{normalized}"
+            )
+            response.raise_for_status()
+            data = _unwrap_response_envelope(response.json())
+            items: list = []
+            if isinstance(data, list):
+                items = data
+            elif isinstance(data, dict):
+                for key in ("users", "root"):
+                    raw = data.get(key)
+                    if isinstance(raw, list):
+                        items = raw
+                        break
+            return [normalize_user_for_crm(u) for u in items]
+        except Exception as e:
+            logger.error("Remnawave get_users_by_tag(%s) failed: %s", normalized, e)
+            raise
+
     async def get_all_users_for_crm(self) -> list[dict]:
         """Bulk-fetch every panel user normalized for CRM segmentation."""
         from .segmentation import normalize_user_for_crm

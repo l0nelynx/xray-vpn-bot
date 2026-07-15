@@ -9,6 +9,15 @@ from common_db.repo import crm_segments as seg_repo
 CONDITION_SEGMENT = "segment"
 CONDITION_USER_TYPE = "user_type"
 CONDITION_TG_ALLOWLIST = "tg_allowlist"
+CONDITION_RW_INTERNAL_SQUAD = "rw_internal_squad"
+CONDITION_RW_TRAFFIC_LIMIT = "rw_traffic_limit"
+CONDITION_RW_TAG = "rw_tag"
+
+RW_CONDITION_TYPES = frozenset({
+    CONDITION_RW_INTERNAL_SQUAD,
+    CONDITION_RW_TRAFFIC_LIMIT,
+    CONDITION_RW_TAG,
+})
 
 ACTION_SEND_MESSAGE = "send_message"
 ACTION_ATTACH_BUTTON = "attach_button"
@@ -189,10 +198,24 @@ def sync_flat_from_model(
     }
 
 
+def normalize_rw_tag(tag: str) -> str:
+    return tag.strip().upper().replace(" ", "")
+
+
 def validate_conditions(conditions: list[dict]) -> None:
     segments = [c for c in conditions if c.get("type") == CONDITION_SEGMENT]
     if len(segments) != 1:
         raise ValueError("exactly one segment condition is required")
+
+    for cond in conditions:
+        ctype = cond.get("type")
+        if ctype == CONDITION_RW_INTERNAL_SQUAD and not cond.get("squad_id"):
+            raise ValueError("rw_internal_squad requires squad_id")
+        if ctype == CONDITION_RW_TRAFFIC_LIMIT:
+            if cond.get("limit_gb") is None:
+                raise ValueError("rw_traffic_limit requires limit_gb")
+        if ctype == CONDITION_RW_TAG and not normalize_rw_tag(cond.get("tag") or ""):
+            raise ValueError("rw_tag requires a non-empty tag")
 
 
 def validate_actions(actions: list[dict]) -> None:

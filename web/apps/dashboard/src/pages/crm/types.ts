@@ -25,6 +25,7 @@ export interface SegmentDef {
 export interface ConditionTypeMeta {
   type: string;
   label: string;
+  category?: "base" | "remnawave";
   description: string;
   required?: boolean;
   fields?: Array<Record<string, unknown>>;
@@ -44,6 +45,14 @@ export interface CrmCondition {
   params?: SegmentParams;
   value?: string;
   tg_ids?: number[];
+  squad_id?: string;
+  limit_gb?: number;
+  tag?: string;
+}
+
+export interface InternalSquadOption {
+  uuid: string;
+  name: string;
 }
 
 export interface CrmAction {
