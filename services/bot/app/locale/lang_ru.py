@@ -379,7 +379,7 @@ promo_invite_text = """<b>Приглашай друзей — получай б�
 
 promo_enter_text = "Введи промокод:"
 
-promo_success_text = "Промокод применён! На баланс начислено <b>{points}</b> ₽ баллов."
+promo_success_text = "Промокод применён! На баланс начислено <b>{points}</b> 🪙."
 
 promo_invalid_text = "Промокод недействителен — проверь правильность ввода."
 
@@ -391,9 +391,9 @@ promo_active_exists_text = "Ты уже использовал этот пром
 
 promo_referral_new_only_text = "Этот промокод действует только для новых пользователей — у тебя уже были покупки."
 
-promo_deeplink_applied_text = "🎁 Промокод активирован! На баланс начислено <b>{points}</b> ₽ баллов."
+promo_deeplink_applied_text = "🎁 Промокод активирован! На баланс начислено <b>{points}</b> 🪙."
 
-btn_pay_credits = "💎 Оплатить баллами ({points} ₽)"
+btn_pay_credits = "💎 Оплатить баллами ({points} 🪙)"
 msg_insufficient_points = "Недостаточно баллов для этого тарифа"
 msg_no_credits_plans = "Нет тарифов для оплаты баллами"
 msg_plan_not_found = "Тариф не найден или устарел"

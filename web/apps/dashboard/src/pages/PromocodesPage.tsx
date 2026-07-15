@@ -37,7 +37,7 @@ const PROMO_SORT_OPTIONS = [
   { value: "promo_code", label: "Code" },
   { value: "promo_type", label: "Type" },
   { value: "owner_username", label: "Owner" },
-  { value: "credit_grant", label: "Points (₽)" },
+  { value: "credit_grant", label: "Points (🪙)" },
   { value: "usage_count", label: "Usage" },
   { value: "days_purchased", label: "Days bought" },
   { value: "days_rewarded", label: "Rewarded" },
@@ -177,7 +177,7 @@ function PromosTab() {
         ),
     },
     {
-      title: "Points (₽)",
+      title: "Points (🪙)",
       dataIndex: "credit_grant",
       key: "credit_grant",
       width: 120,
@@ -359,7 +359,7 @@ function PromosTab() {
           </Form.Item>
           <Form.Item
             name="credit_grant"
-            label="Credit grant (₽ points)"
+            label="Credit grant (points)"
             tooltip="Leave empty to use default from Settings"
           >
             <InputNumber min={0} max={3650} style={{ width: "100%" }} placeholder="default" />
@@ -432,13 +432,13 @@ function SettingsTab() {
         style={{ maxWidth: 600 }}
       >
         <Typography.Paragraph type="secondary">
-          Default bonus points (₽) granted by promo codes without a per-code override.
+          Default bonus points granted by promo codes without a per-code override.
           Reward settings control referral owner bonus days.
         </Typography.Paragraph>
         <Form form={form} layout="vertical">
           <Form.Item
             name="default_credit_grant"
-            label="Default credit grant (₽ points)"
+            label="Default credit grant (points)"
             rules={[{ required: true, message: "Required" }]}
           >
             <InputNumber min={0} max={3650} style={{ width: "100%" }} />

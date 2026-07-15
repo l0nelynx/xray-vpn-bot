@@ -3,6 +3,7 @@ import { EditOutlined, GiftOutlined, IdcardOutlined, SendOutlined, WalletOutline
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import type { TransactionItem, UserDetail } from "../api/types";
+import { formatPoints, POINTS_ICON } from "../points";
 import useIsMobile from "../hooks/useIsMobile";
 
 interface Props {
@@ -140,7 +141,7 @@ export default function UserDrawer({ tgId, open, onClose, onChanged }: Props) {
         `/users/${user.tg_id}/credits`,
         { amount: creditsDelta }
       );
-      message.success(`Баланс обновлён: ${res.balance} ₽`);
+      message.success(`Баланс обновлён: ${formatPoints(res.balance)}`);
       setCreditsDelta(null);
       await load(user.tg_id);
       onChanged?.();
@@ -192,12 +193,12 @@ export default function UserDrawer({ tgId, open, onClose, onChanged }: Props) {
             <Descriptions.Item label="Промокод">
               {user.promo_code ? <Tag color="purple" icon={<GiftOutlined />}>{user.promo_code}</Tag> : "—"}
             </Descriptions.Item>
-            <Descriptions.Item label="Бонусные баллы (₽)">
+            <Descriptions.Item label="Бонусные баллы">
               <Tag color="blue" icon={<WalletOutlined />}>
-                {user.bonus_credits ?? 0}
+                {formatPoints(user.bonus_credits ?? 0)}
               </Tag>
               <Typography.Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>
-                1 балл ≈ 1 ₽ стоимости тарифа
+                1 балл = 1 {POINTS_ICON} стоимости тарифа
               </Typography.Text>
             </Descriptions.Item>
             <Descriptions.Item label="Тикетов открыто">{user.tickets_count}</Descriptions.Item>
@@ -276,7 +277,7 @@ export default function UserDrawer({ tgId, open, onClose, onChanged }: Props) {
               style={{ flex: 1 }}
               value={creditsDelta}
               onChange={(v) => setCreditsDelta(v)}
-              placeholder="± ₽"
+              placeholder={`± ${POINTS_ICON}`}
               min={-3650}
               max={3650}
             />

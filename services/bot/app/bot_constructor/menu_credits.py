@@ -106,7 +106,7 @@ async def create_credits_menu_keyboard() -> InlineKeyboardMarkup | None:
     for node_id, label, points in items:
         builder.row(
             InlineKeyboardButton(
-                text=f"{label} | {points} ₽",
+                text=f"{label} | {points} 🪙",
                 callback_data=CreditsNodeCallbackData(node_id=node_id).pack(),
             )
         )

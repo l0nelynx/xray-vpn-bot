@@ -2,6 +2,7 @@ import { Alert, Spin, Tag } from "antd";
 import { CheckOutlined, LeftOutlined } from "@ant-design/icons";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { formatPoints, POINTS_ICON } from "../points";
 import {
   ApiError,
   MenuNode,
@@ -185,7 +186,7 @@ export default function BuyMenuPage() {
             style={{ marginBottom: 16 }}
             title={
               <span>
-                Бонусный баланс: <Tag color="blue">{balance} ₽</Tag>
+                Бонусный баланс: <Tag color="blue">{formatPoints(balance)}</Tag>
               </span>
             }
           />
@@ -285,7 +286,7 @@ export default function BuyMenuPage() {
               onClick={handlePayCredits}
               disabled={!!busyId}
             >
-              {busyId ? <Spin size="small" /> : `Оплатить баллами · ${pointsCost} ₽`}
+              {busyId ? <Spin size="small" /> : `Оплатить баллами · ${pointsCost} ${POINTS_ICON}`}
             </button>
           )}
           <button

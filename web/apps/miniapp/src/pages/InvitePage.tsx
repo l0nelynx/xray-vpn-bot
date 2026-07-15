@@ -17,6 +17,7 @@ import {
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ReferralState, referral as referralApi } from "../api/client";
+import { formatPoints } from "../points";
 import { copyToClipboard, hapticImpact, shareToTelegram } from "../tg/webapp";
 
 export default function InvitePage() {
@@ -33,7 +34,7 @@ export default function InvitePage() {
   }, []);
 
   const inviteText = state
-    ? `Подключайся к VPN и получи ${state.credit_grant} ₽ баллов по моему коду!`
+    ? `Подключайся к VPN и получи ${formatPoints(state.credit_grant)} по моему коду!`
     : "";
 
   const handleCopy = async () => {
@@ -134,7 +135,7 @@ export default function InvitePage() {
               <b>Как это работает</b>
             </Typography.Paragraph>
             <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-              Друг получает <b>{state.credit_grant}</b> ₽ баллов при активации
+              Друг получает <b>{formatPoints(state.credit_grant)}</b> при активации
               кода. За каждые 30 дней, купленных по вашему коду, вы получаете{" "}
               <b>{state.days_reward_per_30}</b> бонусных дней — всего до{" "}
               <b>{state.reward_cap_days}</b> дней.

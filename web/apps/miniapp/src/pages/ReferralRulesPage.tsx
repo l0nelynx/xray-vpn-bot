@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Typography, Spin } from "antd";
 import LegalLayout from "../components/LegalLayout";
 import { ReferralState, referral as referralApi } from "../api/client";
+import { formatPoints } from "../points";
 
 export default function ReferralRulesPage() {
   const [referralState, setReferralState] = useState<ReferralState | null>(null);
@@ -36,7 +37,7 @@ export default function ReferralRulesPage() {
           </li>
           <li>
             Друг получает скидку{" "}
-            <strong>{referralState?.credit_grant ?? 0}</strong> ₽ баллов при активации кода.
+            <strong>{formatPoints(referralState?.credit_grant ?? 0)}</strong> при активации кода.
           </li>
           <li>
             Реферальный промокод доступен только новым пользователям — у кого
