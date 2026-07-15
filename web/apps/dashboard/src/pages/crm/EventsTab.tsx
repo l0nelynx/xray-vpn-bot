@@ -14,6 +14,7 @@ import {
   Table,
 } from "antd";
 import { useCallback, useEffect, useState } from "react";
+import useIsMobile from "../../hooks/useIsMobile";
 import ActionsBuilder from "./ActionsBuilder";
 import ConditionsBuilder from "./ConditionsBuilder";
 import {
@@ -30,6 +31,7 @@ import { REPEAT_POLICIES, WEEKDAYS } from "./types";
 
 export default function EventsTab() {
   const { message } = App.useApp();
+  const isMobile = useIsMobile();
   const [loading, setLoading] = useState(false);
   const [events, setEvents] = useState<CrmEventRow[]>([]);
   const [segments, setSegments] = useState<SegmentDef[]>([]);
@@ -184,6 +186,11 @@ export default function EventsTab() {
     return `${row.run_at_time} UTC, ${freq}`;
   };
 
+  const repeatLabel = (row: CrmEventRow) =>
+    row.repeat_policy === "cooldown"
+      ? `cooldown ${row.repeat_cooldown_days}д`
+      : row.repeat_policy;
+
   const columns = [
     { title: "ID", dataIndex: "id", key: "id", width: 60 },
     { title: "Название", dataIndex: "name", key: "name", ellipsis: true },
@@ -207,10 +214,7 @@ export default function EventsTab() {
     {
       title: "Повтор",
       key: "repeat",
-      render: (_: unknown, r: CrmEventRow) =>
-        r.repeat_policy === "cooldown"
-          ? `cooldown ${r.repeat_cooldown_days}д`
-          : r.repeat_policy,
+      render: (_: unknown, r: CrmEventRow) => repeatLabel(r),
     },
     {
       title: "Вкл",
@@ -249,52 +253,116 @@ export default function EventsTab() {
     },
   ];
 
+  const renderMobileEventCard = (row: CrmEventRow) => (
+    <Card
+      key={row.id}
+      size="small"
+      style={{ marginBottom: 8 }}
+      styles={{ body: { padding: "12px" } }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: 600, color: "rgba(255,255,255,0.88)", marginBottom: 4 }}>
+            {row.name || `Событие #${row.id}`}
+          </div>
+          <div style={{ fontSize: 12, color: "rgba(255,255,255,0.45)", marginBottom: 6 }}>
+            {row.segment_type ?? "—"} · {scheduleLabel(row)}
+          </div>
+          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginBottom: 6 }}>
+            {row.actions?.length ? actionSummary(row.actions) : "—"} · {repeatLabel(row)}
+          </div>
+          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)" }}>
+            След.: {row.next_run_at ?? "—"}
+          </div>
+        </div>
+        <Switch checked={row.enabled} onChange={(v) => toggleEnabled(row, v)} size="small" />
+      </div>
+      <Space wrap style={{ marginTop: 10 }}>
+        <Button size="small" onClick={() => openEdit(row)}>
+          Изм.
+        </Button>
+        <Button size="small" type="primary" onClick={() => handleRunNow(row)}>
+          Сейчас
+        </Button>
+        <Popconfirm title="Удалить событие?" onConfirm={() => handleDelete(row)}>
+          <Button size="small" danger>
+            Del
+          </Button>
+        </Popconfirm>
+      </Space>
+    </Card>
+  );
+
   const selectedFrequency = Form.useWatch("frequency", form);
   const selectedRepeat = Form.useWatch("repeat_policy", form);
   const segmentId = getSegmentCondition(conditions)?.segment_id ?? null;
+
+  const headerActions = isMobile ? (
+    <Space direction="vertical" style={{ width: "100%" }} size={8}>
+      <Button onClick={load} loading={loading} block>
+        Обновить
+      </Button>
+      <Button type="primary" onClick={openCreate} block>
+        Новое событие
+      </Button>
+    </Space>
+  ) : (
+    <Space>
+      <Button onClick={load} loading={loading}>
+        Обновить
+      </Button>
+      <Button type="primary" onClick={openCreate}>
+        Новое событие
+      </Button>
+    </Space>
+  );
 
   return (
     <>
       <Card
         title="События по расписанию (UTC)"
-        extra={
-          <Space>
-            <Button onClick={load} loading={loading}>
-              Обновить
-            </Button>
-            <Button type="primary" onClick={openCreate}>
-              Новое событие
-            </Button>
-          </Space>
-        }
+        extra={isMobile ? undefined : headerActions}
+        styles={isMobile ? { header: { flexWrap: "wrap" } } : undefined}
       >
+        {isMobile && <div style={{ marginBottom: 12 }}>{headerActions}</div>}
         <Alert
           type="info"
           showIcon
           style={{ marginBottom: 16 }}
           message="Время запуска указывается в UTC. Poller проверяет расписание каждые 15 минут."
         />
-        <Table
-          rowKey="id"
-          loading={loading}
-          columns={columns}
-          dataSource={events}
-          size="small"
-          pagination={{ pageSize: 20 }}
-        />
+        {isMobile ? (
+          loading ? (
+            <div style={{ textAlign: "center", padding: 40, color: "rgba(255,255,255,0.4)" }}>
+              Загрузка...
+            </div>
+          ) : (
+            events.map(renderMobileEventCard)
+          )
+        ) : (
+          <Table
+            rowKey="id"
+            loading={loading}
+            columns={columns}
+            dataSource={events}
+            size="small"
+            pagination={{ pageSize: 20 }}
+          />
+        )}
       </Card>
 
       <Drawer
         title={editing ? `Событие #${editing.id}` : "Новое событие"}
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
-        width={640}
+        width={isMobile ? "100%" : 640}
         destroyOnHidden
         extra={
-          <Button type="primary" onClick={saveEvent}>
+          <Button type="primary" onClick={saveEvent} size={isMobile ? "small" : "middle"}>
             Сохранить
           </Button>
         }
+        styles={isMobile ? { body: { paddingBottom: 24 } } : undefined}
       >
         <Form form={form} layout="vertical">
           <Form.Item name="name" label="Название">
@@ -328,7 +396,7 @@ export default function EventsTab() {
             </Form.Item>
             {selectedRepeat === "cooldown" && (
               <Form.Item name="repeat_cooldown_days" label="Cooldown (дней)">
-                <InputNumber min={1} max={365} />
+                <InputNumber min={1} max={365} style={{ width: "100%" }} />
               </Form.Item>
             )}
           </Form>

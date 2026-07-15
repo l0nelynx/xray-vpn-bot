@@ -15,6 +15,7 @@ import {
 import { InfoCircleOutlined } from "@ant-design/icons";
 import { useEffect, useState } from "react";
 import { api } from "../../api/client";
+import useIsMobile from "../../hooks/useIsMobile";
 import type { ActionTypeMeta, CrmAction, CrmVariable, MessageTemplate } from "./types";
 
 const { TextArea } = Input;
@@ -33,6 +34,7 @@ export default function ActionsBuilder({
   templates: templatesProp,
 }: ActionsBuilderProps) {
   const { message } = App.useApp();
+  const isMobile = useIsMobile();
   const [actionTypes, setActionTypes] = useState<ActionTypeMeta[]>([]);
   const [templates, setTemplates] = useState<MessageTemplate[]>(templatesProp || []);
   const [variablesOpen, setVariablesOpen] = useState(false);
@@ -113,7 +115,7 @@ export default function ActionsBuilder({
         size="small"
         style={{ marginBottom: 8, opacity: disabled ? 0.5 : 1 }}
         title={
-          <Space>
+          <Space wrap>
             <Switch
               size="small"
               checked={act.enabled && !disabled}
@@ -125,17 +127,33 @@ export default function ActionsBuilder({
         }
       >
         {meta.type === "send_message" && act.enabled && (
-          <Space direction="vertical" style={{ width: "100%" }}>
-            <Space style={{ justifyContent: "space-between", width: "100%" }}>
-              <Typography.Text type="secondary">
-                HTML, переменные {"{{username}}"}
-              </Typography.Text>
-              <Button size="small" icon={<InfoCircleOutlined />} onClick={() => setVariablesOpen(true)}>
-                Переменные
-              </Button>
-            </Space>
+          <Space direction="vertical" style={{ width: "100%" }} size={8}>
+            {isMobile ? (
+              <>
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  HTML, переменные {"{{username}}"}
+                </Typography.Text>
+                <Button
+                  size="small"
+                  icon={<InfoCircleOutlined />}
+                  onClick={() => setVariablesOpen(true)}
+                  block
+                >
+                  Переменные
+                </Button>
+              </>
+            ) : (
+              <Space style={{ justifyContent: "space-between", width: "100%" }}>
+                <Typography.Text type="secondary">
+                  HTML, переменные {"{{username}}"}
+                </Typography.Text>
+                <Button size="small" icon={<InfoCircleOutlined />} onClick={() => setVariablesOpen(true)}>
+                  Переменные
+                </Button>
+              </Space>
+            )}
             <TextArea
-              rows={4}
+              rows={isMobile ? 5 : 4}
               value={act.text || ""}
               onChange={(e) => updateAction(meta.type, { text: e.target.value })}
               placeholder="Привет, {{username}}!"
@@ -147,11 +165,12 @@ export default function ActionsBuilder({
             value={act.button_type || "open_bot"}
             options={[{ value: "open_bot", label: "Открыть бота" }]}
             onChange={(v) => updateAction(meta.type, { button_type: v })}
-            style={{ minWidth: 200 }}
+            style={{ width: isMobile ? "100%" : undefined, minWidth: isMobile ? undefined : 200 }}
           />
         )}
         {meta.type === "rw_bonus_days" && act.enabled && (
           <InputNumber
+            style={{ width: isMobile ? "100%" : undefined }}
             min={1}
             max={365}
             value={act.days}
@@ -160,6 +179,7 @@ export default function ActionsBuilder({
         )}
         {meta.type === "rw_bonus_traffic" && act.enabled && (
           <InputNumber
+            style={{ width: isMobile ? "100%" : undefined }}
             min={1}
             max={1000}
             value={act.gb}
@@ -191,7 +211,7 @@ export default function ActionsBuilder({
       )}
 
       <Collapse
-        defaultActiveKey={["telegram", "remnawave"]}
+        defaultActiveKey={isMobile ? [] : ["telegram", "remnawave"]}
         items={[
           {
             key: "telegram",
@@ -211,26 +231,48 @@ export default function ActionsBuilder({
         open={variablesOpen}
         onCancel={() => setVariablesOpen(false)}
         footer={null}
+        width={isMobile ? "100%" : 520}
+        style={isMobile ? { top: 20, maxWidth: "100vw", padding: 0 } : undefined}
+        styles={isMobile ? { body: { maxHeight: "70vh", overflowY: "auto" } } : undefined}
       >
-        <Table
-          rowKey="key"
-          size="small"
-          pagination={false}
-          dataSource={variables}
-          onRow={(row) => ({
-            onClick: () => copyVariable(row.key),
-            style: { cursor: "pointer" },
-          })}
-          columns={[
-            {
-              title: "Ключ",
-              render: (_: unknown, r: CrmVariable) => (
-                <Typography.Text code>{`{{${r.key}}}`}</Typography.Text>
-              ),
-            },
-            { title: "Описание", dataIndex: "label" },
-          ]}
-        />
+        {isMobile ? (
+          <Space direction="vertical" style={{ width: "100%" }} size={8}>
+            {variables.map((row) => (
+              <Card
+                key={row.key}
+                size="small"
+                styles={{ body: { padding: "10px 12px" } }}
+                onClick={() => copyVariable(row.key)}
+                style={{ cursor: "pointer" }}
+              >
+                <Typography.Text code>{`{{${row.key}}}`}</Typography.Text>
+                <div style={{ fontSize: 12, color: "rgba(255,255,255,0.55)", marginTop: 4 }}>
+                  {row.label}
+                </div>
+              </Card>
+            ))}
+          </Space>
+        ) : (
+          <Table
+            rowKey="key"
+            size="small"
+            pagination={false}
+            dataSource={variables}
+            onRow={(row) => ({
+              onClick: () => copyVariable(row.key),
+              style: { cursor: "pointer" },
+            })}
+            columns={[
+              {
+                title: "Ключ",
+                render: (_: unknown, r: CrmVariable) => (
+                  <Typography.Text code>{`{{${r.key}}}`}</Typography.Text>
+                ),
+              },
+              { title: "Описание", dataIndex: "label" },
+            ]}
+          />
+        )}
       </Modal>
     </Card>
   );

@@ -1,6 +1,7 @@
 import { App, Button, Card, Input, Popconfirm, Space, Typography } from "antd";
 import { SendOutlined } from "@ant-design/icons";
 import { useEffect, useState } from "react";
+import useIsMobile from "../../hooks/useIsMobile";
 import ActionsBuilder from "./ActionsBuilder";
 import ConditionsBuilder from "./ConditionsBuilder";
 import { defaultActions, defaultConditions, getSegmentCondition } from "./helpers";
@@ -13,6 +14,7 @@ interface CampaignTabProps {
 
 export default function CampaignTab({ onLaunched }: CampaignTabProps) {
   const { message } = App.useApp();
+  const isMobile = useIsMobile();
   const [segments, setSegments] = useState<SegmentDef[]>([]);
   const [conditions, setConditions] = useState<CrmCondition[]>([]);
   const [actions, setActions] = useState<CrmAction[]>(defaultActions());
@@ -81,7 +83,7 @@ export default function CampaignTab({ onLaunched }: CampaignTabProps) {
         placeholder="Название кампании (необязательно)"
         value={name}
         onChange={(e) => setName(e.target.value)}
-        style={{ maxWidth: 480 }}
+        style={{ width: "100%", maxWidth: isMobile ? undefined : 480 }}
       />
 
       <ConditionsBuilder
@@ -96,30 +98,33 @@ export default function CampaignTab({ onLaunched }: CampaignTabProps) {
       <ActionsBuilder actions={actions} onChange={setActions} segmentId={segmentId} />
 
       <Card size="small">
-        <Popconfirm
-          title="Запустить кампанию?"
-          description={`Получателей: ${
-            isAllUsers ? scanTotal ?? "все" : selectedTgIds.length
-          }`}
-          onConfirm={launch}
-          okText="Запустить"
-          cancelText="Отмена"
-          disabled={!segmentId || !hasEnabledAction || (!isAllUsers && !selectedTgIds.length)}
-        >
-          <Button
-            type="primary"
-            icon={<SendOutlined />}
-            loading={loading}
+        <Space direction="vertical" style={{ width: "100%" }} size={8}>
+          <Popconfirm
+            title="Запустить кампанию?"
+            description={`Получателей: ${
+              isAllUsers ? scanTotal ?? "все" : selectedTgIds.length
+            }`}
+            onConfirm={launch}
+            okText="Запустить"
+            cancelText="Отмена"
             disabled={!segmentId || !hasEnabledAction || (!isAllUsers && !selectedTgIds.length)}
           >
-            Запустить кампанию
-          </Button>
-        </Popconfirm>
-        {!hasEnabledAction && (
-          <Typography.Text type="secondary" style={{ marginLeft: 12 }}>
-            Включите хотя бы одно действие
-          </Typography.Text>
-        )}
+            <Button
+              type="primary"
+              icon={<SendOutlined />}
+              loading={loading}
+              disabled={!segmentId || !hasEnabledAction || (!isAllUsers && !selectedTgIds.length)}
+              block={isMobile}
+            >
+              Запустить кампанию
+            </Button>
+          </Popconfirm>
+          {!hasEnabledAction && (
+            <Typography.Text type="secondary">
+              Включите хотя бы одно действие
+            </Typography.Text>
+          )}
+        </Space>
       </Card>
     </Space>
   );
