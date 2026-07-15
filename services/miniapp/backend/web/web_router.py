@@ -54,7 +54,8 @@ from ..android.payments_router import _load_menu_rows, _load_node, _node_payload
 from ..bonus_points import enrich_invoice_dict, resolve_points_cost
 from ..android.schemas import AuthResponse, UserSummary
 from ..database.session import async_session
-from ..config import get_bot_token, get_tg_client_secret
+from ..config import get_bot_token, get_config, get_tg_client_secret
+from payments.rub_pricing import get_rub_rates_for_currencies
 from ..notify_log import esc, notify_log, notify_web
 from remnawave_client.api import get_user_from_username as _rw_get_by_username
 from payments import InvoiceRequest, PaymentError, create_invoice, get_provider
@@ -352,6 +353,12 @@ async def web_payments_menu(
         balance = await _repo_balance.get_balance(session, user.id)
 
     rows = await _load_menu_rows()
+    currencies = [
+        str(r.get("invoice_currency") or "RUB")
+        for r in rows
+        if r.get("action") == "invoice"
+    ]
+    rates = await get_rub_rates_for_currencies(currencies, get_config())
 
     async def _build(parent_id) -> list[dict]:
         items = sorted(
@@ -369,7 +376,7 @@ async def web_payments_menu(
             orig = float(inv_raw["amount"]) if inv_raw else 0
             inv = None
             if inv_raw:
-                enriched = await enrich_invoice_dict(inv_raw)
+                enriched = await enrich_invoice_dict(inv_raw, rates)
                 inv = {
                     "provider": enriched["provider"],
                     "amount": orig,

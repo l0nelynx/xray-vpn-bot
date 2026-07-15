@@ -1,9 +1,14 @@
 """Tests for RUB bonus points conversion."""
 from __future__ import annotations
 
+import asyncio
+from unittest.mock import AsyncMock, MagicMock, patch
+
+from payments import rub_pricing
 from payments.rub_pricing import (
     LEGACY_CREDIT_TO_POINTS,
     amount_to_rub_points,
+    currency_needs_live_usd,
     invoice_points_cost,
 )
 
@@ -33,3 +38,34 @@ def test_invoice_points_cost() -> None:
 
 def test_legacy_multiplier_constant() -> None:
     assert LEGACY_CREDIT_TO_POINTS == 10
+
+
+def test_currency_needs_live_usd() -> None:
+    assert not currency_needs_live_usd("RUB")
+    assert not currency_needs_live_usd("XTR")
+    assert currency_needs_live_usd("USD")
+    assert currency_needs_live_usd("USDT")
+    assert currency_needs_live_usd("EUR")
+
+
+def test_failed_cbr_fetch_is_cached() -> None:
+    """A blocked CBR must not re-timeout on every invoice enrichment."""
+    rub_pricing._usd_cache.update({"rate": 0.0, "ts": 0.0, "live": 0.0})
+
+    mock_session = MagicMock()
+    mock_session.__aenter__ = AsyncMock(side_effect=asyncio.TimeoutError())
+    mock_session.__aexit__ = AsyncMock(return_value=False)
+
+    async def _run() -> None:
+        with patch("payments.rub_pricing.aiohttp.ClientSession", return_value=mock_session):
+            first = await rub_pricing.fetch_usd_rub_rate({"usd_rub_rate": 80.0})
+            assert first == 80.0
+            # Second call must hit the failure cache — no new ClientSession.
+            with patch(
+                "payments.rub_pricing.aiohttp.ClientSession",
+                side_effect=AssertionError("CBR must not be re-fetched"),
+            ):
+                second = await rub_pricing.fetch_usd_rub_rate({"usd_rub_rate": 80.0})
+            assert second == 80.0
+
+    asyncio.run(_run())

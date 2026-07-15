@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-from payments.rub_pricing import get_rub_rates, invoice_points_cost
+from payments.rub_pricing import get_rub_rates_for_currencies, invoice_points_cost
 from sqlalchemy import text
 
 from app.database.models import async_session
@@ -75,7 +75,7 @@ async def resolve_node_points_cost(node: dict) -> tuple[dict, int] | None:
     invoice = _invoice_from_node(node)
     if invoice is None:
         return None
-    rates = await get_rub_rates(secrets)
+    rates = await get_rub_rates_for_currencies([str(invoice.get("currency") or "RUB")], secrets)
     return invoice, invoice_points_cost(invoice, rates)
 
 
@@ -88,7 +88,10 @@ async def create_credits_menu_keyboard() -> InlineKeyboardMarkup | None:
         return None
 
     rows_by_id = {r["id"]: r for r in rows}
-    rates = await get_rub_rates(secrets)
+    rates = await get_rub_rates_for_currencies(
+        [str(r.get("invoice_currency") or "RUB") for r in rows if r.get("action") == "invoice"],
+        secrets,
+    )
     items: list[tuple[int, str, int]] = []
 
     for row in sorted(rows, key=lambda r: (r["sort_order"], r["id"])):
