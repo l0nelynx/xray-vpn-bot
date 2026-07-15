@@ -238,23 +238,85 @@ function PromosTab() {
     setOrder,
   });
 
+  const perPage = 20;
+
+  const renderMobileCard = (promo: PromoItem) => (
+    <Card
+      key={promo.promo_code}
+      size="small"
+      style={{ marginBottom: 8 }}
+      styles={{ body: { padding: "12px" } }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div
+            style={{
+              fontWeight: 600,
+              color: "rgba(255,255,255,0.88)",
+              marginBottom: 4,
+              wordBreak: "break-all",
+            }}
+          >
+            {promo.promo_code}
+          </div>
+          <div style={{ marginBottom: 6 }}>
+            {promo.promo_type === "referral" ? (
+              <Tag color="purple" style={{ margin: 0 }}>Referral</Tag>
+            ) : (
+              <Tag color="blue" style={{ margin: 0 }}>Promotional</Tag>
+            )}
+          </div>
+          <div style={{ fontSize: 12, color: "rgba(255,255,255,0.45)", marginBottom: 4 }}>
+            {promo.owner_username
+              ? `@${promo.owner_username} (${promo.owner_tg_id})`
+              : "No owner"}
+          </div>
+          <div style={{ fontSize: 12, color: "rgba(255,255,255,0.55)" }}>
+            {promo.credit_grant == null ? "Points: default" : `Points: ${formatPoints(promo.credit_grant)}`}
+            {" · "}
+            Usage: {promo.usage_count}
+          </div>
+          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginTop: 2 }}>
+            Invitee days: {promo.days_purchased} · Owner reward: {formatPoints(promo.points_rewarded)}
+          </div>
+        </div>
+        <Popconfirm
+          title={`Delete promo ${promo.promo_code}?`}
+          onConfirm={() => handleDelete(promo.promo_code)}
+          okText="Delete"
+          okButtonProps={{ danger: true }}
+        >
+          <Button size="small" danger icon={<DeleteOutlined />} />
+        </Popconfirm>
+      </div>
+    </Card>
+  );
+
   return (
     <div>
       <div
         style={{
           marginBottom: 16,
           display: "flex",
-          justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: 8,
+          justifyContent: isMobile ? "stretch" : "space-between",
         }}
       >
         <Button
           icon={<PlusOutlined />}
           type="primary"
           onClick={() => setCreateOpen(true)}
+          block={isMobile}
         >
           Create Promo
         </Button>
-        <Button icon={<ReloadOutlined />} onClick={load} loading={loading}>
+        <Button
+          icon={<ReloadOutlined />}
+          onClick={load}
+          loading={loading}
+          block={isMobile}
+        >
           Refresh
         </Button>
       </div>
@@ -286,36 +348,71 @@ function PromosTab() {
         />
       </div>
 
-      {isMobile && (
-        <MobileSortControl
-          options={PROMO_SORT_OPTIONS}
-          sort={sort}
-          order={order}
-          onChange={(s, o) => {
-            setSort(s);
-            setOrder(o);
-            setPage(1);
-          }}
-        />
+      {isMobile ? (
+        <>
+          <MobileSortControl
+            options={PROMO_SORT_OPTIONS}
+            sort={sort}
+            order={order}
+            onChange={(s, o) => {
+              setSort(s);
+              setOrder(o);
+              setPage(1);
+            }}
+          />
+          {loading ? (
+            <div style={{ textAlign: "center", padding: 40, color: "rgba(255,255,255,0.4)" }}>
+              Loading...
+            </div>
+          ) : items.length === 0 ? (
+            <div style={{ textAlign: "center", padding: 40, color: "rgba(255,255,255,0.4)" }}>
+              No promocodes
+            </div>
+          ) : (
+            items.map(renderMobileCard)
+          )}
+          <div
+            style={{
+              textAlign: "center",
+              padding: "12px 0",
+              color: "rgba(255,255,255,0.45)",
+              fontSize: 12,
+            }}
+          >
+            Page {page} · Total: {total}
+          </div>
+          <div style={{ display: "flex", justifyContent: "center", gap: 8 }}>
+            <Button size="small" disabled={page <= 1} onClick={() => setPage(page - 1)}>
+              Prev
+            </Button>
+            <Button
+              size="small"
+              disabled={page * perPage >= total}
+              onClick={() => setPage(page + 1)}
+            >
+              Next
+            </Button>
+          </div>
+        </>
+      ) : (
+        <Card>
+          <Table
+            rowKey="promo_code"
+            columns={columns}
+            dataSource={items}
+            loading={loading}
+            onChange={handleTableChange}
+            size="middle"
+            scroll={{ x: 700 }}
+            pagination={{
+              current: page,
+              pageSize: perPage,
+              total,
+              showSizeChanger: false,
+            }}
+          />
+        </Card>
       )}
-
-      <Card>
-        <Table
-          rowKey="promo_code"
-          columns={columns}
-          dataSource={items}
-          loading={loading}
-          onChange={handleTableChange}
-          size={isMobile ? "small" : "middle"}
-          scroll={{ x: 700 }}
-          pagination={{
-            current: page,
-            pageSize: 20,
-            total,
-            showSizeChanger: false,
-          }}
-        />
-      </Card>
 
       <Modal
         title="Create Promo Code"
@@ -326,6 +423,8 @@ function PromosTab() {
         }}
         onOk={() => form.submit()}
         okText="Create"
+        width={isMobile ? "100%" : undefined}
+        style={isMobile ? { top: 16, maxWidth: "calc(100vw - 16px)", margin: "0 auto" } : undefined}
       >
         <Form
           form={form}
@@ -380,6 +479,7 @@ function PromosTab() {
 }
 
 function SettingsTab() {
+  const isMobile = useIsMobile();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [form] = Form.useForm();
@@ -427,11 +527,13 @@ function SettingsTab() {
       <Card
         title="Promo Settings"
         extra={
-          <Button type="primary" loading={saving} onClick={onSave}>
-            Save
-          </Button>
+          !isMobile ? (
+            <Button type="primary" loading={saving} onClick={onSave}>
+              Save
+            </Button>
+          ) : undefined
         }
-        style={{ maxWidth: 600 }}
+        style={{ maxWidth: isMobile ? "100%" : 600 }}
       >
         <Typography.Paragraph type="secondary">
           Все бонусы — в баллах {POINTS_ICON}. <strong>Default credit grant</strong> — сколько
@@ -464,6 +566,11 @@ function SettingsTab() {
           >
             <InputNumber min={0} max={365_000} style={{ width: "100%" }} addonAfter={POINTS_ICON} />
           </Form.Item>
+          {isMobile && (
+            <Button type="primary" loading={saving} onClick={onSave} block>
+              Save
+            </Button>
+          )}
         </Form>
       </Card>
     </Spin>
