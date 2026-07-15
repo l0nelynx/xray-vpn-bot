@@ -257,9 +257,9 @@ export default function BuyMenuPage() {
                         <div className="tariff-card__price">{inv.amount}</div>
                         <div className="tariff-card__currency">{inv.currency}</div>
                       </div>
-                      {inv.days > 0 && (
+                      {(inv.days ?? 0) > 0 && (
                         <div style={{ fontSize: 11, opacity: 0.5, marginTop: 4 }}>
-                          {inv.days} кредитов
+                          {inv.days} дн.
                         </div>
                       )}
                       {isSelected && (
