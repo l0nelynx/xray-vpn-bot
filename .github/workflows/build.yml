@@ -87,6 +87,7 @@ jobs:
     outputs:
       tags_meta: ${{ steps.calc.outputs.tags_meta }}
       base_tag:  ${{ steps.calc.outputs.base_tag }}
+      base_pull_tag: ${{ steps.calc.outputs.base_pull_tag }}
     steps:
       - uses: actions/checkout@v4
 
@@ -110,16 +111,19 @@ jobs:
             MINOR="${VER%.*}"
             MAJOR="${VER%%.*}"
             BASE_TAG="$VER"
+            BASE_PULL_TAG="latest"
             add_tag "$VER"
             add_tag "$MINOR"
             add_tag "$MAJOR"
             add_tag "latest"
           elif [[ "$REF" == refs/heads/main ]]; then
             BASE_TAG="latest"
+            BASE_PULL_TAG="latest"
             add_tag "$VERSION"
             add_tag "latest"
           elif [[ "$REF" == refs/heads/develop ]]; then
             BASE_TAG="staging"
+            BASE_PULL_TAG="staging"
             add_tag "${VERSION}.${BUILD}"
             add_tag "staging"
           else
@@ -131,6 +135,7 @@ jobs:
 
           {
             echo "base_tag=${BASE_TAG}"
+            echo "base_pull_tag=${BASE_PULL_TAG}"
             echo "tags_meta<<EOF"
             printf '%s' "$TAGS_META"
             echo "EOF"
@@ -138,10 +143,7 @@ jobs:
 
   build-base:
     needs: [detect, version]
-    if: |
-      needs.detect.outputs.release == 'true' ||
-      needs.detect.outputs.base == 'true' ||
-      needs.detect.outputs.meta == 'true'
+    if: needs.detect.outputs.base == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -158,6 +160,63 @@ jobs:
           ghcr_owner: ${{ github.repository_owner }}
           dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}
           dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}
+
+  # Release tags list python-base:<version>; when base inputs did not change,
+  # point version tags at the already-published moving tag without rebuilding.
+  retag-base:
+    needs: [detect, version, build-base]
+    if: >-
+      ${{ !cancelled()
+          && needs.detect.outputs.release == 'true'
+          && needs.detect.outputs.base != 'true'
+          && needs['build-base'].result != 'failure' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Retag python-base for release
+        shell: bash
+        env:
+          GHCR_OWNER: ${{ github.repository_owner }}
+          DH_USER: ${{ secrets.DOCKERHUB_USERNAME }}
+          REF: ${{ github.ref }}
+          BASE_PULL_TAG: ${{ needs.version.outputs.base_pull_tag }}
+        run: |
+          set -euo pipefail
+
+          VER="${REF#refs/tags/v}"
+          MINOR="${VER%.*}"
+          MAJOR="${VER%%.*}"
+
+          retag() {
+            local registry="$1" image="$2"
+            local source="${registry}/${image}:${BASE_PULL_TAG}"
+            docker buildx imagetools create \
+              -t "${registry}/${image}:${VER}" \
+              -t "${registry}/${image}:${MINOR}" \
+              -t "${registry}/${image}:${MAJOR}" \
+              "${source}"
+          }
+
+          retag "ghcr.io/${GHCR_OWNER}" "python-base"
+          retag "docker.io/${DH_USER}" "python-base"
 
   build-bot:
     needs: [detect, version, build-base]
@@ -186,7 +245,7 @@ jobs:
           ghcr_owner: ${{ github.repository_owner }}
           dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}
           dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}
-          base_image: ghcr.io/${{ github.repository_owner }}/python-base:${{ needs.version.outputs.base_tag }}
+          base_image: ghcr.io/${{ github.repository_owner }}/python-base:${{ needs.build-base.result == 'success' && needs.version.outputs.base_tag || needs.version.outputs.base_pull_tag }}
 
   build-support-bot:
     needs: [detect, version]
@@ -238,7 +297,7 @@ jobs:
           ghcr_owner: ${{ github.repository_owner }}
           dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}
           dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}
-          base_image: ghcr.io/${{ github.repository_owner }}/python-base:${{ needs.version.outputs.base_tag }}
+          base_image: ghcr.io/${{ github.repository_owner }}/python-base:${{ needs.build-base.result == 'success' && needs.version.outputs.base_tag || needs.version.outputs.base_pull_tag }}
 
   build-frontend:
     needs: [detect, version]
@@ -290,4 +349,4 @@ jobs:
           ghcr_owner: ${{ github.repository_owner }}
           dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}
           dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}
-          base_image: ghcr.io/${{ github.repository_owner }}/python-base:${{ needs.version.outputs.base_tag }}
+          base_image: ghcr.io/${{ github.repository_owner }}/python-base:${{ needs.build-base.result == 'success' && needs.version.outputs.base_tag || needs.version.outputs.base_pull_tag }}
