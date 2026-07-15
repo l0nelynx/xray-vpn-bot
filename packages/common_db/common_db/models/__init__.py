@@ -7,6 +7,7 @@ Import any class you need from here:
     from common_db.models import User, SupportTicket, SupportMessage
 """
 from .auth import EmailVerification, RefreshToken, TelegramLinkCode
+from .credit_ledger import CreditLedger
 from .crm import CrmCampaign, CrmCampaignDelivery, CrmEvent, CrmEventDelivery
 from .google_play import GooglePlayPurchase, GooglePlaySku
 from .menus import MenuButton, MenuScreen, WebAppMenuNode
@@ -49,6 +50,8 @@ __all__ = [
     "RefreshToken",
     "EmailVerification",
     "TelegramLinkCode",
+    # credits
+    "CreditLedger",
     # google play
     "GooglePlayPurchase",
     "GooglePlaySku",

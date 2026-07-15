@@ -1,4 +1,4 @@
-"""In-bot tariff selection and inline payment flow (Stars / Crypto / SBP / CrystalPay)."""
+"""In-bot tariff selection and inline payment flow (Stars / Crypto / SBP / CrystalPay / Credits)."""
 import logging
 import uuid
 
@@ -22,6 +22,7 @@ from app.bot_constructor.keyboards.tools import (
     PaymentCallbackData,
     OptimizedTariffKeyboard,
     create_tariff_keyboard,
+    create_credits_tariff_keyboard,
     get_price_stars,
     get_price_crypto,
     get_sbp_price,
@@ -30,7 +31,10 @@ from app.bot_constructor.keyboards.tools import (
 from app.bot_constructor.tariffs import get_tariffs_stars, get_tariffs_crypto, get_tariffs_sbp
 from app.settings import bot, cp, secrets
 import app.database.requests as rq
+from app.database.models import async_session
+from common_db.repo import credits_pay as _repo_credits_pay
 from common_db.repo import promos as rq_promos
+from common_db.repo import users as _repo_users
 
 router = Router()
 
@@ -40,9 +44,10 @@ def _promo_reason_text(lang, reason: str) -> str:
         rq_promos.REASON_INVALID: lang.promo_invalid_text,
         rq_promos.REASON_OWN_CODE: lang.promo_own_code_text,
         rq_promos.REASON_ALREADY_USED: lang.promo_already_used_text,
-        rq_promos.REASON_ACTIVE_EXISTS: lang.promo_active_exists_text,
+        rq_promos.REASON_ACTIVE_EXISTS: lang.promo_already_used_text,
         rq_promos.REASON_REFERRAL_ONLY_ONE: lang.promo_already_used_text,
         rq_promos.REASON_REFERRAL_NOT_NEW: lang.promo_referral_new_only_text,
+        rq_promos.REASON_NO_USER: lang.promo_invalid_text,
     }
     return mapping.get(reason, lang.promo_invalid_text)
 
@@ -52,6 +57,7 @@ PAYMENT_METHOD_NAMES = {
     "crypto": "CRYPTOPAY",
     "SBP_APAY": "SBP_APAY",
     "CRYSTAL": "CRYSTAL_PAY",
+    "BONUS_CREDITS": "BONUS_CREDITS",
 }
 
 
@@ -64,15 +70,19 @@ class PaymentState(StatesGroup):
     PromoInput = State()
 
 
+async def _payment_methods_keyboard(lang, tg_id: int):
+    balance = await rq.get_user_bonus_credits(tg_id)
+    return get_pay_methods_localized(lang, show_promo=True, bonus_credits=balance)
+
+
 @router.callback_query(F.data == "Premium")
 async def premium(callback: CallbackQuery, state: FSMContext):
     lang = await get_user_lang(callback.from_user.id)
     await callback.answer(lang.msg_buying_premium)
-    show_promo = await rq.can_use_promo(callback.from_user.id)
     await callback.message.edit_text(
         text=lang.text_pay_method,
         parse_mode="HTML",
-        reply_markup=get_pay_methods_localized(lang, show_promo=show_promo),
+        reply_markup=await _payment_methods_keyboard(lang, callback.from_user.id),
     )
     await state.set_state(PaymentState.PaymentMethod)
 
@@ -81,11 +91,10 @@ async def premium(callback: CallbackQuery, state: FSMContext):
 async def premium_extend(callback: CallbackQuery, state: FSMContext):
     lang = await get_user_lang(callback.from_user.id)
     await callback.answer(lang.msg_extending_premium)
-    show_promo = await rq.can_use_promo(callback.from_user.id)
     await callback.message.edit_text(
         text=lang.text_extend_pay_method,
         parse_mode="HTML",
-        reply_markup=get_pay_methods_localized(lang, show_promo=show_promo),
+        reply_markup=await _payment_methods_keyboard(lang, callback.from_user.id),
     )
     await state.set_state(PaymentState.PaymentMethod)
 
@@ -106,33 +115,24 @@ async def process_promo_input(message: Message, state: FSMContext):
     result = await rq.redeem_promo_for_user(tg_id, promo_code)
     if not result.ok:
         reason_text = _promo_reason_text(lang, result.reason)
-        show_promo = result.reason not in (
-            rq_promos.REASON_ACTIVE_EXISTS,
-            rq_promos.REASON_ALREADY_USED,
-            rq_promos.REASON_REFERRAL_ONLY_ONE,
-        )
         await message.answer(
             text=reason_text,
             parse_mode="HTML",
-            reply_markup=get_pay_methods_localized(lang, show_promo=show_promo),
+            reply_markup=await _payment_methods_keyboard(lang, tg_id),
         )
         await state.set_state(PaymentState.PaymentMethod)
         return
 
-    promo_discount = result.discount_percent
-    await state.update_data(PromoDiscount=promo_discount, PromoCode=promo_code)
     await message.answer(
-        text=lang.promo_success_text.format(discount=promo_discount),
+        text=lang.promo_success_text.format(credits=result.credit_grant or 0),
         parse_mode="HTML",
-        reply_markup=get_pay_methods_localized(lang, show_promo=False),
+        reply_markup=await _payment_methods_keyboard(lang, tg_id),
     )
     await state.set_state(PaymentState.PaymentMethod)
 
 
 @router.callback_query(PaymentState.PaymentMethod)
 async def stars_plan(callback: CallbackQuery, state: FSMContext):
-    state_data = await state.get_data()
-    promo_discount = state_data.get("PromoDiscount", 0)
     lang_code = await rq.get_user_language(callback.from_user.id) or "ru"
     lang = await get_user_lang(callback.from_user.id)
 
@@ -145,33 +145,37 @@ async def stars_plan(callback: CallbackQuery, state: FSMContext):
     }
     fallback_keyboards = {
         "Stars_Plans": lambda: create_tariff_keyboard(
-            tariff=get_tariffs_stars(), method="stars", base_price=get_price_stars(), extra_discount=promo_discount
+            tariff=get_tariffs_stars(), method="stars", base_price=get_price_stars()
         ),
         "Crypto_Plans": lambda: create_tariff_keyboard(
-            tariff=get_tariffs_crypto(), method="crypto", base_price=get_price_crypto(), extra_discount=promo_discount
+            tariff=get_tariffs_crypto(), method="crypto", base_price=get_price_crypto()
         ),
         "SBP_Plans": lambda: create_tariff_keyboard(
-            tariff=get_tariffs_sbp(), method="SBP", base_price=get_sbp_price(), extra_discount=promo_discount
+            tariff=get_tariffs_sbp(), method="SBP", base_price=get_sbp_price()
         ),
         "SBP_Apay": lambda: create_tariff_keyboard(
-            tariff=get_tariffs_sbp(), method="SBP_APAY", base_price=get_sbp_price(), extra_discount=promo_discount
+            tariff=get_tariffs_sbp(), method="SBP_APAY", base_price=get_sbp_price()
         ),
         "Crystal_plans": lambda: create_tariff_keyboard(
-            tariff=get_tariffs_sbp(), method="CRYSTAL", base_price=get_sbp_price(), extra_discount=promo_discount
+            tariff=get_tariffs_sbp(), method="CRYSTAL", base_price=get_sbp_price()
         ),
+        "Credits_Plans": lambda: create_credits_tariff_keyboard(get_tariffs_stars()),
     }
 
     keyboard = None
-    db_info = db_keyboards.get(callback.data)
-    if db_info:
-        method, base_price = db_info
-        keyboard = await OptimizedTariffKeyboard.from_db(
-            method, base_price, extra_discount=promo_discount, lang=lang_code
-        )
-    if not keyboard:
-        builder = fallback_keyboards.get(callback.data)
-        if builder:
-            keyboard = builder()
+    if callback.data == "Credits_Plans":
+        keyboard = create_credits_tariff_keyboard(get_tariffs_stars())
+    else:
+        db_info = db_keyboards.get(callback.data)
+        if db_info:
+            method, base_price = db_info
+            keyboard = await OptimizedTariffKeyboard.from_db(
+                method, base_price, extra_discount=0, lang=lang_code
+            )
+        if not keyboard:
+            builder = fallback_keyboards.get(callback.data)
+            if builder:
+                keyboard = builder()
 
     if keyboard:
         await callback.message.edit_text(lang.msg_choose_tariff, reply_markup=keyboard)
@@ -186,6 +190,44 @@ async def invoice_handler(callback: CallbackQuery, callback_data: PaymentCallbac
     amount = callback_data.amount
     days = callback_data.days
     lang = await get_user_lang(callback.from_user.id)
+
+    if method == "BONUS_CREDITS":
+        async with async_session() as session:
+            user = await _repo_users.get_user_by_tg_id(session, callback.from_user.id)
+            if not user:
+                await callback.answer("User not found", show_alert=True)
+                return
+            tariff_slug = await get_tariff_slug_by_days("stars", days)
+            purchase = await _repo_credits_pay.purchase_with_credits(
+                session,
+                user_id=user.id,
+                username=callback.from_user.username or f"id_{callback.from_user.id}",
+                tg_id=callback.from_user.id,
+                days=days,
+                tariff_slug=tariff_slug or "",
+            )
+            if purchase is None:
+                await session.rollback()
+                await callback.answer("Insufficient credits", show_alert=True)
+                return
+            await session.commit()
+        await rq.claim_order_for_processing(purchase.transaction_id)
+        await deliver_subscription(
+            message=callback.message,
+            username=callback.from_user.username,
+            user_id=callback.from_user.id,
+            days=days,
+            subscription_type=SubscriptionType.PAID,
+            payment_method=PAYMENT_METHOD_NAMES["BONUS_CREDITS"],
+            data_limit_gb=None,
+            reset_strategy="no_reset",
+            transaction_id=purchase.transaction_id,
+            amount=0,
+            tariff_slug=tariff_slug,
+        )
+        await state.clear()
+        await state.set_state(PaymentState.PrePayment)
+        return
 
     if method == "stars":
         await callback.answer(lang.msg_pay_in_stars)

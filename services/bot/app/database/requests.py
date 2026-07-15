@@ -12,6 +12,7 @@ from app.database.models import async_session
 # their existing "open a session, maybe commit" shape but delegate the
 # actual SELECT to the canonical helper so the predicate (e.g. "paid
 # user") is defined in exactly one place.
+from common_db.repo import balance as _repo_balance
 from common_db.repo import users as _repo_users
 from common_db.repo import promos as _repo_promos
 from common_db.repo import system as _repo_system
@@ -709,6 +710,7 @@ def _promo_to_dict(promo: Promo) -> dict:
         "days_purchased": promo.days_purchased,
         "days_rewarded": promo.days_rewarded,
         "discount_percent": promo.discount_percent,
+        "credit_grant": promo.credit_grant,
         "used_promo_consumed": bool(promo.used_promo_consumed),
     }
 
@@ -797,48 +799,36 @@ async def update_promo_days_rewarded(tg_id: int, days_rewarded: int) -> bool:
         return True
 
 
+async def get_user_bonus_credits(tg_id: int) -> int:
+    async with async_session() as session:
+        user = await _repo_users.get_user_by_tg_id(session, tg_id)
+        if not user:
+            return 0
+        return await _repo_balance.get_balance(session, user.id)
+
+
 async def can_use_promo(tg_id: int) -> bool:
-    """True if the user may activate a (new) promo code right now.
+    """Users can always try to redeem promo codes (credits stack)."""
+    return True
 
-    An active (unconsumed) redemption blocks activating another. After the
-    discount is consumed on a paid delivery the user can redeem again
-    (subject to per-code and referral-once rules enforced at redeem time).
-    """
+
+async def get_default_promo_credit_grant() -> int:
     async with async_session() as session:
-        active = await _repo_promos.get_active_redemption(session, tg_id)
-        return active is None
-
-
-async def consume_promo_redemption(tg_id: int):
-    """Mark the user's active redemption consumed (after first paid delivery).
-
-    Returns the consumed redemption (so the caller can read its promo_code
-    for referral-reward routing) or None.
-    """
-    async with async_session() as session:
-        redemption = await _repo_promos.consume_active_redemption(session, tg_id)
+        grant = await _repo_system.get_default_credit_grant(session)
         await session.commit()
-        if redemption is None:
-            return None
-        # Detach-safe snapshot — session closes on return.
-        return {
-            "promo_code": redemption.promo_code,
-            "promo_type": redemption.promo_type,
-            "discount_percent": redemption.discount_percent,
-        }
+        return grant
 
 
-async def get_active_redemption(tg_id: int) -> dict | None:
-    """The user's current unconsumed redemption as a dict, or None."""
+async def process_referral_reward_for_purchase(tg_id: int, days: int):
+    """Compute referral owner reward after a paid purchase. Returns ReferralRewardInfo or None."""
+    from common_db.repo import referral_rewards as _repo_referral
+
     async with async_session() as session:
-        r = await _repo_promos.get_active_redemption(session, tg_id)
-        if r is None:
-            return None
-        return {
-            "promo_code": r.promo_code,
-            "promo_type": r.promo_type,
-            "discount_percent": r.discount_percent,
-        }
+        info = await _repo_referral.record_purchase_and_compute_reward(
+            session, tg_id, days
+        )
+        await session.commit()
+        return info
 
 
 async def get_promos_paginated(page: int, per_page: int = 10):
@@ -865,12 +855,11 @@ async def delete_promo(promo_code: str) -> bool:
 
 
 async def get_used_promo_with_discount(tg_id: int) -> dict | None:
-    """If the user has an active redemption, return code + discount snapshot."""
-    async with async_session() as session:
-        ed = await _repo_promos.get_effective_discount(session, tg_id)
-        if ed is None:
-            return None
-        return {"promo_code": ed.promo_code, "discount_percent": ed.discount_percent}
+    """Legacy shim — returns balance instead of discount."""
+    balance = await get_user_bonus_credits(tg_id)
+    if balance <= 0:
+        return None
+    return {"balance": balance}
 
 
 async def get_promo_usage_users(promo_code: str) -> list[dict]:

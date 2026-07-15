@@ -45,12 +45,12 @@ export default function SettingsPage({ username }: Props) {
       const res = await promoApi.activate(code);
       setPromoState((prev) =>
         prev
-          ? { ...prev, can_activate: false, active_promo: res.active_promo, discount_percent: res.discount_percent }
-          : prev
+          ? { ...prev, balance: res.balance, last_promo_code: res.promo_code }
+          : { balance: res.balance, last_promo_code: res.promo_code, default_credit_grant: 10 }
       );
       setModalOpen(false);
       setInputCode("");
-      message.success(`Промокод ${res.active_promo} активирован — скидка ${res.discount_percent}%`);
+      message.success(`+${res.credit_grant} кредитов на баланс (всего ${res.balance})`);
     } catch (e: unknown) {
       showAlert(e instanceof Error ? e.message : "Ошибка");
     } finally {
@@ -133,8 +133,7 @@ export default function SettingsPage({ username }: Props) {
         </div>
       )}
 
-      {/* Active promo banner */}
-      {promoState?.active_promo && (
+      {(promoState?.balance ?? 0) > 0 && (
         <div style={{
           display: "flex",
           alignItems: "center",
@@ -146,26 +145,17 @@ export default function SettingsPage({ username }: Props) {
           marginBottom: 12,
           gap: 12,
         }}>
-          <span style={{ color: "rgba(255,255,255,0.60)", fontSize: 14 }}>Скидка активна</span>
+          <span style={{ color: "rgba(255,255,255,0.60)", fontSize: 14 }}>Бонусный баланс</span>
           <Tag color="success" style={{ margin: 0, fontWeight: 600 }}>
-            −{promoState.discount_percent}% на следующую покупку
+            {promoState!.balance} кредитов
           </Tag>
         </div>
       )}
 
-      {/* Promo activation row */}
       <div className="settings-section" style={{ marginBottom: 12 }}>
         <button
           className="settings-item"
-          onClick={() => {
-            if (promoState?.active_promo) {
-              showAlert(
-                `Активный промокод: ${promoState.active_promo}\nСкидка: ${promoState.discount_percent}% на следующую покупку`
-              );
-            } else {
-              setModalOpen(true);
-            }
-          }}
+          onClick={() => setModalOpen(true)}
         >
           <div
             className="settings-item__icon"
@@ -173,14 +163,10 @@ export default function SettingsPage({ username }: Props) {
           >
             <GiftOutlined />
           </div>
-          <span className="settings-item__text">
-            {promoState?.active_promo
-              ? `Промокод: ${promoState.active_promo}`
-              : "Активировать промокод"}
-          </span>
-          {promoState?.active_promo && (
-            <Tag color="warning" style={{ margin: 0, fontSize: 11 }}>
-              −{promoState.discount_percent}%
+          <span className="settings-item__text">Активировать промокод</span>
+          {(promoState?.balance ?? 0) > 0 && (
+            <Tag color="processing" style={{ margin: 0, fontSize: 11 }}>
+              {promoState!.balance} кр.
             </Tag>
           )}
           <RightOutlined className="settings-item__arrow" />
@@ -200,7 +186,7 @@ export default function SettingsPage({ username }: Props) {
       >
         <Space direction="vertical" size={12} style={{ width: "100%", paddingTop: 4 }}>
           <p style={{ color: "rgba(255,255,255,0.50)", margin: 0, fontSize: 14 }}>
-            Введите промокод для получения скидки на следующую покупку
+            Введите промокод — кредиты (дни подписки) начислятся на баланс сразу
           </p>
           <Input
             placeholder="EXAMPLE123"

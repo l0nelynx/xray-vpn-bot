@@ -61,6 +61,7 @@ async def get_or_create_singleton(
 # Why 20: matches the seed in app/database/models.py::_seed_promo_settings.
 # Keep both in sync — when one changes, change the other.
 DEFAULT_PROMO_DISCOUNT_PERCENT = 20
+DEFAULT_CREDIT_GRANT = 10
 # Reward tunables — defaults mirror the PromoSettings server_defaults and the
 # legacy config.yml values (promo_days_reward=3). The 180-day cap is the new
 # product rule.
@@ -75,10 +76,17 @@ async def get_promo_settings(session: AsyncSession) -> PromoSettings:
         PromoSettings,
         defaults={
             "default_discount_percent": DEFAULT_PROMO_DISCOUNT_PERCENT,
+            "default_credit_grant": DEFAULT_CREDIT_GRANT,
             "days_reward_per_30": DEFAULT_DAYS_REWARD_PER_30,
             "reward_cap_days": DEFAULT_REWARD_CAP_DAYS,
         },
     )
+
+
+async def get_default_credit_grant(session: AsyncSession) -> int:
+    """Default credits a code grants when it has no per-code override."""
+    settings = await get_promo_settings(session)
+    return settings.default_credit_grant
 
 
 async def get_default_discount_percent(session: AsyncSession) -> int:
@@ -168,6 +176,7 @@ async def get_bot_feature_flags(session: AsyncSession) -> BotFeatureFlags:
 
 
 __all__ = [
+    "DEFAULT_CREDIT_GRANT",
     "DEFAULT_DAYS_REWARD_PER_30",
     "DEFAULT_PROMO_DISCOUNT_PERCENT",
     "DEFAULT_REWARD_CAP_DAYS",
@@ -176,6 +185,7 @@ __all__ = [
     "get_bot_feature_flags",
     "get_cache_version",
     "get_days_reward_per_30",
+    "get_default_credit_grant",
     "get_default_discount_percent",
     "get_or_create_singleton",
     "get_promo_settings",

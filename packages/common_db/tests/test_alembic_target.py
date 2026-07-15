@@ -28,6 +28,7 @@ CANONICAL_TABLES = frozenset({
     "crm_campaigns",
     "crm_event_deliveries",
     "crm_events",
+    "credit_ledger",
     "disabled_users",
     "email_verifications",
     "google_play_purchases",

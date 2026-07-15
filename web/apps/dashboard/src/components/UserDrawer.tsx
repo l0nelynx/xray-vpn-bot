@@ -1,5 +1,5 @@
-import { App, Button, Descriptions, Divider, Drawer, Input, List, Space, Tag, Typography } from "antd";
-import { EditOutlined, GiftOutlined, IdcardOutlined, SendOutlined } from "@ant-design/icons";
+import { App, Button, Descriptions, Divider, Drawer, Input, InputNumber, List, Space, Tag, Typography } from "antd";
+import { EditOutlined, GiftOutlined, IdcardOutlined, SendOutlined, WalletOutlined } from "@ant-design/icons";
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import type { TransactionItem, UserDetail } from "../api/types";
@@ -41,6 +41,9 @@ export default function UserDrawer({ tgId, open, onClose, onChanged }: Props) {
   const [msgText, setMsgText] = useState("");
   const [msgSending, setMsgSending] = useState(false);
 
+  const [creditsDelta, setCreditsDelta] = useState<number | null>(null);
+  const [creditsSaving, setCreditsSaving] = useState(false);
+
   const load = async (id: number) => {
     setLoading(true);
     try {
@@ -54,6 +57,7 @@ export default function UserDrawer({ tgId, open, onClose, onChanged }: Props) {
       setEditRwId(u.rw_id != null ? String(u.rw_id) : "");
       setEmailInput(u.email || "");
       setMsgText("");
+      setCreditsDelta(null);
     } catch {
       message.error("Не удалось загрузить пользователя");
     } finally {
@@ -128,6 +132,26 @@ export default function UserDrawer({ tgId, open, onClose, onChanged }: Props) {
     }
   };
 
+  const handleAdjustCredits = async () => {
+    if (!user || creditsDelta == null || creditsDelta === 0) return;
+    setCreditsSaving(true);
+    try {
+      const res = await api.post<{ ok: boolean; balance: number }>(
+        `/users/${user.tg_id}/credits`,
+        { amount: creditsDelta }
+      );
+      message.success(`Баланс обновлён: ${res.balance} кредитов`);
+      setCreditsDelta(null);
+      await load(user.tg_id);
+      onChanged?.();
+    } catch (e) {
+      const status = (e as { status?: number })?.status;
+      message.error(status === 400 ? "Недостаточно кредитов для списания" : "Ошибка изменения баланса");
+    } finally {
+      setCreditsSaving(false);
+    }
+  };
+
   const handleSendMessage = async () => {
     if (!user || !msgText.trim()) return;
     setMsgSending(true);
@@ -167,6 +191,14 @@ export default function UserDrawer({ tgId, open, onClose, onChanged }: Props) {
             <Descriptions.Item label="Provider">{user.api_provider}</Descriptions.Item>
             <Descriptions.Item label="Промокод">
               {user.promo_code ? <Tag color="purple" icon={<GiftOutlined />}>{user.promo_code}</Tag> : "—"}
+            </Descriptions.Item>
+            <Descriptions.Item label="Бонусные кредиты">
+              <Tag color="blue" icon={<WalletOutlined />}>
+                {user.bonus_credits ?? 0}
+              </Tag>
+              <Typography.Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>
+                1 кредит = 1 день
+              </Typography.Text>
             </Descriptions.Item>
             <Descriptions.Item label="Тикетов открыто">{user.tickets_count}</Descriptions.Item>
             <Descriptions.Item label="Banned">{user.is_banned ? "Yes" : "No"}</Descriptions.Item>
@@ -232,6 +264,34 @@ export default function UserDrawer({ tgId, open, onClose, onChanged }: Props) {
               Сохранить
             </Button>
           </Space.Compact>
+
+          <Divider style={{ borderColor: "rgba(255,255,255,0.1)" }} />
+
+          <Typography.Text strong style={labelStyle}>
+            <WalletOutlined style={{ marginRight: 6 }} />
+            Бонусный баланс
+          </Typography.Text>
+          <Space.Compact style={{ width: "100%", marginTop: 8 }}>
+            <InputNumber
+              style={{ flex: 1 }}
+              value={creditsDelta}
+              onChange={(v) => setCreditsDelta(v)}
+              placeholder="± дней"
+              min={-3650}
+              max={3650}
+            />
+            <Button
+              type="primary"
+              onClick={handleAdjustCredits}
+              loading={creditsSaving}
+              disabled={creditsDelta == null || creditsDelta === 0}
+            >
+              Применить
+            </Button>
+          </Space.Compact>
+          <Typography.Text type="secondary" style={{ display: "block", marginTop: 6, fontSize: 12 }}>
+            Положительное число — начислить, отрицательное — списать.
+          </Typography.Text>
 
           <Divider style={{ borderColor: "rgba(255,255,255,0.1)" }} />
 

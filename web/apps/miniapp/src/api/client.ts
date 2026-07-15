@@ -142,8 +142,11 @@ export interface InvoiceResponse {
 
 export const payments = {
   listProviders: () => api.get<ProvidersResponse>("/payments/providers"),
+  getBalance: () => api.get<{ balance: number }>("/payments/balance"),
   createInvoice: (body: InvoiceCreateRequest) =>
     api.post<InvoiceResponse>("/payments/invoice", body),
+  payWithCredits: (body: { node_id: number }) =>
+    api.post<PayCreditsResponse>("/payments/pay-credits", body),
 };
 
 export type MenuNodeAction = "buttons" | "invoice";
@@ -175,16 +178,25 @@ export const menu = {
 };
 
 export interface PromoState {
-  can_activate: boolean;
-  active_promo: string | null;
-  discount_percent: number;
-  default_discount_percent: number;
+  balance: number;
+  last_promo_code: string | null;
+  default_credit_grant: number;
 }
 
 export interface PromoActivateResponse {
   ok: boolean;
-  active_promo: string;
-  discount_percent: number;
+  promo_code: string;
+  credit_grant: number;
+  balance: number;
+}
+
+export interface PayCreditsResponse {
+  ok: boolean;
+  transaction_id?: string;
+  credits_spent?: number;
+  balance_after?: number;
+  subscription_url?: string | null;
+  message?: string | null;
 }
 
 export const promo = {
@@ -196,7 +208,7 @@ export const promo = {
 export interface ReferralState {
   code: string;
   deeplink: string;
-  discount_percent: number;
+  credit_grant: number;
   days_reward_per_30: number;
   reward_cap_days: number;
   days_purchased: number;

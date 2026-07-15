@@ -44,10 +44,10 @@ def test_evaluate_conditions_allowlist_intersect() -> None:
                 ])
                 await session.flush()
 
-                from dashboard.backend import crm_service
+                from dashboard.backend import crm_conditions
 
-                original = crm_service.scan_segment
-                crm_service.scan_segment = AsyncMock(
+                original = crm_conditions.scan_segment
+                crm_conditions.scan_segment = AsyncMock(
                     return_value=(
                         [
                             {"tg_id": 101, "username": "a", "vless_uuid": None, "meta": {}},
@@ -70,7 +70,7 @@ def test_evaluate_conditions_allowlist_intersect() -> None:
                     assert len(users) == 2
                     assert total == 2
                 finally:
-                    crm_service.scan_segment = original
+                    crm_conditions.scan_segment = original
         finally:
             await engine.dispose()
 

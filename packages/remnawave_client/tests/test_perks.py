@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from remnawave_client.perks import apply_crm_bonus_days, is_free_tier_user
 
@@ -17,7 +17,7 @@ def test_apply_crm_bonus_days_resets_traffic_for_active_free_user() -> None:
         rw = MagicMock()
         rw.reset_user_traffic = AsyncMock(return_value=True)
 
-        with __import__("unittest.mock").patch(
+        with patch(
             "remnawave_client.perks.apply_extend",
             new_callable=AsyncMock,
             return_value={"ok": True},
@@ -46,7 +46,7 @@ def test_apply_crm_bonus_days_no_reset_for_unlimited_paid() -> None:
         rw = MagicMock()
         rw.reset_user_traffic = AsyncMock(return_value=True)
 
-        with __import__("unittest.mock").patch(
+        with patch(
             "remnawave_client.perks.apply_extend",
             new_callable=AsyncMock,
             return_value={"ok": True},

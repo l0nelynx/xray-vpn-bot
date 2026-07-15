@@ -16,6 +16,7 @@ ACTION_RW_BONUS_DAYS = "rw_bonus_days"
 ACTION_RW_BONUS_TRAFFIC = "rw_bonus_traffic"
 ACTION_RW_RESET_TRAFFIC = "rw_reset_traffic"
 ACTION_RW_SET_STATUS = "rw_set_status"
+ACTION_CREDIT_BALANCE = "credit_balance"
 
 
 def _loads(raw: str | None) -> list[dict]:
@@ -207,6 +208,7 @@ def normalize_actions(actions: list[dict]) -> list[dict]:
         ACTION_RW_BONUS_TRAFFIC,
         ACTION_RW_RESET_TRAFFIC,
         ACTION_RW_SET_STATUS,
+        ACTION_CREDIT_BALANCE,
     }
     tg_types = {ACTION_SEND_MESSAGE, ACTION_ATTACH_BUTTON}
 

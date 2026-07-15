@@ -66,13 +66,20 @@ def get_others_localized(lang) -> InlineKeyboardMarkup:
 
 
 
-def get_pay_methods_localized(lang, show_promo: bool = False) -> InlineKeyboardMarkup:
+def get_pay_methods_localized(lang, show_promo: bool = False, bonus_credits: int = 0) -> InlineKeyboardMarkup:
     buttons = [
         [InlineKeyboardButton(text=lang.btn_pay_stars, callback_data='Stars_Plans')],
         [InlineKeyboardButton(text=lang.btn_pay_crypto, callback_data='Crypto_Plans')],
         [InlineKeyboardButton(text=lang.btn_pay_crystal, callback_data='Crystal_plans')],
         [InlineKeyboardButton(text=lang.btn_pay_card, callback_data='SBP_Apay')],
     ]
+    if bonus_credits > 0:
+        buttons.append([
+            InlineKeyboardButton(
+                text=lang.btn_pay_credits.format(credits=bonus_credits),
+                callback_data='Credits_Plans',
+            )
+        ])
     if show_promo:
         buttons.append([InlineKeyboardButton(text=lang.btn_have_promo, callback_data='Enter_Promo')])
     buttons.append([InlineKeyboardButton(text=lang.btn_back, callback_data='Main')])

@@ -6,10 +6,13 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from common_db.models import User
+from common_db.models.credit_ledger import SOURCE_CRM
+from common_db.repo import balance as _repo_balance
 from remnawave_client.perks import apply_crm_bonus_days, apply_crm_bonus_traffic
 
 from .crm_model_adapter import (
     ACTION_ATTACH_BUTTON,
+    ACTION_CREDIT_BALANCE,
     ACTION_RW_BONUS_DAYS,
     ACTION_RW_BONUS_TRAFFIC,
     ACTION_RW_RESET_TRAFFIC,
@@ -18,6 +21,7 @@ from .crm_model_adapter import (
     normalize_actions,
 )
 from .crm_variables import build_message_context, render_crm_message
+from .database.session import async_session
 from .telegram import tg_bot_open_url, tg_send
 
 logger = logging.getLogger(__name__)
@@ -42,6 +46,12 @@ ACTION_CATALOG: list[dict[str, Any]] = [
                 "default": "open_bot",
             }
         ],
+    },
+    {
+        "type": ACTION_CREDIT_BALANCE,
+        "label": "Начислить кредиты",
+        "category": "wallet",
+        "fields": [{"name": "days", "label": "Кредитов (дней)", "type": "int", "min": 1, "max": 365}],
     },
     {
         "type": ACTION_RW_BONUS_DAYS,
@@ -149,6 +159,23 @@ async def execute_user_actions(
                 else:
                     result.perks_failed = True
                     result.errors.append("bonus_days failed")
+        elif atype == ACTION_CREDIT_BALANCE:
+            credits = int(act.get("days") or 0)
+            if credits > 0:
+                try:
+                    async with async_session() as session:
+                        await _repo_balance.credit(
+                            session,
+                            db_user.id,
+                            credits,
+                            SOURCE_CRM,
+                            reference=f"crm:{event_id or 'batch'}",
+                        )
+                        await session.commit()
+                    result.perks_applied = True
+                except Exception as exc:
+                    result.perks_failed = True
+                    result.errors.append(f"credit_balance: {exc}")
         elif atype == ACTION_RW_BONUS_TRAFFIC:
             gb = int(act.get("gb") or 0)
             if gb > 0 and db_user.vless_uuid and crm_user:

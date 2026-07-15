@@ -4,7 +4,7 @@ from datetime import datetime
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select, func, delete, exists, or_
 
 logger = logging.getLogger(__name__)
@@ -18,7 +18,9 @@ from ..database.session import async_session
 # packages/common_db/common_db/repo/users.py. Routes still own their
 # sessions; the helpers just centralise the WHERE clause so dashboard
 # and app can never disagree on what "paid" means.
+from common_db.repo import balance as _repo_balance
 from common_db.repo import users as _repo_users
+from common_db.models.credit_ledger import SOURCE_ADMIN
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -236,6 +238,7 @@ async def get_user(tg_id: int, _: str = Depends(get_current_user)):
             "is_banned": bool(user.is_banned),
             "language": user.language,
             "vip": bool(user.vip),
+            "bonus_credits": user.bonus_credits,
             "transactions_count": tx_count,
             "total_spent": float(total_spent),
             "promo_code": promo_code,
@@ -392,6 +395,37 @@ async def send_message(tg_id: int, body: SendMessageRequest, _: str = Depends(ge
         detail = r.json().get("description", "Telegram error")
         raise HTTPException(status_code=502, detail=detail)
     return {"ok": True}
+
+
+class AdjustCreditsRequest(BaseModel):
+    amount: int = Field(..., ge=-3650, le=3650)
+
+
+@router.post("/{tg_id}/credits")
+async def adjust_credits(
+    tg_id: int,
+    body: AdjustCreditsRequest,
+    _: str = Depends(get_current_user),
+):
+    if body.amount == 0:
+        raise HTTPException(400, "amount must be non-zero")
+    async with async_session() as session:
+        user = await _repo_users.get_user_by_tg_id(session, tg_id)
+        if not user:
+            raise HTTPException(404, "User not found")
+        if body.amount > 0:
+            new_balance = await _repo_balance.credit(
+                session, user.id, body.amount, SOURCE_ADMIN, f"admin:{tg_id}"
+            )
+        else:
+            ok = await _repo_balance.debit_if_sufficient(
+                session, user.id, -body.amount, SOURCE_ADMIN, f"admin:{tg_id}"
+            )
+            if not ok:
+                raise HTTPException(400, "insufficient credits to debit")
+            new_balance = await _repo_balance.get_balance(session, user.id)
+        await session.commit()
+    return {"ok": True, "balance": new_balance}
 
 
 class UpdateEmailRequest(BaseModel):

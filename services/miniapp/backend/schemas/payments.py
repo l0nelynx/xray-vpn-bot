@@ -9,6 +9,19 @@ class InvoiceCreateRequest(BaseModel):
     description: str | None = None
 
 
+class PayCreditsRequest(BaseModel):
+    node_id: int = Field(..., ge=1)
+
+
+class PayCreditsResponse(BaseModel):
+    ok: bool
+    transaction_id: str | None = None
+    credits_spent: int | None = None
+    balance_after: int | None = None
+    subscription_url: str | None = None
+    message: str | None = None
+
+
 class InvoiceResponse(BaseModel):
     provider: str
     invoice_id: str

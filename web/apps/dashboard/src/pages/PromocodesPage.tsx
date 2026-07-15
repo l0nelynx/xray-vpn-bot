@@ -37,7 +37,7 @@ const PROMO_SORT_OPTIONS = [
   { value: "promo_code", label: "Code" },
   { value: "promo_type", label: "Type" },
   { value: "owner_username", label: "Owner" },
-  { value: "discount_percent", label: "Discount" },
+  { value: "credit_grant", label: "Credits" },
   { value: "usage_count", label: "Usage" },
   { value: "days_purchased", label: "Days bought" },
   { value: "days_rewarded", label: "Rewarded" },
@@ -51,7 +51,7 @@ interface PromoItem {
   usage_count: number;
   days_purchased: number;
   days_rewarded: number;
-  discount_percent: number | null;
+  credit_grant: number | null;
 }
 
 interface PromosListResponse {
@@ -62,7 +62,7 @@ interface PromosListResponse {
 }
 
 interface PromoSettings {
-  default_discount_percent: number;
+  default_credit_grant: number;
   days_reward_per_30: number;
   reward_cap_days: number;
 }
@@ -103,14 +103,14 @@ function PromosTab() {
 
   const handleCreate = async (values: {
     promo_code: string;
-    discount_percent?: number;
+    credit_grant?: number;
     owner_tg_id?: number;
     promo_type?: PromoType;
   }) => {
     try {
       await api.post("/promos", {
         promo_code: values.promo_code.trim().toUpperCase(),
-        discount_percent: values.discount_percent ?? null,
+        credit_grant: values.credit_grant ?? null,
         owner_tg_id: values.owner_tg_id ?? null,
         promo_type: values.promo_type ?? "promotional",
       });
@@ -177,14 +177,14 @@ function PromosTab() {
         ),
     },
     {
-      title: "Discount",
-      dataIndex: "discount_percent",
-      key: "discount_percent",
+      title: "Credits",
+      dataIndex: "credit_grant",
+      key: "credit_grant",
       width: 120,
       sorter: true,
-      sortOrder: sortOrderFor("discount_percent"),
+      sortOrder: sortOrderFor("credit_grant"),
       render: (v: number | null) =>
-        v == null ? <Tag>default</Tag> : <Tag color="green">{v}%</Tag>,
+        v == null ? <Tag>default</Tag> : <Tag color="green">{v} d</Tag>,
     },
     {
       title: "Usage",
@@ -358,11 +358,11 @@ function PromosTab() {
             />
           </Form.Item>
           <Form.Item
-            name="discount_percent"
-            label="Discount %"
-            tooltip="Leave empty to use the default discount from Settings"
+            name="credit_grant"
+            label="Credit grant (days)"
+            tooltip="Leave empty to use default from Settings"
           >
-            <InputNumber min={0} max={100} style={{ width: "100%" }} placeholder="default" />
+            <InputNumber min={0} max={3650} style={{ width: "100%" }} placeholder="default" />
           </Form.Item>
           <Form.Item
             name="owner_tg_id"
@@ -388,7 +388,7 @@ function SettingsTab() {
     try {
       const r = await api.get<PromoSettings>("/promos/settings");
       form.setFieldsValue({
-        default_discount_percent: r.default_discount_percent,
+        default_credit_grant: r.default_credit_grant,
         days_reward_per_30: r.days_reward_per_30,
         reward_cap_days: r.reward_cap_days,
       });
@@ -408,7 +408,7 @@ function SettingsTab() {
       const values = await form.validateFields();
       setSaving(true);
       await api.put("/promos/settings", {
-        default_discount_percent: values.default_discount_percent,
+        default_credit_grant: values.default_credit_grant,
         days_reward_per_30: values.days_reward_per_30,
         reward_cap_days: values.reward_cap_days,
       });
@@ -432,18 +432,16 @@ function SettingsTab() {
         style={{ maxWidth: 600 }}
       >
         <Typography.Paragraph type="secondary">
-          Default discount % is applied to promo codes that don't have a specific
-          discount value set. Reward settings control how many bonus days a
-          referral owner earns per 30 days purchased with their code, and the
-          cumulative cap on that reward.
+          Default credits (days) granted by promo codes without a per-code override.
+          Reward settings control referral owner bonus days.
         </Typography.Paragraph>
         <Form form={form} layout="vertical">
           <Form.Item
-            name="default_discount_percent"
-            label="Default promo discount (%)"
+            name="default_credit_grant"
+            label="Default credit grant (days)"
             rules={[{ required: true, message: "Required" }]}
           >
-            <InputNumber min={0} max={100} style={{ width: "100%" }} />
+            <InputNumber min={0} max={3650} style={{ width: "100%" }} />
           </Form.Item>
           <Form.Item
             name="days_reward_per_30"

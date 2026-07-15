@@ -37,7 +37,10 @@ class Promo(Base):
     days_purchased: Mapped[int] = mapped_column(Integer, default=0)
     days_rewarded: Mapped[int] = mapped_column(Integer, default=0)
 
-    # NULL = use PromoSettings.default_discount_percent.
+    # NULL = use PromoSettings.default_credit_grant.
+    credit_grant: Mapped[int] = mapped_column(Integer, nullable=True)
+
+    # Legacy — superseded by credit_grant; kept for migration reads.
     discount_percent: Mapped[int] = mapped_column(Integer, nullable=True)
 
     # --- legacy single-redemption columns (superseded by promo_redemptions) ---
@@ -59,6 +62,11 @@ class PromoSettings(Base):
     __tablename__ = "promo_settings"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    default_credit_grant: Mapped[int] = mapped_column(
+        Integer, default=10, server_default="10"
+    )
+
+    # Legacy — superseded by default_credit_grant.
     default_discount_percent: Mapped[int] = mapped_column(Integer, default=20)
 
     # Reward days granted to a referral owner per 30 days an invitee buys.

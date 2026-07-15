@@ -29,6 +29,7 @@ from common_db.models import (  # noqa: F401
     CacheVersion,
     CrmCampaign,
     CrmCampaignDelivery,
+    CreditLedger,
     DisabledUser,
     EmailVerification,
     GooglePlayPurchase,
@@ -82,6 +83,7 @@ __all__ = [
     "CacheVersion",
     "CrmCampaign",
     "CrmCampaignDelivery",
+    "CreditLedger",
     "DisabledUser",
     "EmailVerification",
     "GooglePlayPurchase",
@@ -339,7 +341,7 @@ async def _seed_promo_settings():
     async with async_session() as session:
         count = await session.scalar(select(func.count()).select_from(PromoSettings))
         if not count:
-            session.add(PromoSettings(id=1, default_discount_percent=20))
+            session.add(PromoSettings(id=1, default_discount_percent=20, default_credit_grant=10))
             await session.commit()
             logging.info("Seed: promo_settings default row created")
 

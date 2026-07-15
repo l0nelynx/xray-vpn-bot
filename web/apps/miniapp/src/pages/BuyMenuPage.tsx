@@ -4,19 +4,13 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ApiError,
-  MeResponse,
   MenuNode,
   PromoState,
-  api,
   menu,
   payments,
   promo as promoApi,
 } from "../api/client";
 import { hapticImpact, openLink, showAlert } from "../tg/webapp";
-
-function discountedAmount(amount: number, pct: number): number {
-  return Math.round(amount * (1 - pct / 100) * 100) / 100;
-}
 
 interface ViewResult {
   chipLevels: MenuNode[][];
@@ -74,10 +68,9 @@ export default function BuyMenuPage() {
     [invoices, selectedInvoiceId]
   );
 
-  const activeDiscount =
-    promoState?.active_promo && promoState.discount_percent > 0
-      ? promoState.discount_percent
-      : 0;
+  const balance = promoState?.balance ?? 0;
+  const creditDays = selectedInvoice?.invoice?.days ?? 0;
+  const canPayCredits = creditDays > 0 && balance >= creditDays;
 
   const selectChip = (depth: number, id: number) => {
     hapticImpact("light");
@@ -95,7 +88,7 @@ export default function BuyMenuPage() {
     setSelectedInvoiceId((prev) => (prev === id ? null : id));
   };
 
-  const handlePay = async () => {
+  const handlePayFiat = async () => {
     if (!selectedInvoice?.invoice) return;
     const inv = selectedInvoice.invoice;
 
@@ -106,29 +99,32 @@ export default function BuyMenuPage() {
 
     setBusyId(selectedInvoice.id);
     try {
-      let baselineExpireIso: string | null = null;
-      let baselineDaysLeft = 0;
-      try {
-        const snapshot = await api.get<MeResponse>("/me");
-        baselineExpireIso = snapshot.subscription?.expire_iso ?? null;
-        baselineDaysLeft = snapshot.subscription?.days_left ?? 0;
-      } catch {
-        /* polling works without baseline */
-      }
-
       const res = await payments.createInvoice({
         node_id: selectedInvoice.id,
         description: selectedInvoice.text,
       });
       openLink(res.url);
-      setPromoState((prev) =>
-        prev ? { ...prev, can_activate: true, active_promo: null, discount_percent: 0 } : prev
-      );
-      navigate("/buy/success", {
-        state: { paymentUrl: res.url, baselineExpireIso, baselineDaysLeft },
-      });
+      navigate("/buy/success", { state: { paymentUrl: res.url } });
     } catch (e) {
       showAlert(`Ошибка создания счёта: ${(e as Error).message}`);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handlePayCredits = async () => {
+    if (!selectedInvoice?.invoice || !canPayCredits) return;
+    setBusyId(selectedInvoice.id);
+    try {
+      const res = await payments.payWithCredits({ node_id: selectedInvoice.id });
+      if (res.ok) {
+        setPromoState((prev) =>
+          prev ? { ...prev, balance: res.balance_after ?? prev.balance } : prev
+        );
+        navigate("/buy/success", { state: { paidWithCredits: true } });
+      }
+    } catch (e) {
+      showAlert(`Ошибка оплаты кредитами: ${(e as Error).message}`);
     } finally {
       setBusyId(null);
     }
@@ -151,17 +147,12 @@ export default function BuyMenuPage() {
   }
 
   const payInvoice = selectedInvoice?.invoice;
-  const payOrig = payInvoice?.amount ?? 0;
-  const payDisc = activeDiscount > 0 && payInvoice
-    ? discountedAmount(payOrig, activeDiscount)
-    : null;
-  const payPrice = payDisc ?? payOrig;
+  const payPrice = payInvoice?.amount ?? 0;
   const payCurrency = payInvoice?.currency ?? "";
 
   return (
     <>
       <div className="page">
-        {/* Back + title */}
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
           <button
             onClick={() => navigate("/")}
@@ -187,22 +178,24 @@ export default function BuyMenuPage() {
           </span>
         </div>
 
-        {/* Promo banner */}
-        {activeDiscount > 0 && (
+        {balance > 0 && (
           <Alert
-            type="success"
+            type="info"
             showIcon
             style={{ marginBottom: 16 }}
             title={
               <span>
-                Промокод <strong>{promoState!.active_promo}</strong> активен —{" "}
-                скидка <Tag color="success">−{activeDiscount}%</Tag> применится при оплате
+                Бонусный баланс: <Tag color="blue">{balance} кредитов</Tag>
+                {creditDays > 0 && (
+                  <span style={{ marginLeft: 8, opacity: 0.8 }}>
+                    (1 кредит = 1 день)
+                  </span>
+                )}
               </span>
             }
           />
         )}
 
-        {/* Chip levels */}
         {chipLevels.map((chips, depth) => (
           <div key={depth} style={{ marginBottom: 12 }}>
             <div style={{
@@ -231,7 +224,6 @@ export default function BuyMenuPage() {
           </div>
         ))}
 
-        {/* Tariff cards */}
         {chipLevels.length > 0 && invoices.length === 0 && (
           <div className="tariff-hint">Выберите категорию выше</div>
         )}
@@ -252,10 +244,6 @@ export default function BuyMenuPage() {
               <div className="tariff-scroll">
                 {invoices.map((n) => {
                   const inv = n.invoice!;
-                  const origAmt = inv.amount;
-                  const discAmt = activeDiscount > 0
-                    ? discountedAmount(origAmt, activeDiscount)
-                    : null;
                   const isSelected = selectedInvoiceId === n.id;
 
                   return (
@@ -266,16 +254,14 @@ export default function BuyMenuPage() {
                     >
                       <div className="tariff-card__name">{n.text}</div>
                       <div className="tariff-card__price-row">
-                        {discAmt !== null && (
-                          <div className="tariff-card__price-orig">
-                            {origAmt} {inv.currency}
-                          </div>
-                        )}
-                        <div className="tariff-card__price">
-                          {discAmt ?? origAmt}
-                        </div>
+                        <div className="tariff-card__price">{inv.amount}</div>
                         <div className="tariff-card__currency">{inv.currency}</div>
                       </div>
+                      {inv.days > 0 && (
+                        <div style={{ fontSize: 11, opacity: 0.5, marginTop: 4 }}>
+                          {inv.days} кредитов
+                        </div>
+                      )}
                       {isSelected && (
                         <div className="tariff-card__check">
                           <CheckOutlined />
@@ -289,21 +275,27 @@ export default function BuyMenuPage() {
           </>
         )}
 
-        {/* If tree has only invoices at root (no button categories) */}
         {chipLevels.length === 0 && invoices.length === 0 && (
           <div className="tariff-hint">Тарифы не найдены</div>
         )}
 
-        {/* Spacer so content isn't hidden behind the pay bar */}
-        {selectedInvoice && <div style={{ height: 68 }} />}
+        {selectedInvoice && <div style={{ height: 88 }} />}
       </div>
 
-      {/* Floating pay button */}
       {selectedInvoice && (
-        <div className="pay-bar">
+        <div className="pay-bar" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {canPayCredits && (
+            <button
+              className="ant-btn ant-btn-primary pay-bar-btn"
+              onClick={handlePayCredits}
+              disabled={!!busyId}
+            >
+              {busyId ? <Spin size="small" /> : `Оплатить кредитами · ${creditDays} дн.`}
+            </button>
+          )}
           <button
-            className="ant-btn ant-btn-primary pay-bar-btn"
-            onClick={handlePay}
+            className="ant-btn pay-bar-btn"
+            onClick={handlePayFiat}
             disabled={!!busyId}
             style={{
               display: "flex",
@@ -321,16 +313,6 @@ export default function BuyMenuPage() {
                 <span style={{ fontWeight: 800 }}>
                   {payPrice} {payCurrency}
                 </span>
-                {payDisc !== null && (
-                  <span style={{
-                    fontSize: 12,
-                    opacity: 0.6,
-                    textDecoration: "line-through",
-                    fontWeight: 400,
-                  }}>
-                    {payOrig}
-                  </span>
-                )}
               </>
             )}
           </button>

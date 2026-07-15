@@ -383,7 +383,7 @@ Your promo code: <code>{promo_code}</code>
 
 promo_enter_text = "Enter promo code:"
 
-promo_success_text = "Promo code applied! <b>{discount}%</b> discount will be applied at payment."
+promo_success_text = "Promo code applied! <b>{credits}</b> day credits added to your balance."
 
 promo_invalid_text = "Invalid promo code — please check and try again."
 
@@ -391,11 +391,13 @@ promo_own_code_text = "You cannot use your own promo code."
 
 promo_already_used_text = "You have already used this promo code."
 
-promo_active_exists_text = "You already have an active promo code. Use it at checkout before activating a new one."
+promo_active_exists_text = "You have already used this promo code."
 
 promo_referral_new_only_text = "This promo code is for new users only — you already have purchases."
 
-promo_deeplink_applied_text = "🎁 Promo code activated! A <b>{discount}%</b> discount will be applied to your subscription payment."
+promo_deeplink_applied_text = "🎁 Promo code activated! <b>{credits}</b> day credits added to your balance."
+
+btn_pay_credits = "💎 Pay with credits ({credits})"
 
 free_traffic_exhausted = """<b>FREE subscription traffic exhausted</b>
 

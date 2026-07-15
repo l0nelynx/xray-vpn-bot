@@ -17,6 +17,7 @@ export interface UserDetail extends UserItem {
   total_spent: number;
   promo_code: string | null;
   tickets_count: number;
+  bonus_credits: number;
 }
 
 export interface TransactionItem {
@@ -95,7 +96,7 @@ export interface PromoItem {
   usage_count: number;
   days_purchased: number;
   days_rewarded: number;
-  discount_percent: number | null;
+  credit_grant: number | null;
 }
 
 export interface TariffPrice {

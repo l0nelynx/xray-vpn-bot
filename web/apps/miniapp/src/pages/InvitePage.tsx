@@ -33,7 +33,7 @@ export default function InvitePage() {
   }, []);
 
   const inviteText = state
-    ? `Подключайся к VPN и получи скидку ${state.discount_percent}% на первую покупку!`
+    ? `Подключайся к VPN и получи ${state.credit_grant} бонусных дней по моему коду!`
     : "";
 
   const handleCopy = async () => {
@@ -134,8 +134,8 @@ export default function InvitePage() {
               <b>Как это работает</b>
             </Typography.Paragraph>
             <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-              Друг получает скидку <b>{state.discount_percent}%</b> на первую
-              покупку. За каждые 30 дней, купленных по вашему коду, вы получаете{" "}
+              Друг получает <b>{state.credit_grant}</b> бонусных дней при активации
+              кода. За каждые 30 дней, купленных по вашему коду, вы получаете{" "}
               <b>{state.days_reward_per_30}</b> бонусных дней — всего до{" "}
               <b>{state.reward_cap_days}</b> дней.
             </Typography.Paragraph>

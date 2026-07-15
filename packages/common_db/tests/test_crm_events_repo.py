@@ -26,6 +26,8 @@ def test_create_and_list_due_events() -> None:
                 event = await events_repo.create_event(
                     session,
                     name="test",
+                    conditions=[],
+                    actions=[],
                     segment_type="limited",
                     segment_params={},
                     run_at_time="01:00",

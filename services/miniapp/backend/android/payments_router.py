@@ -418,3 +418,54 @@ async def get_user_transaction(
         days_ordered=int(row[5] or 0),
         created_at=row[6],
     )
+
+
+@router.post("/pay-credits")
+@limiter.limit("10/minute")
+async def android_pay_credits(
+    body: AndroidInvoiceRequest,
+    request: Request,
+    user: android_repo.UserRow = Depends(deps.require_verified_email),
+):
+    from ..credits_delivery import pay_and_deliver
+    from common_db.repo import balance as _repo_balance
+
+    node = await _load_node(body.node_id)
+    if node is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail={"code": "node_not_found"})
+    invoice_data = _node_payload(node)
+    if invoice_data is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail={"code": "node_not_invoice"})
+
+    days = invoice_data["days"]
+    async with async_session() as session:
+        balance = await _repo_balance.get_balance(session, user.id)
+    if balance < days:
+        raise HTTPException(
+            status.HTTP_402_PAYMENT_REQUIRED,
+            detail={"code": "insufficient_credits", "need": days, "have": balance},
+        )
+
+    promo_tg = user.tg_id if user.tg_id is not None else -int(user.id)
+    result = await pay_and_deliver(
+        user_id=user.id,
+        tg_id=user.tg_id,
+        username=user.email or f"android_{user.id}",
+        days=days,
+        tariff_slug=invoice_data["tariff_slug"],
+        android_user_id=user.id if user.tg_id is None else None,
+        email=user.email,
+        referral_tg_id=promo_tg,
+    )
+    if result.get("status") != "success":
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            detail={"code": result.get("message", "delivery_failed")},
+        )
+    return {
+        "ok": True,
+        "transaction_id": result.get("transaction_id"),
+        "credits_spent": result.get("credits_spent"),
+        "balance_after": result.get("balance_after"),
+        "subscription_url": result.get("subscription_url"),
+    }
