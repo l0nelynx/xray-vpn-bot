@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from payments.rub_pricing import get_rub_rates, invoice_points_cost
 
-from ..config import get_config
+from .config import get_config
 
 
 async def resolve_points_cost(invoice_data: dict) -> int:
