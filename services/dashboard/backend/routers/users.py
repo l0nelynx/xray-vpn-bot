@@ -204,10 +204,11 @@ async def backfill_rw_ids(_: str = Depends(get_current_user)):
     }
 
 
-@router.get("/{tg_id}")
-async def get_user(tg_id: int, _: str = Depends(get_current_user)):
+@router.get("/{user_id}")
+async def get_user(user_id: int, _: str = Depends(get_current_user)):
+    """Fetch user by local DB primary key (works for Android/web accounts without tg_id)."""
     async with async_session() as session:
-        user = await _repo_users.get_user_by_tg_id(session, tg_id)
+        user = await _repo_users.get_user_by_id(session, user_id)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
 
@@ -218,11 +219,11 @@ async def get_user(tg_id: int, _: str = Depends(get_current_user)):
             select(func.sum(Transaction.amount)).where(Transaction.user_id == user.id)
         ) or 0
 
-        # The user's own promo/referral code (one row per owner tg_id), if any.
-        promo_code = await session.scalar(
-            select(Promo.promo_code).where(Promo.tg_id == user.tg_id)
-        )
-        # How many support tickets this user has opened.
+        promo_code = None
+        if user.tg_id is not None:
+            promo_code = await session.scalar(
+                select(Promo.promo_code).where(Promo.tg_id == user.tg_id)
+            )
         tickets_count = await session.scalar(
             select(func.count()).select_from(SupportTicket).where(SupportTicket.user_id == user.id)
         ) or 0
@@ -253,16 +254,16 @@ class UpdateIdentifiersRequest(BaseModel):
     rw_id: int | None = None
 
 
-@router.patch("/{tg_id}/identifiers")
+@router.patch("/{user_id}/identifiers")
 async def update_identifiers(
-    tg_id: int,
+    user_id: int,
     body: UpdateIdentifiersRequest,
     _: str = Depends(get_current_user),
 ):
     """Edit a user's tg_id / username / vless_uuid / rw_id. Empty string clears the
     field (sets NULL); a missing field is left unchanged."""
     async with async_session() as session:
-        user = await _repo_users.get_user_by_tg_id(session, tg_id)
+        user = await _repo_users.get_user_by_id(session, user_id)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
 
@@ -272,15 +273,17 @@ async def update_identifiers(
             user.vless_uuid = body.vless_uuid.strip() or None
         if "rw_id" in body.model_fields_set:
             user.rw_id = body.rw_id
-        if body.tg_id is not None and body.tg_id != tg_id:
-            clash = await _repo_users.get_user_by_tg_id(session, body.tg_id)
-            if clash and clash.id != user.id:
-                raise HTTPException(status_code=409, detail="tg_id already in use by another user")
+        if "tg_id" in body.model_fields_set:
+            if body.tg_id is not None and body.tg_id != user.tg_id:
+                clash = await _repo_users.get_user_by_tg_id(session, body.tg_id)
+                if clash and clash.id != user.id:
+                    raise HTTPException(status_code=409, detail="tg_id already in use by another user")
             user.tg_id = body.tg_id
 
         await session.commit()
         return {
             "ok": True,
+            "id": user.id,
             "tg_id": user.tg_id,
             "username": user.username,
             "vless_uuid": user.vless_uuid,
@@ -288,10 +291,10 @@ async def update_identifiers(
         }
 
 
-@router.get("/{tg_id}/transactions")
-async def get_user_transactions(tg_id: int, _: str = Depends(get_current_user)):
+@router.get("/{user_id}/transactions")
+async def get_user_transactions(user_id: int, _: str = Depends(get_current_user)):
     async with async_session() as session:
-        user = await _repo_users.get_user_by_tg_id(session, tg_id)
+        user = await _repo_users.get_user_by_id(session, user_id)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
 
@@ -317,75 +320,82 @@ async def get_user_transactions(tg_id: int, _: str = Depends(get_current_user)):
         ]
 
 
-@router.post("/{tg_id}/ban")
-async def ban_user(tg_id: int, _: str = Depends(get_current_user)):
+@router.post("/{user_id}/ban")
+async def ban_user(user_id: int, _: str = Depends(get_current_user)):
     async with async_session() as session:
-        user = await _repo_users.get_user_by_tg_id(session, tg_id)
+        user = await _repo_users.get_user_by_id(session, user_id)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
         user.is_banned = True
         await session.commit()
-    return {"ok": True, "message": f"User {tg_id} banned"}
+    return {"ok": True, "message": f"User {user_id} banned"}
 
 
-@router.post("/{tg_id}/unban")
-async def unban_user(tg_id: int, _: str = Depends(get_current_user)):
+@router.post("/{user_id}/unban")
+async def unban_user(user_id: int, _: str = Depends(get_current_user)):
     async with async_session() as session:
-        user = await _repo_users.get_user_by_tg_id(session, tg_id)
+        user = await _repo_users.get_user_by_id(session, user_id)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
         user.is_banned = False
         await session.commit()
-    return {"ok": True, "message": f"User {tg_id} unbanned"}
+    return {"ok": True, "message": f"User {user_id} unbanned"}
 
 
-@router.post("/{tg_id}/vip")
-async def set_vip(tg_id: int, _: str = Depends(get_current_user)):
+@router.post("/{user_id}/vip")
+async def set_vip(user_id: int, _: str = Depends(get_current_user)):
     async with async_session() as session:
-        user = await _repo_users.get_user_by_tg_id(session, tg_id)
+        user = await _repo_users.get_user_by_id(session, user_id)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
         user.vip = 1
         await session.commit()
-    return {"ok": True, "message": f"User {tg_id} VIP enabled"}
+    return {"ok": True, "message": f"User {user_id} VIP enabled"}
 
 
-@router.post("/{tg_id}/unvip")
-async def unset_vip(tg_id: int, _: str = Depends(get_current_user)):
+@router.post("/{user_id}/unvip")
+async def unset_vip(user_id: int, _: str = Depends(get_current_user)):
     async with async_session() as session:
-        user = await _repo_users.get_user_by_tg_id(session, tg_id)
+        user = await _repo_users.get_user_by_id(session, user_id)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
         user.vip = 0
         await session.commit()
-    return {"ok": True, "message": f"User {tg_id} VIP disabled"}
+    return {"ok": True, "message": f"User {user_id} VIP disabled"}
 
 
-@router.delete("/{tg_id}")
-async def delete_user(tg_id: int, _: str = Depends(get_current_user)):
+@router.delete("/{user_id}")
+async def delete_user(user_id: int, _: str = Depends(get_current_user)):
     async with async_session() as session:
-        user = await _repo_users.get_user_by_tg_id(session, tg_id)
+        user = await _repo_users.get_user_by_id(session, user_id)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
         await session.execute(delete(Transaction).where(Transaction.user_id == user.id))
         await session.execute(delete(User).where(User.id == user.id))
         await session.commit()
-    return {"ok": True, "message": f"User {tg_id} deleted"}
+    return {"ok": True, "message": f"User {user_id} deleted"}
 
 
 class SendMessageRequest(BaseModel):
     text: str
 
 
-@router.post("/{tg_id}/send-message")
-async def send_message(tg_id: int, body: SendMessageRequest, _: str = Depends(get_current_user)):
+@router.post("/{user_id}/send-message")
+async def send_message(user_id: int, body: SendMessageRequest, _: str = Depends(get_current_user)):
     if not body.text.strip():
         raise HTTPException(status_code=400, detail="Text is required")
+    async with async_session() as session:
+        user = await _repo_users.get_user_by_id(session, user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        if not user.tg_id:
+            raise HTTPException(status_code=400, detail="User has no Telegram ID")
+        chat_id = user.tg_id
     token = get_bot_token()
     if not token:
         raise HTTPException(status_code=503, detail="Bot token not configured")
     payload = {
-        "chat_id": tg_id,
+        "chat_id": chat_id,
         "text": f"Сообщение от администратора:\n\n{body.text}",
         "parse_mode": "HTML",
     }
@@ -401,25 +411,25 @@ class AdjustCreditsRequest(BaseModel):
     amount: int = Field(..., ge=-3650, le=3650)
 
 
-@router.post("/{tg_id}/credits")
+@router.post("/{user_id}/credits")
 async def adjust_credits(
-    tg_id: int,
+    user_id: int,
     body: AdjustCreditsRequest,
     _: str = Depends(get_current_user),
 ):
     if body.amount == 0:
         raise HTTPException(400, "amount must be non-zero")
     async with async_session() as session:
-        user = await _repo_users.get_user_by_tg_id(session, tg_id)
+        user = await _repo_users.get_user_by_id(session, user_id)
         if not user:
             raise HTTPException(404, "User not found")
         if body.amount > 0:
             new_balance = await _repo_balance.credit(
-                session, user.id, body.amount, SOURCE_ADMIN, f"admin:{tg_id}"
+                session, user.id, body.amount, SOURCE_ADMIN, f"admin:{user_id}"
             )
         else:
             ok = await _repo_balance.debit_if_sufficient(
-                session, user.id, -body.amount, SOURCE_ADMIN, f"admin:{tg_id}"
+                session, user.id, -body.amount, SOURCE_ADMIN, f"admin:{user_id}"
             )
             if not ok:
                 raise HTTPException(400, "insufficient credits to debit")
@@ -432,13 +442,13 @@ class UpdateEmailRequest(BaseModel):
     email: str
 
 
-@router.patch("/{tg_id}/email")
-async def update_email(tg_id: int, body: UpdateEmailRequest, _: str = Depends(get_current_user)):
+@router.patch("/{user_id}/email")
+async def update_email(user_id: int, body: UpdateEmailRequest, _: str = Depends(get_current_user)):
     email = body.email.strip().lower()
     if not re.match(r"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$", email):
         raise HTTPException(status_code=400, detail="Invalid email format")
     async with async_session() as session:
-        user = await _repo_users.get_user_by_tg_id(session, tg_id)
+        user = await _repo_users.get_user_by_id(session, user_id)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
         user.email = email
@@ -454,7 +464,7 @@ async def update_email(tg_id: int, body: UpdateEmailRequest, _: str = Depends(ge
             rw_uuid = str(rw_user["uuid"])
             rw_id = rw_user.get("rw_id")
             async with async_session() as session:
-                user = await _repo_users.get_user_by_tg_id(session, tg_id)
+                user = await _repo_users.get_user_by_id(session, user_id)
                 if user:
                     user.vless_uuid = rw_uuid
                     user.api_provider = "remnawave"

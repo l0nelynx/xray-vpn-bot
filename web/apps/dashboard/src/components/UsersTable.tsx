@@ -30,7 +30,7 @@ export default function UsersTable() {
   const [order, setOrder] = useState<SortOrder>("desc");
   const [loading, setLoading] = useState(false);
   const [backfillLoading, setBackfillLoading] = useState(false);
-  const [drawerTgId, setDrawerTgId] = useState<number | null>(null);
+  const [drawerUserId, setDrawerUserId] = useState<number | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const isMobile = useIsMobile();
   const debouncedSearch = useDebounce(search, 400);
@@ -63,36 +63,36 @@ export default function UsersTable() {
     return () => abortRef.current?.abort();
   }, [fetchUsers]);
 
-  const handleBan = async (tg_id: number) => {
+  const handleBan = async (user_id: number) => {
     try {
-      await api.post(`/users/${tg_id}/ban`);
+      await api.post(`/users/${user_id}/ban`);
       fetchUsers();
     } catch {
       message.error("Failed to ban user");
     }
   };
 
-  const handleUnban = async (tg_id: number) => {
+  const handleUnban = async (user_id: number) => {
     try {
-      await api.post(`/users/${tg_id}/unban`);
+      await api.post(`/users/${user_id}/unban`);
       fetchUsers();
     } catch {
       message.error("Failed to unban user");
     }
   };
 
-  const handleDelete = async (tg_id: number) => {
+  const handleDelete = async (user_id: number) => {
     try {
-      await api.delete(`/users/${tg_id}`);
+      await api.delete(`/users/${user_id}`);
       fetchUsers();
     } catch {
       message.error("Failed to delete user");
     }
   };
 
-  const handleToggleVip = async (tg_id: number, currentVip: boolean) => {
+  const handleToggleVip = async (user_id: number, currentVip: boolean) => {
     try {
-      await api.post(`/users/${tg_id}/${currentVip ? "unvip" : "vip"}`);
+      await api.post(`/users/${user_id}/${currentVip ? "unvip" : "vip"}`);
       fetchUsers();
     } catch {
       message.error("Failed to toggle VIP status");
@@ -121,8 +121,8 @@ export default function UsersTable() {
     }
   };
 
-  const openDrawer = (tg_id: number) => {
-    setDrawerTgId(tg_id);
+  const openDrawer = (user_id: number) => {
+    setDrawerUserId(user_id);
     setDrawerOpen(true);
   };
 
@@ -131,7 +131,7 @@ export default function UsersTable() {
 
   const columns: TableProps<UserItem>["columns"] = [
     { title: "ID", dataIndex: "id", key: "id", width: 60, sorter: true, sortOrder: sortOrderFor("id") },
-    { title: "TG ID", dataIndex: "tg_id", key: "tg_id", width: 130, sorter: true, sortOrder: sortOrderFor("tg_id") },
+    { title: "TG ID", dataIndex: "tg_id", key: "tg_id", width: 130, sorter: true, sortOrder: sortOrderFor("tg_id"), render: (v: number | null) => v ?? "—" },
     {
       title: "rw_id",
       dataIndex: "rw_id",
@@ -185,22 +185,22 @@ export default function UsersTable() {
       fixed: "right",
       render: (_: unknown, r: UserItem) => (
         <Space size="small">
-          <Button size="small" icon={<EyeOutlined />} onClick={() => openDrawer(r.tg_id)} />
+          <Button size="small" icon={<EyeOutlined />} onClick={() => openDrawer(r.id)} />
           <Button
             size="small"
             icon={<CrownOutlined />}
-            onClick={() => handleToggleVip(r.tg_id, r.vip)}
+            onClick={() => handleToggleVip(r.id, r.vip)}
             title={r.vip ? "Remove VIP" : "Set VIP"}
             style={r.vip ? { color: "#faad14", borderColor: "#faad14" } : undefined}
           />
           {r.is_banned ? (
-            <Button size="small" icon={<CheckOutlined />} onClick={() => handleUnban(r.tg_id)} title="Unban" />
+            <Button size="small" icon={<CheckOutlined />} onClick={() => handleUnban(r.id)} title="Unban" />
           ) : (
-            <Popconfirm title="Ban this user?" onConfirm={() => handleBan(r.tg_id)}>
+            <Popconfirm title="Ban this user?" onConfirm={() => handleBan(r.id)}>
               <Button size="small" danger icon={<StopOutlined />} title="Ban" />
             </Popconfirm>
           )}
-          <Popconfirm title="Delete this user and all transactions?" onConfirm={() => handleDelete(r.tg_id)}>
+          <Popconfirm title="Delete this user and all transactions?" onConfirm={() => handleDelete(r.id)}>
             <Button size="small" danger icon={<DeleteOutlined />} />
           </Popconfirm>
         </Space>
@@ -225,7 +225,7 @@ export default function UsersTable() {
             {user.username || "—"}
           </div>
           <div style={{ fontSize: 12, color: "rgba(255,255,255,0.45)", marginBottom: 4 }}>
-            TG: {user.tg_id}
+            TG: {user.tg_id ?? "—"}
             {user.rw_id != null ? ` · RW: ${user.rw_id}` : ""} · {user.api_provider}
           </div>
           {user.email && (
@@ -240,15 +240,15 @@ export default function UsersTable() {
           </Space>
         </div>
         <Space size="small">
-          <Button size="small" icon={<EyeOutlined />} onClick={() => openDrawer(user.tg_id)} />
+          <Button size="small" icon={<EyeOutlined />} onClick={() => openDrawer(user.id)} />
           {user.is_banned ? (
-            <Button size="small" icon={<CheckOutlined />} onClick={() => handleUnban(user.tg_id)} />
+            <Button size="small" icon={<CheckOutlined />} onClick={() => handleUnban(user.id)} />
           ) : (
-            <Popconfirm title="Ban this user?" onConfirm={() => handleBan(user.tg_id)}>
+            <Popconfirm title="Ban this user?" onConfirm={() => handleBan(user.id)}>
               <Button size="small" danger icon={<StopOutlined />} />
             </Popconfirm>
           )}
-          <Popconfirm title="Delete user?" onConfirm={() => handleDelete(user.tg_id)}>
+          <Popconfirm title="Delete user?" onConfirm={() => handleDelete(user.id)}>
             <Button size="small" danger icon={<DeleteOutlined />} />
           </Popconfirm>
         </Space>
@@ -349,7 +349,7 @@ export default function UsersTable() {
       )}
 
       <UserDrawer
-        tgId={drawerTgId}
+        userId={drawerUserId}
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         onChanged={fetchUsers}

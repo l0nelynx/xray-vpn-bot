@@ -1,6 +1,6 @@
 export interface UserItem {
   id: number;
-  tg_id: number;
+  tg_id: number | null;
   username: string | null;
   vless_uuid: string | null;
   rw_id: number | null;

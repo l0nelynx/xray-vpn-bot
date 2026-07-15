@@ -7,8 +7,8 @@ import { formatPoints, POINTS_ICON } from "../points";
 import useIsMobile from "../hooks/useIsMobile";
 
 interface Props {
-  /** When non-null the drawer fetches & shows this user. */
-  tgId: number | null;
+  /** Local DB users.id. When non-null the drawer fetches & shows this user. */
+  userId: number | null;
   open: boolean;
   onClose: () => void;
   /** Called after edits so the opener can refresh its list. */
@@ -16,12 +16,11 @@ interface Props {
 }
 
 /**
- * Reusable user card. Fetches the user detail + transactions for `tgId` and
- * renders the account info, identifier editor (tg_id/username/vless_uuid/rw_id),
- * email editor, promo/ticket stats, transaction history and a send-message box.
- * Used by the Users table and the Support ticket view.
+ * Reusable user card. Fetches the user detail + transactions by local DB id
+ * (works for Android/web accounts without tg_id). Used by the Users table
+ * and the Support ticket view.
  */
-export default function UserDrawer({ tgId, open, onClose, onChanged }: Props) {
+export default function UserDrawer({ userId, open, onClose, onChanged }: Props) {
   const { message } = App.useApp();
   const isMobile = useIsMobile();
 
@@ -52,7 +51,7 @@ export default function UserDrawer({ tgId, open, onClose, onChanged }: Props) {
       const t = await api.get<TransactionItem[]>(`/users/${id}/transactions`);
       setUser(u);
       setTx(t);
-      setEditTgId(String(u.tg_id));
+      setEditTgId(u.tg_id != null ? String(u.tg_id) : "");
       setEditUsername(u.username || "");
       setEditUuid(u.vless_uuid || "");
       setEditRwId(u.rw_id != null ? String(u.rw_id) : "");
@@ -67,9 +66,9 @@ export default function UserDrawer({ tgId, open, onClose, onChanged }: Props) {
   };
 
   useEffect(() => {
-    if (open && tgId != null) load(tgId);
+    if (open && userId != null) load(userId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, tgId]);
+  }, [open, userId]);
 
   const handleSaveIdentifiers = async () => {
     if (!user) return;
@@ -85,24 +84,24 @@ export default function UserDrawer({ tgId, open, onClose, onChanged }: Props) {
     }
     setIdSaving(true);
     try {
-      const res = await api.patch<{
+      await api.patch<{
         ok: boolean;
-        tg_id: number;
+        id: number;
+        tg_id: number | null;
         username: string | null;
         vless_uuid: string | null;
         rw_id: number | null;
       }>(
-        `/users/${user.tg_id}/identifiers`,
+        `/users/${user.id}/identifiers`,
         {
-          tg_id: newTgId ? Number(newTgId) : undefined,
+          tg_id: newTgId ? Number(newTgId) : null,
           username: editUsername,
           vless_uuid: editUuid,
           rw_id: rwIdTrimmed ? Number(rwIdTrimmed) : null,
         }
       );
       message.success("Сохранено");
-      // tg_id may have changed → reload by the new id and refresh the opener
-      await load(res.tg_id);
+      await load(user.id);
       onChanged?.();
     } catch (e) {
       const status = (e as { status?: number })?.status;
@@ -117,14 +116,14 @@ export default function UserDrawer({ tgId, open, onClose, onChanged }: Props) {
     setEmailSaving(true);
     try {
       const res = await api.patch<{ ok: boolean; rw_uuid: string | null; rw_id: number | null }>(
-        `/users/${user.tg_id}/email`,
+        `/users/${user.id}/email`,
         { email: emailInput.trim() }
       );
       const parts = ["Email сохранён"];
       if (res.rw_uuid) parts.push(`UUID: ${res.rw_uuid}`);
       if (res.rw_id != null) parts.push(`rw_id: ${res.rw_id}`);
       message.success(parts.join(", "));
-      await load(user.tg_id);
+      await load(user.id);
       onChanged?.();
     } catch {
       message.error("Ошибка сохранения email");
@@ -138,12 +137,12 @@ export default function UserDrawer({ tgId, open, onClose, onChanged }: Props) {
     setCreditsSaving(true);
     try {
       const res = await api.post<{ ok: boolean; balance: number }>(
-        `/users/${user.tg_id}/credits`,
+        `/users/${user.id}/credits`,
         { amount: creditsDelta }
       );
       message.success(`Баланс обновлён: ${formatPoints(res.balance)}`);
       setCreditsDelta(null);
-      await load(user.tg_id);
+      await load(user.id);
       onChanged?.();
     } catch (e) {
       const status = (e as { status?: number })?.status;
@@ -155,9 +154,13 @@ export default function UserDrawer({ tgId, open, onClose, onChanged }: Props) {
 
   const handleSendMessage = async () => {
     if (!user || !msgText.trim()) return;
+    if (user.tg_id == null) {
+      message.error("У пользователя нет Telegram ID");
+      return;
+    }
     setMsgSending(true);
     try {
-      await api.post(`/users/${user.tg_id}/send-message`, { text: msgText });
+      await api.post(`/users/${user.id}/send-message`, { text: msgText });
       message.success("Сообщение отправлено");
       setMsgText("");
     } catch {
@@ -168,10 +171,13 @@ export default function UserDrawer({ tgId, open, onClose, onChanged }: Props) {
   };
 
   const labelStyle = { color: "rgba(255,255,255,0.85)" } as const;
+  const displayName = user
+    ? (user.username || user.email || (user.tg_id != null ? String(user.tg_id) : `#${user.id}`))
+    : "User";
 
   return (
     <Drawer
-      title={user ? `User: ${user.username || user.tg_id}` : "User"}
+      title={user ? `User: ${displayName}` : "User"}
       open={open}
       onClose={onClose}
       width={isMobile ? "100%" : 520}
@@ -180,7 +186,8 @@ export default function UserDrawer({ tgId, open, onClose, onChanged }: Props) {
       {user && (
         <>
           <Descriptions column={1} bordered size="small">
-            <Descriptions.Item label="TG ID">{user.tg_id}</Descriptions.Item>
+            <Descriptions.Item label="ID">{user.id}</Descriptions.Item>
+            <Descriptions.Item label="TG ID">{user.tg_id ?? "—"}</Descriptions.Item>
             <Descriptions.Item label="Username">{user.username || "—"}</Descriptions.Item>
             <Descriptions.Item label="Email">{user.email || "—"}</Descriptions.Item>
             <Descriptions.Item label="vless_uuid">
@@ -220,7 +227,8 @@ export default function UserDrawer({ tgId, open, onClose, onChanged }: Props) {
               addonBefore="TG ID"
               value={editTgId}
               onChange={(e) => setEditTgId(e.target.value)}
-              placeholder="123456789"
+              placeholder="123456789 (опционально)"
+              allowClear
             />
             <Input
               addonBefore="Username"
@@ -300,12 +308,18 @@ export default function UserDrawer({ tgId, open, onClose, onChanged }: Props) {
             <SendOutlined style={{ marginRight: 6 }} />
             Сообщение пользователю
           </Typography.Text>
+          {user.tg_id == null && (
+            <Typography.Text type="secondary" style={{ display: "block", marginTop: 6, fontSize: 12 }}>
+              Недоступно: у аккаунта нет Telegram ID (Android / web).
+            </Typography.Text>
+          )}
           <Input.TextArea
             style={{ marginTop: 8 }}
             rows={3}
             value={msgText}
             onChange={(e) => setMsgText(e.target.value)}
             placeholder="Текст сообщения..."
+            disabled={user.tg_id == null}
           />
           <Button
             type="primary"
@@ -313,7 +327,7 @@ export default function UserDrawer({ tgId, open, onClose, onChanged }: Props) {
             icon={<SendOutlined />}
             loading={msgSending}
             onClick={handleSendMessage}
-            disabled={!msgText.trim()}
+            disabled={!msgText.trim() || user.tg_id == null}
           >
             Отправить
           </Button>

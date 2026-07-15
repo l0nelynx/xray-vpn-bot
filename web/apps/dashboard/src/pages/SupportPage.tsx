@@ -105,7 +105,7 @@ export default function SupportPage() {
   }, [pendingPreviewUrls]);
 
   // Nested user card (opened from within a ticket)
-  const [userTgId, setUserTgId] = useState<number | null>(null);
+  const [userDrawerId, setUserDrawerId] = useState<number | null>(null);
   const [userOpen, setUserOpen] = useState(false);
 
   const load = async () => {
@@ -460,12 +460,12 @@ export default function SupportPage() {
               <span style={{ color: "rgba(255,255,255,0.6)" }}>
                 {detail.username ? `@${detail.username}` : detail.tg_id} · {detail.created_at}
               </span>
-              {detail.tg_id != null && (
+              {detail.user_id != null && (
                 <Button
                   size="small"
                   icon={<UserOutlined />}
                   onClick={() => {
-                    setUserTgId(detail.tg_id);
+                    setUserDrawerId(detail.user_id);
                     setUserOpen(true);
                   }}
                 >
@@ -604,7 +604,7 @@ export default function SupportPage() {
       </Drawer>
 
       <UserDrawer
-        tgId={userTgId}
+        userId={userDrawerId}
         open={userOpen}
         onClose={() => setUserOpen(false)}
       />
