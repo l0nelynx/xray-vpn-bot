@@ -165,8 +165,8 @@ class TestPromoCanon:
 
     def test_promo_settings_default_credit_grant(self) -> None:
         col = _col(PromoSettings, "default_credit_grant")
-        assert col.default is not None and col.default.arg == 10
-        assert _server_default(col) == "10"
+        assert col.default is not None and col.default.arg == 100
+        assert _server_default(col) == "100"
 
     def test_promo_settings_default_discount_percent(self) -> None:
         col = _col(PromoSettings, "default_discount_percent")

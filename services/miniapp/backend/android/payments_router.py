@@ -427,6 +427,7 @@ async def android_pay_credits(
     request: Request,
     user: android_repo.UserRow = Depends(deps.require_verified_email),
 ):
+    from ..bonus_points import resolve_points_cost
     from ..credits_delivery import pay_and_deliver
     from common_db.repo import balance as _repo_balance
 
@@ -438,12 +439,13 @@ async def android_pay_credits(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail={"code": "node_not_invoice"})
 
     days = invoice_data["days"]
+    points_cost = await resolve_points_cost(invoice_data)
     async with async_session() as session:
         balance = await _repo_balance.get_balance(session, user.id)
-    if balance < days:
+    if balance < points_cost:
         raise HTTPException(
             status.HTTP_402_PAYMENT_REQUIRED,
-            detail={"code": "insufficient_credits", "need": days, "have": balance},
+            detail={"code": "insufficient_credits", "need": points_cost, "have": balance},
         )
 
     promo_tg = user.tg_id if user.tg_id is not None else -int(user.id)
@@ -451,6 +453,7 @@ async def android_pay_credits(
         user_id=user.id,
         tg_id=user.tg_id,
         username=user.email or f"android_{user.id}",
+        points_cost=points_cost,
         days=days,
         tariff_slug=invoice_data["tariff_slug"],
         android_user_id=user.id if user.tg_id is None else None,
@@ -465,6 +468,8 @@ async def android_pay_credits(
     return {
         "ok": True,
         "transaction_id": result.get("transaction_id"),
+        "points_spent": result.get("points_spent"),
+        "points_cost": points_cost,
         "credits_spent": result.get("credits_spent"),
         "balance_after": result.get("balance_after"),
         "subscription_url": result.get("subscription_url"),

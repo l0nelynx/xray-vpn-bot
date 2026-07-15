@@ -50,7 +50,7 @@ export default function SettingsPage({ username }: Props) {
       );
       setModalOpen(false);
       setInputCode("");
-      message.success(`+${res.credit_grant} кредитов на баланс (всего ${res.balance})`);
+      message.success(`+${res.credit_grant} ₽ на баланс (всего ${res.balance})`);
     } catch (e: unknown) {
       showAlert(e instanceof Error ? e.message : "Ошибка");
     } finally {
@@ -147,7 +147,7 @@ export default function SettingsPage({ username }: Props) {
         }}>
           <span style={{ color: "rgba(255,255,255,0.60)", fontSize: 14 }}>Бонусный баланс</span>
           <Tag color="success" style={{ margin: 0, fontWeight: 600 }}>
-            {promoState!.balance} кредитов
+            {promoState!.balance} ₽
           </Tag>
         </div>
       )}
@@ -186,7 +186,7 @@ export default function SettingsPage({ username }: Props) {
       >
         <Space direction="vertical" size={12} style={{ width: "100%", paddingTop: 4 }}>
           <p style={{ color: "rgba(255,255,255,0.50)", margin: 0, fontSize: 14 }}>
-            Введите промокод — кредиты (дни подписки) начислятся на баланс сразу
+            Введите промокод — баллы (₽) начислятся на баланс сразу
           </p>
           <Input
             placeholder="EXAMPLE123"

@@ -76,7 +76,7 @@ def get_pay_methods_localized(lang, show_promo: bool = False, bonus_credits: int
     if bonus_credits > 0:
         buttons.append([
             InlineKeyboardButton(
-                text=lang.btn_pay_credits.format(credits=bonus_credits),
+                text=lang.btn_pay_credits.format(points=bonus_credits),
                 callback_data='Credits_Plans',
             )
         ])

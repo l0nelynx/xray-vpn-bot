@@ -31,6 +31,10 @@ class PaymentCallbackData(CallbackData, prefix=""):
     days: int
 
 
+class CreditsNodeCallbackData(CallbackData, prefix="crd"):
+    node_id: int
+
+
 def payment_keyboard(amount):
     builder = InlineKeyboardBuilder()
     builder.button(text=f"Оплатить {amount} ⭐️", pay=True)
@@ -184,17 +188,3 @@ def create_tariff_keyboard(
     ).build()
 
 
-def create_credits_tariff_keyboard(tariff: Dict[str, dict]) -> InlineKeyboardMarkup:
-    """Tariff picker for BONUS_CREDITS — 1 credit = 1 day."""
-    keyboard_buttons = []
-    for _name, params in tariff.items():
-        days = int(params["days"])
-        period = params["period"]
-        call_data = PaymentCallbackData(
-            tag="data", method="BONUS_CREDITS", amount=float(days), days=days
-        ).pack()
-        text = f"{period} | {days} credits"
-        keyboard_buttons.append([InlineKeyboardButton(text=text, callback_data=call_data)])
-    keyboard_buttons.append([InlineKeyboardButton(text="Назад", callback_data="Premium")])
-    keyboard_buttons.append([InlineKeyboardButton(text="На главную", callback_data="Main")])
-    return InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)

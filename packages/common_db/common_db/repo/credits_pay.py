@@ -1,4 +1,4 @@
-"""Pay for a menu tariff using bonus credits (full amount only)."""
+"""Pay for a menu tariff using RUB bonus points (full amount only)."""
 from __future__ import annotations
 
 import uuid
@@ -16,8 +16,13 @@ class CreditPurchaseResult:
     transaction_id: str
     days: int
     tariff_slug: str
-    credits_spent: int
+    points_spent: int
     balance_after: int
+
+    @property
+    def credits_spent(self) -> int:
+        """Alias for API responses during transition."""
+        return self.points_spent
 
 
 def _now_iso() -> str:
@@ -30,14 +35,17 @@ async def purchase_with_credits(
     user_id: int,
     username: str,
     tg_id: int | None,
+    points_cost: int,
     days: int,
     tariff_slug: str,
     android_user_id: int | None = None,
 ) -> CreditPurchaseResult | None:
-    """Debit credits and create a confirmed BONUS_CREDITS transaction.
+    """Debit RUB points and create a confirmed BONUS_CREDITS transaction.
 
     Returns None if balance is insufficient. Caller owns commit and delivery.
     """
+    if points_cost <= 0:
+        raise ValueError("points_cost must be positive")
     if days <= 0:
         raise ValueError("days must be positive")
 
@@ -45,7 +53,7 @@ async def purchase_with_credits(
     debited = await debit_if_sufficient(
         session,
         user_id,
-        days,
+        points_cost,
         reference=transaction_id,
     )
     if not debited:
@@ -76,7 +84,7 @@ async def purchase_with_credits(
         transaction_id=transaction_id,
         days=days,
         tariff_slug=tariff_slug,
-        credits_spent=days,
+        points_spent=points_cost,
         balance_after=balance_after,
     )
 

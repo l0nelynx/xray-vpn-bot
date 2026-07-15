@@ -20,13 +20,18 @@ from app.keyboards.localized import get_to_main_localized
 from app.bot_constructor.keyboards.payment_kb import get_pay_methods_localized
 from app.bot_constructor.keyboards.tools import (
     PaymentCallbackData,
+    CreditsNodeCallbackData,
     OptimizedTariffKeyboard,
     create_tariff_keyboard,
-    create_credits_tariff_keyboard,
     get_price_stars,
     get_price_crypto,
     get_sbp_price,
     payment_keyboard,
+)
+from app.bot_constructor.menu_credits import (
+    create_credits_menu_keyboard,
+    load_menu_node,
+    resolve_node_points_cost,
 )
 from app.bot_constructor.tariffs import get_tariffs_stars, get_tariffs_crypto, get_tariffs_sbp
 from app.settings import bot, cp, secrets
@@ -124,7 +129,7 @@ async def process_promo_input(message: Message, state: FSMContext):
         return
 
     await message.answer(
-        text=lang.promo_success_text.format(credits=result.credit_grant or 0),
+        text=lang.promo_success_text.format(points=result.credit_grant or 0),
         parse_mode="HTML",
         reply_markup=await _payment_methods_keyboard(lang, tg_id),
     )
@@ -159,12 +164,14 @@ async def stars_plan(callback: CallbackQuery, state: FSMContext):
         "Crystal_plans": lambda: create_tariff_keyboard(
             tariff=get_tariffs_sbp(), method="CRYSTAL", base_price=get_sbp_price()
         ),
-        "Credits_Plans": lambda: create_credits_tariff_keyboard(get_tariffs_stars()),
     }
 
     keyboard = None
     if callback.data == "Credits_Plans":
-        keyboard = create_credits_tariff_keyboard(get_tariffs_stars())
+        keyboard = await create_credits_menu_keyboard()
+        if not keyboard:
+            await callback.answer(lang.msg_no_credits_plans, show_alert=True)
+            return
     else:
         db_info = db_keyboards.get(callback.data)
         if db_info:
@@ -184,50 +191,73 @@ async def stars_plan(callback: CallbackQuery, state: FSMContext):
         logging.warning("Unrecognised payment method callback: %s", callback.data)
 
 
+@router.callback_query(
+    CreditsNodeCallbackData.filter(),
+    PaymentState.PaymentTariff,
+)
+async def credits_node_handler(
+    callback: CallbackQuery,
+    callback_data: CreditsNodeCallbackData,
+    state: FSMContext,
+):
+    lang = await get_user_lang(callback.from_user.id)
+    node = await load_menu_node(callback_data.node_id)
+    if node is None:
+        await callback.answer(lang.msg_plan_not_found, show_alert=True)
+        return
+
+    resolved = await resolve_node_points_cost(node)
+    if resolved is None:
+        await callback.answer(lang.msg_plan_not_found, show_alert=True)
+        return
+    invoice, points_cost = resolved
+    days = invoice["days"]
+    tariff_slug = invoice["tariff_slug"]
+
+    async with async_session() as session:
+        user = await _repo_users.get_user_by_tg_id(session, callback.from_user.id)
+        if not user:
+            await callback.answer("User not found", show_alert=True)
+            return
+        purchase = await _repo_credits_pay.purchase_with_credits(
+            session,
+            user_id=user.id,
+            username=callback.from_user.username or f"id_{callback.from_user.id}",
+            tg_id=callback.from_user.id,
+            points_cost=points_cost,
+            days=days,
+            tariff_slug=tariff_slug,
+        )
+        if purchase is None:
+            await session.rollback()
+            await callback.answer(lang.msg_insufficient_points, show_alert=True)
+            return
+        await session.commit()
+
+    await rq.claim_order_for_processing(purchase.transaction_id)
+    await deliver_subscription(
+        message=callback.message,
+        username=callback.from_user.username,
+        user_id=callback.from_user.id,
+        days=days,
+        subscription_type=SubscriptionType.PAID,
+        payment_method=PAYMENT_METHOD_NAMES["BONUS_CREDITS"],
+        data_limit_gb=None,
+        reset_strategy="no_reset",
+        transaction_id=purchase.transaction_id,
+        amount=0,
+        tariff_slug=tariff_slug,
+    )
+    await state.clear()
+    await state.set_state(PaymentState.PrePayment)
+
+
 @router.callback_query(PaymentCallbackData.filter(F.tag == "data"), PaymentState.PaymentTariff)
 async def invoice_handler(callback: CallbackQuery, callback_data: PaymentCallbackData, state: FSMContext):
     method = callback_data.method
     amount = callback_data.amount
     days = callback_data.days
     lang = await get_user_lang(callback.from_user.id)
-
-    if method == "BONUS_CREDITS":
-        async with async_session() as session:
-            user = await _repo_users.get_user_by_tg_id(session, callback.from_user.id)
-            if not user:
-                await callback.answer("User not found", show_alert=True)
-                return
-            tariff_slug = await get_tariff_slug_by_days("stars", days)
-            purchase = await _repo_credits_pay.purchase_with_credits(
-                session,
-                user_id=user.id,
-                username=callback.from_user.username or f"id_{callback.from_user.id}",
-                tg_id=callback.from_user.id,
-                days=days,
-                tariff_slug=tariff_slug or "",
-            )
-            if purchase is None:
-                await session.rollback()
-                await callback.answer("Insufficient credits", show_alert=True)
-                return
-            await session.commit()
-        await rq.claim_order_for_processing(purchase.transaction_id)
-        await deliver_subscription(
-            message=callback.message,
-            username=callback.from_user.username,
-            user_id=callback.from_user.id,
-            days=days,
-            subscription_type=SubscriptionType.PAID,
-            payment_method=PAYMENT_METHOD_NAMES["BONUS_CREDITS"],
-            data_limit_gb=None,
-            reset_strategy="no_reset",
-            transaction_id=purchase.transaction_id,
-            amount=0,
-            tariff_slug=tariff_slug,
-        )
-        await state.clear()
-        await state.set_state(PaymentState.PrePayment)
-        return
 
     if method == "stars":
         await callback.answer(lang.msg_pay_in_stars)

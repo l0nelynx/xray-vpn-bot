@@ -1,4 +1,4 @@
-"""Bonus credits — ledger-backed wallet (1 credit = 1 subscription day)."""
+"""Bonus balance — ledger-backed wallet (RUB points, 1 point ≈ 1 ₽)."""
 from __future__ import annotations
 
 import math
@@ -24,8 +24,13 @@ def _now_iso() -> str:
 
 
 def discount_percent_to_credits(discount_percent: int) -> int:
-    """Legacy conversion: 5 credits per 10% discount, rounded up."""
+    """Legacy conversion: 5 credits per 10% discount, rounded up (pre-RUB migration)."""
     return math.ceil(discount_percent / 10 * 5)
+
+
+def discount_percent_to_points(discount_percent: int) -> int:
+    """RUB points grant from legacy discount %: credits × 10."""
+    return discount_percent_to_credits(discount_percent) * 10
 
 
 async def _lock_user(session: AsyncSession, user_id: int) -> User | None:
@@ -107,5 +112,6 @@ __all__ = [
     "credit",
     "debit_if_sufficient",
     "discount_percent_to_credits",
+    "discount_percent_to_points",
     "get_balance",
 ]

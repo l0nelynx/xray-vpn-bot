@@ -61,7 +61,7 @@ async def get_or_create_singleton(
 # Why 20: matches the seed in app/database/models.py::_seed_promo_settings.
 # Keep both in sync — when one changes, change the other.
 DEFAULT_PROMO_DISCOUNT_PERCENT = 20
-DEFAULT_CREDIT_GRANT = 10
+DEFAULT_CREDIT_GRANT = 100
 # Reward tunables — defaults mirror the PromoSettings server_defaults and the
 # legacy config.yml values (promo_days_reward=3). The 180-day cap is the new
 # product rule.

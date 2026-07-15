@@ -69,8 +69,8 @@ export default function BuyMenuPage() {
   );
 
   const balance = promoState?.balance ?? 0;
-  const creditDays = selectedInvoice?.invoice?.days ?? 0;
-  const canPayCredits = creditDays > 0 && balance >= creditDays;
+  const pointsCost = selectedInvoice?.invoice?.points_cost ?? 0;
+  const canPayCredits = pointsCost > 0 && balance >= pointsCost;
 
   const selectChip = (depth: number, id: number) => {
     hapticImpact("light");
@@ -124,7 +124,7 @@ export default function BuyMenuPage() {
         navigate("/buy/success", { state: { paidWithCredits: true } });
       }
     } catch (e) {
-      showAlert(`Ошибка оплаты кредитами: ${(e as Error).message}`);
+      showAlert(`Ошибка оплаты баллами: ${(e as Error).message}`);
     } finally {
       setBusyId(null);
     }
@@ -185,12 +185,7 @@ export default function BuyMenuPage() {
             style={{ marginBottom: 16 }}
             title={
               <span>
-                Бонусный баланс: <Tag color="blue">{balance} кредитов</Tag>
-                {creditDays > 0 && (
-                  <span style={{ marginLeft: 8, opacity: 0.8 }}>
-                    (1 кредит = 1 день)
-                  </span>
-                )}
+                Бонусный баланс: <Tag color="blue">{balance} ₽</Tag>
               </span>
             }
           />
@@ -290,7 +285,7 @@ export default function BuyMenuPage() {
               onClick={handlePayCredits}
               disabled={!!busyId}
             >
-              {busyId ? <Spin size="small" /> : `Оплатить кредитами · ${creditDays} дн.`}
+              {busyId ? <Spin size="small" /> : `Оплатить баллами · ${pointsCost} ₽`}
             </button>
           )}
           <button

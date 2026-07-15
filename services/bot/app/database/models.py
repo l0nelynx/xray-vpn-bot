@@ -341,7 +341,7 @@ async def _seed_promo_settings():
     async with async_session() as session:
         count = await session.scalar(select(func.count()).select_from(PromoSettings))
         if not count:
-            session.add(PromoSettings(id=1, default_discount_percent=20, default_credit_grant=10))
+            session.add(PromoSettings(id=1, default_discount_percent=20, default_credit_grant=100))
             await session.commit()
             logging.info("Seed: promo_settings default row created")
 

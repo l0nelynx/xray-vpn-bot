@@ -155,7 +155,7 @@ async def cmd_start(message: Message, command: CommandObject = None):
         result = await rq.redeem_promo_for_user(message.from_user.id, raw_payload.upper())
         if result.ok:
             await message.answer(
-                text=lang.promo_deeplink_applied_text.format(credits=result.credit_grant or 0),
+                text=lang.promo_deeplink_applied_text.format(points=result.credit_grant or 0),
                 parse_mode='HTML', disable_web_page_preview=True,
             )
         elif result.reason == rq_promos.REASON_REFERRAL_NOT_NEW:

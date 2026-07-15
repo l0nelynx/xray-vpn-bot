@@ -22,19 +22,21 @@ async def pay_and_deliver(
     user_id: int,
     tg_id: int | None,
     username: str,
+    points_cost: int,
     days: int,
     tariff_slug: str,
     android_user_id: int | None = None,
     email: str | None = None,
     referral_tg_id: int | None = None,
 ) -> dict:
-    """Debit credits, create transaction, deliver subscription."""
+    """Debit RUB points, create transaction, deliver subscription."""
     async with async_session() as session:
         purchase = await _repo_credits_pay.purchase_with_credits(
             session,
             user_id=user_id,
             username=username,
             tg_id=tg_id,
+            points_cost=points_cost,
             days=days,
             tariff_slug=tariff_slug,
             android_user_id=android_user_id,
@@ -85,6 +87,7 @@ async def pay_and_deliver(
         "status": "success",
         "transaction_id": tx_id,
         "balance_after": purchase.balance_after,
+        "points_spent": purchase.points_spent,
         "credits_spent": purchase.credits_spent,
         "referral_reward": reward.reward_days if reward else 0,
         "subscription_url": result.get("subscription_url"),

@@ -63,7 +63,7 @@ class PromoSettings(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     default_credit_grant: Mapped[int] = mapped_column(
-        Integer, default=10, server_default="10"
+        Integer, default=100, server_default="100"
     )
 
     # Legacy — superseded by default_credit_grant.

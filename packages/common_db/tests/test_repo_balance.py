@@ -52,8 +52,8 @@ def test_credit_and_debit() -> None:
     _run(go())
 
 
-def test_discount_percent_to_credits() -> None:
-    assert repo_balance.discount_percent_to_credits(20) == 10
-    assert repo_balance.discount_percent_to_credits(15) == 8
-    assert repo_balance.discount_percent_to_credits(10) == 5
-    assert repo_balance.discount_percent_to_credits(0) == 0
+def test_discount_percent_to_points() -> None:
+    assert repo_balance.discount_percent_to_points(20) == 100
+    assert repo_balance.discount_percent_to_points(15) == 80
+    assert repo_balance.discount_percent_to_points(10) == 50
+    assert repo_balance.discount_percent_to_points(0) == 0

@@ -158,6 +158,7 @@ export interface MenuInvoice {
   days: number | null;
   tariff_slug: string | null;
   method: string | null;
+  points_cost?: number;
 }
 
 export interface MenuNode {
@@ -193,6 +194,8 @@ export interface PromoActivateResponse {
 export interface PayCreditsResponse {
   ok: boolean;
   transaction_id?: string;
+  points_spent?: number;
+  points_cost?: number;
   credits_spent?: number;
   balance_after?: number;
   subscription_url?: string | null;

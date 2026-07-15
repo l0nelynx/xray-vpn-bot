@@ -383,7 +383,7 @@ Your promo code: <code>{promo_code}</code>
 
 promo_enter_text = "Enter promo code:"
 
-promo_success_text = "Promo code applied! <b>{credits}</b> day credits added to your balance."
+promo_success_text = "Promo code applied! <b>{points}</b> RUB points added to your balance."
 
 promo_invalid_text = "Invalid promo code — please check and try again."
 
@@ -395,9 +395,12 @@ promo_active_exists_text = "You have already used this promo code."
 
 promo_referral_new_only_text = "This promo code is for new users only — you already have purchases."
 
-promo_deeplink_applied_text = "🎁 Promo code activated! <b>{credits}</b> day credits added to your balance."
+promo_deeplink_applied_text = "🎁 Promo code activated! <b>{points}</b> RUB points added to your balance."
 
-btn_pay_credits = "💎 Pay with credits ({credits})"
+btn_pay_credits = "💎 Pay with points ({points} ₽)"
+msg_insufficient_points = "Not enough points for this plan"
+msg_no_credits_plans = "No plans available for bonus payment"
+msg_plan_not_found = "Plan not found or outdated"
 
 free_traffic_exhausted = """<b>FREE subscription traffic exhausted</b>
 

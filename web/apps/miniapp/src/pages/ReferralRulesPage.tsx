@@ -36,7 +36,7 @@ export default function ReferralRulesPage() {
           </li>
           <li>
             Друг получает скидку{" "}
-            <strong>{referralState?.credit_grant ?? 0}</strong> кредитов (дней) при активации кода.
+            <strong>{referralState?.credit_grant ?? 0}</strong> ₽ баллов при активации кода.
           </li>
           <li>
             Реферальный промокод доступен только новым пользователям — у кого

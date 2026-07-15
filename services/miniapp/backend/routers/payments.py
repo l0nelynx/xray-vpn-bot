@@ -13,6 +13,7 @@ from payments import (
 from common_db.repo import balance as _repo_balance
 from common_db.repo import users as _repo_users
 
+from ..bonus_points import resolve_points_cost
 from ..credits_delivery import pay_and_deliver
 from ..database.models import Transaction
 from ..database.session import async_session
@@ -87,19 +88,25 @@ async def pay_with_credits(
         )
 
     days = invoice_data["days"]
+    points_cost = await resolve_points_cost(invoice_data)
     async with async_session() as session:
         balance = await _repo_balance.get_balance(session, user.id)
 
-    if balance < days:
+    if balance < points_cost:
         raise HTTPException(
             status.HTTP_402_PAYMENT_REQUIRED,
-            f"insufficient credits: need {days}, have {balance}",
+            detail={
+                "code": "insufficient_credits",
+                "need": points_cost,
+                "have": balance,
+            },
         )
 
     result = await pay_and_deliver(
         user_id=user.id,
         tg_id=tg.tg_id,
         username=tg.username or f"id_{tg.tg_id}",
+        points_cost=points_cost,
         days=days,
         tariff_slug=invoice_data["tariff_slug"],
     )
@@ -113,6 +120,8 @@ async def pay_with_credits(
     return PayCreditsResponse(
         ok=True,
         transaction_id=result.get("transaction_id"),
+        points_spent=result.get("points_spent"),
+        points_cost=points_cost,
         credits_spent=result.get("credits_spent"),
         balance_after=result.get("balance_after"),
         subscription_url=result.get("subscription_url"),

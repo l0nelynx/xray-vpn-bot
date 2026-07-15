@@ -140,13 +140,13 @@ export default function UserDrawer({ tgId, open, onClose, onChanged }: Props) {
         `/users/${user.tg_id}/credits`,
         { amount: creditsDelta }
       );
-      message.success(`Баланс обновлён: ${res.balance} кредитов`);
+      message.success(`Баланс обновлён: ${res.balance} ₽`);
       setCreditsDelta(null);
       await load(user.tg_id);
       onChanged?.();
     } catch (e) {
       const status = (e as { status?: number })?.status;
-      message.error(status === 400 ? "Недостаточно кредитов для списания" : "Ошибка изменения баланса");
+      message.error(status === 400 ? "Недостаточно баллов для списания" : "Ошибка изменения баланса");
     } finally {
       setCreditsSaving(false);
     }
@@ -192,12 +192,12 @@ export default function UserDrawer({ tgId, open, onClose, onChanged }: Props) {
             <Descriptions.Item label="Промокод">
               {user.promo_code ? <Tag color="purple" icon={<GiftOutlined />}>{user.promo_code}</Tag> : "—"}
             </Descriptions.Item>
-            <Descriptions.Item label="Бонусные кредиты">
+            <Descriptions.Item label="Бонусные баллы (₽)">
               <Tag color="blue" icon={<WalletOutlined />}>
                 {user.bonus_credits ?? 0}
               </Tag>
               <Typography.Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>
-                1 кредит = 1 день
+                1 балл ≈ 1 ₽ стоимости тарифа
               </Typography.Text>
             </Descriptions.Item>
             <Descriptions.Item label="Тикетов открыто">{user.tickets_count}</Descriptions.Item>
@@ -276,7 +276,7 @@ export default function UserDrawer({ tgId, open, onClose, onChanged }: Props) {
               style={{ flex: 1 }}
               value={creditsDelta}
               onChange={(v) => setCreditsDelta(v)}
-              placeholder="± дней"
+              placeholder="± ₽"
               min={-3650}
               max={3650}
             />

@@ -16,6 +16,8 @@ class PayCreditsRequest(BaseModel):
 class PayCreditsResponse(BaseModel):
     ok: bool
     transaction_id: str | None = None
+    points_spent: int | None = None
+    points_cost: int | None = None
     credits_spent: int | None = None
     balance_after: int | None = None
     subscription_url: str | None = None

@@ -51,6 +51,7 @@ from ..android import repo as android_repo
 from ..android import security as android_security
 from ..android.auth_router import _issue_pair, _user_summary, limiter
 from ..android.payments_router import _load_menu_rows, _load_node, _node_payload
+from ..bonus_points import enrich_invoice_dict, resolve_points_cost
 from ..android.schemas import AuthResponse, UserSummary
 from ..database.session import async_session
 from ..config import get_bot_token, get_tg_client_secret
@@ -158,6 +159,7 @@ class WebMenuInvoice(BaseModel):
     method: str | None
     days: int
     tariff_slug: str
+    points_cost: int
 
 
 class WebMenuNode(BaseModel):
@@ -202,6 +204,8 @@ class WebPayCreditsRequest(BaseModel):
 class WebPayCreditsResponse(BaseModel):
     ok: bool
     transaction_id: str | None = None
+    points_spent: int | None = None
+    points_cost: int | None = None
     credits_spent: int | None = None
     balance_after: int | None = None
     subscription_url: str | None = None
@@ -349,33 +353,33 @@ async def web_payments_menu(
 
     rows = await _load_menu_rows()
 
-    def _build(parent_id) -> list[dict]:
+    async def _build(parent_id) -> list[dict]:
         items = sorted(
             [r for r in rows if r["parent_id"] == parent_id],
             key=lambda r: (r["sort_order"], r["id"]),
         )
         out: list[dict] = []
         for r in items:
-            children = _build(r["id"])
+            children = await _build(r["id"])
             inv_raw = _node_payload(r)
             if r["action"] == "invoice" and inv_raw is None:
                 continue
             if r["action"] != "invoice" and not children and inv_raw is None:
                 continue
             orig = float(inv_raw["amount"]) if inv_raw else 0
-            inv = (
-                {
-                    "provider": inv_raw["provider"],
+            inv = None
+            if inv_raw:
+                enriched = await enrich_invoice_dict(inv_raw)
+                inv = {
+                    "provider": enriched["provider"],
                     "amount": orig,
                     "original_amount": orig,
-                    "currency": inv_raw["currency"],
-                    "method": inv_raw["method"],
-                    "days": inv_raw["days"],
-                    "tariff_slug": inv_raw["tariff_slug"],
+                    "currency": enriched["currency"],
+                    "method": enriched["method"],
+                    "days": enriched["days"],
+                    "tariff_slug": enriched["tariff_slug"],
+                    "points_cost": enriched["points_cost"],
                 }
-                if inv_raw
-                else None
-            )
             out.append(
                 {
                     "id": r["id"],
@@ -388,7 +392,7 @@ async def web_payments_menu(
             )
         return out
 
-    tree = _build(None)
+    tree = await _build(None)
     return WebMenuResponse(
         tree=[WebMenuNode(**n) for n in tree],
         balance=balance,
@@ -511,12 +515,13 @@ async def web_pay_credits(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail={"code": "node_not_invoice"})
 
     days = invoice_data["days"]
+    points_cost = await resolve_points_cost(invoice_data)
     async with async_session() as session:
         balance = await _repo_balance.get_balance(session, user.id)
-    if balance < days:
+    if balance < points_cost:
         raise HTTPException(
             status.HTTP_402_PAYMENT_REQUIRED,
-            detail={"code": "insufficient_credits", "need": days, "have": balance},
+            detail={"code": "insufficient_credits", "need": points_cost, "have": balance},
         )
 
     promo_tg_id = _promo_tg_id(user)
@@ -524,6 +529,7 @@ async def web_pay_credits(
         user_id=user.id,
         tg_id=user.tg_id,
         username=user.email or f"webuser_{user.id}",
+        points_cost=points_cost,
         days=days,
         tariff_slug=invoice_data["tariff_slug"],
         android_user_id=user.id if user.tg_id is None else None,
@@ -538,6 +544,8 @@ async def web_pay_credits(
     return WebPayCreditsResponse(
         ok=True,
         transaction_id=result.get("transaction_id"),
+        points_spent=result.get("points_spent"),
+        points_cost=points_cost,
         credits_spent=result.get("credits_spent"),
         balance_after=result.get("balance_after"),
         subscription_url=result.get("subscription_url"),
