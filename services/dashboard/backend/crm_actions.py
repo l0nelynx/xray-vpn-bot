@@ -8,6 +8,8 @@ from typing import Any
 from common_db.models import User
 from common_db.models.credit_ledger import SOURCE_CRM
 from common_db.repo import balance as _repo_balance
+from common_db.repo import promos as _repo_promos
+from common_db.repo import system as _repo_system
 from remnawave_client.perks import apply_crm_bonus_days, apply_crm_bonus_traffic
 
 from .crm_model_adapter import (
@@ -22,9 +24,12 @@ from .crm_model_adapter import (
 )
 from .crm_variables import build_message_context, render_crm_message
 from .database.session import async_session
-from .telegram import tg_bot_open_url, tg_send
+from .telegram import tg_bot_deeplink, tg_bot_open_url, tg_send, tg_share_url
 
 logger = logging.getLogger(__name__)
+
+BUTTON_OPEN_BOT = "open_bot"
+BUTTON_INVITE_FRIENDS = "invite_friends"
 
 ACTION_CATALOG: list[dict[str, Any]] = [
     {
@@ -42,8 +47,11 @@ ACTION_CATALOG: list[dict[str, Any]] = [
                 "name": "button_type",
                 "label": "Тип кнопки",
                 "type": "select",
-                "options": [{"value": "open_bot", "label": "Открыть бота"}],
-                "default": "open_bot",
+                "options": [
+                    {"value": BUTTON_OPEN_BOT, "label": "Открыть бота"},
+                    {"value": BUTTON_INVITE_FRIENDS, "label": "Пригласить друзей"},
+                ],
+                "default": BUTTON_OPEN_BOT,
             }
         ],
     },
@@ -105,6 +113,23 @@ class UserActionResult:
     errors: list[str] = field(default_factory=list)
 
 
+async def _build_invite_friends_markup(
+    session,
+    *,
+    tg_id: int,
+    bot_username: str,
+) -> dict | None:
+    """Build share-sheet URL keyboard; creates referral code if missing."""
+    code = await _repo_promos.get_or_create_referral_code(session, tg_id)
+    grant = await _repo_system.get_default_credit_grant(session)
+    deeplink = tg_bot_deeplink(bot_username, code)
+    invite_text = f"Подключайся к VPN и получи {grant} 🪙 по моему коду!"
+    share = tg_share_url(deeplink, invite_text)
+    return {
+        "inline_keyboard": [[{"text": "Пригласить друзей", "url": share}]]
+    }
+
+
 async def execute_user_actions(
     rw_client,
     db_user: User,
@@ -114,6 +139,7 @@ async def execute_user_actions(
     bot_username: str | None = None,
     event_id: int | None = None,
     on_message_sent=None,
+    session=None,
 ) -> UserActionResult:
     """Run enabled actions for one user. RW actions first, then Telegram."""
     result = UserActionResult()
@@ -122,7 +148,7 @@ async def execute_user_actions(
 
     message_text: str | None = None
     attach_button = False
-    button_type = "open_bot"
+    button_type = BUTTON_OPEN_BOT
 
     username = db_user.username or f"user_{db_user.tg_id}"
     has_rw = any(
@@ -163,15 +189,15 @@ async def execute_user_actions(
             credits = int(act.get("days") or 0)
             if credits > 0:
                 try:
-                    async with async_session() as session:
+                    async with async_session() as bal_session:
                         await _repo_balance.credit(
-                            session,
+                            bal_session,
                             db_user.id,
                             credits,
                             SOURCE_CRM,
                             reference=f"crm:{event_id or 'batch'}",
                         )
-                        await session.commit()
+                        await bal_session.commit()
                     result.perks_applied = True
                 except Exception as exc:
                     result.perks_failed = True
@@ -215,18 +241,38 @@ async def execute_user_actions(
                 result.message_skipped = False
         elif atype == ACTION_ATTACH_BUTTON:
             attach_button = True
-            button_type = act.get("button_type") or "open_bot"
+            button_type = act.get("button_type") or BUTTON_OPEN_BOT
 
     if message_text and not result.message_skipped:
         ctx = build_message_context(username=db_user.username, crm_user=crm_user)
         personalized = render_crm_message(message_text, ctx)
         reply_markup = None
-        if attach_button and button_type == "open_bot" and bot_username:
-            reply_markup = {
-                "inline_keyboard": [[
-                    {"text": "Открыть бота", "url": tg_bot_open_url(bot_username)}
-                ]]
-            }
+        if attach_button:
+            if button_type == BUTTON_OPEN_BOT and bot_username:
+                reply_markup = {
+                    "inline_keyboard": [[
+                        {"text": "Открыть бота", "url": tg_bot_open_url(bot_username)}
+                    ]]
+                }
+            elif button_type == BUTTON_INVITE_FRIENDS:
+                if not bot_username:
+                    result.errors.append("invite_friends: bot username unavailable")
+                elif not db_user.tg_id:
+                    result.errors.append("invite_friends: no tg_id")
+                elif session is None:
+                    result.errors.append("invite_friends: session required")
+                else:
+                    try:
+                        reply_markup = await _build_invite_friends_markup(
+                            session,
+                            tg_id=db_user.tg_id,
+                            bot_username=bot_username,
+                        )
+                    except Exception as exc:
+                        result.errors.append(f"invite_friends: {exc}")
+                        logger.exception(
+                            "invite_friends markup failed tg_id=%s", db_user.tg_id
+                        )
         if await tg_send(db_user.tg_id, personalized, reply_markup):
             result.message_sent = True
             if on_message_sent:

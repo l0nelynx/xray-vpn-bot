@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from urllib.parse import quote
 
 import httpx
 
@@ -16,6 +17,21 @@ def tg_url(method: str) -> str:
 def tg_bot_open_url(username: str) -> str:
     """Deep link that re-triggers /start when opened from an existing bot chat."""
     return f"https://t.me/{username}?start="
+
+
+def tg_bot_deeplink(username: str, start_payload: str) -> str:
+    """Deep link that opens the bot with a /start payload (e.g. referral code)."""
+    return f"https://t.me/{username}?start={start_payload}"
+
+
+def tg_share_url(url: str, text: str = "") -> str:
+    """Telegram share sheet URL prefilled with link + message."""
+    return (
+        "https://t.me/share/url?url="
+        + quote(url, safe="")
+        + "&text="
+        + quote(text or "", safe="")
+    )
 
 
 async def tg_send(chat_id: int, text: str, reply_markup: dict | None = None) -> bool:

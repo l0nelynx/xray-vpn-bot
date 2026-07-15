@@ -163,7 +163,10 @@ export default function ActionsBuilder({
         {meta.type === "attach_button" && act.enabled && (
           <Select
             value={act.button_type || "open_bot"}
-            options={[{ value: "open_bot", label: "Открыть бота" }]}
+            options={[
+              { value: "open_bot", label: "Открыть бота" },
+              { value: "invite_friends", label: "Пригласить друзей" },
+            ]}
             onChange={(v) => updateAction(meta.type, { button_type: v })}
             style={{ width: isMobile ? "100%" : undefined, minWidth: isMobile ? undefined : 200 }}
           />

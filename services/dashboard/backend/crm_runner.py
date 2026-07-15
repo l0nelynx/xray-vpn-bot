@@ -137,35 +137,36 @@ async def execute_crm_campaign(
                     )
                     await session.commit()
 
-            result = await execute_user_actions(
-                rw,
-                db_user,
-                crm_user,
-                actions,
-                bot_username=bot_username,
-                event_id=event_id,
-                on_message_sent=_on_sent if event_id else None,
-            )
-
-            if result.perks_applied:
-                perks_ok += 1
-                perk_status = "applied"
-            elif result.perks_failed:
-                perks_fail += 1
-                perk_status = "failed"
-            error_parts.extend(result.errors)
-
-            if result.message_sent:
-                sent += 1
-                message_status = "sent"
-            elif result.message_failed:
-                failed += 1
-                message_status = "failed"
-            elif not result.message_skipped:
-                message_status = "failed"
-                failed += 1
-
             async with async_session() as session:
+                result = await execute_user_actions(
+                    rw,
+                    db_user,
+                    crm_user,
+                    actions,
+                    bot_username=bot_username,
+                    event_id=event_id,
+                    on_message_sent=_on_sent if event_id else None,
+                    session=session,
+                )
+
+                if result.perks_applied:
+                    perks_ok += 1
+                    perk_status = "applied"
+                elif result.perks_failed:
+                    perks_fail += 1
+                    perk_status = "failed"
+                error_parts.extend(result.errors)
+
+                if result.message_sent:
+                    sent += 1
+                    message_status = "sent"
+                elif result.message_failed:
+                    failed += 1
+                    message_status = "failed"
+                elif not result.message_skipped:
+                    message_status = "failed"
+                    failed += 1
+
                 await crm_repo.add_delivery(
                     session,
                     campaign_id=campaign_id,
