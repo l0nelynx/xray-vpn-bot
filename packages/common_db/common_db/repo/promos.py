@@ -252,7 +252,7 @@ async def list_promos_paginated(
             "owner_tg_id": promo.tg_id,
             "usage_count": usage_count or 0,
             "days_purchased": promo.days_purchased,
-            "days_rewarded": promo.days_rewarded,
+            "points_rewarded": promo.points_rewarded,
             "credit_grant": promo.credit_grant,
         }
         for promo, owner_username, usage_count in result.all()

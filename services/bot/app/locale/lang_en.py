@@ -368,18 +368,18 @@ admin_migration_message = """✅ <b>Миграция пользователя у
 
 # ==================== Promo / Referral ====================
 
-promo_invite_text = """<b>Invite friends — get bonuses</b>
+promo_invite_text = """<b>Invite friends — earn points</b>
 
 Your promo code: <code>{promo_code}</code>
 
 <b>How it works:</b>
 1. Share your promo code with friends
-2. A friend gets a <b>{discount}%</b> discount on purchase
-3. For every 30 days purchased with your code, you receive <b>{reward_days}</b> bonus days
+2. A friend gets <b>{invite_grant}</b> 🪙 on activation
+3. For every 30 days purchased with your code — <b>{reward_points}</b> 🪙 for you
 
 <b>Your stats:</b>
-• Purchased via promo code: {days_purchased} days
-• Bonus days received: {days_rewarded}"""
+• Purchased by invitees: {days_purchased} days
+• Points earned: {points_rewarded} 🪙"""
 
 promo_enter_text = "Enter promo code:"
 
@@ -410,10 +410,10 @@ Switch to <b>PRO</b> — unlimited traffic and up to 5 devices without waiting""
 
 promo_reward_notification = """<b>Referral bonus!</b>
 
-A purchase was made with your promo code — you've been credited <b>{reward_days}</b> subscription days.
+A purchase was made with your promo code — <b>{reward_points}</b> 🪙 added to your balance.
 
-Total purchased via promo code: {total_days} days
-Total bonus days: {total_rewarded}"""
+Total purchased by invitees: {total_days} days
+Total points earned: {total_rewarded} 🪙"""
 
 # ==================== MiniApp mode welcome ====================
 

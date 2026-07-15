@@ -17,7 +17,7 @@ import {
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ReferralState, referral as referralApi } from "../api/client";
-import { formatPoints } from "../points";
+import { formatPoints, POINTS_ICON } from "../points";
 import { copyToClipboard, hapticImpact, shareToTelegram } from "../tg/webapp";
 
 export default function InvitePage() {
@@ -124,8 +124,8 @@ export default function InvitePage() {
               />
               <Statistic
                 title="Начислено вам"
-                value={state.days_rewarded}
-                suffix="дн."
+                value={state.points_rewarded}
+                suffix={POINTS_ICON}
               />
             </Space>
           </Card>
@@ -136,9 +136,9 @@ export default function InvitePage() {
             </Typography.Paragraph>
             <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
               Друг получает <b>{formatPoints(state.credit_grant)}</b> при активации
-              кода. За каждые 30 дней, купленных по вашему коду, вы получаете{" "}
-              <b>{state.days_reward_per_30}</b> бонусных дней — всего до{" "}
-              <b>{state.reward_cap_days}</b> дней.
+              кода. За каждые 30 дней покупок по вашему коду вы получаете{" "}
+              <b>{formatPoints(state.points_reward_per_30)}</b> — всего до{" "}
+              <b>{formatPoints(state.reward_cap_points)}</b>.
             </Typography.Paragraph>
           </Card>
         </Space>

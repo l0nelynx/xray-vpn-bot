@@ -30,6 +30,7 @@ import useIsMobile from "../hooks/useIsMobile";
 import useDebounce from "../hooks/useDebounce";
 import MobileSortControl, { SortOrder } from "../components/MobileSortControl";
 import { makePaginatedTableChange } from "../utils/tableChange";
+import { formatPoints, POINTS_ICON } from "../points";
 
 type PromoType = "referral" | "promotional";
 
@@ -39,8 +40,8 @@ const PROMO_SORT_OPTIONS = [
   { value: "owner_username", label: "Owner" },
   { value: "credit_grant", label: "Points (🪙)" },
   { value: "usage_count", label: "Usage" },
-  { value: "days_purchased", label: "Days bought" },
-  { value: "days_rewarded", label: "Rewarded" },
+  { value: "days_purchased", label: "Invitee days bought" },
+  { value: "points_rewarded", label: "Owner reward (🪙)" },
 ];
 
 interface PromoItem {
@@ -50,7 +51,7 @@ interface PromoItem {
   owner_tg_id: number;
   usage_count: number;
   days_purchased: number;
-  days_rewarded: number;
+  points_rewarded: number;
   credit_grant: number | null;
 }
 
@@ -63,8 +64,8 @@ interface PromosListResponse {
 
 interface PromoSettings {
   default_credit_grant: number;
-  days_reward_per_30: number;
-  reward_cap_days: number;
+  points_reward_per_30: number;
+  reward_cap_points: number;
 }
 
 function PromosTab() {
@@ -184,7 +185,7 @@ function PromosTab() {
       sorter: true,
       sortOrder: sortOrderFor("credit_grant"),
       render: (v: number | null) =>
-        v == null ? <Tag>default</Tag> : <Tag color="green">{v} d</Tag>,
+        v == null ? <Tag>default</Tag> : <Tag color="green">{formatPoints(v)}</Tag>,
     },
     {
       title: "Usage",
@@ -195,20 +196,21 @@ function PromosTab() {
       sortOrder: sortOrderFor("usage_count"),
     },
     {
-      title: "Days bought",
+      title: "Invitee days bought",
       dataIndex: "days_purchased",
       key: "days_purchased",
-      width: 110,
+      width: 130,
       sorter: true,
       sortOrder: sortOrderFor("days_purchased"),
     },
     {
-      title: "Rewarded",
-      dataIndex: "days_rewarded",
-      key: "days_rewarded",
-      width: 110,
+      title: "Owner reward (🪙)",
+      dataIndex: "points_rewarded",
+      key: "points_rewarded",
+      width: 140,
       sorter: true,
-      sortOrder: sortOrderFor("days_rewarded"),
+      sortOrder: sortOrderFor("points_rewarded"),
+      render: (v: number) => <Tag color="green">{formatPoints(v)}</Tag>,
     },
     {
       title: "",
@@ -359,10 +361,10 @@ function PromosTab() {
           </Form.Item>
           <Form.Item
             name="credit_grant"
-            label="Credit grant (points)"
-            tooltip="Leave empty to use default from Settings"
+            label={`Credit grant (${POINTS_ICON} points)`}
+            tooltip={`Bonus points credited to the user when they activate this code. Empty = use default from Settings.`}
           >
-            <InputNumber min={0} max={3650} style={{ width: "100%" }} placeholder="default" />
+            <InputNumber min={0} max={3650} style={{ width: "100%" }} placeholder="default" addonAfter={POINTS_ICON} />
           </Form.Item>
           <Form.Item
             name="owner_tg_id"
@@ -389,8 +391,8 @@ function SettingsTab() {
       const r = await api.get<PromoSettings>("/promos/settings");
       form.setFieldsValue({
         default_credit_grant: r.default_credit_grant,
-        days_reward_per_30: r.days_reward_per_30,
-        reward_cap_days: r.reward_cap_days,
+        points_reward_per_30: r.points_reward_per_30,
+        reward_cap_points: r.reward_cap_points,
       });
     } catch (e) {
       message.error((e as Error).message || "Failed to load settings");
@@ -409,8 +411,8 @@ function SettingsTab() {
       setSaving(true);
       await api.put("/promos/settings", {
         default_credit_grant: values.default_credit_grant,
-        days_reward_per_30: values.days_reward_per_30,
-        reward_cap_days: values.reward_cap_days,
+        points_reward_per_30: values.points_reward_per_30,
+        reward_cap_points: values.reward_cap_points,
       });
       message.success("Settings saved");
     } catch (e) {
@@ -432,31 +434,35 @@ function SettingsTab() {
         style={{ maxWidth: 600 }}
       >
         <Typography.Paragraph type="secondary">
-          Default bonus points granted by promo codes without a per-code override.
-          Reward settings control referral owner bonus days.
+          Все бонусы — в баллах {POINTS_ICON}. <strong>Default credit grant</strong> — сколько
+          получает пользователь при активации кода. <strong>Owner reward per 30 days</strong> —
+          сколько баллов начисляется владельцу рефкода за каждые 30 дней покупок приглашённых.
+          <strong> Reward cap</strong> — максимум баллов владельцу с одного кода за всё время.
         </Typography.Paragraph>
         <Form form={form} layout="vertical">
           <Form.Item
             name="default_credit_grant"
-            label="Default credit grant (points)"
+            label={`Default credit grant (${POINTS_ICON})`}
+            tooltip="Points credited to user balance on promo activation."
             rules={[{ required: true, message: "Required" }]}
           >
-            <InputNumber min={0} max={3650} style={{ width: "100%" }} />
+            <InputNumber min={0} max={3650} style={{ width: "100%" }} addonAfter={POINTS_ICON} />
           </Form.Item>
           <Form.Item
-            name="days_reward_per_30"
-            label="Reward days per 30 days purchased"
+            name="points_reward_per_30"
+            label={`Owner reward per 30 invitee-days (${POINTS_ICON})`}
+            tooltip="Bonus points credited to referral owner wallet per each 30 subscription-days purchased by invitees."
             rules={[{ required: true, message: "Required" }]}
           >
-            <InputNumber min={0} max={365} style={{ width: "100%" }} />
+            <InputNumber min={0} max={3650} style={{ width: "100%" }} addonAfter={POINTS_ICON} />
           </Form.Item>
           <Form.Item
-            name="reward_cap_days"
-            label="Reward cap (days)"
-            tooltip="Maximum cumulative bonus days a single referral owner can ever earn."
+            name="reward_cap_points"
+            label={`Owner reward cap (${POINTS_ICON})`}
+            tooltip="Maximum total bonus points one referral owner can earn from invitee purchases."
             rules={[{ required: true, message: "Required" }]}
           >
-            <InputNumber min={0} max={3650} style={{ width: "100%" }} />
+            <InputNumber min={0} max={365_000} style={{ width: "100%" }} addonAfter={POINTS_ICON} />
           </Form.Item>
         </Form>
       </Card>

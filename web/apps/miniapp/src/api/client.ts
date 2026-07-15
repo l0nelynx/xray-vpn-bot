@@ -212,10 +212,10 @@ export interface ReferralState {
   code: string;
   deeplink: string;
   credit_grant: number;
-  days_reward_per_30: number;
-  reward_cap_days: number;
+  points_reward_per_30: number;
+  reward_cap_points: number;
   days_purchased: number;
-  days_rewarded: number;
+  points_rewarded: number;
 }
 
 export const referral = {

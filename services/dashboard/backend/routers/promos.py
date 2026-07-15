@@ -28,8 +28,8 @@ class PromoCreateRequest(BaseModel):
 
 class PromoSettingsRequest(BaseModel):
     default_credit_grant: int = Field(ge=0, le=3650)
-    days_reward_per_30: int = Field(ge=0, le=365)
-    reward_cap_days: int = Field(ge=0, le=3650)
+    points_reward_per_30: int = Field(ge=0, le=3650)
+    reward_cap_points: int = Field(ge=0, le=365_000)
 
 
 @router.get("")
@@ -61,7 +61,7 @@ async def list_promos(
         "owner_tg_id": Promo.tg_id,
         "usage_count": usage_sq,
         "days_purchased": Promo.days_purchased,
-        "days_rewarded": Promo.days_rewarded,
+        "points_rewarded": Promo.points_rewarded,
         "discount_percent": Promo.discount_percent,
         "credit_grant": Promo.credit_grant,
     }
@@ -97,7 +97,7 @@ async def list_promos(
                 "owner_tg_id": promo.tg_id,
                 "usage_count": usage_count or 0,
                 "days_purchased": promo.days_purchased,
-                "days_rewarded": promo.days_rewarded,
+                "points_rewarded": promo.points_rewarded,
                 "discount_percent": promo.discount_percent,
                 "credit_grant": promo.credit_grant,
             }
@@ -171,8 +171,8 @@ async def get_promo_settings(_: str = Depends(get_current_user)):
         return {
             "default_credit_grant": settings.default_credit_grant,
             "default_discount_percent": settings.default_discount_percent,
-            "days_reward_per_30": settings.days_reward_per_30,
-            "reward_cap_days": settings.reward_cap_days,
+            "points_reward_per_30": settings.points_reward_per_30,
+            "reward_cap_points": settings.reward_cap_points,
         }
 
 
@@ -184,13 +184,13 @@ async def update_promo_settings(
     async with async_session() as session:
         settings = await _repo_system.get_promo_settings(session)
         settings.default_credit_grant = body.default_credit_grant
-        settings.days_reward_per_30 = body.days_reward_per_30
-        settings.reward_cap_days = body.reward_cap_days
+        settings.points_reward_per_30 = body.points_reward_per_30
+        settings.reward_cap_points = body.reward_cap_points
         await session.commit()
     return {
         "default_credit_grant": body.default_credit_grant,
-        "days_reward_per_30": body.days_reward_per_30,
-        "reward_cap_days": body.reward_cap_days,
+        "points_reward_per_30": body.points_reward_per_30,
+        "reward_cap_points": body.reward_cap_points,
     }
 
 

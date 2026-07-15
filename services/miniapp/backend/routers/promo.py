@@ -79,12 +79,12 @@ async def get_referral_state(tg: TgUser = Depends(get_tg_user)):
         code = await _repo_promos.get_or_create_referral_code(session, tg.tg_id)
         promo = await _repo_promos.get_promo_by_tg_id(session, tg.tg_id)
         default_grant = await _repo_system.get_default_credit_grant(session)
-        days_reward_per_30 = await _repo_system.get_days_reward_per_30(session)
-        reward_cap_days = await _repo_system.get_reward_cap_days(session)
+        points_reward_per_30 = await _repo_system.get_points_reward_per_30(session)
+        reward_cap_points = await _repo_system.get_reward_cap_points(session)
         await session.commit()
 
         days_purchased = promo.days_purchased if promo else 0
-        days_rewarded = promo.days_rewarded if promo else 0
+        points_rewarded = promo.points_rewarded if promo else 0
 
     bot_url = (get_bot_url() or "").rstrip("/")
     deeplink = f"{bot_url}?start={code}" if bot_url else ""
@@ -93,8 +93,8 @@ async def get_referral_state(tg: TgUser = Depends(get_tg_user)):
         "code": code,
         "deeplink": deeplink,
         "credit_grant": default_grant,
-        "days_reward_per_30": days_reward_per_30,
-        "reward_cap_days": reward_cap_days,
+        "points_reward_per_30": points_reward_per_30,
+        "reward_cap_points": reward_cap_points,
         "days_purchased": days_purchased,
-        "days_rewarded": days_rewarded,
+        "points_rewarded": points_rewarded,
     }

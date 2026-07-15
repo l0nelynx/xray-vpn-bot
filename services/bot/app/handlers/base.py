@@ -397,14 +397,14 @@ async def invite_friends(callback: CallbackQuery):
     # Discount + reward tunables now come from promo_settings (single source
     # of truth) rather than config.yml.
     promo_grant = await rq.get_default_promo_credit_grant()
-    promo_days_reward, _reward_cap = await rq.get_promo_reward_settings()
+    promo_points_reward, _reward_cap = await rq.get_promo_reward_settings()
 
     text = lang.promo_invite_text.format(
         promo_code=code,
-        discount=promo_grant,
-        reward_days=promo_days_reward,
+        invite_grant=promo_grant,
+        reward_points=promo_points_reward,
         days_purchased=promo['days_purchased'] if promo else 0,
-        days_rewarded=promo['days_rewarded'] if promo else 0,
+        points_rewarded=promo['points_rewarded'] if promo else 0,
     )
 
     await callback.message.edit_text(text=text, parse_mode='HTML', disable_web_page_preview=True,

@@ -36,7 +36,7 @@ export default function ReferralRulesPage() {
             друзьями.
           </li>
           <li>
-            Друг получает скидку{" "}
+            Друг получает{" "}
             <strong>{formatPoints(referralState?.credit_grant ?? 0)}</strong> при активации кода.
           </li>
           <li>
@@ -51,12 +51,12 @@ export default function ReferralRulesPage() {
         <h2>Бонусы за приглашения</h2>
         <ul>
           <li>
-            За каждые 30 дней, купленных по вашему коду, вы получаете{" "}
-            <strong>{referralState?.days_reward_per_30 ?? 0}</strong> бонусных дней.
+            За каждые 30 дней покупок по вашему коду вы получаете{" "}
+            <strong>{formatPoints(referralState?.points_reward_per_30 ?? 0)}</strong>.
           </li>
           <li>
             Всего можно получить до{" "}
-            <strong>{referralState?.reward_cap_days ?? 0}</strong> бонусных дней.
+            <strong>{formatPoints(referralState?.reward_cap_points ?? 0)}</strong>.
           </li>
         </ul>
       </section>

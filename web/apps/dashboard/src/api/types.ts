@@ -95,7 +95,7 @@ export interface PromoItem {
   owner_tg_id: number;
   usage_count: number;
   days_purchased: number;
-  days_rewarded: number;
+  points_rewarded: number;
   credit_grant: number | null;
 }
 

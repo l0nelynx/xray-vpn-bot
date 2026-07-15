@@ -172,17 +172,17 @@ class TestPromoCanon:
         col = _col(PromoSettings, "default_discount_percent")
         assert col.default is not None and col.default.arg == 20
 
-    def test_promo_settings_days_reward_per_30(self) -> None:
-        col = _col(PromoSettings, "days_reward_per_30")
+    def test_promo_settings_points_reward_per_30(self) -> None:
+        col = _col(PromoSettings, "points_reward_per_30")
         assert isinstance(col.type, Integer)
-        assert col.default is not None and col.default.arg == 3
-        assert _server_default(col) == "3"
+        assert col.default is not None and col.default.arg == 30
+        assert _server_default(col) == "30"
 
-    def test_promo_settings_reward_cap_days(self) -> None:
-        col = _col(PromoSettings, "reward_cap_days")
+    def test_promo_settings_reward_cap_points(self) -> None:
+        col = _col(PromoSettings, "reward_cap_points")
         assert isinstance(col.type, Integer)
-        assert col.default is not None and col.default.arg == 180
-        assert _server_default(col) == "180"
+        assert col.default is not None and col.default.arg == 1800
+        assert _server_default(col) == "1800"
 
 
 # ------------------------------------------------- PromoRedemption ----------

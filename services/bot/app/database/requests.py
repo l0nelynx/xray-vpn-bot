@@ -243,7 +243,7 @@ async def get_user_full_context(tg_id: int) -> dict | None:
                 "promo_code": promo.promo_code,
                 "used_promo": promo.used_promo,
                 "days_purchased": promo.days_purchased,
-                "days_rewarded": promo.days_rewarded,
+                "points_rewarded": promo.points_rewarded,
             } if promo else None,
         }
 
@@ -708,7 +708,7 @@ def _promo_to_dict(promo: Promo) -> dict:
         "promo_code": promo.promo_code,
         "used_promo": promo.used_promo,
         "days_purchased": promo.days_purchased,
-        "days_rewarded": promo.days_rewarded,
+        "points_rewarded": promo.points_rewarded,
         "discount_percent": promo.discount_percent,
         "credit_grant": promo.credit_grant,
         "used_promo_consumed": bool(promo.used_promo_consumed),
@@ -759,15 +759,11 @@ async def get_default_promo_discount() -> int:
 
 
 async def get_promo_reward_settings() -> tuple[int, int]:
-    """Return (days_reward_per_30, reward_cap_days) from promo_settings.
-
-    Single source of truth for referral reward tunables — replaces the
-    config.yml ``promo_days_reward`` constant. Auto-seeds the singleton.
-    """
+    """Return (points_reward_per_30, reward_cap_points) from promo_settings."""
     async with async_session() as session:
-        per_30 = await _repo_system.get_days_reward_per_30(session)
-        cap = await _repo_system.get_reward_cap_days(session)
-        await session.commit()  # persist auto-seeded PromoSettings
+        per_30 = await _repo_system.get_points_reward_per_30(session)
+        cap = await _repo_system.get_reward_cap_points(session)
+        await session.commit()
         return per_30, cap
 
 
@@ -780,21 +776,21 @@ async def add_referral_days(promo_code: str, days: int) -> dict | None:
         # Capture values before commit (commit expires all attributes)
         tg_id = promo.tg_id
         new_days_purchased = promo.days_purchased
-        days_rewarded = promo.days_rewarded
+        points_rewarded = promo.points_rewarded
         await session.commit()
         return {
             "tg_id": tg_id,
             "days_purchased": new_days_purchased,
-            "days_rewarded": days_rewarded,
+            "points_rewarded": points_rewarded,
         }
 
 
-async def update_promo_days_rewarded(tg_id: int, days_rewarded: int) -> bool:
+async def update_promo_points_rewarded(tg_id: int, points_rewarded: int) -> bool:
     async with async_session() as session:
         promo = await session.scalar(select(Promo).where(Promo.tg_id == tg_id))
         if not promo:
             return False
-        promo.days_rewarded = days_rewarded
+        promo.points_rewarded = points_rewarded
         await session.commit()
         return True
 

@@ -194,55 +194,28 @@ async def deliver_subscription(
         elif scenario == SubscriptionScenario.ALREADY_ACTIVE:
             result = await _handle_already_active(message, username, subscription_type, lang, user_info=user_info)
 
-        # Referral reward on paid delivery (credits already granted at redeem time).
+        # Referral owner reward: bonus points credited in record_purchase_and_compute_reward.
         if subscription_type == SubscriptionType.PAID:
             try:
                 reward_info = await rq.process_referral_reward_for_purchase(user_id, days)
-                if reward_info and reward_info.reward_days > 0:
-                    owner_tg_id = reward_info.owner_tg_id
-                    owner_info = await rq.get_user_full_info_by_tg_id(owner_tg_id)
-                    if owner_info and owner_info.get('username'):
-                        from app.handlers.tools import get_user_info, set_user_info, get_user_days
-                        owner_user_info = await get_user_info(owner_info['username'])
-                        if owner_user_info != 404:
-                            owner_status = owner_user_info.get("status")
-                            owner_limit = owner_user_info.get("data_limit")
-                            is_owner_pro = owner_status == "active" and owner_limit is None
-                            reward_days = reward_info.reward_days
-
-                            if is_owner_pro:
-                                owner_days = await get_user_days(owner_user_info)
-                                new_days = (owner_days if isinstance(owner_days, int) else 0) + reward_days
-                                await set_user_info(
-                                    name=owner_info['username'],
-                                    limit=0,
-                                    res_strat="no_reset",
-                                    expire_days=new_days,
-                                    api="remnawave"
-                                )
-                            else:
-                                await set_user_info(
-                                    name=owner_info['username'],
-                                    limit=0,
-                                    res_strat="no_reset",
-                                    expire_days=reward_days,
-                                    api="remnawave",
-                                    squad_id=secrets.get("rw_pro_id")
-                                )
-
-                            try:
-                                owner_lang = await get_user_lang(owner_tg_id)
-                                await bot.send_message(
-                                    chat_id=owner_tg_id,
-                                    text=owner_lang.promo_reward_notification.format(
-                                        reward_days=reward_days,
-                                        total_days=reward_info.days_purchased,
-                                        total_rewarded=reward_info.days_rewarded_after
-                                    ),
-                                    parse_mode='HTML'
-                                )
-                            except Exception as notify_err:
-                                logging.warning(f"Failed to notify promo owner {owner_tg_id}: {notify_err}")
+                if reward_info and reward_info.reward_points > 0:
+                    try:
+                        owner_lang = await get_user_lang(reward_info.owner_tg_id)
+                        await bot.send_message(
+                            chat_id=reward_info.owner_tg_id,
+                            text=owner_lang.promo_reward_notification.format(
+                                reward_points=reward_info.reward_points,
+                                total_days=reward_info.days_purchased,
+                                total_rewarded=reward_info.points_rewarded_after,
+                            ),
+                            parse_mode="HTML",
+                        )
+                    except Exception as notify_err:
+                        logging.warning(
+                            "Failed to notify promo owner %s: %s",
+                            reward_info.owner_tg_id,
+                            notify_err,
+                        )
             except Exception as promo_err:
                 logging.error(f"Error processing referral reward: {promo_err}")
 

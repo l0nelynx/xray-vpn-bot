@@ -89,6 +89,6 @@ async def pay_and_deliver(
         "balance_after": purchase.balance_after,
         "points_spent": purchase.points_spent,
         "credits_spent": purchase.credits_spent,
-        "referral_reward": reward.reward_days if reward else 0,
+        "referral_reward": reward.reward_points if reward else 0,
         "subscription_url": result.get("subscription_url"),
     }
