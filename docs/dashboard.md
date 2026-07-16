@@ -29,7 +29,7 @@ The sidebar is grouped into four sections:
 
 | Section | Pages | Visible when |
 |---------|-------|--------------|
-| **Overview** | Dashboard, Users, Transactions, Statistics, Promocodes, Support, TG Admin | Always |
+| **Overview** | Dashboard, Users, Transactions, Statistics, Promocodes, CRM, Support, TG Admin | Always |
 | **Bot Constructor** | Tariffs, Menus, Squads | `legacy_bot_constructor = true` |
 | **Services** | Telemt, Store | Always (503 if not configured) |
 | **WebApp** | Tariff Constructor, Settings | Always |
@@ -123,27 +123,38 @@ Revenue is converted to RUB using live CBR rates (with optional overrides in
 
 **Route:** `/promocodes`
 
+Full guide: **[Referral & promocodes](referral.md)** (bonus credits / points wallet).
+
 Two tabs:
 
 ### Codes
 
-Create and manage promo codes:
-
 | Type | Behavior |
 |------|----------|
-| **Promotional** | Discount % on purchase |
-| **Referral** | Linked to owner's `tg_id`; rewards referrer on purchases |
+| **Promotional** | Marketing code — redeemer gets bonus points immediately |
+| **Referral** | User-owned invite code — owner earns points when invitees purchase |
 
-List shows usage count, days purchased, days rewarded. Delete cascades
-redemption history.
+List shows usage count, invitee days purchased, owner points rewarded, and
+optional `credit_grant` override. Delete cascades redemption history.
 
 ### Settings
 
-Global promo system defaults (stored in DB, not `config.yml`):
+Stored in DB (`promo_settings`), not `config.yml`:
 
-- Default discount %
-- Referral reward days per 30 days purchased
-- Reward cap
+- `default_credit_grant` — points granted on redeem when code has no override
+- `points_reward_per_30` — owner reward per 30 invitee-days
+- `reward_cap_points` — cumulative owner reward cap
+
+---
+
+## CRM
+
+**Route:** `/crm`
+
+Marketing automation: segment users → Remnawave perks / bonus credits → Telegram
+messages. Tabs: **Campaigns**, **Events** (UTC schedules), **History**.
+
+Requires `redis` + `crm-worker`. Full guide: **[CRM](crm.md)**.
 
 ---
 
@@ -320,7 +331,8 @@ All endpoints require `Authorization: Bearer <JWT>` unless noted.
 | Users | `/api/users` | list, detail, ban, VIP, send-message |
 | Transactions | `/api/transactions` | list, detail, recent |
 | Stats | `/api/stats` | summary, revenue, user-growth, payment-methods |
-| Promos | `/api/promos` | CRUD, settings |
+| Promos | `/api/promos` | CRUD, settings (credits / points) |
+| CRM | `/api/crm` | segments, campaigns, events, evaluate |
 | Tariffs | `/api/tariffs` | legacy plan CRUD + reorder |
 | Menus | `/api/menus` | legacy screen/button CRUD |
 | Squads | `/api/squads` | squad profile CRUD |

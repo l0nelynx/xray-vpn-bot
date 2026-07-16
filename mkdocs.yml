@@ -68,6 +68,9 @@ nav:
       - MiniApp: miniapp.md
       - Web portal: web-portal.md
       - Android API: android-api.md
+  - Growth:
+      - CRM: crm.md
+      - Referral & promocodes: referral.md
   - Payments:
       - Payment gateways: payment-gateways.md
   - Operations:

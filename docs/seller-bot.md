@@ -45,8 +45,9 @@ Users can claim a free VPN subscription (channel subscription check against
 
 ### Promo codes
 
-Users can activate promo codes via bot commands or the MiniApp. Referral codes
-reward the referrer on purchases (configured in Dashboard → Promocodes).
+Users can activate promo codes via bot commands, deeplink (`?start=CODE`), or the
+MiniApp. Activation credits the **bonus wallet** immediately. Referral codes
+reward the owner in points when invitees purchase — see [referral.md](referral.md).
 
 ## Payment webhooks
 

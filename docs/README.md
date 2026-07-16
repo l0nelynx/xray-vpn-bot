@@ -27,12 +27,19 @@ and Android app — all on a shared PostgreSQL database.
 
 | Guide | What you'll learn |
 |-------|-------------------|
-| [Architecture](architecture.md) | Repo layout, containers, networking, data flow |
+| [Architecture](architecture.md) | Repo layout, containers, shared packages, networking |
 | [Seller bot](seller-bot.md) | Main Telegram bot, payment webhooks, admin bot |
-| [Dashboard](dashboard.md) | Admin UI: tariffs, users, stats, support, Telemt |
+| [Dashboard](dashboard.md) | Admin UI: tariffs, users, stats, CRM, support |
 | [MiniApp](miniapp.md) | Telegram WebApp: buy flow, subscription, support |
 | [Web portal](web-portal.md) | External browser SPA, CORS, Telegram OIDC |
 | [Android API](android-api.md) | JWT auth, Google Play IAP, account linking |
+
+### Growth
+
+| Guide | What you'll learn |
+|-------|-------------------|
+| [CRM](crm.md) | Segments, campaigns, scheduled events, perks |
+| [Referral & promocodes](referral.md) | Bonus credits wallet, referral rewards, admin settings |
 
 ### Payments & operations
 
@@ -53,7 +60,7 @@ and Android app — all on a shared PostgreSQL database.
 | MiniApp API | `/bot/miniapp/api/` |
 | Payment webhooks | `/bot/*_webhook` → `bot:5000` |
 | Config file | `config.yml` (copy from `config-example.yml`) |
-| DB migrations | Alembic HEAD `0014_support_attachments` |
+| DB migrations | Alembic HEAD `0021_referral_owner_points` |
 
 ## Local preview
 

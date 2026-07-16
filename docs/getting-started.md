@@ -10,7 +10,7 @@ XRAY VPN Bot is a **complete VPN sales stack**:
 | Component | Who uses it | Purpose |
 |-----------|-------------|---------|
 | **Seller bot** | Telegram users | Registration, subscription delivery, VLESS links, optional in-bot purchase menu |
-| **Dashboard** | Operator (you) | Admin panel: tariffs, users, payments, promos, support tickets, analytics |
+| **Dashboard** | Operator (you) | Admin panel: tariffs, users, payments, promos, CRM, support, analytics |
 | **MiniApp** | Telegram users | Modern WebApp UI: buy, extend, devices, support, free trial |
 | **Web portal** | Browser users | Separate SPA repo — invite-based registration, same backend API |
 | **Android app** | Mobile users | Native client with JWT auth and Google Play IAP |
@@ -152,7 +152,10 @@ Point each gateway's callback URL to your public domain, e.g.:
 2. **Squads** — map Remnawave squad UUIDs to named profiles.
 3. **WebApp → Tariff Constructor** — build the purchase menu tree (invoice leaves
    per payment method).
-4. **Promocodes** — configure discounts and referral rewards.
+4. **Promocodes** — set credit grants and referral reward points
+   ([referral.md](referral.md)).
+5. **CRM** (optional) — ensure `redis` + `crm-worker` are up
+   ([crm.md](crm.md)).
 
 Changes to the tariff tree are live immediately — no bot restart needed.
 
@@ -170,8 +173,10 @@ Changes to the tariff tree are live immediately — no bot restart needed.
 | View revenue / users | Dashboard → Overview / Statistics |
 | Reply to support tickets | Dashboard → Support |
 | Change prices | Dashboard → WebApp → Tariff Constructor |
+| Promo / referral settings | Dashboard → Promocodes |
+| Segmented campaigns | Dashboard → CRM |
 | Ban a user | Dashboard → Users |
-| Broadcast announcement | Dashboard → TG Admin |
+| Broadcast announcement | Dashboard → TG Admin or CRM |
 | Update images | `docker compose pull && docker compose up -d` |
 | DB backup | `pg_dump` via host port `127.0.0.1:5432` |
 
@@ -180,5 +185,7 @@ Changes to the tariff tree are live immediately — no bot restart needed.
 - **[Deployment](deployment.md)** — networks, images, migrations, scaling limits
 - **[Configuration](configuration.md)** — full `config.yml` reference
 - **[Dashboard](dashboard.md)** — every admin feature explained
+- **[CRM](crm.md)** — campaigns, events, segments
+- **[Referral & promocodes](referral.md)** — bonus credits wallet
 - **[MiniApp](miniapp.md)** — user-facing WebApp flows
 - **[Payment gateways](payment-gateways.md)** — setup + adding custom gateways

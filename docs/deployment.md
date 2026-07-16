@@ -217,6 +217,8 @@ launch returns HTTP 503.
 
 Set `REDIS_URL` in `.env` (default in compose: `redis://redis:6379/0`).
 
+Full CRM feature guide (conditions, actions, segments, UI): **[crm.md](crm.md)**.
+
 ### CRM scheduled events (UTC)
 
 Automated CRM events (`crm_events` table) are polled by the `crm-worker` ARQ
