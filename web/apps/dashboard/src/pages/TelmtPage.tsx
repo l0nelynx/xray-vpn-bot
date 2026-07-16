@@ -22,6 +22,7 @@ import {
   Badge,
   Checkbox,
   Dropdown,
+  Alert,
 } from "antd";
 import {
   ReloadOutlined,
@@ -59,6 +60,9 @@ import type {
   TelmtRuntimeConnectionsSummary,
   TelmtRuntimeRecentEvents,
   TelmtTlsFingerprints,
+  TelmtConfigData,
+  TelmtPatchConfigResponse,
+  TelmtConfigSectionName,
 } from "../api/types";
 import StatsCard from "../components/StatsCard";
 import useIsMobile from "../hooks/useIsMobile";
@@ -1123,6 +1127,159 @@ function OperationsTab() {
   );
 }
 
+const EDITABLE_CONFIG_SECTIONS: TelmtConfigSectionName[] = [
+  "general",
+  "timeouts",
+  "censorship",
+  "upstreams",
+  "show_link",
+  "dc_overrides",
+];
+
+function ConfigTab() {
+  const isMobile = useIsMobile();
+  const { message } = App.useApp();
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [revision, setRevision] = useState<string>("");
+  const [editorText, setEditorText] = useState("{}");
+  const [lastPatch, setLastPatch] = useState<TelmtPatchConfigResponse | null>(null);
+
+  const load = useCallback(async (clearPatch = true) => {
+    setLoading(true);
+    if (clearPatch) setLastPatch(null);
+    try {
+      const r = await api.get<TelmtEnvelope<TelmtConfigData>>("/telemt/config");
+      const data = r.data ?? {};
+      const editable: TelmtConfigData = {};
+      for (const key of EDITABLE_CONFIG_SECTIONS) {
+        if (data[key] != null) editable[key] = data[key];
+      }
+      setEditorText(JSON.stringify(editable, null, 2));
+      setRevision(r.revision || "");
+    } catch (e: any) {
+      message.error(e.message || "Failed to load telemt config");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const onSave = async () => {
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(editorText);
+    } catch {
+      message.error("Invalid JSON");
+      return;
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      message.error("Config must be a JSON object");
+      return;
+    }
+
+    const unknown = Object.keys(parsed).filter(
+      (k) => !EDITABLE_CONFIG_SECTIONS.includes(k as TelmtConfigSectionName),
+    );
+    if (unknown.length) {
+      message.error(`Non-editable keys: ${unknown.join(", ")}`);
+      return;
+    }
+
+    const payload: Record<string, unknown> = { ...parsed };
+    if (revision) payload.revision = revision;
+
+    setSaving(true);
+    try {
+      const r = await api.patch<TelmtEnvelope<TelmtPatchConfigResponse>>("/telemt/config", payload);
+      const result = r.data;
+      await load(false);
+      if (result) {
+        setLastPatch(result);
+        if (result.revision) setRevision(result.revision);
+      }
+      message.success(
+        result?.restart_required
+          ? `Config saved (restart required). Changed: ${(result.changed || []).join(", ") || "—"}`
+          : `Config saved. Changed: ${(result?.changed || []).join(", ") || "—"}`,
+      );
+    } catch (e: any) {
+      message.error(e.message || "Failed to patch telemt config");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Spin spinning={loading}>
+      <Space direction="vertical" style={{ width: "100%" }} size="middle">
+        <Alert
+          type="info"
+          showIcon
+          message="Editable sections only"
+          description={
+            <>
+              Allowed keys: <code>{EDITABLE_CONFIG_SECTIONS.join(", ")}</code>.
+              Users/secrets (<code>access</code>), <code>server</code> and <code>network</code> are not editable here.
+              Save uses optimistic concurrency via <code>If-Match</code> revision.
+            </>
+          }
+        />
+
+        <Card
+          size={isMobile ? "small" : "default"}
+          title="Telemt Config"
+          extra={
+            <Space wrap>
+              {revision && (
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  rev: {revision.slice(0, 12)}…
+                </Typography.Text>
+              )}
+              <Button icon={<ReloadOutlined />} onClick={load} loading={loading}>
+                Reload
+              </Button>
+              {!isMobile && (
+                <Button type="primary" onClick={onSave} loading={saving}>
+                  Save Patch
+                </Button>
+              )}
+            </Space>
+          }
+        >
+          {lastPatch?.restart_required && (
+            <Alert
+              style={{ marginBottom: 12 }}
+              type="warning"
+              showIcon
+              message="Restart required"
+              description={`Changed sections: ${(lastPatch.changed || []).join(", ") || "—"}. Telemt wrote the config, but some fields need a process restart.`}
+            />
+          )}
+          <Input.TextArea
+            value={editorText}
+            onChange={(e) => setEditorText(e.target.value)}
+            autoSize={{ minRows: isMobile ? 14 : 22, maxRows: isMobile ? 28 : 40 }}
+            style={{
+              fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+              fontSize: isMobile ? 12 : 13,
+            }}
+            spellCheck={false}
+          />
+          {isMobile && (
+            <Button type="primary" onClick={onSave} loading={saving} block style={{ marginTop: 12 }}>
+              Save Patch
+            </Button>
+          )}
+        </Card>
+      </Space>
+    </Spin>
+  );
+}
+
 export default function TelmtPage() {
   const isMobile = useIsMobile();
 
@@ -1166,7 +1323,16 @@ export default function TelmtPage() {
             ),
             children: <FreeParamsTab />,
           },
-            {
+          {
+            key: "config",
+            label: (
+              <span>
+                <SettingOutlined /> Config
+              </span>
+            ),
+            children: <ConfigTab />,
+          },
+          {
             key: "operations",
             label: (
               <span>

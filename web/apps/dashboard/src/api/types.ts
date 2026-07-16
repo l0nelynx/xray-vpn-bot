@@ -285,6 +285,22 @@ export interface TelmtBulkResult {
   errors: TelmtBulkError[];
 }
 
+export type TelmtConfigSectionName =
+  | "general"
+  | "timeouts"
+  | "censorship"
+  | "upstreams"
+  | "show_link"
+  | "dc_overrides";
+
+export type TelmtConfigData = Partial<Record<TelmtConfigSectionName, Record<string, unknown>>>;
+
+export interface TelmtPatchConfigResponse {
+  revision: string;
+  restart_required: boolean;
+  changed: string[];
+}
+
 export interface OrderParam {
   id: number;
   item_id: number;

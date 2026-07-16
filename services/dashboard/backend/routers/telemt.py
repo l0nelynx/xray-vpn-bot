@@ -35,11 +35,15 @@ async def _telemt_request(
     *,
     json_body: Optional[dict[str, Any]] = None,
     expected_not_found: Optional[str] = None,
+    extra_headers: Optional[dict[str, str]] = None,
 ) -> dict[str, Any]:
     url = f"{_base_url()}{path}"
+    headers = _headers()
+    if extra_headers:
+        headers.update(extra_headers)
     try:
         async with httpx.AsyncClient(timeout=10) as client:
-            r = await client.request(method, url, headers=_headers(), json=json_body)
+            r = await client.request(method, url, headers=headers, json=json_body)
     except httpx.RequestError as exc:
         raise HTTPException(status_code=503, detail=f"Telemt unavailable: {exc}") from exc
 
@@ -175,6 +179,51 @@ async def stats_users(_: str = Depends(get_current_user)):
 @router.get("/stats/users/active-ips")
 async def stats_users_active_ips(_: str = Depends(get_current_user)):
     return await _telemt_request("GET", "/v1/stats/users/active-ips")
+
+
+_EDITABLE_CONFIG_SECTIONS = (
+    "general",
+    "timeouts",
+    "censorship",
+    "upstreams",
+    "show_link",
+    "dc_overrides",
+)
+
+
+@router.get("/config")
+async def get_config(_: str = Depends(get_current_user)):
+    return await _telemt_request("GET", "/v1/config")
+
+
+class PatchTelemtConfig(BaseModel):
+    """Sparse patch of editable Telemt config sections + optional revision for If-Match."""
+
+    revision: Optional[str] = None
+    general: Optional[dict[str, Any]] = None
+    timeouts: Optional[dict[str, Any]] = None
+    censorship: Optional[dict[str, Any]] = None
+    upstreams: Optional[dict[str, Any]] = None
+    show_link: Optional[dict[str, Any]] = None
+    dc_overrides: Optional[dict[str, Any]] = None
+
+
+@router.patch("/config")
+async def patch_config(body: PatchTelemtConfig, _: str = Depends(get_current_user)):
+    payload = {
+        key: value
+        for key, value in body.model_dump(exclude={"revision"}).items()
+        if value is not None
+    }
+    if not payload:
+        raise HTTPException(
+            status_code=400,
+            detail="Empty patch: provide at least one of " + ", ".join(_EDITABLE_CONFIG_SECTIONS),
+        )
+    extra = {}
+    if body.revision:
+        extra["If-Match"] = body.revision
+    return await _telemt_request("PATCH", "/v1/config", json_body=payload, extra_headers=extra or None)
 
 
 @router.get("/users")
