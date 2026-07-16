@@ -62,7 +62,6 @@ import type {
   TelmtConfigData,
   TelmtPatchConfigResponse,
   TelmtConfigSectionName,
-  TelmtUser,
 } from "../api/types";
 import StatsCard from "../components/StatsCard";
 import useIsMobile from "../hooks/useIsMobile";
@@ -1402,7 +1401,7 @@ function ConfigTab() {
                   rev: {revision.slice(0, 12)}…
                 </Typography.Text>
               )}
-              <Button icon={<ReloadOutlined />} onClick={load} loading={loading}>
+              <Button icon={<ReloadOutlined />} onClick={() => load()} loading={loading}>
                 Reload
               </Button>
               {!isMobile && (
