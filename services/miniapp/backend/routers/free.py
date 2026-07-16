@@ -195,6 +195,8 @@ async def telemt_claim(tg: TgUser = Depends(get_tg_user)) -> TelemtClaimResponse
     max_tcp = params.max_tcp_conns
     max_ips = params.max_unique_ips
     quota = params.data_quota_bytes
+    rate_up = params.rate_limit_up_bps
+    rate_down = params.rate_limit_down_bps
 
     try:
         created = await create_telemt_user(
@@ -203,6 +205,8 @@ async def telemt_claim(tg: TgUser = Depends(get_tg_user)) -> TelemtClaimResponse
             max_tcp_conns=max_tcp,
             max_unique_ips=max_ips,
             data_quota_bytes=quota,
+            rate_limit_up_bps=rate_up,
+            rate_limit_down_bps=rate_down,
         )
     except RuntimeError as e:
         return TelemtClaimResponse(ok=False, detail=str(e))

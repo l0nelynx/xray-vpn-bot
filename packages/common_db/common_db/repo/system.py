@@ -125,6 +125,8 @@ async def get_telmt_free_params(session: AsyncSession) -> TelmtFreeParams:
             "max_unique_ips": None,
             "data_quota_bytes": None,
             "expire_days": DEFAULT_TELMT_EXPIRE_DAYS,
+            "rate_limit_up_bps": None,
+            "rate_limit_down_bps": None,
         },
     )
 

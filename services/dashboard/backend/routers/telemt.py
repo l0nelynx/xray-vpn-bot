@@ -181,48 +181,60 @@ async def stats_users_active_ips(_: str = Depends(get_current_user)):
     return await _telemt_request("GET", "/v1/stats/users/active-ips")
 
 
-_EDITABLE_CONFIG_SECTIONS = (
-    "general",
-    "timeouts",
-    "censorship",
-    "upstreams",
-    "show_link",
-    "dc_overrides",
-)
+_FORBIDDEN_TOP_LEVEL = frozenset({"access"})
+_FORBIDDEN_SERVER_KEYS = frozenset({"api", "admin_api"})
+
+
+def _strip_forbidden_config(data: Any) -> Any:
+    """Remove access secrets and server.api from a Telemt config payload."""
+    if not isinstance(data, dict):
+        return data
+    out = {k: v for k, v in data.items() if k not in _FORBIDDEN_TOP_LEVEL}
+    server = out.get("server")
+    if isinstance(server, dict):
+        out["server"] = {k: v for k, v in server.items() if k not in _FORBIDDEN_SERVER_KEYS}
+    return out
+
+
+def _assert_editable_patch(payload: dict[str, Any]) -> None:
+    if "access" in payload:
+        raise HTTPException(
+            status_code=400,
+            detail="access is not editable here; manage users via the Telemt Users API",
+        )
+    server = payload.get("server")
+    if isinstance(server, dict):
+        bad = sorted(_FORBIDDEN_SERVER_KEYS & server.keys())
+        if bad:
+            raise HTTPException(
+                status_code=400,
+                detail=f"server.{', server.'.join(bad)} is not editable here",
+            )
 
 
 @router.get("/config")
 async def get_config(_: str = Depends(get_current_user)):
-    return await _telemt_request("GET", "/v1/config")
-
-
-class PatchTelemtConfig(BaseModel):
-    """Sparse patch of editable Telemt config sections + optional revision for If-Match."""
-
-    revision: Optional[str] = None
-    general: Optional[dict[str, Any]] = None
-    timeouts: Optional[dict[str, Any]] = None
-    censorship: Optional[dict[str, Any]] = None
-    upstreams: Optional[dict[str, Any]] = None
-    show_link: Optional[dict[str, Any]] = None
-    dc_overrides: Optional[dict[str, Any]] = None
+    raw = await _telemt_request("GET", "/v1/config")
+    if isinstance(raw, dict) and "data" in raw:
+        return {**raw, "data": _strip_forbidden_config(raw.get("data"))}
+    return _strip_forbidden_config(raw)
 
 
 @router.patch("/config")
-async def patch_config(body: PatchTelemtConfig, _: str = Depends(get_current_user)):
-    payload = {
-        key: value
-        for key, value in body.model_dump(exclude={"revision"}).items()
-        if value is not None
-    }
+async def patch_config(body: dict[str, Any], _: str = Depends(get_current_user)):
+    """Sparse patch of Telemt config. Forbidden: top-level access, server.api/admin_api."""
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="Config patch must be a JSON object")
+    payload = dict(body)
+    revision = payload.pop("revision", None)
+    if revision is not None and not isinstance(revision, str):
+        raise HTTPException(status_code=400, detail="revision must be a string")
     if not payload:
-        raise HTTPException(
-            status_code=400,
-            detail="Empty patch: provide at least one of " + ", ".join(_EDITABLE_CONFIG_SECTIONS),
-        )
+        raise HTTPException(status_code=400, detail="Empty patch: provide at least one config key")
+    _assert_editable_patch(payload)
     extra = {}
-    if body.revision:
-        extra["If-Match"] = body.revision
+    if revision:
+        extra["If-Match"] = revision
     return await _telemt_request("PATCH", "/v1/config", json_body=payload, extra_headers=extra or None)
 
 
@@ -413,6 +425,8 @@ class TelmtFreeParamsSchema(BaseModel):
     max_unique_ips: Optional[int] = None
     data_quota_bytes: Optional[int] = None
     expire_days: int = 30
+    rate_limit_up_bps: Optional[int] = None
+    rate_limit_down_bps: Optional[int] = None
 
 
 @router.get("/free-params", response_model=TelmtFreeParamsSchema)
@@ -425,6 +439,8 @@ async def get_free_params(_: str = Depends(get_current_user)):
             max_unique_ips=row.max_unique_ips,
             data_quota_bytes=row.data_quota_bytes,
             expire_days=row.expire_days,
+            rate_limit_up_bps=row.rate_limit_up_bps,
+            rate_limit_down_bps=row.rate_limit_down_bps,
         )
 
 
@@ -436,6 +452,8 @@ async def update_free_params(body: TelmtFreeParamsSchema, _: str = Depends(get_c
         row.max_unique_ips = body.max_unique_ips
         row.data_quota_bytes = body.data_quota_bytes
         row.expire_days = body.expire_days
+        row.rate_limit_up_bps = body.rate_limit_up_bps
+        row.rate_limit_down_bps = body.rate_limit_down_bps
         await session.commit()
         await session.refresh(row)
     return TelmtFreeParamsSchema(
@@ -443,4 +461,6 @@ async def update_free_params(body: TelmtFreeParamsSchema, _: str = Depends(get_c
         max_unique_ips=row.max_unique_ips,
         data_quota_bytes=row.data_quota_bytes,
         expire_days=row.expire_days,
+        rate_limit_up_bps=row.rate_limit_up_bps,
+        rate_limit_down_bps=row.rate_limit_down_bps,
     )

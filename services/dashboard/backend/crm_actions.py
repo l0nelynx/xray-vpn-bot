@@ -34,22 +34,22 @@ BUTTON_INVITE_FRIENDS = "invite_friends"
 ACTION_CATALOG: list[dict[str, Any]] = [
     {
         "type": ACTION_SEND_MESSAGE,
-        "label": "Отправить сообщение",
+        "label": "Send message",
         "category": "telegram",
-        "fields": [{"name": "text", "label": "Текст (HTML)", "type": "textarea"}],
+        "fields": [{"name": "text", "label": "Text (HTML)", "type": "textarea"}],
     },
     {
         "type": ACTION_ATTACH_BUTTON,
-        "label": "Прикрепить кнопку",
+        "label": "Attach button",
         "category": "telegram",
         "fields": [
             {
                 "name": "button_type",
-                "label": "Тип кнопки",
+                "label": "Button type",
                 "type": "select",
                 "options": [
-                    {"value": BUTTON_OPEN_BOT, "label": "Открыть бота"},
-                    {"value": BUTTON_INVITE_FRIENDS, "label": "Пригласить друзей"},
+                    {"value": BUTTON_OPEN_BOT, "label": "Open bot"},
+                    {"value": BUTTON_INVITE_FRIENDS, "label": "Invite friends"},
                 ],
                 "default": BUTTON_OPEN_BOT,
             }
@@ -57,37 +57,37 @@ ACTION_CATALOG: list[dict[str, Any]] = [
     },
     {
         "type": ACTION_CREDIT_BALANCE,
-        "label": "Начислить кредиты",
+        "label": "Grant credits",
         "category": "wallet",
-        "fields": [{"name": "days", "label": "Кредитов (дней)", "type": "int", "min": 1, "max": 365}],
+        "fields": [{"name": "days", "label": "Credits (days)", "type": "int", "min": 1, "max": 365}],
     },
     {
         "type": ACTION_RW_BONUS_DAYS,
-        "label": "Добавить дней",
+        "label": "Add days",
         "category": "remnawave",
-        "fields": [{"name": "days", "label": "Дней", "type": "int", "min": 1, "max": 365}],
+        "fields": [{"name": "days", "label": "Days", "type": "int", "min": 1, "max": 365}],
     },
     {
         "type": ACTION_RW_BONUS_TRAFFIC,
-        "label": "Добавить трафика (ГБ)",
+        "label": "Add traffic (GB)",
         "category": "remnawave",
-        "fields": [{"name": "gb", "label": "ГБ", "type": "int", "min": 1, "max": 1000}],
+        "fields": [{"name": "gb", "label": "GB", "type": "int", "min": 1, "max": 1000}],
     },
     {
         "type": ACTION_RW_RESET_TRAFFIC,
-        "label": "Сбросить трафик",
+        "label": "Reset traffic",
         "category": "remnawave",
         "fields": [],
     },
     {
         "type": ACTION_RW_SET_STATUS,
-        "label": "Изменить статус",
+        "label": "Change status",
         "category": "remnawave",
         "available": False,
         "fields": [
             {
                 "name": "status",
-                "label": "Статус",
+                "label": "Status",
                 "type": "select",
                 "options": [
                     {"value": "active", "label": "active"},

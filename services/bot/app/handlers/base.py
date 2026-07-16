@@ -351,6 +351,8 @@ async def telemt_free_buy(callback: CallbackQuery):
         max_tcp_conns=params.get("max_tcp_conns"),
         max_unique_ips=params.get("max_unique_ips"),
         data_quota_bytes=params.get("data_quota_bytes"),
+        rate_limit_up_bps=params.get("rate_limit_up_bps"),
+        rate_limit_down_bps=params.get("rate_limit_down_bps"),
     )
 
     if not result:

@@ -26,22 +26,22 @@ logger = logging.getLogger(__name__)
 CONDITION_CATALOG: list[dict[str, Any]] = [
     {
         "type": CONDITION_SEGMENT,
-        "label": "Сегмент",
+        "label": "Segment",
         "category": "base",
-        "description": "Скан Remnawave + локальная БД",
+        "description": "Scan Remnawave + local DB",
         "required": True,
         "max_count": 1,
     },
     {
         "type": CONDITION_USER_TYPE,
-        "label": "Тип пользователя",
+        "label": "User type",
         "category": "base",
-        "description": "Free или Paid/VIP",
+        "description": "Free or Paid/VIP",
         "required": False,
         "fields": [
             {
                 "name": "value",
-                "label": "Тип",
+                "label": "Type",
                 "type": "select",
                 "options": seg_repo.USER_TYPE_OPTIONS,
                 "default": seg_repo.USER_TYPE_ALL,
@@ -50,9 +50,9 @@ CONDITION_CATALOG: list[dict[str, Any]] = [
     },
     {
         "type": CONDITION_TG_ALLOWLIST,
-        "label": "Ручной отбор",
+        "label": "Manual selection",
         "category": "base",
-        "description": "Ограничить получателей выбранными tg_id",
+        "description": "Restrict recipients to the selected tg_ids",
         "required": False,
         "fields": [
             {"name": "tg_ids", "label": "TG IDs", "type": "tg_ids"},
@@ -62,7 +62,7 @@ CONDITION_CATALOG: list[dict[str, Any]] = [
         "type": CONDITION_RW_INTERNAL_SQUAD,
         "label": "Internal Squad",
         "category": "remnawave",
-        "description": "Пользователь состоит в выбранном internal squad",
+        "description": "User belongs to the selected internal squad",
         "required": False,
         "fields": [
             {"name": "squad_id", "label": "Squad", "type": "squad_select"},
@@ -72,12 +72,12 @@ CONDITION_CATALOG: list[dict[str, Any]] = [
         "type": CONDITION_RW_TRAFFIC_LIMIT,
         "label": "Traffic Limit",
         "category": "remnawave",
-        "description": "Лимит трафика в ГБ (0 = безлимит)",
+        "description": "Traffic limit in GB (0 = unlimited)",
         "required": False,
         "fields": [
             {
                 "name": "limit_gb",
-                "label": "Лимит (ГБ)",
+                "label": "Limit (GB)",
                 "type": "int",
                 "min": 0,
                 "max": 10000,
@@ -89,7 +89,7 @@ CONDITION_CATALOG: list[dict[str, Any]] = [
         "type": CONDITION_RW_TAG,
         "label": "Tag",
         "category": "remnawave",
-        "description": "Тег пользователя в Remnawave (UPPERCASE, без пробелов)",
+        "description": "User tag in Remnawave (UPPERCASE, no spaces)",
         "required": False,
         "fields": [
             {"name": "tag", "label": "Tag", "type": "tag", "placeholder": "PROMO_1"},
@@ -175,10 +175,10 @@ async def _apply_rw_filters(
                 tagged = await rw_client.get_users_by_tag(tag)
             except Exception as exc:
                 logger.error("CRM tag filter failed tag=%s: %s", tag, exc)
-                return [], f"Не удалось загрузить пользователей по тегу {tag}: {exc}"
+                return [], f"Failed to load users by tag {tag}: {exc}"
             tag_uuids = {u["uuid"] for u in tagged if u.get("uuid")}
             if not tag_uuids:
-                return [], f"Пользователи с тегом {tag} не найдены"
+                return [], f"No users found with tag {tag}"
 
     need_crm_meta = any(
         c.get("type") in (CONDITION_RW_INTERNAL_SQUAD, CONDITION_RW_TRAFFIC_LIMIT)
@@ -197,7 +197,7 @@ async def _apply_rw_filters(
             all_crm = await rw_client.get_all_users_for_crm()
         except Exception as exc:
             logger.error("CRM rw filter bulk fetch failed: %s", exc)
-            return [], f"Не удалось загрузить данные Remnawave: {exc}"
+            return [], f"Failed to load Remnawave data: {exc}"
 
         crm_by_uuid = {u["uuid"]: u for u in all_crm if u.get("uuid") in uuids}
 

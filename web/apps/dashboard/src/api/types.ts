@@ -337,6 +337,8 @@ export interface TelmtFreeParams {
   max_unique_ips: number | null;
   data_quota_bytes: number | null;
   expire_days: number;
+  rate_limit_up_bps: number | null;
+  rate_limit_down_bps: number | null;
 }
 
 export interface TelmtSecurityPosture {
@@ -364,15 +366,8 @@ export interface TelmtBulkResult {
   errors: TelmtBulkError[];
 }
 
-export type TelmtConfigSectionName =
-  | "general"
-  | "timeouts"
-  | "censorship"
-  | "upstreams"
-  | "show_link"
-  | "dc_overrides";
-
-export type TelmtConfigData = Partial<Record<TelmtConfigSectionName, Record<string, unknown>>>;
+/** Telemt config JSON (any keys except forbidden access / server.api). */
+export type TelmtConfigData = Record<string, unknown>;
 
 export interface TelmtPatchConfigResponse {
   revision: string;

@@ -14,7 +14,7 @@ USER_TYPE_FREE = "free"
 USER_TYPE_PAID_VIP = "paid_vip"
 
 USER_TYPE_OPTIONS: list[dict[str, str]] = [
-    {"value": USER_TYPE_ALL, "label": "Все"},
+    {"value": USER_TYPE_ALL, "label": "All"},
     {"value": USER_TYPE_FREE, "label": "Free"},
     {"value": USER_TYPE_PAID_VIP, "label": "Paid / VIP"},
 ]

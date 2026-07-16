@@ -62,7 +62,6 @@ import type {
   TelmtTlsFingerprints,
   TelmtConfigData,
   TelmtPatchConfigResponse,
-  TelmtConfigSectionName,
 } from "../api/types";
 import StatsCard from "../components/StatsCard";
 import useIsMobile from "../hooks/useIsMobile";
@@ -949,6 +948,8 @@ function FreeParamsTab() {
         max_unique_ips: data.max_unique_ips,
         data_quota_bytes: data.data_quota_bytes,
         expire_days: data.expire_days,
+        rate_limit_up_bps: data.rate_limit_up_bps,
+        rate_limit_down_bps: data.rate_limit_down_bps,
       });
     } catch {
       message.error("Failed to load free params");
@@ -970,6 +971,8 @@ function FreeParamsTab() {
         max_unique_ips: values.max_unique_ips ?? null,
         data_quota_bytes: values.data_quota_bytes ?? null,
         expire_days: values.expire_days ?? 30,
+        rate_limit_up_bps: values.rate_limit_up_bps ?? null,
+        rate_limit_down_bps: values.rate_limit_down_bps ?? null,
       };
       await api.put("/telemt/free-params", payload);
       message.success("Free params saved");
@@ -1024,6 +1027,20 @@ function FreeParamsTab() {
             name="data_quota_bytes"
             label="Data Quota (bytes)"
             tooltip="Maximum data usage in bytes (leave empty for unlimited)"
+          >
+            <InputNumber min={0} style={{ width: "100%" }} placeholder="Unlimited" />
+          </Form.Item>
+          <Form.Item
+            name="rate_limit_up_bps"
+            label="Rate Limit Up (bps)"
+            tooltip="Default upload rate limit in bits per second (leave empty for unlimited)"
+          >
+            <InputNumber min={0} style={{ width: "100%" }} placeholder="Unlimited" />
+          </Form.Item>
+          <Form.Item
+            name="rate_limit_down_bps"
+            label="Rate Limit Down (bps)"
+            tooltip="Default download rate limit in bits per second (leave empty for unlimited)"
           >
             <InputNumber min={0} style={{ width: "100%" }} placeholder="Unlimited" />
           </Form.Item>
@@ -1327,14 +1344,37 @@ function OperationsTab() {
   );
 }
 
-const EDITABLE_CONFIG_SECTIONS: TelmtConfigSectionName[] = [
-  "general",
-  "timeouts",
-  "censorship",
-  "upstreams",
-  "show_link",
-  "dc_overrides",
-];
+const FORBIDDEN_CONFIG_TOP = new Set(["access"]);
+const FORBIDDEN_SERVER_KEYS = new Set(["api", "admin_api"]);
+
+function sanitizeConfigForEditor(data: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(data)) {
+    if (FORBIDDEN_CONFIG_TOP.has(k)) continue;
+    if (k === "server" && v && typeof v === "object" && !Array.isArray(v)) {
+      const server: Record<string, unknown> = {};
+      for (const [sk, sv] of Object.entries(v as Record<string, unknown>)) {
+        if (!FORBIDDEN_SERVER_KEYS.has(sk)) server[sk] = sv;
+      }
+      out.server = server;
+    } else {
+      out[k] = v;
+    }
+  }
+  return out;
+}
+
+function validateConfigPatch(parsed: Record<string, unknown>): string | null {
+  if ("access" in parsed) {
+    return "access is not editable here; manage users via the Telemt Users tab";
+  }
+  const server = parsed.server;
+  if (server && typeof server === "object" && !Array.isArray(server)) {
+    const bad = Object.keys(server as Record<string, unknown>).filter((k) => FORBIDDEN_SERVER_KEYS.has(k));
+    if (bad.length) return `server.${bad.join(", server.")} is not editable here`;
+  }
+  return null;
+}
 
 function ConfigTab() {
   const isMobile = useIsMobile();
@@ -1350,11 +1390,8 @@ function ConfigTab() {
     if (clearPatch) setLastPatch(null);
     try {
       const r = await api.get<TelmtEnvelope<TelmtConfigData>>("/telemt/config");
-      const data = r.data ?? {};
-      const editable: TelmtConfigData = {};
-      for (const key of EDITABLE_CONFIG_SECTIONS) {
-        if (data[key] != null) editable[key] = data[key];
-      }
+      const data = (r.data ?? {}) as Record<string, unknown>;
+      const editable = sanitizeConfigForEditor(data);
       setEditorText(JSON.stringify(editable, null, 2));
       setRevision(r.revision || "");
     } catch (e: any) {
@@ -1384,14 +1421,10 @@ function ConfigTab() {
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
       return { ok: false, error: "Config must be a JSON object" };
     }
-    const keys = Object.keys(parsed as Record<string, unknown>);
-    const unknown = keys.filter(
-      (k) => !EDITABLE_CONFIG_SECTIONS.includes(k as TelmtConfigSectionName),
-    );
-    if (unknown.length) {
-      return { ok: false, error: `Non-editable keys: ${unknown.join(", ")}` };
-    }
-    return { ok: true, sections: keys };
+    const obj = parsed as Record<string, unknown>;
+    const forbidden = validateConfigPatch(obj);
+    if (forbidden) return { ok: false, error: forbidden };
+    return { ok: true, sections: Object.keys(obj) };
   }, [editorText]);
 
   const applyPatch = async (payload: Record<string, unknown>) => {
@@ -1459,11 +1492,11 @@ function ConfigTab() {
         <Alert
           type="info"
           showIcon
-          message="Editable sections only"
+          message="Editable Telemt config"
           description={
             <>
-              Allowed keys: <code>{EDITABLE_CONFIG_SECTIONS.join(", ")}</code>.
-              Users/secrets (<code>access</code>), <code>server</code> and <code>network</code> are not editable here.
+              Almost all config keys can be patched here. Not editable: top-level <code>access</code>{" "}
+              (users/secrets — use the Users tab) and <code>server.api</code> / <code>server.admin_api</code>.
               Save uses optimistic concurrency via <code>If-Match</code> revision.
             </>
           }

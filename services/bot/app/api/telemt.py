@@ -79,6 +79,8 @@ async def create_telemt_user(
     max_tcp_conns: Optional[int] = None,
     max_unique_ips: Optional[int] = None,
     data_quota_bytes: Optional[int] = None,
+    rate_limit_up_bps: Optional[int] = None,
+    rate_limit_down_bps: Optional[int] = None,
 ) -> Optional[dict]:
     """
     Create a new Telemt user. Returns UserInfo dict (with links) or None on error.
@@ -95,6 +97,10 @@ async def create_telemt_user(
         payload["max_unique_ips"] = max_unique_ips
     if data_quota_bytes is not None:
         payload["data_quota_bytes"] = data_quota_bytes
+    if rate_limit_up_bps is not None:
+        payload["rate_limit_up_bps"] = rate_limit_up_bps
+    if rate_limit_down_bps is not None:
+        payload["rate_limit_down_bps"] = rate_limit_down_bps
 
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:

@@ -18,7 +18,7 @@ _TEMPLATES: list[dict] = [
     {
         "id": "all_users_announce",
         "segment_id": SEGMENT_ALL_USERS,
-        "title": "Общее объявление",
+        "title": "General announcement",
         "message_text": (
             "<b>Важное сообщение</b>\n\n"
             "Привет, {{username}}! У нас есть новости для всех пользователей."
@@ -30,7 +30,7 @@ _TEMPLATES: list[dict] = [
     {
         "id": "never_connected_nudge",
         "segment_id": SEGMENT_NEVER_CONNECTED,
-        "title": "Напоминание подключиться",
+        "title": "Connection reminder",
         "message_text": (
             "<b>Вы ещё не подключались</b>\n\n"
             "Привет, {{username}}! Подписка активна, но подключений не было. "
@@ -43,7 +43,7 @@ _TEMPLATES: list[dict] = [
     {
         "id": "never_connected_bonus",
         "segment_id": SEGMENT_NEVER_CONNECTED,
-        "title": "Бонус за первое подключение",
+        "title": "Bonus for first connection",
         "message_text": (
             "<b>Бонус за подключение</b>\n\n"
             "{{username}}, подключитесь к VPN — мы начислили вам дополнительные дни."
@@ -55,7 +55,7 @@ _TEMPLATES: list[dict] = [
     {
         "id": "expired_renew",
         "segment_id": SEGMENT_EXPIRED,
-        "title": "Подписка истекла",
+        "title": "Subscription expired",
         "message_text": (
             "<b>Подписка истекла</b>\n\n"
             "{{username}}, ваша подписка больше не активна. "
@@ -68,7 +68,7 @@ _TEMPLATES: list[dict] = [
     {
         "id": "limited_upgrade",
         "segment_id": SEGMENT_LIMITED,
-        "title": "LIMITED — предложение PRO",
+        "title": "LIMITED — PRO offer",
         "message_text": (
             "<b>Трафик FREE-подписки исчерпан</b>\n\n"
             "Привет, {{username}}! Статус: <code>{{status}}</code>.\n"
@@ -81,7 +81,7 @@ _TEMPLATES: list[dict] = [
     {
         "id": "limited_bonus_traffic",
         "segment_id": SEGMENT_LIMITED,
-        "title": "LIMITED — бонус трафика",
+        "title": "LIMITED — traffic bonus",
         "message_text": (
             "<b>Дополнительный трафик</b>\n\n"
             "{{username}}, мы начислили вам бонусный трафик. "
@@ -94,7 +94,7 @@ _TEMPLATES: list[dict] = [
     {
         "id": "traffic_low_warning",
         "segment_id": SEGMENT_TRAFFIC_LOW,
-        "title": "Трафик заканчивается",
+        "title": "Traffic running low",
         "message_text": (
             "<b>Трафик почти исчерпан</b>\n\n"
             "{{username}}, использовано {{traffic_percent}}% лимита. "
@@ -107,7 +107,7 @@ _TEMPLATES: list[dict] = [
     {
         "id": "traffic_low_bonus",
         "segment_id": SEGMENT_TRAFFIC_LOW,
-        "title": "Трафик — бонус ГБ",
+        "title": "Traffic — GB bonus",
         "message_text": (
             "<b>Бонус трафика</b>\n\n"
             "{{username}}, начислили дополнительный трафик. Текущий остаток: {{traffic_left}}."
@@ -119,7 +119,7 @@ _TEMPLATES: list[dict] = [
     {
         "id": "expiring_soon_renew",
         "segment_id": SEGMENT_EXPIRING_SOON,
-        "title": "Скоро истечёт",
+        "title": "Expiring soon",
         "message_text": (
             "<b>Подписка скоро истечёт</b>\n\n"
             "{{username}}, осталось {{days_left}} дн. Продлите подписку заранее."
@@ -131,7 +131,7 @@ _TEMPLATES: list[dict] = [
     {
         "id": "expiring_soon_bonus",
         "segment_id": SEGMENT_EXPIRING_SOON,
-        "title": "Скоро истечёт — бонус дней",
+        "title": "Expiring soon — bonus days",
         "message_text": (
             "<b>Бонусные дни</b>\n\n"
             "{{username}}, начислили +дни к подписке. Осталось {{days_left}} дн."
@@ -143,7 +143,7 @@ _TEMPLATES: list[dict] = [
     {
         "id": "unpaid_invoice_remind",
         "segment_id": SEGMENT_UNPAID_INVOICE,
-        "title": "Неоплаченный инвойс",
+        "title": "Unpaid invoice",
         "message_text": (
             "<b>Ожидается оплата</b>\n\n"
             "{{username}}, у вас есть неоплаченный заказ. Завершите оплату в боте."
@@ -155,7 +155,7 @@ _TEMPLATES: list[dict] = [
     {
         "id": "torrent_warning",
         "segment_id": SEGMENT_TORRENT,
-        "title": "Torrent — предупреждение",
+        "title": "Torrent — warning",
         "message_text": (
             "<b>Torrent-трафик</b>\n\n"
             "{{username}}, зафиксирован torrent-трафик. "
@@ -168,7 +168,7 @@ _TEMPLATES: list[dict] = [
     {
         "id": "device_limit_notice",
         "segment_id": SEGMENT_DEVICE_LIMIT,
-        "title": "Лимит устройств",
+        "title": "Device limit",
         "message_text": (
             "<b>Лимит устройств</b>\n\n"
             "{{username}}, подключено устройств: {{hwid_devices}}. "

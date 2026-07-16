@@ -131,6 +131,8 @@ def test_get_telmt_free_params_creates_with_defaults() -> None:
                 assert row.max_unique_ips is None
                 assert row.data_quota_bytes is None
                 assert row.expire_days == repo_system.DEFAULT_TELMT_EXPIRE_DAYS
+                assert row.rate_limit_up_bps is None
+                assert row.rate_limit_down_bps is None
         finally:
             await engine.dispose()
 

@@ -982,6 +982,8 @@ async def get_telemt_free_params() -> dict:
             "max_unique_ips": row.max_unique_ips,
             "data_quota_bytes": row.data_quota_bytes,
             "expire_days": row.expire_days,
+            "rate_limit_up_bps": row.rate_limit_up_bps,
+            "rate_limit_down_bps": row.rate_limit_down_bps,
         }
 
 
@@ -990,6 +992,8 @@ async def update_telemt_free_params(
     max_unique_ips: int = None,
     data_quota_bytes: int = None,
     expire_days: int = 30,
+    rate_limit_up_bps: int = None,
+    rate_limit_down_bps: int = None,
 ) -> bool:
     """Обновляет параметры для создания бесплатного пользователя Telemt."""
     async with async_session() as session:
@@ -998,5 +1002,7 @@ async def update_telemt_free_params(
         row.max_unique_ips = max_unique_ips
         row.data_quota_bytes = data_quota_bytes
         row.expire_days = expire_days
+        row.rate_limit_up_bps = rate_limit_up_bps
+        row.rate_limit_down_bps = rate_limit_down_bps
         await session.commit()
         return True

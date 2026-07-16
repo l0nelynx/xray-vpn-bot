@@ -330,7 +330,8 @@ async def _seed_telemt_free_params():
         count = await session.scalar(select(func.count()).select_from(TelmtFreeParams))
         if not count:
             session.add(TelmtFreeParams(id=1, max_tcp_conns=None, max_unique_ips=None,
-                                        data_quota_bytes=None, expire_days=30))
+                                        data_quota_bytes=None, expire_days=30,
+                                        rate_limit_up_bps=None, rate_limit_down_bps=None))
             await session.commit()
             logging.info("Seed: telemt_free_params default row created")
 
