@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, type Key } from "react";
 import {
   Typography,
   Card,
@@ -30,6 +30,9 @@ import {
   CopyOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
+  KeyOutlined,
+  PauseCircleOutlined,
+  PlayCircleOutlined,
   CloudServerOutlined,
   UserOutlined,
   SettingOutlined,
@@ -45,6 +48,14 @@ import type {
   TelmtUser,
   TelmtSecurityPosture,
   TelmtFreeParams,
+  TelmtBulkResult,
+  TelmtHealthReady,
+  TelmtUsersQuotaResponse,
+  TelmtLimitsEffective,
+  TelmtSecurityWhitelist,
+  TelmtRuntimeConnectionsSummary,
+  TelmtRuntimeRecentEvents,
+  TelmtTlsFingerprints,
 } from "../api/types";
 import StatsCard from "../components/StatsCard";
 import useIsMobile from "../hooks/useIsMobile";
@@ -243,6 +254,12 @@ function UsersTab() {
   const [linksUser, setLinksUser] = useState<TelmtUser | null>(null);
   const [createForm] = Form.useForm();
   const [editForm] = Form.useForm();
+  const [bulkExtendForm] = Form.useForm();
+  const [bulkLimitsForm] = Form.useForm();
+  const [selectedUsernames, setSelectedUsernames] = useState<Key[]>([]);
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const [bulkExtendOpen, setBulkExtendOpen] = useState(false);
+  const [bulkLimitsOpen, setBulkLimitsOpen] = useState(false);
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -268,6 +285,8 @@ function UsersTab() {
       if (values.max_tcp_conns != null) body.max_tcp_conns = values.max_tcp_conns;
       if (values.max_unique_ips != null) body.max_unique_ips = values.max_unique_ips;
       if (values.data_quota_bytes != null) body.data_quota_bytes = values.data_quota_bytes;
+      if (values.rate_limit_up_bps != null) body.rate_limit_up_bps = values.rate_limit_up_bps;
+      if (values.rate_limit_down_bps != null) body.rate_limit_down_bps = values.rate_limit_down_bps;
       if (values.expiration) body.expiration_rfc3339 = values.expiration.toISOString();
       await api.post("/telemt/users", body);
       message.success("User created");
@@ -288,6 +307,8 @@ function UsersTab() {
       if (values.max_tcp_conns != null) body.max_tcp_conns = values.max_tcp_conns;
       if (values.max_unique_ips != null) body.max_unique_ips = values.max_unique_ips;
       if (values.data_quota_bytes != null) body.data_quota_bytes = values.data_quota_bytes;
+      if (values.rate_limit_up_bps != null) body.rate_limit_up_bps = values.rate_limit_up_bps;
+      if (values.rate_limit_down_bps != null) body.rate_limit_down_bps = values.rate_limit_down_bps;
       if (values.expiration) body.expiration_rfc3339 = values.expiration.toISOString();
       await api.patch(`/telemt/users/${editUser.username}`, body);
       message.success("User updated");
@@ -309,6 +330,70 @@ function UsersTab() {
     }
   };
 
+  const handleRotateSecret = async (username: string) => {
+    try {
+      await api.post(`/telemt/users/${username}/rotate-secret`, {});
+      message.success(`Secret rotated for ${username}`);
+      load();
+    } catch (e: any) {
+      message.error(e.message || "Failed to rotate secret");
+    }
+  };
+
+  const handleResetQuota = async (username: string) => {
+    try {
+      await api.post(`/telemt/users/${username}/reset-quota`, {});
+      message.success(`Quota reset for ${username}`);
+      load();
+    } catch (e: any) {
+      message.error(e.message || "Failed to reset quota");
+    }
+  };
+
+  const handleEnableUser = async (username: string) => {
+    try {
+      await api.post(`/telemt/users/${username}/enable`, {});
+      message.success(`User ${username} enabled`);
+      load();
+    } catch (e: any) {
+      message.error(e.message || "Failed to enable user");
+    }
+  };
+
+  const handleDisableUser = async (username: string) => {
+    try {
+      await api.post(`/telemt/users/${username}/disable`, {});
+      message.success(`User ${username} disabled`);
+      load();
+    } catch (e: any) {
+      message.error(e.message || "Failed to disable user");
+    }
+  };
+
+  const runBulk = async (path: string, payload: any, successText: string) => {
+    setBulkLoading(true);
+    try {
+      const result = await api.post<TelmtBulkResult>(path, payload);
+      if (result.failed > 0) {
+        message.warning(`${successText}: ${result.succeeded}/${result.processed} succeeded`);
+      } else {
+        message.success(`${successText}: ${result.succeeded}/${result.processed} succeeded`);
+      }
+      if (result.errors.length) {
+        const first = result.errors[0];
+        message.error(`First error: ${first.username} - ${first.detail}`);
+      }
+      setSelectedUsernames([]);
+      load();
+    } catch (e: any) {
+      message.error(e.message || "Bulk operation failed");
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
+  const selectedAsStrings = selectedUsernames.map(String);
+
   const openEdit = (user: TelmtUser) => {
     setEditUser(user);
     editForm.setFieldsValue({
@@ -316,6 +401,8 @@ function UsersTab() {
       max_tcp_conns: user.max_tcp_conns,
       max_unique_ips: user.max_unique_ips,
       data_quota_bytes: user.data_quota_bytes,
+      rate_limit_up_bps: user.rate_limit_up_bps,
+      rate_limit_down_bps: user.rate_limit_down_bps,
       expiration: user.expiration_rfc3339 ? dayjs(user.expiration_rfc3339) : undefined,
     });
   };
@@ -363,6 +450,8 @@ function UsersTab() {
           {r.max_tcp_conns != null && <Tag>TCP: {r.max_tcp_conns}</Tag>}
           {r.max_unique_ips != null && <Tag>IPs: {r.max_unique_ips}</Tag>}
           {r.data_quota_bytes != null && <Tag>Quota: {formatBytes(r.data_quota_bytes)}</Tag>}
+          {r.rate_limit_up_bps != null && <Tag color="purple">UP: {formatBytes(r.rate_limit_up_bps / 8)}/s</Tag>}
+          {r.rate_limit_down_bps != null && <Tag color="purple">DOWN: {formatBytes(r.rate_limit_down_bps / 8)}/s</Tag>}
           {r.expiration_rfc3339 && (
             <Tag color={dayjs(r.expiration_rfc3339).isBefore(dayjs()) ? "red" : "blue"}>
               Exp: {dayjs(r.expiration_rfc3339).format("DD.MM.YY")}
@@ -385,6 +474,20 @@ function UsersTab() {
           </Tooltip>
           <Tooltip title="Edit">
             <Button type="text" size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} />
+          </Tooltip>
+          <Tooltip title="Rotate Secret">
+            <Button type="text" size="small" icon={<KeyOutlined />} onClick={() => handleRotateSecret(r.username)} />
+          </Tooltip>
+          <Tooltip title="Enable user">
+            <Button type="text" size="small" icon={<PlayCircleOutlined />} onClick={() => handleEnableUser(r.username)} />
+          </Tooltip>
+          <Tooltip title="Disable user">
+            <Button type="text" size="small" icon={<PauseCircleOutlined />} onClick={() => handleDisableUser(r.username)} />
+          </Tooltip>
+          <Tooltip title="Reset Quota">
+            <Button type="text" size="small" onClick={() => handleResetQuota(r.username)}>
+              RQ
+            </Button>
           </Tooltip>
           <Popconfirm title={`Delete ${r.username}?`} onConfirm={() => handleDelete(r.username)} okText="Delete" okButtonProps={{ danger: true }}>
             <Button type="text" size="small" icon={<DeleteOutlined />} danger />
@@ -445,6 +548,12 @@ function UsersTab() {
       <Form.Item name="data_quota_bytes" label="Data Quota (bytes)">
         <InputNumber min={0} style={{ width: "100%" }} placeholder="Unlimited" />
       </Form.Item>
+      <Form.Item name="rate_limit_up_bps" label="Rate Limit Up (bps)">
+        <InputNumber min={1} style={{ width: "100%" }} placeholder="No limit" />
+      </Form.Item>
+      <Form.Item name="rate_limit_down_bps" label="Rate Limit Down (bps)">
+        <InputNumber min={1} style={{ width: "100%" }} placeholder="No limit" />
+      </Form.Item>
       <Form.Item name="expiration" label="Expiration">
         <DatePicker showTime style={{ width: "100%" }} />
       </Form.Item>
@@ -457,10 +566,46 @@ function UsersTab() {
         <Button icon={<PlusOutlined />} type="primary" onClick={() => setCreateOpen(true)}>
           Add User
         </Button>
-        <Button icon={<ReloadOutlined />} onClick={load} loading={loading}>
-          Refresh
-        </Button>
+        <Space>
+          <Button icon={<ReloadOutlined />} onClick={load} loading={loading}>
+            Refresh
+          </Button>
+        </Space>
       </div>
+
+      {!isMobile && (
+        <Card size="small" style={{ marginBottom: 12 }}>
+          <Space wrap>
+            <Typography.Text type="secondary">
+              Selected: {selectedUsernames.length}
+            </Typography.Text>
+            <Popconfirm
+              title={`Delete ${selectedUsernames.length} users?`}
+              onConfirm={() => runBulk("/telemt/users/bulk-delete", { usernames: selectedAsStrings }, "Bulk delete")}
+              disabled={!selectedUsernames.length}
+            >
+              <Button danger disabled={!selectedUsernames.length} loading={bulkLoading}>
+                Bulk Delete
+              </Button>
+            </Popconfirm>
+            <Button disabled={!selectedUsernames.length} loading={bulkLoading} onClick={() => setBulkExtendOpen(true)}>
+              Bulk Extend
+            </Button>
+            <Button disabled={!selectedUsernames.length} loading={bulkLoading} onClick={() => runBulk("/telemt/users/bulk-rotate-secret", { usernames: selectedAsStrings }, "Bulk reissue secret")}>
+              Bulk Reissue Secret
+            </Button>
+            <Button disabled={!selectedUsernames.length} loading={bulkLoading} onClick={() => runBulk("/telemt/users/bulk-enable", { usernames: selectedAsStrings }, "Bulk enable")}>
+              Bulk Enable
+            </Button>
+            <Button disabled={!selectedUsernames.length} loading={bulkLoading} onClick={() => runBulk("/telemt/users/bulk-disable", { usernames: selectedAsStrings }, "Bulk disable")}>
+              Bulk Disable
+            </Button>
+            <Button disabled={!selectedUsernames.length} loading={bulkLoading} onClick={() => setBulkLimitsOpen(true)}>
+              Bulk Update Limits
+            </Button>
+          </Space>
+        </Card>
+      )}
 
       {isMobile ? (
         loading ? (
@@ -472,6 +617,10 @@ function UsersTab() {
         <Card>
           <Table
             rowKey="username"
+            rowSelection={{
+              selectedRowKeys: selectedUsernames,
+              onChange: (keys) => setSelectedUsernames(keys),
+            }}
             columns={columns}
             dataSource={users}
             loading={loading}
@@ -560,6 +709,87 @@ function UsersTab() {
             )}
           </div>
         )}
+      </Modal>
+
+      <Modal
+        title={`Bulk Extend (${selectedUsernames.length} users)`}
+        open={bulkExtendOpen}
+        onCancel={() => {
+          setBulkExtendOpen(false);
+          bulkExtendForm.resetFields();
+        }}
+        onOk={() => bulkExtendForm.submit()}
+        okText="Apply"
+        confirmLoading={bulkLoading}
+      >
+        <Form
+          form={bulkExtendForm}
+          layout="vertical"
+          onFinish={(values) => {
+            runBulk(
+              "/telemt/users/bulk-extend",
+              {
+                usernames: selectedAsStrings,
+                expiration_rfc3339: values.expiration.toISOString(),
+              },
+              "Bulk extend",
+            );
+            setBulkExtendOpen(false);
+            bulkExtendForm.resetFields();
+          }}
+        >
+          <Form.Item
+            name="expiration"
+            label="New Expiration"
+            rules={[{ required: true, message: "Expiration is required" }]}
+          >
+            <DatePicker showTime style={{ width: "100%" }} />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title={`Bulk Update Limits (${selectedUsernames.length} users)`}
+        open={bulkLimitsOpen}
+        onCancel={() => {
+          setBulkLimitsOpen(false);
+          bulkLimitsForm.resetFields();
+        }}
+        onOk={() => bulkLimitsForm.submit()}
+        okText="Apply"
+        confirmLoading={bulkLoading}
+      >
+        <Form
+          form={bulkLimitsForm}
+          layout="vertical"
+          onFinish={(values) => {
+            const payload: any = { usernames: selectedAsStrings };
+            if (values.max_tcp_conns != null) payload.max_tcp_conns = values.max_tcp_conns;
+            if (values.max_unique_ips != null) payload.max_unique_ips = values.max_unique_ips;
+            if (values.data_quota_bytes != null) payload.data_quota_bytes = values.data_quota_bytes;
+            if (values.rate_limit_up_bps != null) payload.rate_limit_up_bps = values.rate_limit_up_bps;
+            if (values.rate_limit_down_bps != null) payload.rate_limit_down_bps = values.rate_limit_down_bps;
+            runBulk("/telemt/users/bulk-update-limits", payload, "Bulk update limits");
+            setBulkLimitsOpen(false);
+            bulkLimitsForm.resetFields();
+          }}
+        >
+          <Form.Item name="max_tcp_conns" label="Max TCP Connections">
+            <InputNumber min={1} style={{ width: "100%" }} />
+          </Form.Item>
+          <Form.Item name="max_unique_ips" label="Max Unique IPs">
+            <InputNumber min={1} style={{ width: "100%" }} />
+          </Form.Item>
+          <Form.Item name="data_quota_bytes" label="Data Quota (bytes)">
+            <InputNumber min={0} style={{ width: "100%" }} />
+          </Form.Item>
+          <Form.Item name="rate_limit_up_bps" label="Rate Limit Up (bps)">
+            <InputNumber min={1} style={{ width: "100%" }} />
+          </Form.Item>
+          <Form.Item name="rate_limit_down_bps" label="Rate Limit Down (bps)">
+            <InputNumber min={1} style={{ width: "100%" }} />
+          </Form.Item>
+        </Form>
       </Modal>
     </div>
   );
@@ -666,6 +896,126 @@ function FreeParamsTab() {
   );
 }
 
+function OperationsTab() {
+  const { message } = App.useApp();
+  const [loading, setLoading] = useState(true);
+  const [healthReady, setHealthReady] = useState<TelmtHealthReady | null>(null);
+  const [limits, setLimits] = useState<TelmtLimitsEffective | null>(null);
+  const [whitelist, setWhitelist] = useState<TelmtSecurityWhitelist | null>(null);
+  const [connSummary, setConnSummary] = useState<TelmtRuntimeConnectionsSummary | null>(null);
+  const [recentEvents, setRecentEvents] = useState<TelmtRuntimeRecentEvents | null>(null);
+  const [fingerprints, setFingerprints] = useState<TelmtTlsFingerprints | null>(null);
+  const [quota, setQuota] = useState<TelmtUsersQuotaResponse | null>(null);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    Promise.all([
+      api.get<TelmtEnvelope<TelmtHealthReady>>("/telemt/health/ready"),
+      api.get<TelmtEnvelope<TelmtLimitsEffective>>("/telemt/limits/effective"),
+      api.get<TelmtEnvelope<TelmtSecurityWhitelist>>("/telemt/security/whitelist"),
+      api.get<TelmtEnvelope<TelmtRuntimeConnectionsSummary>>("/telemt/runtime/connections/summary"),
+      api.get<TelmtEnvelope<TelmtRuntimeRecentEvents>>("/telemt/runtime/events/recent"),
+      api.get<TelmtEnvelope<TelmtTlsFingerprints>>("/telemt/runtime/tls-fingerprints"),
+      api.get<TelmtEnvelope<TelmtUsersQuotaResponse>>("/telemt/users/quota"),
+    ])
+      .then(([hr, lim, wl, cs, ev, fp, q]) => {
+        setHealthReady(hr.data);
+        setLimits(lim.data);
+        setWhitelist(wl.data);
+        setConnSummary(cs.data);
+        setRecentEvents(ev.data);
+        setFingerprints(fp.data);
+        setQuota(q.data);
+      })
+      .catch(() => message.error("Failed to load telemt operations data"))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  return (
+    <div>
+      <div style={{ marginBottom: 16, display: "flex", justifyContent: "flex-end" }}>
+        <Button icon={<ReloadOutlined />} onClick={load} loading={loading}>
+          Refresh
+        </Button>
+      </div>
+      <Row gutter={[16, 16]}>
+        <Col xs={24} lg={8}>
+          <Card title="Readiness">
+            <Space direction="vertical">
+              <Tag color={healthReady?.ready ? "green" : "red"}>
+                {healthReady?.ready ? "Ready" : "Not ready"}
+              </Tag>
+              {healthReady?.reason && <Typography.Text type="secondary">{healthReady.reason}</Typography.Text>}
+            </Space>
+          </Card>
+        </Col>
+        <Col xs={24} lg={8}>
+          <Card title="Quota Users">
+            <Typography.Title level={4} style={{ margin: 0 }}>
+              {quota?.users?.length ?? 0}
+            </Typography.Title>
+            <Typography.Text type="secondary">users with configured quota</Typography.Text>
+          </Card>
+        </Col>
+        <Col xs={24} lg={8}>
+          <Card title="Recent Events">
+            <Typography.Title level={4} style={{ margin: 0 }}>
+              {recentEvents?.events?.length ?? 0}
+            </Typography.Title>
+            <Typography.Text type="secondary">recent runtime events</Typography.Text>
+          </Card>
+        </Col>
+      </Row>
+
+      <Row gutter={[16, 16]} style={{ marginTop: 8 }}>
+        <Col xs={24} lg={12}>
+          <Card title="Effective Limits">
+            <Typography.Paragraph>
+              <pre style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                {JSON.stringify(limits, null, 2)}
+              </pre>
+            </Typography.Paragraph>
+          </Card>
+        </Col>
+        <Col xs={24} lg={12}>
+          <Card title="Security Whitelist">
+            <Typography.Paragraph>
+              <pre style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                {JSON.stringify(whitelist, null, 2)}
+              </pre>
+            </Typography.Paragraph>
+          </Card>
+        </Col>
+      </Row>
+
+      <Row gutter={[16, 16]} style={{ marginTop: 8 }}>
+        <Col xs={24} lg={12}>
+          <Card title="Connections Summary">
+            <Typography.Paragraph>
+              <pre style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                {JSON.stringify(connSummary, null, 2)}
+              </pre>
+            </Typography.Paragraph>
+          </Card>
+        </Col>
+        <Col xs={24} lg={12}>
+          <Card title="TLS Fingerprints">
+            <Typography.Paragraph>
+              <pre style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                {JSON.stringify(fingerprints, null, 2)}
+              </pre>
+            </Typography.Paragraph>
+          </Card>
+        </Col>
+      </Row>
+    </div>
+  );
+}
+
 export default function TelmtPage() {
   const isMobile = useIsMobile();
 
@@ -706,6 +1056,15 @@ export default function TelmtPage() {
               </span>
             ),
             children: <FreeParamsTab />,
+          },
+          {
+            key: "operations",
+            label: (
+              <span>
+                <CloudServerOutlined /> Operations
+              </span>
+            ),
+            children: <OperationsTab />,
           },
         ]}
       />

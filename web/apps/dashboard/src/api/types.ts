@@ -179,6 +179,11 @@ export interface TelmtHealth {
   read_only: boolean;
 }
 
+export interface TelmtHealthReady {
+  ready: boolean;
+  reason?: string;
+}
+
 export interface TelmtRuntimeGates {
   accepting_new_connections: boolean;
   conditional_cast_enabled: boolean;
@@ -204,6 +209,8 @@ export interface TelmtUser {
   expiration_rfc3339: string | null;
   data_quota_bytes: number | null;
   max_unique_ips: number | null;
+  rate_limit_up_bps: number | null;
+  rate_limit_down_bps: number | null;
   current_connections: number;
   active_unique_ips: number;
   active_unique_ips_list: string[];
@@ -211,6 +218,39 @@ export interface TelmtUser {
   recent_unique_ips_list: string[];
   total_octets: number;
   links: TelmtUserLink;
+}
+
+export interface TelmtUserQuota {
+  username: string;
+  data_quota_bytes: number;
+  used_bytes: number;
+  last_reset_epoch_secs: number | null;
+}
+
+export interface TelmtUsersQuotaResponse {
+  users: TelmtUserQuota[];
+}
+
+export interface TelmtRuntimeConnectionsSummary {
+  [key: string]: unknown;
+}
+
+export interface TelmtRuntimeRecentEvents {
+  events?: Array<Record<string, unknown>>;
+  [key: string]: unknown;
+}
+
+export interface TelmtTlsFingerprints {
+  fingerprints?: Array<Record<string, unknown>>;
+  [key: string]: unknown;
+}
+
+export interface TelmtLimitsEffective {
+  [key: string]: unknown;
+}
+
+export interface TelmtSecurityWhitelist {
+  [key: string]: unknown;
 }
 
 export interface TelmtFreeParams {
@@ -230,6 +270,19 @@ export interface TelmtSecurityPosture {
   telemetry_core_enabled: boolean;
   telemetry_user_enabled: boolean;
   telemetry_me_level: string;
+}
+
+export interface TelmtBulkError {
+  username: string;
+  status: number;
+  detail: string;
+}
+
+export interface TelmtBulkResult {
+  processed: number;
+  succeeded: number;
+  failed: number;
+  errors: TelmtBulkError[];
 }
 
 export interface OrderParam {
