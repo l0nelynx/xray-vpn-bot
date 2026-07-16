@@ -15,7 +15,7 @@ export default function HistoryTab() {
     try {
       setCampaigns(await fetchCampaigns());
     } catch {
-      message.error("Не удалось загрузить историю");
+      message.error("Failed to load history");
     } finally {
       setLoading(false);
     }
@@ -35,40 +35,40 @@ export default function HistoryTab() {
 
   const perksLabel = (r: CampaignSummary) => {
     const parts: string[] = [];
-    if (r.bonus_days) parts.push(`+${r.bonus_days}д`);
-    if (r.bonus_traffic_gb) parts.push(`+${r.bonus_traffic_gb}ГБ`);
+    if (r.bonus_days) parts.push(`+${r.bonus_days}d`);
+    if (r.bonus_traffic_gb) parts.push(`+${r.bonus_traffic_gb}GB`);
     if (!parts.length) return "—";
-    return `${parts.join(", ")} (${r.perks_applied}/${r.perks_failed} ош.)`;
+    return `${parts.join(", ")} (${r.perks_applied}/${r.perks_failed} failed)`;
   };
 
   const columns = [
     { title: "ID", dataIndex: "id", key: "id", width: 70 },
-    { title: "Название", dataIndex: "name", key: "name", ellipsis: true },
+    { title: "Name", dataIndex: "name", key: "name", ellipsis: true },
     {
-      title: "Сегмент",
+      title: "Segment",
       dataIndex: "segment_type",
       key: "segment_type",
       render: (v: string | null) => v ?? "—",
     },
     {
-      title: "Статус",
+      title: "Status",
       dataIndex: "status",
       key: "status",
       render: (v: string) => <Tag color={statusColor(v)}>{v}</Tag>,
     },
-    { title: "Целей", dataIndex: "total_targets", key: "total_targets", width: 80 },
+    { title: "Targets", dataIndex: "total_targets", key: "total_targets", width: 80 },
     {
-      title: "Отправлено",
+      title: "Sent",
       key: "sent",
       render: (_: unknown, r: CampaignSummary) =>
-        `${r.messages_sent} / ${r.messages_failed} ош.`,
+        `${r.messages_sent} / ${r.messages_failed} failed`,
     },
     {
-      title: "Бонусы",
+      title: "Bonuses",
       key: "perks",
       render: (_: unknown, r: CampaignSummary) => perksLabel(r),
     },
-    { title: "Создана", dataIndex: "created_at", key: "created_at", width: 170 },
+    { title: "Created", dataIndex: "created_at", key: "created_at", width: 170 },
   ];
 
   const renderMobileCampaignCard = (r: CampaignSummary) => (
@@ -88,13 +88,13 @@ export default function HistoryTab() {
         {r.name || "—"}
       </div>
       <div style={{ fontSize: 12, color: "rgba(255,255,255,0.45)", marginBottom: 4 }}>
-        {r.segment_type ?? "—"} · {r.total_targets} целей
+        {r.segment_type ?? "—"} · {r.total_targets} targets
       </div>
       <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginBottom: 2 }}>
-        Отправлено: {r.messages_sent} / ошибок: {r.messages_failed}
+        Sent: {r.messages_sent} / failed: {r.messages_failed}
       </div>
       <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginBottom: 2 }}>
-        Бонусы: {perksLabel(r)}
+        Bonuses: {perksLabel(r)}
       </div>
       <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)" }}>
         {r.created_at || "—"}
@@ -104,17 +104,17 @@ export default function HistoryTab() {
 
   return (
     <Card
-      title="История кампаний"
+      title="Campaign history"
       extra={
         <Button onClick={load} loading={loading} block={isMobile}>
-          Обновить
+          Refresh
         </Button>
       }
     >
       {isMobile ? (
         loading ? (
           <div style={{ textAlign: "center", padding: 40, color: "rgba(255,255,255,0.4)" }}>
-            Загрузка...
+            Loading...
           </div>
         ) : (
           <Space direction="vertical" style={{ width: "100%" }} size={0}>

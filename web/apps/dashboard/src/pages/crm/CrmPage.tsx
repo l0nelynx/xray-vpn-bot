@@ -16,11 +16,11 @@ export default function CrmPage() {
       label: isMobile ? (
         <span>
           <SendOutlined />
-          <span style={{ marginLeft: 6 }}>Кампании</span>
+          <span style={{ marginLeft: 6 }}>Campaigns</span>
         </span>
       ) : (
         <span>
-          <SendOutlined /> Кампании
+          <SendOutlined /> Campaigns
         </span>
       ),
       children: <CampaignTab onLaunched={() => setActiveTab("history")} />,
@@ -30,11 +30,11 @@ export default function CrmPage() {
       label: isMobile ? (
         <span>
           <CalendarOutlined />
-          <span style={{ marginLeft: 6 }}>События</span>
+          <span style={{ marginLeft: 6 }}>Events</span>
         </span>
       ) : (
         <span>
-          <CalendarOutlined /> События
+          <CalendarOutlined /> Events
         </span>
       ),
       children: <EventsTab />,
@@ -44,11 +44,11 @@ export default function CrmPage() {
       label: isMobile ? (
         <span>
           <HistoryOutlined />
-          <span style={{ marginLeft: 6 }}>История</span>
+          <span style={{ marginLeft: 6 }}>History</span>
         </span>
       ) : (
         <span>
-          <HistoryOutlined /> История
+          <HistoryOutlined /> History
         </span>
       ),
       children: <HistoryTab />,

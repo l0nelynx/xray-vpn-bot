@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Row, Col, Select, Typography, Card, App } from "antd";
+import { Row, Col, Select, Typography, Card, App, Alert, Button } from "antd";
 import {
   WalletOutlined,
   UserAddOutlined,
@@ -34,16 +34,25 @@ export default function StatsPage() {
   const [summary, setSummary] = useState<SummaryStats | null>(null);
   const [orderStatuses, setOrderStatuses] = useState<OrderStatusStat[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const isMobile = useIsMobile();
   const { message } = App.useApp();
 
   const loadSummary = useCallback(
     (p: string) => {
       setLoading(true);
+      setError(null);
       api
         .get<SummaryStats>(`/stats/summary?period=${p}`)
-        .then(setSummary)
-        .catch(() => message.error("Failed to load statistics"))
+        .then((data) => {
+          setSummary(data);
+          setError(null);
+        })
+        .catch(() => {
+          setSummary(null);
+          setError("Failed to load statistics");
+          message.error("Failed to load statistics");
+        })
         .finally(() => setLoading(false));
     },
     [message]
@@ -83,85 +92,103 @@ export default function StatsPage() {
         <Select value={period} onChange={setPeriod} style={{ width: 140 }} options={PERIOD_OPTIONS} />
       </div>
 
+      {error && (
+        <Alert
+          type="error"
+          showIcon
+          style={{ marginBottom: gap }}
+          message={error}
+          action={
+            <Button size="small" onClick={() => loadSummary(period)}>
+              Retry
+            </Button>
+          }
+        />
+      )}
+
       {/* Period KPIs with deltas vs previous period */}
-      <Row gutter={[gap, gap]}>
-        <Col xs={12} lg={6}>
-          <MetricCard
-            label="Revenue"
-            value={summary?.revenue.value ?? 0}
-            prev={summary?.revenue.prev}
-            icon={<WalletOutlined />}
-            color="#A78BFF"
-            format={rub}
-            suffix="₽"
-            loading={loading}
-          />
-        </Col>
-        <Col xs={12} lg={6}>
-          <MetricCard
-            label="New Users"
-            value={summary?.new_users.value ?? 0}
-            prev={summary?.new_users.prev}
-            icon={<UserAddOutlined />}
-            color="#34D399"
-            loading={loading}
-          />
-        </Col>
-        <Col xs={12} lg={6}>
-          <MetricCard
-            label="Orders"
-            value={summary?.orders.value ?? 0}
-            prev={summary?.orders.prev}
-            icon={<ShoppingOutlined />}
-            color="#6C8EFF"
-            loading={loading}
-          />
-        </Col>
-        <Col xs={12} lg={6}>
-          <MetricCard
-            label="Avg Order"
-            value={summary?.avg_order.value ?? 0}
-            prev={summary?.avg_order.prev}
-            icon={<RiseOutlined />}
-            color="#FBBF24"
-            format={rub}
-            suffix="₽"
-            loading={loading}
-          />
-        </Col>
-      </Row>
+      {!error && (
+        <Row gutter={[gap, gap]}>
+          <Col xs={12} lg={6}>
+            <MetricCard
+              label="Revenue"
+              value={summary?.revenue.value ?? 0}
+              prev={summary?.revenue.prev}
+              icon={<WalletOutlined />}
+              color="#A78BFF"
+              format={rub}
+              suffix="₽"
+              loading={loading}
+            />
+          </Col>
+          <Col xs={12} lg={6}>
+            <MetricCard
+              label="New Users"
+              value={summary?.new_users.value ?? 0}
+              prev={summary?.new_users.prev}
+              icon={<UserAddOutlined />}
+              color="#34D399"
+              loading={loading}
+            />
+          </Col>
+          <Col xs={12} lg={6}>
+            <MetricCard
+              label="Orders"
+              value={summary?.orders.value ?? 0}
+              prev={summary?.orders.prev}
+              icon={<ShoppingOutlined />}
+              color="#6C8EFF"
+              loading={loading}
+            />
+          </Col>
+          <Col xs={12} lg={6}>
+            <MetricCard
+              label="Avg Order"
+              value={summary?.avg_order.value ?? 0}
+              prev={summary?.avg_order.prev}
+              icon={<RiseOutlined />}
+              color="#FBBF24"
+              format={rub}
+              suffix="₽"
+              loading={loading}
+            />
+          </Col>
+        </Row>
+      )}
 
       {/* All-time context */}
-      <Row gutter={[gap, gap]} style={{ marginTop: gap }}>
-        <Col xs={12} lg={6}>
-          <MetricCard label="Total Users" value={summary?.totals.total_users ?? 0} icon={<TeamOutlined />} color="#6C8EFF" loading={loading} />
-        </Col>
-        <Col xs={12} lg={6}>
-          <MetricCard label="Active Subs" value={summary?.totals.active_subs ?? 0} icon={<CrownOutlined />} color="#34D399" loading={loading} />
-        </Col>
-        <Col xs={12} lg={6}>
-          <MetricCard
-            label="Conversion"
-            value={summary?.totals.conversion ?? 0}
-            icon={<PercentageOutlined />}
-            color="#22D3EE"
-            format={(v) => v.toFixed(1)}
-            suffix="%"
-            loading={loading}
-          />
-        </Col>
-        <Col xs={12} lg={6}>
-          <MetricCard
-            label="Lifetime Revenue"
-            value={summary?.totals.revenue_all_time ?? 0}
-            icon={<DollarOutlined />}
-            color="#A78BFF"
-            format={rub}
-            suffix="₽"
-            loading={loading}
-          />
-        </Col>
-      </Row>
+      {!error && (
+        <Row gutter={[gap, gap]} style={{ marginTop: gap }}>
+          <Col xs={12} lg={6}>
+            <MetricCard label="Total Users" value={summary?.totals.total_users ?? 0} icon={<TeamOutlined />} color="#6C8EFF" loading={loading} />
+          </Col>
+          <Col xs={12} lg={6}>
+            <MetricCard label="Active Subs" value={summary?.totals.active_subs ?? 0} icon={<CrownOutlined />} color="#34D399" loading={loading} />
+          </Col>
+          <Col xs={12} lg={6}>
+            <MetricCard
+              label="Conversion"
+              value={summary?.totals.conversion ?? 0}
+              icon={<PercentageOutlined />}
+              color="#22D3EE"
+              format={(v) => v.toFixed(1)}
+              suffix="%"
+              loading={loading}
+            />
+          </Col>
+          <Col xs={12} lg={6}>
+            <MetricCard
+              label="Lifetime Revenue"
+              value={summary?.totals.revenue_all_time ?? 0}
+              icon={<DollarOutlined />}
+              color="#A78BFF"
+              format={rub}
+              suffix="₽"
+              loading={loading}
+            />
+          </Col>
+        </Row>
+      )}
 
       {/* Revenue + payment methods */}
       <Row gutter={[gap, gap]} style={{ marginTop: gap }}>
@@ -182,7 +209,9 @@ export default function StatsPage() {
           <Card title={<span style={{ color: "rgba(255,255,255,0.85)" }}>Order Statuses</span>}>
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               {orderStatuses.length === 0 && (
-                <div style={{ color: "rgba(255,255,255,0.35)", textAlign: "center", padding: 20 }}>No data</div>
+                <div style={{ color: "rgba(255,255,255,0.35)", textAlign: "center", padding: 20 }}>
+                  No data for this period
+                </div>
               )}
               {orderStatuses.map((s) => {
                 const pct = totalOrders ? (s.count / totalOrders) * 100 : 0;

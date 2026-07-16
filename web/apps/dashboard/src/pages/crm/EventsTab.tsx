@@ -47,7 +47,7 @@ export default function EventsTab() {
     try {
       setEvents(await fetchEvents());
     } catch {
-      message.error("Не удалось загрузить события");
+      message.error("Failed to load events");
     } finally {
       setLoading(false);
     }
@@ -101,7 +101,7 @@ export default function EventsTab() {
   const saveEvent = async () => {
     const values = await form.validateFields();
     if (!actions.some((a) => a.enabled)) {
-      message.warning("Включите хотя бы одно действие");
+      message.warning("Enable at least one action");
       return;
     }
 
@@ -128,15 +128,15 @@ export default function EventsTab() {
     try {
       if (editing) {
         await updateEvent(editing.id, payload);
-        message.success("Событие обновлено");
+        message.success("Event updated");
       } else {
         await createEvent(payload);
-        message.success("Событие создано");
+        message.success("Event created");
       }
       setDrawerOpen(false);
       load();
     } catch {
-      message.error("Ошибка сохранения");
+      message.error("Failed to save");
     }
   };
 
@@ -145,7 +145,7 @@ export default function EventsTab() {
       await updateEvent(row.id, { enabled });
       load();
     } catch {
-      message.error("Не удалось изменить статус");
+      message.error("Failed to change status");
     }
   };
 
@@ -153,27 +153,27 @@ export default function EventsTab() {
     try {
       const res = await runEventNow(row.id);
       if (res.status === "empty") {
-        message.info("Аудитория пуста после фильтра повторов");
+        message.info("Audience is empty after the repeat filter");
       } else {
         message.success(
           res.total
-            ? `Запущено: ${res.total} получателей (кампания #${res.campaign_id})`
-            : "Событие запущено"
+            ? `Launched: ${res.total} recipients (campaign #${res.campaign_id})`
+            : "Event launched"
         );
       }
       load();
     } catch {
-      message.error("Ошибка запуска");
+      message.error("Failed to launch");
     }
   };
 
   const handleDelete = async (row: CrmEventRow) => {
     try {
       await deleteEvent(row.id);
-      message.success("Удалено");
+      message.success("Deleted");
       load();
     } catch {
-      message.error("Ошибка удаления");
+      message.error("Failed to delete");
     }
   };
 
@@ -182,42 +182,42 @@ export default function EventsTab() {
       row.frequency === "weekly" && row.weekday != null
         ? WEEKDAYS.find((d) => d.value === row.weekday)?.label
         : null;
-    const freq = row.frequency === "weekly" ? `еженед. (${wd})` : "ежедн.";
+    const freq = row.frequency === "weekly" ? `weekly (${wd})` : "daily";
     return `${row.run_at_time} UTC, ${freq}`;
   };
 
   const repeatLabel = (row: CrmEventRow) =>
     row.repeat_policy === "cooldown"
-      ? `cooldown ${row.repeat_cooldown_days}д`
+      ? `cooldown ${row.repeat_cooldown_days}d`
       : row.repeat_policy;
 
   const columns = [
     { title: "ID", dataIndex: "id", key: "id", width: 60 },
-    { title: "Название", dataIndex: "name", key: "name", ellipsis: true },
+    { title: "Name", dataIndex: "name", key: "name", ellipsis: true },
     {
-      title: "Сегмент",
+      title: "Segment",
       dataIndex: "segment_type",
       key: "segment_type",
       render: (v: string | null) => v ?? "—",
     },
     {
-      title: "Действия",
+      title: "Actions",
       key: "actions",
       render: (_: unknown, r: CrmEventRow) =>
         r.actions?.length ? actionSummary(r.actions) : "—",
     },
     {
-      title: "Расписание (UTC)",
+      title: "Schedule (UTC)",
       key: "schedule",
       render: (_: unknown, r: CrmEventRow) => scheduleLabel(r),
     },
     {
-      title: "Повтор",
+      title: "Repeat",
       key: "repeat",
       render: (_: unknown, r: CrmEventRow) => repeatLabel(r),
     },
     {
-      title: "Вкл",
+      title: "On",
       key: "enabled",
       width: 70,
       render: (_: unknown, r: CrmEventRow) => (
@@ -225,7 +225,7 @@ export default function EventsTab() {
       ),
     },
     {
-      title: "След. запуск",
+      title: "Next run",
       dataIndex: "next_run_at",
       key: "next_run_at",
       width: 160,
@@ -238,12 +238,12 @@ export default function EventsTab() {
       render: (_: unknown, r: CrmEventRow) => (
         <Space size="small">
           <Button size="small" onClick={() => openEdit(r)}>
-            Изм.
+            Edit
           </Button>
           <Button size="small" type="primary" onClick={() => handleRunNow(r)}>
-            Сейчас
+            Run now
           </Button>
-          <Popconfirm title="Удалить событие?" onConfirm={() => handleDelete(r)}>
+          <Popconfirm title="Delete this event?" onConfirm={() => handleDelete(r)}>
             <Button size="small" danger>
               Del
             </Button>
@@ -263,7 +263,7 @@ export default function EventsTab() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontWeight: 600, color: "rgba(255,255,255,0.88)", marginBottom: 4 }}>
-            {row.name || `Событие #${row.id}`}
+            {row.name || `Event #${row.id}`}
           </div>
           <div style={{ fontSize: 12, color: "rgba(255,255,255,0.45)", marginBottom: 6 }}>
             {row.segment_type ?? "—"} · {scheduleLabel(row)}
@@ -272,19 +272,19 @@ export default function EventsTab() {
             {row.actions?.length ? actionSummary(row.actions) : "—"} · {repeatLabel(row)}
           </div>
           <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)" }}>
-            След.: {row.next_run_at ?? "—"}
+            Next: {row.next_run_at ?? "—"}
           </div>
         </div>
         <Switch checked={row.enabled} onChange={(v) => toggleEnabled(row, v)} size="small" />
       </div>
       <Space wrap style={{ marginTop: 10 }}>
         <Button size="small" onClick={() => openEdit(row)}>
-          Изм.
+          Edit
         </Button>
         <Button size="small" type="primary" onClick={() => handleRunNow(row)}>
-          Сейчас
+          Run now
         </Button>
-        <Popconfirm title="Удалить событие?" onConfirm={() => handleDelete(row)}>
+        <Popconfirm title="Delete this event?" onConfirm={() => handleDelete(row)}>
           <Button size="small" danger>
             Del
           </Button>
@@ -300,19 +300,19 @@ export default function EventsTab() {
   const headerActions = isMobile ? (
     <Space direction="vertical" style={{ width: "100%" }} size={8}>
       <Button onClick={load} loading={loading} block>
-        Обновить
+        Refresh
       </Button>
       <Button type="primary" onClick={openCreate} block>
-        Новое событие
+        New event
       </Button>
     </Space>
   ) : (
     <Space>
       <Button onClick={load} loading={loading}>
-        Обновить
+        Refresh
       </Button>
       <Button type="primary" onClick={openCreate}>
-        Новое событие
+        New event
       </Button>
     </Space>
   );
@@ -320,7 +320,7 @@ export default function EventsTab() {
   return (
     <>
       <Card
-        title="События по расписанию (UTC)"
+        title="Scheduled events (UTC)"
         extra={isMobile ? undefined : headerActions}
         styles={isMobile ? { header: { flexWrap: "wrap" } } : undefined}
       >
@@ -329,12 +329,12 @@ export default function EventsTab() {
           type="info"
           showIcon
           style={{ marginBottom: 16 }}
-          message="Время запуска указывается в UTC. Poller проверяет расписание каждые 15 минут."
+          message="Run time is specified in UTC. The poller checks the schedule every 15 minutes."
         />
         {isMobile ? (
           loading ? (
             <div style={{ textAlign: "center", padding: 40, color: "rgba(255,255,255,0.4)" }}>
-              Загрузка...
+              Loading...
             </div>
           ) : (
             events.map(renderMobileEventCard)
@@ -352,50 +352,50 @@ export default function EventsTab() {
       </Card>
 
       <Drawer
-        title={editing ? `Событие #${editing.id}` : "Новое событие"}
+        title={editing ? `Event #${editing.id}` : "New event"}
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         width={isMobile ? "100%" : 640}
         destroyOnHidden
         extra={
           <Button type="primary" onClick={saveEvent} size={isMobile ? "small" : "middle"}>
-            Сохранить
+            Save
           </Button>
         }
         styles={isMobile ? { body: { paddingBottom: 24 } } : undefined}
       >
         <Form form={form} layout="vertical">
-          <Form.Item name="name" label="Название">
-            <Input placeholder="Например: LIMITED — утреннее напоминание" />
+          <Form.Item name="name" label="Name">
+            <Input placeholder="E.g.: LIMITED — morning reminder" />
           </Form.Item>
-          <Form.Item name="enabled" label="Включено" valuePropName="checked">
+          <Form.Item name="enabled" label="Enabled" valuePropName="checked">
             <Switch />
           </Form.Item>
         </Form>
 
-        <Card title="Триггер" size="small" style={{ marginBottom: 16 }}>
+        <Card title="Trigger" size="small" style={{ marginBottom: 16 }}>
           <Form form={form} layout="vertical">
-            <Form.Item name="run_at_time" label="Время запуска (UTC)" rules={[{ required: true }]}>
+            <Form.Item name="run_at_time" label="Run time (UTC)" rules={[{ required: true }]}>
               <Input placeholder="01:00" />
             </Form.Item>
-            <Form.Item name="frequency" label="Частота" rules={[{ required: true }]}>
+            <Form.Item name="frequency" label="Frequency" rules={[{ required: true }]}>
               <Select
                 options={[
-                  { value: "daily", label: "Ежедневно" },
-                  { value: "weekly", label: "Еженедельно" },
+                  { value: "daily", label: "Daily" },
+                  { value: "weekly", label: "Weekly" },
                 ]}
               />
             </Form.Item>
             {selectedFrequency === "weekly" && (
-              <Form.Item name="weekday" label="День недели" rules={[{ required: true }]}>
+              <Form.Item name="weekday" label="Day of week" rules={[{ required: true }]}>
                 <Select options={WEEKDAYS} />
               </Form.Item>
             )}
-            <Form.Item name="repeat_policy" label="Политика повторов">
+            <Form.Item name="repeat_policy" label="Repeat policy">
               <Select options={REPEAT_POLICIES} />
             </Form.Item>
             {selectedRepeat === "cooldown" && (
-              <Form.Item name="repeat_cooldown_days" label="Cooldown (дней)">
+              <Form.Item name="repeat_cooldown_days" label="Cooldown (days)">
                 <InputNumber min={1} max={365} style={{ width: "100%" }} />
               </Form.Item>
             )}

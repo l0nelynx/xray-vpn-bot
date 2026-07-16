@@ -78,8 +78,8 @@ function formatScanMeta(row: ScanUser): string {
   const m = row.meta || {};
   const parts: string[] = [];
   if (m.status) parts.push(`status: ${m.status}`);
-  if (m.days_left !== undefined) parts.push(`дней: ${m.days_left}`);
-  if (m.traffic_percent !== undefined) parts.push(`трафик: ${m.traffic_percent}%`);
+  if (m.days_left !== undefined) parts.push(`days: ${m.days_left}`);
+  if (m.traffic_percent !== undefined) parts.push(`traffic: ${m.traffic_percent}%`);
   return parts.length ? parts.join(", ") : "—";
 }
 
@@ -138,7 +138,7 @@ export default function ConditionsBuilder({
     }
     const first = internalSquads[0]?.uuid;
     if (!first) {
-      message.warning("Internal squads не загружены");
+      message.warning("Internal squads not loaded");
       return;
     }
     onChange(
@@ -187,7 +187,7 @@ export default function ConditionsBuilder({
 
   const runScan = async () => {
     if (!segmentCond?.segment_id) {
-      message.warning("Выберите сегмент");
+      message.warning("Select a segment");
       return;
     }
     setScanning(true);
@@ -201,7 +201,7 @@ export default function ConditionsBuilder({
       onScanComplete?.(res.total);
       if (res.warning) message.warning(res.warning);
     } catch {
-      message.error("Ошибка сканирования");
+      message.error("Scan failed");
     } finally {
       setScanning(false);
     }
@@ -229,7 +229,7 @@ export default function ConditionsBuilder({
       render: (v: string | null) => v ?? "—",
     },
     {
-      title: "Метрики",
+      title: "Metrics",
       key: "meta",
       render: (_: unknown, row: ScanUser) => formatScanMeta(row),
     },
@@ -238,12 +238,12 @@ export default function ConditionsBuilder({
   const segmentParams = segmentDef?.params.filter((p) => p.name !== "user_type") ?? [];
 
   return (
-    <Card title="1. Условия" size="small" style={{ marginBottom: 16 }}>
+    <Card title="1. Conditions" size="small" style={{ marginBottom: 16 }}>
       <Space direction="vertical" style={{ width: "100%" }} size={12}>
         <Form layout="vertical">
-          <Form.Item label="1.1 Сегмент" required>
+          <Form.Item label="1.1 Segment" required>
             <Select
-              placeholder="Выберите сегмент"
+              placeholder="Select a segment"
               value={segmentCond?.segment_id}
               onChange={onSegmentIdChange}
               options={segmentTypes.map((s) => ({ value: s.id, label: s.title }))}
@@ -252,7 +252,7 @@ export default function ConditionsBuilder({
           </Form.Item>
 
           {segmentParams.length > 0 && (
-            <Form.Item label="Параметры сегмента">
+            <Form.Item label="Segment parameters">
               {isMobile ? (
                 <Space direction="vertical" style={{ width: "100%" }} size={8}>
                   {segmentParams.map((p) => (
@@ -292,7 +292,7 @@ export default function ConditionsBuilder({
             </Form.Item>
           )}
 
-          <Form.Item label="1.2 Тип пользователя">
+          <Form.Item label="1.2 User type">
             <Select
               style={{ width: "100%", maxWidth: isMobile ? undefined : 240 }}
               value={userTypeCond?.value ?? "all"}
@@ -306,7 +306,7 @@ export default function ConditionsBuilder({
           items={[
             {
               key: "remnawave",
-              label: "1.3 Remnawave (опционально)",
+              label: "1.3 Remnawave (optional)",
               children: (
                 <Space direction="vertical" style={{ width: "100%" }} size={12}>
                   <div>
@@ -322,7 +322,7 @@ export default function ConditionsBuilder({
                       <Select
                         showSearch
                         optionFilterProp="label"
-                        placeholder="Выберите squad"
+                        placeholder="Select a squad"
                         style={{ width: "100%" }}
                         value={rwSquadCond.squad_id}
                         options={internalSquads.map((s) => ({
@@ -348,7 +348,7 @@ export default function ConditionsBuilder({
                         checked={!!rwTrafficCond}
                         onChange={toggleRwTraffic}
                       />
-                      <Typography.Text>Traffic Limit (ГБ)</Typography.Text>
+                      <Typography.Text>Traffic Limit (GB)</Typography.Text>
                     </Space>
                     {rwTrafficCond && (
                       <>
@@ -367,7 +367,7 @@ export default function ConditionsBuilder({
                           }
                         />
                         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                          0 = безлимит
+                          0 = unlimited
                         </Typography.Text>
                       </>
                     )}
@@ -398,7 +398,7 @@ export default function ConditionsBuilder({
                           }
                         />
                         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                          UPPERCASE, без пробелов
+                          UPPERCASE, no spaces
                         </Typography.Text>
                       </>
                     )}
@@ -416,24 +416,24 @@ export default function ConditionsBuilder({
           onClick={runScan}
           block={isMobile}
         >
-          Preview / сканирование
+          Preview / scan
         </Button>
 
         {scanResult && (
           <>
             <Descriptions size="small" column={isMobile ? 1 : 2}>
-              <Descriptions.Item label="Всего в сегменте">
+              <Descriptions.Item label="Total in segment">
                 <Tag color="blue">{scanResult.total}</Tag>
               </Descriptions.Item>
-              <Descriptions.Item label="В превью">
+              <Descriptions.Item label="In preview">
                 {scanResult.users.length}
-                {scanResult.total > scanResult.users.length && " (первые 500)"}
+                {scanResult.total > scanResult.users.length && " (first 500)"}
               </Descriptions.Item>
             </Descriptions>
             {scanResult.users.length > 0 && (
               <>
                 <Typography.Text type="secondary">
-                  1.3 Ручной отбор (опционально) — {selectedTgIds.length} выбрано
+                  1.3 Manual selection (optional) — {selectedTgIds.length} selected
                 </Typography.Text>
                 {isMobile ? (
                   <Space direction="vertical" style={{ width: "100%" }} size={8}>

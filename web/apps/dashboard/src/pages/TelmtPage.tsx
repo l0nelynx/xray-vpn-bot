@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, type Key } from "react";
+import { useEffect, useState, useCallback, useMemo, type Key } from "react";
 import {
   Typography,
   Card,
@@ -40,6 +40,7 @@ import {
   UserOutlined,
   SettingOutlined,
   MoreOutlined,
+  FieldTimeOutlined,
 } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { api } from "../api/client";
@@ -497,16 +498,17 @@ function UsersTab() {
           <Tooltip title="Rotate Secret">
             <Button type="text" size="small" icon={<KeyOutlined />} onClick={() => handleRotateSecret(r.username)} />
           </Tooltip>
-          <Tooltip title="Enable user">
-            <Button type="text" size="small" icon={<PlayCircleOutlined />} onClick={() => handleEnableUser(r.username)} />
-          </Tooltip>
-          <Tooltip title="Disable user">
-            <Button type="text" size="small" icon={<PauseCircleOutlined />} onClick={() => handleDisableUser(r.username)} />
-          </Tooltip>
+          {r.enabled === false ? (
+            <Tooltip title="Enable user">
+              <Button type="text" size="small" icon={<PlayCircleOutlined />} onClick={() => handleEnableUser(r.username)} />
+            </Tooltip>
+          ) : (
+            <Tooltip title="Disable user">
+              <Button type="text" size="small" icon={<PauseCircleOutlined />} onClick={() => handleDisableUser(r.username)} />
+            </Tooltip>
+          )}
           <Tooltip title="Reset Quota">
-            <Button type="text" size="small" onClick={() => handleResetQuota(r.username)}>
-              RQ
-            </Button>
+            <Button type="text" size="small" icon={<FieldTimeOutlined />} onClick={() => handleResetQuota(r.username)} />
           </Tooltip>
           <Popconfirm title={`Delete ${r.username}?`} onConfirm={() => handleDelete(r.username)} okText="Delete" okButtonProps={{ danger: true }}>
             <Button type="text" size="small" icon={<DeleteOutlined />} danger />
@@ -554,9 +556,10 @@ function UsersTab() {
                 { key: "links", icon: <LinkOutlined />, label: "Links", onClick: () => setLinksUser(user) },
                 { key: "edit", icon: <EditOutlined />, label: "Edit", onClick: () => openEdit(user) },
                 { key: "rotate", icon: <KeyOutlined />, label: "Rotate Secret", onClick: () => handleRotateSecret(user.username) },
-                { key: "enable", icon: <PlayCircleOutlined />, label: "Enable", onClick: () => handleEnableUser(user.username) },
-                { key: "disable", icon: <PauseCircleOutlined />, label: "Disable", onClick: () => handleDisableUser(user.username) },
-                { key: "reset-quota", label: "Reset Quota", onClick: () => handleResetQuota(user.username) },
+                user.enabled === false
+                  ? { key: "enable", icon: <PlayCircleOutlined />, label: "Enable", onClick: () => handleEnableUser(user.username) }
+                  : { key: "disable", icon: <PauseCircleOutlined />, label: "Disable", onClick: () => handleDisableUser(user.username) },
+                { key: "reset-quota", icon: <FieldTimeOutlined />, label: "Reset Quota", onClick: () => handleResetQuota(user.username) },
                 { type: "divider" },
                 {
                   key: "delete",
@@ -648,30 +651,65 @@ function UsersTab() {
         <Typography.Text type="secondary">
           Selected: {selectedUsernames.length}
         </Typography.Text>
+        <Button disabled={!selectedUsernames.length} loading={bulkLoading} onClick={() => setBulkExtendOpen(true)}>
+          Extend
+        </Button>
+        <Button disabled={!selectedUsernames.length} loading={bulkLoading} onClick={() => setBulkLimitsOpen(true)}>
+          Update Limits
+        </Button>
+        <Dropdown
+          disabled={!selectedUsernames.length}
+          menu={{
+            items: [
+              {
+                key: "reissue",
+                label: "Reissue Secret",
+                icon: <KeyOutlined />,
+                onClick: () => {
+                  modal.confirm({
+                    title: `Reissue secret for ${selectedUsernames.length} users?`,
+                    content: "Existing proxy links will stop working for these users.",
+                    okText: "Reissue",
+                    okButtonProps: { danger: true },
+                    onOk: () =>
+                      runBulk(
+                        "/telemt/users/bulk-rotate-secret",
+                        { usernames: selectedAsStrings },
+                        "Bulk reissue secret",
+                      ),
+                  });
+                },
+              },
+              {
+                key: "enable",
+                label: "Enable",
+                icon: <PlayCircleOutlined />,
+                onClick: () =>
+                  runBulk("/telemt/users/bulk-enable", { usernames: selectedAsStrings }, "Bulk enable"),
+              },
+              {
+                key: "disable",
+                label: "Disable",
+                icon: <PauseCircleOutlined />,
+                onClick: () =>
+                  runBulk("/telemt/users/bulk-disable", { usernames: selectedAsStrings }, "Bulk disable"),
+              },
+            ],
+          }}
+        >
+          <Button disabled={!selectedUsernames.length} loading={bulkLoading} icon={<MoreOutlined />}>
+            More
+          </Button>
+        </Dropdown>
         <Popconfirm
           title={`Delete ${selectedUsernames.length} users?`}
           onConfirm={() => runBulk("/telemt/users/bulk-delete", { usernames: selectedAsStrings }, "Bulk delete")}
           disabled={!selectedUsernames.length}
         >
-          <Button danger disabled={!selectedUsernames.length} loading={bulkLoading} block={isMobile}>
-            Bulk Delete
+          <Button danger disabled={!selectedUsernames.length} loading={bulkLoading}>
+            Delete
           </Button>
         </Popconfirm>
-        <Button disabled={!selectedUsernames.length} loading={bulkLoading} onClick={() => setBulkExtendOpen(true)} block={isMobile}>
-          Bulk Extend
-        </Button>
-        <Button disabled={!selectedUsernames.length} loading={bulkLoading} onClick={() => runBulk("/telemt/users/bulk-rotate-secret", { usernames: selectedAsStrings }, "Bulk reissue secret")} block={isMobile}>
-          Bulk Reissue Secret
-        </Button>
-        <Button disabled={!selectedUsernames.length} loading={bulkLoading} onClick={() => runBulk("/telemt/users/bulk-enable", { usernames: selectedAsStrings }, "Bulk enable")} block={isMobile}>
-          Bulk Enable
-        </Button>
-        <Button disabled={!selectedUsernames.length} loading={bulkLoading} onClick={() => runBulk("/telemt/users/bulk-disable", { usernames: selectedAsStrings }, "Bulk disable")} block={isMobile}>
-          Bulk Disable
-        </Button>
-        <Button disabled={!selectedUsernames.length} loading={bulkLoading} onClick={() => setBulkLimitsOpen(true)} block={isMobile}>
-          Bulk Update Limits
-        </Button>
       </Space>
     </Card>
   );
@@ -1300,7 +1338,7 @@ const EDITABLE_CONFIG_SECTIONS: TelmtConfigSectionName[] = [
 
 function ConfigTab() {
   const isMobile = useIsMobile();
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [revision, setRevision] = useState<string>("");
@@ -1330,30 +1368,33 @@ function ConfigTab() {
     load();
   }, [load]);
 
-  const onSave = async () => {
-    let parsed: Record<string, unknown>;
+  type ConfigValidation =
+    | { ok: true; sections: string[] }
+    | { ok: false; error: string };
+
+  const validation = useMemo<ConfigValidation>(() => {
+    const trimmed = editorText.trim();
+    if (!trimmed) return { ok: false, error: "Config is empty" };
+    let parsed: unknown;
     try {
-      parsed = JSON.parse(editorText);
-    } catch {
-      message.error("Invalid JSON");
-      return;
+      parsed = JSON.parse(trimmed);
+    } catch (e: any) {
+      return { ok: false, error: e?.message ? `Invalid JSON: ${e.message}` : "Invalid JSON" };
     }
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      message.error("Config must be a JSON object");
-      return;
+      return { ok: false, error: "Config must be a JSON object" };
     }
-
-    const unknown = Object.keys(parsed).filter(
+    const keys = Object.keys(parsed as Record<string, unknown>);
+    const unknown = keys.filter(
       (k) => !EDITABLE_CONFIG_SECTIONS.includes(k as TelmtConfigSectionName),
     );
     if (unknown.length) {
-      message.error(`Non-editable keys: ${unknown.join(", ")}`);
-      return;
+      return { ok: false, error: `Non-editable keys: ${unknown.join(", ")}` };
     }
+    return { ok: true, sections: keys };
+  }, [editorText]);
 
-    const payload: Record<string, unknown> = { ...parsed };
-    if (revision) payload.revision = revision;
-
+  const applyPatch = async (payload: Record<string, unknown>) => {
     setSaving(true);
     try {
       const r = await api.patch<TelmtEnvelope<TelmtPatchConfigResponse>>("/telemt/config", payload);
@@ -1373,6 +1414,43 @@ function ConfigTab() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const onSave = () => {
+    if (!validation.ok) {
+      message.error(validation.error);
+      return;
+    }
+
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(editorText);
+    } catch {
+      message.error("Invalid JSON");
+      return;
+    }
+
+    const payload: Record<string, unknown> = { ...parsed };
+    if (revision) payload.revision = revision;
+    const sections = validation.sections;
+
+    modal.confirm({
+      title: "Apply live config patch?",
+      content: (
+        <>
+          This writes editable Telemt config immediately
+          {revision ? (
+            <>
+              {" "}
+              (revision <code>{revision.slice(0, 12)}…</code>)
+            </>
+          ) : null}
+          . Sections in payload: {sections.join(", ") || "—"}. Some changes may require a Telemt restart.
+        </>
+      ),
+      okText: "Save Patch",
+      onOk: () => applyPatch(payload),
+    });
   };
 
   return (
@@ -1405,7 +1483,7 @@ function ConfigTab() {
                 Reload
               </Button>
               {!isMobile && (
-                <Button type="primary" onClick={onSave} loading={saving}>
+                <Button type="primary" onClick={onSave} loading={saving} disabled={!validation.ok}>
                   Save Patch
                 </Button>
               )}
@@ -1417,13 +1495,14 @@ function ConfigTab() {
               style={{ marginBottom: 12 }}
               type="warning"
               showIcon
-              message="Restart required"
-              description={`Changed sections: ${(lastPatch.changed || []).join(", ") || "—"}. Telemt wrote the config, but some fields need a process restart.`}
+              message="Telemt restart required"
+              description={`Config was written live. Changed: ${(lastPatch.changed || []).join(", ") || "—"}. Restart the Telemt process so all fields take effect — until then behavior may be mixed.`}
             />
           )}
           <Input.TextArea
             value={editorText}
             onChange={(e) => setEditorText(e.target.value)}
+            status={validation.ok ? undefined : "error"}
             autoSize={{ minRows: isMobile ? 14 : 22, maxRows: isMobile ? 28 : 40 }}
             style={{
               fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
@@ -1431,8 +1510,18 @@ function ConfigTab() {
             }}
             spellCheck={false}
           />
+          <Alert
+            style={{ marginTop: 12 }}
+            type={validation.ok ? "success" : "error"}
+            showIcon
+            message={
+              validation.ok
+                ? `Valid JSON (${validation.sections.length ? validation.sections.join(", ") : "empty object"})`
+                : validation.error
+            }
+          />
           {isMobile && (
-            <Button type="primary" onClick={onSave} loading={saving} block style={{ marginTop: 12 }}>
+            <Button type="primary" onClick={onSave} loading={saving} disabled={!validation.ok} block style={{ marginTop: 12 }}>
               Save Patch
             </Button>
           )}

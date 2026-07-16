@@ -1,6 +1,6 @@
 import { Table, Tag, Button, Space, Popconfirm, Input, Select, Card, App, Typography } from "antd";
 import type { TableProps } from "antd";
-import { SearchOutlined, StopOutlined, CheckOutlined, DeleteOutlined, EyeOutlined, CrownOutlined, SyncOutlined } from "@ant-design/icons";
+import { SearchOutlined, StopOutlined, CheckOutlined, DeleteOutlined, EyeOutlined, CrownOutlined } from "@ant-design/icons";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "../api/client";
 import type { UserItem, PaginatedResponse } from "../api/types";
@@ -29,7 +29,6 @@ export default function UsersTable() {
   const [sort, setSort] = useState("id");
   const [order, setOrder] = useState<SortOrder>("desc");
   const [loading, setLoading] = useState(false);
-  const [backfillLoading, setBackfillLoading] = useState(false);
   const [drawerUserId, setDrawerUserId] = useState<number | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const isMobile = useIsMobile();
@@ -96,28 +95,6 @@ export default function UsersTable() {
       fetchUsers();
     } catch {
       message.error("Failed to toggle VIP status");
-    }
-  };
-
-  const handleBackfillRwIds = async () => {
-    setBackfillLoading(true);
-    try {
-      const res = await api.post<{
-        local_candidates: number;
-        updated: number;
-        not_found_on_panel: number;
-        errors: number;
-      }>("/users/backfill-rw-ids");
-      message.success(
-        `Synced Remnawave IDs: ${res.updated} updated, ` +
-          `${res.not_found_on_panel} not on panel, ${res.errors} errors ` +
-          `(of ${res.local_candidates} candidates)`
-      );
-      fetchUsers();
-    } catch {
-      message.error("Failed to sync Remnawave IDs");
-    } finally {
-      setBackfillLoading(false);
     }
   };
 
@@ -285,19 +262,6 @@ export default function UsersTable() {
             { value: "banned", label: "Banned" },
           ]}
         />
-        <Popconfirm
-          title="Fetch Remnawave panel IDs for all users with vless_uuid?"
-          description="Temporary migration helper. Safe to re-run; only fills missing rw_id."
-          onConfirm={handleBackfillRwIds}
-        >
-          <Button
-            icon={<SyncOutlined />}
-            loading={backfillLoading}
-            title="Temporary: sync Remnawave numeric user IDs into rw_id"
-          >
-            Sync Remnawave IDs
-          </Button>
-        </Popconfirm>
       </div>
 
       {isMobile ? (

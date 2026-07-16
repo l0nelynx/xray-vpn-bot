@@ -59,7 +59,7 @@ export default function UserDrawer({ userId, open, onClose, onChanged }: Props) 
       setMsgText("");
       setCreditsDelta(null);
     } catch {
-      message.error("Не удалось загрузить пользователя");
+      message.error("Failed to load user");
     } finally {
       setLoading(false);
     }
@@ -74,12 +74,12 @@ export default function UserDrawer({ userId, open, onClose, onChanged }: Props) 
     if (!user) return;
     const newTgId = editTgId.trim();
     if (newTgId && !/^-?\d+$/.test(newTgId)) {
-      message.error("TG ID должен быть числом");
+      message.error("TG ID must be a number");
       return;
     }
     const rwIdTrimmed = editRwId.trim();
     if (rwIdTrimmed && !/^\d+$/.test(rwIdTrimmed)) {
-      message.error("rw_id должен быть числом");
+      message.error("rw_id must be a number");
       return;
     }
     setIdSaving(true);
@@ -100,12 +100,12 @@ export default function UserDrawer({ userId, open, onClose, onChanged }: Props) 
           rw_id: rwIdTrimmed ? Number(rwIdTrimmed) : null,
         }
       );
-      message.success("Сохранено");
+      message.success("Saved");
       await load(user.id);
       onChanged?.();
     } catch (e) {
       const status = (e as { status?: number })?.status;
-      message.error(status === 409 ? "Этот TG ID уже занят" : "Ошибка сохранения");
+      message.error(status === 409 ? "This TG ID is already in use" : "Failed to save");
     } finally {
       setIdSaving(false);
     }
@@ -119,14 +119,14 @@ export default function UserDrawer({ userId, open, onClose, onChanged }: Props) 
         `/users/${user.id}/email`,
         { email: emailInput.trim() }
       );
-      const parts = ["Email сохранён"];
+      const parts = ["Email saved"];
       if (res.rw_uuid) parts.push(`UUID: ${res.rw_uuid}`);
       if (res.rw_id != null) parts.push(`rw_id: ${res.rw_id}`);
       message.success(parts.join(", "));
       await load(user.id);
       onChanged?.();
     } catch {
-      message.error("Ошибка сохранения email");
+      message.error("Failed to save email");
     } finally {
       setEmailSaving(false);
     }
@@ -140,13 +140,13 @@ export default function UserDrawer({ userId, open, onClose, onChanged }: Props) 
         `/users/${user.id}/credits`,
         { amount: creditsDelta }
       );
-      message.success(`Баланс обновлён: ${formatPoints(res.balance)}`);
+      message.success(`Balance updated: ${formatPoints(res.balance)}`);
       setCreditsDelta(null);
       await load(user.id);
       onChanged?.();
     } catch (e) {
       const status = (e as { status?: number })?.status;
-      message.error(status === 400 ? "Недостаточно баллов для списания" : "Ошибка изменения баланса");
+      message.error(status === 400 ? "Not enough points to deduct" : "Failed to update balance");
     } finally {
       setCreditsSaving(false);
     }
@@ -155,16 +155,16 @@ export default function UserDrawer({ userId, open, onClose, onChanged }: Props) 
   const handleSendMessage = async () => {
     if (!user || !msgText.trim()) return;
     if (user.tg_id == null) {
-      message.error("У пользователя нет Telegram ID");
+      message.error("User has no Telegram ID");
       return;
     }
     setMsgSending(true);
     try {
       await api.post(`/users/${user.id}/send-message`, { text: msgText });
-      message.success("Сообщение отправлено");
+      message.success("Message sent");
       setMsgText("");
     } catch {
-      message.error("Ошибка отправки");
+      message.error("Failed to send");
     } finally {
       setMsgSending(false);
     }
@@ -197,18 +197,18 @@ export default function UserDrawer({ userId, open, onClose, onChanged }: Props) 
             </Descriptions.Item>
             <Descriptions.Item label="rw_id">{user.rw_id ?? "—"}</Descriptions.Item>
             <Descriptions.Item label="Provider">{user.api_provider}</Descriptions.Item>
-            <Descriptions.Item label="Промокод">
+            <Descriptions.Item label="Promo code">
               {user.promo_code ? <Tag color="purple" icon={<GiftOutlined />}>{user.promo_code}</Tag> : "—"}
             </Descriptions.Item>
-            <Descriptions.Item label="Бонусные баллы">
+            <Descriptions.Item label="Bonus points">
               <Tag color="blue" icon={<WalletOutlined />}>
                 {formatPoints(user.bonus_credits ?? 0)}
               </Tag>
               <Typography.Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>
-                1 балл = 1 {POINTS_ICON} стоимости тарифа
+                1 point = 1 {POINTS_ICON} of tariff price
               </Typography.Text>
             </Descriptions.Item>
-            <Descriptions.Item label="Тикетов открыто">{user.tickets_count}</Descriptions.Item>
+            <Descriptions.Item label="Open tickets">{user.tickets_count}</Descriptions.Item>
             <Descriptions.Item label="Banned">{user.is_banned ? "Yes" : "No"}</Descriptions.Item>
             <Descriptions.Item label="VIP">{user.vip ? "Yes" : "No"}</Descriptions.Item>
             <Descriptions.Item label="Language">{user.language || "—"}</Descriptions.Item>
@@ -220,14 +220,14 @@ export default function UserDrawer({ userId, open, onClose, onChanged }: Props) 
 
           <Typography.Text strong style={labelStyle}>
             <IdcardOutlined style={{ marginRight: 6 }} />
-            Идентификаторы
+            Identifiers
           </Typography.Text>
           <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
             <Input
               addonBefore="TG ID"
               value={editTgId}
               onChange={(e) => setEditTgId(e.target.value)}
-              placeholder="123456789 (опционально)"
+              placeholder="123456789 (optional)"
               allowClear
             />
             <Input
@@ -252,7 +252,7 @@ export default function UserDrawer({ userId, open, onClose, onChanged }: Props) 
               allowClear
             />
             <Button type="primary" icon={<EditOutlined />} loading={idSaving} onClick={handleSaveIdentifiers}>
-              Сохранить идентификаторы
+              Save identifiers
             </Button>
           </div>
 
@@ -260,7 +260,7 @@ export default function UserDrawer({ userId, open, onClose, onChanged }: Props) 
 
           <Typography.Text strong style={labelStyle}>
             <EditOutlined style={{ marginRight: 6 }} />
-            Email пользователя
+            User email
           </Typography.Text>
           <Space.Compact style={{ width: "100%", marginTop: 8 }}>
             <Input
@@ -270,7 +270,7 @@ export default function UserDrawer({ userId, open, onClose, onChanged }: Props) 
               onPressEnter={handleSaveEmail}
             />
             <Button type="primary" onClick={handleSaveEmail} loading={emailSaving} icon={<EditOutlined />}>
-              Сохранить
+              Save
             </Button>
           </Space.Compact>
 
@@ -278,7 +278,7 @@ export default function UserDrawer({ userId, open, onClose, onChanged }: Props) 
 
           <Typography.Text strong style={labelStyle}>
             <WalletOutlined style={{ marginRight: 6 }} />
-            Бонусный баланс
+            Bonus balance
           </Typography.Text>
           <Space.Compact style={{ width: "100%", marginTop: 8 }}>
             <InputNumber
@@ -295,22 +295,22 @@ export default function UserDrawer({ userId, open, onClose, onChanged }: Props) 
               loading={creditsSaving}
               disabled={creditsDelta == null || creditsDelta === 0}
             >
-              Применить
+              Apply
             </Button>
           </Space.Compact>
           <Typography.Text type="secondary" style={{ display: "block", marginTop: 6, fontSize: 12 }}>
-            Положительное число — начислить, отрицательное — списать.
+            Positive number credits, negative debits.
           </Typography.Text>
 
           <Divider style={{ borderColor: "rgba(255,255,255,0.1)" }} />
 
           <Typography.Text strong style={labelStyle}>
             <SendOutlined style={{ marginRight: 6 }} />
-            Сообщение пользователю
+            Message to user
           </Typography.Text>
           {user.tg_id == null && (
             <Typography.Text type="secondary" style={{ display: "block", marginTop: 6, fontSize: 12 }}>
-              Недоступно: у аккаунта нет Telegram ID (Android / web).
+              Unavailable: this account has no Telegram ID (Android / web).
             </Typography.Text>
           )}
           <Input.TextArea
@@ -318,7 +318,7 @@ export default function UserDrawer({ userId, open, onClose, onChanged }: Props) 
             rows={3}
             value={msgText}
             onChange={(e) => setMsgText(e.target.value)}
-            placeholder="Текст сообщения..."
+            placeholder="Message text..."
             disabled={user.tg_id == null}
           />
           <Button
@@ -329,7 +329,7 @@ export default function UserDrawer({ userId, open, onClose, onChanged }: Props) 
             onClick={handleSendMessage}
             disabled={!msgText.trim() || user.tg_id == null}
           >
-            Отправить
+            Send
           </Button>
 
           <Divider style={{ borderColor: "rgba(255,255,255,0.1)" }} />
@@ -338,7 +338,7 @@ export default function UserDrawer({ userId, open, onClose, onChanged }: Props) 
           <List
             size="small"
             dataSource={tx}
-            locale={{ emptyText: "Нет транзакций" }}
+            locale={{ emptyText: "No transactions" }}
             renderItem={(t) => (
               <List.Item>
                 <List.Item.Meta

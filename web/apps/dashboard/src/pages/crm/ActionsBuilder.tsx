@@ -95,9 +95,9 @@ export default function ActionsBuilder({
   const copyVariable = async (key: string) => {
     try {
       await navigator.clipboard.writeText(`{{${key}}}`);
-      message.success(`Скопировано: {{${key}}}`);
+      message.success(`Copied: {{${key}}}`);
     } catch {
-      message.error("Не удалось скопировать");
+      message.error("Failed to copy");
     }
   };
 
@@ -131,7 +131,7 @@ export default function ActionsBuilder({
             {isMobile ? (
               <>
                 <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                  HTML, переменные {"{{username}}"}
+                  HTML, variables {"{{username}}"}
                 </Typography.Text>
                 <Button
                   size="small"
@@ -139,16 +139,16 @@ export default function ActionsBuilder({
                   onClick={() => setVariablesOpen(true)}
                   block
                 >
-                  Переменные
+                  Variables
                 </Button>
               </>
             ) : (
               <Space style={{ justifyContent: "space-between", width: "100%" }}>
                 <Typography.Text type="secondary">
-                  HTML, переменные {"{{username}}"}
+                  HTML, variables {"{{username}}"}
                 </Typography.Text>
                 <Button size="small" icon={<InfoCircleOutlined />} onClick={() => setVariablesOpen(true)}>
-                  Переменные
+                  Variables
                 </Button>
               </Space>
             )}
@@ -156,7 +156,7 @@ export default function ActionsBuilder({
               rows={isMobile ? 5 : 4}
               value={act.text || ""}
               onChange={(e) => updateAction(meta.type, { text: e.target.value })}
-              placeholder="Привет, {{username}}!"
+              placeholder="Hi, {{username}}!"
             />
           </Space>
         )}
@@ -164,8 +164,8 @@ export default function ActionsBuilder({
           <Select
             value={act.button_type || "open_bot"}
             options={[
-              { value: "open_bot", label: "Открыть бота" },
-              { value: "invite_friends", label: "Пригласить друзей" },
+              { value: "open_bot", label: "Open bot" },
+              { value: "invite_friends", label: "Invite friends" },
             ]}
             onChange={(v) => updateAction(meta.type, { button_type: v })}
             style={{ width: isMobile ? "100%" : undefined, minWidth: isMobile ? undefined : 200 }}
@@ -191,22 +191,22 @@ export default function ActionsBuilder({
         )}
         {meta.type === "rw_reset_traffic" && act.enabled && (
           <Typography.Text type="secondary">
-            Сбросит счётчик использованного трафика в Remnawave
+            Resets the used traffic counter in Remnawave
           </Typography.Text>
         )}
         {meta.type === "rw_set_status" && (
-          <Typography.Text type="secondary">Скоро</Typography.Text>
+          <Typography.Text type="secondary">Coming soon</Typography.Text>
         )}
       </Card>
     );
   };
 
   return (
-    <Card title="2. Действия" size="small">
+    <Card title="2. Actions" size="small">
       {templates.length > 0 && (
         <Select
           allowClear
-          placeholder="Применить шаблон"
+          placeholder="Apply template"
           style={{ width: "100%", marginBottom: 12 }}
           options={templates.map((t) => ({ value: t.id, label: t.title }))}
           onChange={(v) => v && applyTemplate(v)}
@@ -230,7 +230,7 @@ export default function ActionsBuilder({
       />
 
       <Modal
-        title="Переменные"
+        title="Variables"
         open={variablesOpen}
         onCancel={() => setVariablesOpen(false)}
         footer={null}
@@ -267,12 +267,12 @@ export default function ActionsBuilder({
             })}
             columns={[
               {
-                title: "Ключ",
+                title: "Key",
                 render: (_: unknown, r: CrmVariable) => (
                   <Typography.Text code>{`{{${r.key}}}`}</Typography.Text>
                 ),
               },
-              { title: "Описание", dataIndex: "label" },
+              { title: "Description", dataIndex: "label" },
             ]}
           />
         )}

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { Row, Col, Card, Table, Tag, Select, App } from "antd";
+import { Row, Col, Card, Table, Tag, Select, App, Alert, Button, Empty } from "antd";
 import {
   UserAddOutlined,
   WalletOutlined,
@@ -21,6 +21,9 @@ export default function DashboardPage() {
   const [summary, setSummary] = useState<SummaryStats | null>(null);
   const [recent, setRecent] = useState<TransactionItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [recentLoading, setRecentLoading] = useState(true);
+  const [recentError, setRecentError] = useState<string | null>(null);
   const [period, setPeriod] = useState("month");
   const isMobile = useIsMobile();
   const { message } = App.useApp();
@@ -28,25 +31,46 @@ export default function DashboardPage() {
   const loadSummary = useCallback(
     (p: string) => {
       setLoading(true);
+      setError(null);
       api
         .get<SummaryStats>(`/stats/summary?period=${p}`)
-        .then(setSummary)
-        .catch(() => message.error("Failed to load dashboard data"))
+        .then((data) => {
+          setSummary(data);
+          setError(null);
+        })
+        .catch(() => {
+          setSummary(null);
+          setError("Failed to load dashboard data");
+          message.error("Failed to load dashboard data");
+        })
         .finally(() => setLoading(false));
     },
     [message]
   );
+
+  const loadRecent = useCallback(() => {
+    setRecentLoading(true);
+    setRecentError(null);
+    api
+      .get<TransactionItem[]>("/transactions/recent?limit=10")
+      .then((data) => {
+        setRecent(data);
+        setRecentError(null);
+      })
+      .catch(() => {
+        setRecent([]);
+        setRecentError("Failed to load recent transactions");
+      })
+      .finally(() => setRecentLoading(false));
+  }, []);
 
   useEffect(() => {
     loadSummary(period);
   }, [period, loadSummary]);
 
   useEffect(() => {
-    api
-      .get<TransactionItem[]>("/transactions/recent?limit=10")
-      .then(setRecent)
-      .catch(() => {});
-  }, []);
+    loadRecent();
+  }, [loadRecent]);
 
   const recentColumns = [
     {
@@ -167,56 +191,72 @@ export default function DashboardPage() {
         />
       </div>
 
-      {/* Period KPIs with deltas */}
-      <Row gutter={[gap, gap]}>
-        <Col xs={12} sm={12} lg={6}>
-          <MetricCard
-            label="Revenue"
-            value={summary?.revenue.value ?? 0}
-            prev={summary?.revenue.prev}
-            icon={<WalletOutlined />}
-            color="#A78BFF"
-            format={rub}
-            suffix="₽"
-            loading={loading}
-          />
-        </Col>
-        <Col xs={12} sm={12} lg={6}>
-          <MetricCard
-            label="New Users"
-            value={summary?.new_users.value ?? 0}
-            prev={summary?.new_users.prev}
-            icon={<UserAddOutlined />}
-            color="#34D399"
-            loading={loading}
-          />
-        </Col>
-        <Col xs={12} sm={12} lg={6}>
-          <MetricCard
-            label="Orders"
-            value={summary?.orders.value ?? 0}
-            prev={summary?.orders.prev}
-            icon={<ShoppingOutlined />}
-            color="#6C8EFF"
-            loading={loading}
-          />
-        </Col>
-        <Col xs={12} sm={12} lg={6}>
-          <MetricCard
-            label="Avg Order"
-            value={summary?.avg_order.value ?? 0}
-            prev={summary?.avg_order.prev}
-            icon={<RiseOutlined />}
-            color="#FBBF24"
-            format={rub}
-            suffix="₽"
-            loading={loading}
-          />
-        </Col>
-      </Row>
+      {error && (
+        <Alert
+          type="error"
+          showIcon
+          style={{ marginBottom: gap }}
+          message={error}
+          action={
+            <Button size="small" onClick={() => loadSummary(period)}>
+              Retry
+            </Button>
+          }
+        />
+      )}
+
+      {/* Period KPIs with deltas — skip fake zeros on error */}
+      {!error && (
+        <Row gutter={[gap, gap]}>
+          <Col xs={12} sm={12} lg={6}>
+            <MetricCard
+              label="Revenue"
+              value={summary?.revenue.value ?? 0}
+              prev={summary?.revenue.prev}
+              icon={<WalletOutlined />}
+              color="#A78BFF"
+              format={rub}
+              suffix="₽"
+              loading={loading}
+            />
+          </Col>
+          <Col xs={12} sm={12} lg={6}>
+            <MetricCard
+              label="New Users"
+              value={summary?.new_users.value ?? 0}
+              prev={summary?.new_users.prev}
+              icon={<UserAddOutlined />}
+              color="#34D399"
+              loading={loading}
+            />
+          </Col>
+          <Col xs={12} sm={12} lg={6}>
+            <MetricCard
+              label="Orders"
+              value={summary?.orders.value ?? 0}
+              prev={summary?.orders.prev}
+              icon={<ShoppingOutlined />}
+              color="#6C8EFF"
+              loading={loading}
+            />
+          </Col>
+          <Col xs={12} sm={12} lg={6}>
+            <MetricCard
+              label="Avg Order"
+              value={summary?.avg_order.value ?? 0}
+              prev={summary?.avg_order.prev}
+              icon={<RiseOutlined />}
+              color="#FBBF24"
+              format={rub}
+              suffix="₽"
+              loading={loading}
+            />
+          </Col>
+        </Row>
+      )}
 
       {/* All-time context strip */}
-      {summary && (
+      {summary && !error && (
         <div
           style={{
             marginTop: gap,
@@ -269,18 +309,41 @@ export default function DashboardPage() {
             }
             styles={{ body: { padding: isMobile ? "12px 14px" : "0" } }}
           >
-            {isMobile ? (
-              <div style={{ padding: "2px 0" }}>{recent.map(renderRecentMobile)}</div>
+            {recentError ? (
+              <Alert
+                type="error"
+                showIcon
+                style={{ margin: isMobile ? 0 : 16 }}
+                message={recentError}
+                action={
+                  <Button size="small" onClick={loadRecent}>
+                    Retry
+                  </Button>
+                }
+              />
+            ) : isMobile ? (
+              recentLoading ? (
+                <div style={{ color: "rgba(255,255,255,0.35)", textAlign: "center", padding: 20 }}>Loading…</div>
+              ) : recent.length === 0 ? (
+                <Empty
+                  image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  description="No recent transactions"
+                  style={{ margin: "16px 0" }}
+                />
+              ) : (
+                <div style={{ padding: "2px 0" }}>{recent.map(renderRecentMobile)}</div>
+              )
             ) : (
               <Table
                 rowKey="transaction_id"
                 columns={recentColumns}
                 dataSource={recent}
-                loading={loading}
+                loading={recentLoading}
                 pagination={false}
                 size="small"
                 scroll={{ x: 620 }}
                 style={{ borderRadius: 0 }}
+                locale={{ emptyText: "No recent transactions" }}
               />
             )}
           </Card>

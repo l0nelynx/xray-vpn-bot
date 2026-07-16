@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
-import { Layout as AntLayout, Menu, Button, Drawer } from "antd";
+import { Layout as AntLayout, Menu, Button, Drawer, Popconfirm } from "antd";
 import type { MenuProps } from "antd";
 import {
   DashboardOutlined,
@@ -126,11 +126,15 @@ export default function Layout() {
 
   const menuItems = useMemo(() => buildMenuItems(legacyEnabled), [legacyEnabled]);
 
-  const defaultOpenKeys = useMemo(
-    () => (location.pathname.startsWith("/webapp") ? ["webapp"] : []),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
+  const [openKeys, setOpenKeys] = useState<string[]>(() =>
+    location.pathname.startsWith("/webapp") ? ["webapp"] : [],
   );
+
+  useEffect(() => {
+    if (location.pathname.startsWith("/webapp")) {
+      setOpenKeys((keys) => (keys.includes("webapp") ? keys : [...keys, "webapp"]));
+    }
+  }, [location.pathname]);
 
   const handleLogout = () => {
     clearToken();
@@ -199,7 +203,8 @@ export default function Layout() {
           mode="inline"
           theme="dark"
           selectedKeys={[location.pathname]}
-          defaultOpenKeys={defaultOpenKeys}
+          openKeys={openKeys}
+          onOpenChange={setOpenKeys}
           items={menuItems}
           onClick={handleMenuClick}
           style={{ background: "transparent", border: 0 }}
@@ -214,23 +219,32 @@ export default function Layout() {
           flexShrink: 0,
         }}
       >
-        <Button
-          type="text"
-          icon={<LogoutOutlined />}
-          onClick={handleLogout}
-          style={{
-            width: "100%",
-            textAlign: "left",
-            color: "rgba(255,255,255,0.35)",
-            fontSize: 13,
-            height: 34,
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-          }}
+        <Popconfirm
+          title="Log out?"
+          description="You will need to sign in again."
+          onConfirm={handleLogout}
+          okText="Logout"
+          cancelText="Cancel"
+          placement="top"
         >
-          {(!collapsed || isMobile) && "Logout"}
-        </Button>
+          <Button
+            type="text"
+            icon={<LogoutOutlined />}
+            aria-label="Logout"
+            style={{
+              width: "100%",
+              textAlign: "left",
+              color: "rgba(255,255,255,0.35)",
+              fontSize: 13,
+              height: 34,
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+            }}
+          >
+            {(!collapsed || isMobile) && "Logout"}
+          </Button>
+        </Popconfirm>
       </div>
     </div>
   );
@@ -299,6 +313,7 @@ export default function Layout() {
             {/* Toggle / burger */}
             <Button
               type="text"
+              aria-label={isMobile ? "Open navigation menu" : collapsed ? "Expand sidebar" : "Collapse sidebar"}
               icon={
                 isMobile ? (
                   <MenuOutlined />

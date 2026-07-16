@@ -140,23 +140,23 @@ export interface CrmVariable {
 }
 
 export const USER_TYPE_OPTIONS = [
-  { value: "all", label: "Все" },
+  { value: "all", label: "All" },
   { value: "free", label: "Free" },
   { value: "paid_vip", label: "Paid / VIP" },
 ];
 
 export const WEEKDAYS = [
-  { value: 0, label: "Пн" },
-  { value: 1, label: "Вт" },
-  { value: 2, label: "Ср" },
-  { value: 3, label: "Чт" },
-  { value: 4, label: "Пт" },
-  { value: 5, label: "Сб" },
-  { value: 6, label: "Вс" },
+  { value: 0, label: "Mon" },
+  { value: 1, label: "Tue" },
+  { value: 2, label: "Wed" },
+  { value: 3, label: "Thu" },
+  { value: 4, label: "Fri" },
+  { value: 5, label: "Sat" },
+  { value: 6, label: "Sun" },
 ];
 
 export const REPEAT_POLICIES = [
-  { value: "always", label: "Всегда" },
-  { value: "once", label: "Один раз" },
+  { value: "always", label: "Always" },
+  { value: "once", label: "Once" },
   { value: "cooldown", label: "Cooldown" },
 ];

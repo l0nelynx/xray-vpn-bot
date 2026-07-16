@@ -85,11 +85,11 @@ export function upsertRwCondition(
 export function actionSummary(actions: CrmAction[]): string {
   const parts: string[] = [];
   for (const a of actions.filter((x) => x.enabled)) {
-    if (a.type === "send_message") parts.push("сообщение");
-    if (a.type === "attach_button") parts.push("кнопка");
-    if (a.type === "rw_bonus_days") parts.push(`+${a.days}д`);
-    if (a.type === "rw_bonus_traffic") parts.push(`+${a.gb}ГБ`);
-    if (a.type === "rw_reset_traffic") parts.push("сброс трафика");
+    if (a.type === "send_message") parts.push("message");
+    if (a.type === "attach_button") parts.push("button");
+    if (a.type === "rw_bonus_days") parts.push(`+${a.days}d`);
+    if (a.type === "rw_bonus_traffic") parts.push(`+${a.gb}GB`);
+    if (a.type === "rw_reset_traffic") parts.push("traffic reset");
   }
   return parts.length ? parts.join(", ") : "—";
 }

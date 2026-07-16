@@ -31,7 +31,7 @@ export default function CampaignTab({ onLaunched }: CampaignTabProps) {
           setConditions(defaultConditions(segs[0].id, segs[0]));
         }
       })
-      .catch(() => message.error("Не удалось загрузить сегменты"));
+      .catch(() => message.error("Failed to load segments"));
   }, [message]);
 
   const segmentCond = getSegmentCondition(conditions);
@@ -42,15 +42,15 @@ export default function CampaignTab({ onLaunched }: CampaignTabProps) {
 
   const launch = async () => {
     if (!segmentId) {
-      message.warning("Выберите сегмент");
+      message.warning("Select a segment");
       return;
     }
     if (!hasEnabledAction) {
-      message.warning("Включите хотя бы одно действие");
+      message.warning("Enable at least one action");
       return;
     }
     if (!isAllUsers && selectedTgIds.length === 0) {
-      message.warning("Выполните сканирование и выберите получателей");
+      message.warning("Run a scan and select recipients");
       return;
     }
     setLoading(true);
@@ -63,15 +63,15 @@ export default function CampaignTab({ onLaunched }: CampaignTabProps) {
       });
       message.success(
         isAllUsers
-          ? `Кампания поставлена в очередь (${scanTotal ?? "все"} пользователей)`
-          : `Кампания поставлена в очередь для ${selectedTgIds.length} пользователей`
+          ? `Campaign queued (${scanTotal ?? "all"} users)`
+          : `Campaign queued for ${selectedTgIds.length} users`
       );
       setName("");
       setSelectedTgIds([]);
       setScanTotal(null);
       onLaunched();
     } catch {
-      message.error("Ошибка запуска кампании");
+      message.error("Failed to launch campaign");
     } finally {
       setLoading(false);
     }
@@ -80,7 +80,7 @@ export default function CampaignTab({ onLaunched }: CampaignTabProps) {
   return (
     <Space direction="vertical" style={{ width: "100%" }} size={16}>
       <Input
-        placeholder="Название кампании (необязательно)"
+        placeholder="Campaign name (optional)"
         value={name}
         onChange={(e) => setName(e.target.value)}
         style={{ width: "100%", maxWidth: isMobile ? undefined : 480 }}
@@ -100,13 +100,13 @@ export default function CampaignTab({ onLaunched }: CampaignTabProps) {
       <Card size="small">
         <Space direction="vertical" style={{ width: "100%" }} size={8}>
           <Popconfirm
-            title="Запустить кампанию?"
-            description={`Получателей: ${
-              isAllUsers ? scanTotal ?? "все" : selectedTgIds.length
+            title="Launch campaign?"
+            description={`Recipients: ${
+              isAllUsers ? scanTotal ?? "all" : selectedTgIds.length
             }`}
             onConfirm={launch}
-            okText="Запустить"
-            cancelText="Отмена"
+            okText="Launch"
+            cancelText="Cancel"
             disabled={!segmentId || !hasEnabledAction || (!isAllUsers && !selectedTgIds.length)}
           >
             <Button
@@ -116,12 +116,12 @@ export default function CampaignTab({ onLaunched }: CampaignTabProps) {
               disabled={!segmentId || !hasEnabledAction || (!isAllUsers && !selectedTgIds.length)}
               block={isMobile}
             >
-              Запустить кампанию
+              Launch campaign
             </Button>
           </Popconfirm>
           {!hasEnabledAction && (
             <Typography.Text type="secondary">
-              Включите хотя бы одно действие
+              Enable at least one action
             </Typography.Text>
           )}
         </Space>
