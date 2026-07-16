@@ -184,7 +184,13 @@ async def list_users(_: str = Depends(get_current_user)):
 
 @router.get("/users/quota")
 async def users_quota(_: str = Depends(get_current_user)):
-    return await _telemt_request("GET", "/v1/users/quota")
+    try:
+        return await _telemt_request("GET", "/v1/users/quota")
+    except HTTPException as exc:
+        # Older Telemt builds (< PR #788) have no /v1/users/quota route yet.
+        if exc.status_code == 404:
+            return {"ok": True, "data": {"users": []}}
+        raise
 
 
 @router.get("/users/{username}")

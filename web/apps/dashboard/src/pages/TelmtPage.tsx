@@ -907,9 +907,9 @@ function OperationsTab() {
   const [fingerprints, setFingerprints] = useState<TelmtTlsFingerprints | null>(null);
   const [quota, setQuota] = useState<TelmtUsersQuotaResponse | null>(null);
 
-  const load = useCallback(() => {
+  const load = useCallback(async () => {
     setLoading(true);
-    Promise.all([
+    const results = await Promise.allSettled([
       api.get<TelmtEnvelope<TelmtHealthReady>>("/telemt/health/ready"),
       api.get<TelmtEnvelope<TelmtLimitsEffective>>("/telemt/limits/effective"),
       api.get<TelmtEnvelope<TelmtSecurityWhitelist>>("/telemt/security/whitelist"),
@@ -917,18 +917,26 @@ function OperationsTab() {
       api.get<TelmtEnvelope<TelmtRuntimeRecentEvents>>("/telemt/runtime/events/recent"),
       api.get<TelmtEnvelope<TelmtTlsFingerprints>>("/telemt/runtime/tls-fingerprints"),
       api.get<TelmtEnvelope<TelmtUsersQuotaResponse>>("/telemt/users/quota"),
-    ])
-      .then(([hr, lim, wl, cs, ev, fp, q]) => {
-        setHealthReady(hr.data);
-        setLimits(lim.data);
-        setWhitelist(wl.data);
-        setConnSummary(cs.data);
-        setRecentEvents(ev.data);
-        setFingerprints(fp.data);
-        setQuota(q.data);
-      })
-      .catch(() => message.error("Failed to load telemt operations data"))
-      .finally(() => setLoading(false));
+    ]);
+
+    const pick = <T,>(idx: number): T | null =>
+      results[idx].status === "fulfilled" ? (results[idx] as PromiseFulfilledResult<T>).value : null;
+
+    setHealthReady(pick<TelmtEnvelope<TelmtHealthReady>>(0)?.data ?? null);
+    setLimits(pick<TelmtEnvelope<TelmtLimitsEffective>>(1)?.data ?? null);
+    setWhitelist(pick<TelmtEnvelope<TelmtSecurityWhitelist>>(2)?.data ?? null);
+    setConnSummary(pick<TelmtEnvelope<TelmtRuntimeConnectionsSummary>>(3)?.data ?? null);
+    setRecentEvents(pick<TelmtEnvelope<TelmtRuntimeRecentEvents>>(4)?.data ?? null);
+    setFingerprints(pick<TelmtEnvelope<TelmtTlsFingerprints>>(5)?.data ?? null);
+    setQuota(pick<TelmtEnvelope<TelmtUsersQuotaResponse>>(6)?.data ?? null);
+
+    const failed = results.filter((r) => r.status === "rejected").length;
+    if (failed === results.length) {
+      message.error("Failed to load telemt operations data");
+    } else if (failed > 0) {
+      message.warning(`Some telemt operations endpoints are unavailable (${failed}/${results.length})`);
+    }
+    setLoading(false);
   }, []);
 
   useEffect(() => {
