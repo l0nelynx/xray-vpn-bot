@@ -20,6 +20,8 @@ import {
   Popconfirm,
   Spin,
   Badge,
+  Checkbox,
+  Dropdown,
 } from "antd";
 import {
   ReloadOutlined,
@@ -36,6 +38,7 @@ import {
   CloudServerOutlined,
   UserOutlined,
   SettingOutlined,
+  MoreOutlined,
 } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { api } from "../api/client";
@@ -76,6 +79,16 @@ function formatBytes(bytes: number): string {
   const units = ["B", "KB", "MB", "GB", "TB"];
   const i = Math.floor(Math.log(bytes) / Math.log(1024));
   return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`;
+}
+
+function mobileModalProps(isMobile: boolean) {
+  return isMobile
+    ? {
+        width: "100%" as const,
+        style: { top: 16, maxWidth: "calc(100vw - 16px)", margin: "0 auto" },
+        styles: { body: { maxHeight: "70vh", overflowY: "auto" as const } },
+      }
+    : {};
 }
 
 // ======================== Server Tab ========================
@@ -119,7 +132,7 @@ function ServerTab() {
   return (
     <div>
       <div style={{ marginBottom: 16, display: "flex", justifyContent: "flex-end" }}>
-        <Button icon={<ReloadOutlined />} onClick={load} loading={loading}>
+        <Button icon={<ReloadOutlined />} onClick={load} loading={loading} block={isMobile}>
           Refresh
         </Button>
       </div>
@@ -246,7 +259,7 @@ function ServerTab() {
 
 function UsersTab() {
   const isMobile = useIsMobile();
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<TelmtUser[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
@@ -407,6 +420,24 @@ function UsersTab() {
     });
   };
 
+  const renderUserLimits = (user: TelmtUser) => (
+    <Space wrap size={4}>
+      {user.max_tcp_conns != null && <Tag>TCP: {user.max_tcp_conns}</Tag>}
+      {user.max_unique_ips != null && <Tag>IPs: {user.max_unique_ips}</Tag>}
+      {user.data_quota_bytes != null && <Tag>Quota: {formatBytes(user.data_quota_bytes)}</Tag>}
+      {user.rate_limit_up_bps != null && <Tag color="purple">UP: {formatBytes(user.rate_limit_up_bps / 8)}/s</Tag>}
+      {user.rate_limit_down_bps != null && <Tag color="purple">DOWN: {formatBytes(user.rate_limit_down_bps / 8)}/s</Tag>}
+      {user.expiration_rfc3339 && (
+        <Tag color={dayjs(user.expiration_rfc3339).isBefore(dayjs()) ? "red" : "blue"}>
+          Exp: {dayjs(user.expiration_rfc3339).format("DD.MM.YY")}
+        </Tag>
+      )}
+      {!user.max_tcp_conns && !user.max_unique_ips && !user.data_quota_bytes && !user.expiration_rfc3339 && (
+        <span style={{ color: "rgba(255,255,255,0.3)" }}>No limits</span>
+      )}
+    </Space>
+  );
+
   const columns = [
     {
       title: "Username",
@@ -445,28 +476,12 @@ function UsersTab() {
       title: "Limits",
       key: "limits",
       width: 180,
-      render: (_: any, r: TelmtUser) => (
-        <Space wrap size={4}>
-          {r.max_tcp_conns != null && <Tag>TCP: {r.max_tcp_conns}</Tag>}
-          {r.max_unique_ips != null && <Tag>IPs: {r.max_unique_ips}</Tag>}
-          {r.data_quota_bytes != null && <Tag>Quota: {formatBytes(r.data_quota_bytes)}</Tag>}
-          {r.rate_limit_up_bps != null && <Tag color="purple">UP: {formatBytes(r.rate_limit_up_bps / 8)}/s</Tag>}
-          {r.rate_limit_down_bps != null && <Tag color="purple">DOWN: {formatBytes(r.rate_limit_down_bps / 8)}/s</Tag>}
-          {r.expiration_rfc3339 && (
-            <Tag color={dayjs(r.expiration_rfc3339).isBefore(dayjs()) ? "red" : "blue"}>
-              Exp: {dayjs(r.expiration_rfc3339).format("DD.MM.YY")}
-            </Tag>
-          )}
-          {!r.max_tcp_conns && !r.max_unique_ips && !r.data_quota_bytes && !r.expiration_rfc3339 && (
-            <span style={{ color: "rgba(255,255,255,0.3)" }}>No limits</span>
-          )}
-        </Space>
-      ),
+      render: (_: any, r: TelmtUser) => renderUserLimits(r),
     },
     {
       title: "",
       key: "actions",
-      width: 120,
+      width: 220,
       render: (_: any, r: TelmtUser) => (
         <Space size={4}>
           <Tooltip title="Links">
@@ -497,34 +512,87 @@ function UsersTab() {
     },
   ];
 
-  const renderUserMobile = (user: TelmtUser) => (
-    <Card
-      key={user.username}
-      size="small"
-      style={{ marginBottom: 8 }}
-      title={
-        <Space>
-          <Badge status={user.in_runtime ? "success" : "default"} />
-          <span>{user.username}</span>
-        </Space>
-      }
-      extra={
-        <Space size={4}>
-          <Button type="text" size="small" icon={<LinkOutlined />} onClick={() => setLinksUser(user)} />
-          <Button type="text" size="small" icon={<EditOutlined />} onClick={() => openEdit(user)} />
-          <Popconfirm title={`Delete ${user.username}?`} onConfirm={() => handleDelete(user.username)} okText="Delete" okButtonProps={{ danger: true }}>
-            <Button type="text" size="small" icon={<DeleteOutlined />} danger />
-          </Popconfirm>
-        </Space>
-      }
-    >
-      <Row gutter={8}>
-        <Col span={8}><span style={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>Conns</span><div>{user.current_connections}</div></Col>
-        <Col span={8}><span style={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>IPs</span><div>{user.active_unique_ips}</div></Col>
-        <Col span={8}><span style={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>Traffic</span><div>{formatBytes(user.total_octets)}</div></Col>
-      </Row>
-    </Card>
-  );
+  const toggleUserSelection = (username: string, checked: boolean) => {
+    setSelectedUsernames((prev) =>
+      checked ? [...prev, username] : prev.filter((k) => String(k) !== username),
+    );
+  };
+
+  const toggleSelectAll = (checked: boolean) => {
+    setSelectedUsernames(checked ? users.map((u) => u.username) : []);
+  };
+
+  const renderUserMobile = (user: TelmtUser) => {
+    const selected = selectedUsernames.some((k) => String(k) === user.username);
+    return (
+      <Card
+        key={user.username}
+        size="small"
+        style={{
+          marginBottom: 8,
+          borderColor: selected ? "rgba(124,156,255,0.55)" : undefined,
+        }}
+        title={
+          <Space>
+            <Checkbox
+              checked={selected}
+              onChange={(e) => toggleUserSelection(user.username, e.target.checked)}
+            />
+            <Badge status={user.in_runtime ? "success" : "default"} />
+            <span style={{ wordBreak: "break-all" }}>{user.username}</span>
+          </Space>
+        }
+        extra={
+          <Dropdown
+            menu={{
+              items: [
+                { key: "links", icon: <LinkOutlined />, label: "Links", onClick: () => setLinksUser(user) },
+                { key: "edit", icon: <EditOutlined />, label: "Edit", onClick: () => openEdit(user) },
+                { key: "rotate", icon: <KeyOutlined />, label: "Rotate Secret", onClick: () => handleRotateSecret(user.username) },
+                { key: "enable", icon: <PlayCircleOutlined />, label: "Enable", onClick: () => handleEnableUser(user.username) },
+                { key: "disable", icon: <PauseCircleOutlined />, label: "Disable", onClick: () => handleDisableUser(user.username) },
+                { key: "reset-quota", label: "Reset Quota", onClick: () => handleResetQuota(user.username) },
+                { type: "divider" },
+                {
+                  key: "delete",
+                  icon: <DeleteOutlined />,
+                  label: "Delete",
+                  danger: true,
+                  onClick: () => {
+                    modal.confirm({
+                      title: `Delete ${user.username}?`,
+                      okText: "Delete",
+                      okButtonProps: { danger: true },
+                      onOk: () => handleDelete(user.username),
+                    });
+                  },
+                },
+              ],
+            }}
+            trigger={["click"]}
+          >
+            <Button type="text" size="small" icon={<MoreOutlined />} />
+          </Dropdown>
+        }
+      >
+        <Row gutter={[8, 8]}>
+          <Col span={8}>
+            <span style={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>Conns</span>
+            <div>{user.current_connections}</div>
+          </Col>
+          <Col span={8}>
+            <span style={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>IPs</span>
+            <div>{user.active_unique_ips}</div>
+          </Col>
+          <Col span={8}>
+            <span style={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>Traffic</span>
+            <div>{formatBytes(user.total_octets)}</div>
+          </Col>
+          <Col span={24}>{renderUserLimits(user)}</Col>
+        </Row>
+      </Card>
+    );
+  };
 
   const userFormFields = (isCreate: boolean) => (
     <>
@@ -560,56 +628,77 @@ function UsersTab() {
     </>
   );
 
+  const bulkToolbar = (
+    <Card size="small" style={{ marginBottom: 12 }}>
+      <Space wrap style={{ width: "100%" }}>
+        {isMobile && (
+          <Checkbox
+            checked={users.length > 0 && selectedUsernames.length === users.length}
+            indeterminate={selectedUsernames.length > 0 && selectedUsernames.length < users.length}
+            onChange={(e) => toggleSelectAll(e.target.checked)}
+          >
+            Select all
+          </Checkbox>
+        )}
+        <Typography.Text type="secondary">
+          Selected: {selectedUsernames.length}
+        </Typography.Text>
+        <Popconfirm
+          title={`Delete ${selectedUsernames.length} users?`}
+          onConfirm={() => runBulk("/telemt/users/bulk-delete", { usernames: selectedAsStrings }, "Bulk delete")}
+          disabled={!selectedUsernames.length}
+        >
+          <Button danger disabled={!selectedUsernames.length} loading={bulkLoading} block={isMobile}>
+            Bulk Delete
+          </Button>
+        </Popconfirm>
+        <Button disabled={!selectedUsernames.length} loading={bulkLoading} onClick={() => setBulkExtendOpen(true)} block={isMobile}>
+          Bulk Extend
+        </Button>
+        <Button disabled={!selectedUsernames.length} loading={bulkLoading} onClick={() => runBulk("/telemt/users/bulk-rotate-secret", { usernames: selectedAsStrings }, "Bulk reissue secret")} block={isMobile}>
+          Bulk Reissue Secret
+        </Button>
+        <Button disabled={!selectedUsernames.length} loading={bulkLoading} onClick={() => runBulk("/telemt/users/bulk-enable", { usernames: selectedAsStrings }, "Bulk enable")} block={isMobile}>
+          Bulk Enable
+        </Button>
+        <Button disabled={!selectedUsernames.length} loading={bulkLoading} onClick={() => runBulk("/telemt/users/bulk-disable", { usernames: selectedAsStrings }, "Bulk disable")} block={isMobile}>
+          Bulk Disable
+        </Button>
+        <Button disabled={!selectedUsernames.length} loading={bulkLoading} onClick={() => setBulkLimitsOpen(true)} block={isMobile}>
+          Bulk Update Limits
+        </Button>
+      </Space>
+    </Card>
+  );
+
   return (
     <div>
-      <div style={{ marginBottom: 16, display: "flex", justifyContent: "space-between" }}>
-        <Button icon={<PlusOutlined />} type="primary" onClick={() => setCreateOpen(true)}>
+      <div
+        style={{
+          marginBottom: 16,
+          display: "flex",
+          flexDirection: isMobile ? "column" : "row",
+          justifyContent: "space-between",
+          gap: 8,
+        }}
+      >
+        <Button icon={<PlusOutlined />} type="primary" onClick={() => setCreateOpen(true)} block={isMobile}>
           Add User
         </Button>
-        <Space>
-          <Button icon={<ReloadOutlined />} onClick={load} loading={loading}>
-            Refresh
-          </Button>
-        </Space>
+        <Button icon={<ReloadOutlined />} onClick={load} loading={loading} block={isMobile}>
+          Refresh
+        </Button>
       </div>
 
-      {!isMobile && (
-        <Card size="small" style={{ marginBottom: 12 }}>
-          <Space wrap>
-            <Typography.Text type="secondary">
-              Selected: {selectedUsernames.length}
-            </Typography.Text>
-            <Popconfirm
-              title={`Delete ${selectedUsernames.length} users?`}
-              onConfirm={() => runBulk("/telemt/users/bulk-delete", { usernames: selectedAsStrings }, "Bulk delete")}
-              disabled={!selectedUsernames.length}
-            >
-              <Button danger disabled={!selectedUsernames.length} loading={bulkLoading}>
-                Bulk Delete
-              </Button>
-            </Popconfirm>
-            <Button disabled={!selectedUsernames.length} loading={bulkLoading} onClick={() => setBulkExtendOpen(true)}>
-              Bulk Extend
-            </Button>
-            <Button disabled={!selectedUsernames.length} loading={bulkLoading} onClick={() => runBulk("/telemt/users/bulk-rotate-secret", { usernames: selectedAsStrings }, "Bulk reissue secret")}>
-              Bulk Reissue Secret
-            </Button>
-            <Button disabled={!selectedUsernames.length} loading={bulkLoading} onClick={() => runBulk("/telemt/users/bulk-enable", { usernames: selectedAsStrings }, "Bulk enable")}>
-              Bulk Enable
-            </Button>
-            <Button disabled={!selectedUsernames.length} loading={bulkLoading} onClick={() => runBulk("/telemt/users/bulk-disable", { usernames: selectedAsStrings }, "Bulk disable")}>
-              Bulk Disable
-            </Button>
-            <Button disabled={!selectedUsernames.length} loading={bulkLoading} onClick={() => setBulkLimitsOpen(true)}>
-              Bulk Update Limits
-            </Button>
-          </Space>
-        </Card>
-      )}
+      {bulkToolbar}
 
       {isMobile ? (
         loading ? (
           <div style={{ textAlign: "center", padding: 40 }}><Spin /></div>
+        ) : users.length === 0 ? (
+          <div style={{ textAlign: "center", padding: 40, color: "rgba(255,255,255,0.4)" }}>
+            No users
+          </div>
         ) : (
           users.map(renderUserMobile)
         )
@@ -631,39 +720,39 @@ function UsersTab() {
         </Card>
       )}
 
-      {/* Create Modal */}
       <Modal
         title="Create Telemt User"
         open={createOpen}
         onCancel={() => { setCreateOpen(false); createForm.resetFields(); }}
         onOk={() => createForm.submit()}
         okText="Create"
+        {...mobileModalProps(isMobile)}
       >
         <Form form={createForm} layout="vertical" onFinish={handleCreate}>
           {userFormFields(true)}
         </Form>
       </Modal>
 
-      {/* Edit Modal */}
       <Modal
         title={`Edit ${editUser?.username}`}
         open={!!editUser}
         onCancel={() => { setEditUser(null); editForm.resetFields(); }}
         onOk={() => editForm.submit()}
         okText="Save"
+        {...mobileModalProps(isMobile)}
       >
         <Form form={editForm} layout="vertical" onFinish={handleEdit}>
           {userFormFields(false)}
         </Form>
       </Modal>
 
-      {/* Links Modal */}
       <Modal
         title={`Links for ${linksUser?.username}`}
         open={!!linksUser}
         onCancel={() => setLinksUser(null)}
         footer={null}
-        width={600}
+        {...mobileModalProps(isMobile)}
+        width={isMobile ? "100%" : 600}
       >
         {linksUser && (
           <div>
@@ -721,6 +810,7 @@ function UsersTab() {
         onOk={() => bulkExtendForm.submit()}
         okText="Apply"
         confirmLoading={bulkLoading}
+        {...mobileModalProps(isMobile)}
       >
         <Form
           form={bulkExtendForm}
@@ -758,6 +848,7 @@ function UsersTab() {
         onOk={() => bulkLimitsForm.submit()}
         okText="Apply"
         confirmLoading={bulkLoading}
+        {...mobileModalProps(isMobile)}
       >
         <Form
           form={bulkLimitsForm}
@@ -800,6 +891,7 @@ function UsersTab() {
 // ======================== Free Params Tab ========================
 
 function FreeParamsTab() {
+  const isMobile = useIsMobile();
   const { message } = App.useApp();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -850,11 +942,13 @@ function FreeParamsTab() {
       <Card
         title="Telemt Free User Parameters"
         extra={
-          <Button type="primary" loading={saving} onClick={onSave}>
-            Save
-          </Button>
+          !isMobile ? (
+            <Button type="primary" loading={saving} onClick={onSave}>
+              Save
+            </Button>
+          ) : undefined
         }
-        style={{ maxWidth: 600 }}
+        style={{ maxWidth: isMobile ? "100%" : 600 }}
       >
         <Typography.Paragraph type="secondary">
           These parameters are used when creating a free Telemt user via the bot
@@ -891,12 +985,18 @@ function FreeParamsTab() {
             <InputNumber min={0} style={{ width: "100%" }} placeholder="Unlimited" />
           </Form.Item>
         </Form>
+        {isMobile && (
+          <Button type="primary" loading={saving} onClick={onSave} block>
+            Save
+          </Button>
+        )}
       </Card>
     </Spin>
   );
 }
 
 function OperationsTab() {
+  const isMobile = useIsMobile();
   const { message } = App.useApp();
   const [loading, setLoading] = useState(true);
   const [healthReady, setHealthReady] = useState<TelmtHealthReady | null>(null);
@@ -943,16 +1043,31 @@ function OperationsTab() {
     load();
   }, [load]);
 
+  const jsonBlock = (value: unknown) => (
+    <pre
+      style={{
+        margin: 0,
+        whiteSpace: "pre-wrap",
+        wordBreak: "break-word",
+        fontSize: isMobile ? 11 : 12,
+        maxHeight: isMobile ? 220 : 360,
+        overflow: "auto",
+      }}
+    >
+      {JSON.stringify(value, null, 2)}
+    </pre>
+  );
+
   return (
     <div>
       <div style={{ marginBottom: 16, display: "flex", justifyContent: "flex-end" }}>
-        <Button icon={<ReloadOutlined />} onClick={load} loading={loading}>
+        <Button icon={<ReloadOutlined />} onClick={load} loading={loading} block={isMobile}>
           Refresh
         </Button>
       </div>
-      <Row gutter={[16, 16]}>
-        <Col xs={24} lg={8}>
-          <Card title="Readiness">
+      <Row gutter={[isMobile ? 8 : 16, isMobile ? 8 : 16]}>
+        <Col xs={24} sm={12} lg={8}>
+          <Card title="Readiness" size={isMobile ? "small" : "default"}>
             <Space direction="vertical">
               <Tag color={healthReady?.ready ? "green" : "red"}>
                 {healthReady?.ready ? "Ready" : "Not ready"}
@@ -961,16 +1076,16 @@ function OperationsTab() {
             </Space>
           </Card>
         </Col>
-        <Col xs={24} lg={8}>
-          <Card title="Quota Users">
+        <Col xs={24} sm={12} lg={8}>
+          <Card title="Quota Users" size={isMobile ? "small" : "default"}>
             <Typography.Title level={4} style={{ margin: 0 }}>
               {quota?.users?.length ?? 0}
             </Typography.Title>
             <Typography.Text type="secondary">users with configured quota</Typography.Text>
           </Card>
         </Col>
-        <Col xs={24} lg={8}>
-          <Card title="Recent Events">
+        <Col xs={24} sm={12} lg={8}>
+          <Card title="Recent Events" size={isMobile ? "small" : "default"}>
             <Typography.Title level={4} style={{ margin: 0 }}>
               {recentEvents?.events?.length ?? 0}
             </Typography.Title>
@@ -979,44 +1094,28 @@ function OperationsTab() {
         </Col>
       </Row>
 
-      <Row gutter={[16, 16]} style={{ marginTop: 8 }}>
+      <Row gutter={[isMobile ? 8 : 16, isMobile ? 8 : 16]} style={{ marginTop: isMobile ? 8 : 8 }}>
         <Col xs={24} lg={12}>
-          <Card title="Effective Limits">
-            <Typography.Paragraph>
-              <pre style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-                {JSON.stringify(limits, null, 2)}
-              </pre>
-            </Typography.Paragraph>
+          <Card title="Effective Limits" size={isMobile ? "small" : "default"}>
+            {jsonBlock(limits)}
           </Card>
         </Col>
         <Col xs={24} lg={12}>
-          <Card title="Security Whitelist">
-            <Typography.Paragraph>
-              <pre style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-                {JSON.stringify(whitelist, null, 2)}
-              </pre>
-            </Typography.Paragraph>
+          <Card title="Security Whitelist" size={isMobile ? "small" : "default"}>
+            {jsonBlock(whitelist)}
           </Card>
         </Col>
       </Row>
 
-      <Row gutter={[16, 16]} style={{ marginTop: 8 }}>
+      <Row gutter={[isMobile ? 8 : 16, isMobile ? 8 : 16]} style={{ marginTop: 8 }}>
         <Col xs={24} lg={12}>
-          <Card title="Connections Summary">
-            <Typography.Paragraph>
-              <pre style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-                {JSON.stringify(connSummary, null, 2)}
-              </pre>
-            </Typography.Paragraph>
+          <Card title="Connections Summary" size={isMobile ? "small" : "default"}>
+            {jsonBlock(connSummary)}
           </Card>
         </Col>
         <Col xs={24} lg={12}>
-          <Card title="TLS Fingerprints">
-            <Typography.Paragraph>
-              <pre style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-                {JSON.stringify(fingerprints, null, 2)}
-              </pre>
-            </Typography.Paragraph>
+          <Card title="TLS Fingerprints" size={isMobile ? "small" : "default"}>
+            {jsonBlock(fingerprints)}
           </Card>
         </Col>
       </Row>
@@ -1037,6 +1136,8 @@ export default function TelmtPage() {
       </Typography.Title>
       <Tabs
         defaultActiveKey="server"
+        size={isMobile ? "small" : "middle"}
+        tabBarGutter={isMobile ? 8 : undefined}
         items={[
           {
             key: "server",
@@ -1060,16 +1161,16 @@ export default function TelmtPage() {
             key: "free-params",
             label: (
               <span>
-                <SettingOutlined /> Free Params
+                <SettingOutlined /> {isMobile ? "Free" : "Free Params"}
               </span>
             ),
             children: <FreeParamsTab />,
           },
-          {
+            {
             key: "operations",
             label: (
               <span>
-                <CloudServerOutlined /> Operations
+                <CloudServerOutlined /> {isMobile ? "Ops" : "Operations"}
               </span>
             ),
             children: <OperationsTab />,
