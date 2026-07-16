@@ -54,7 +54,6 @@ import type {
   TelmtFreeParams,
   TelmtBulkResult,
   TelmtHealthReady,
-  TelmtUsersQuotaResponse,
   TelmtLimitsEffective,
   TelmtSecurityWhitelist,
   TelmtRuntimeConnectionsSummary,
@@ -63,6 +62,7 @@ import type {
   TelmtConfigData,
   TelmtPatchConfigResponse,
   TelmtConfigSectionName,
+  TelmtUser,
 } from "../api/types";
 import StatsCard from "../components/StatsCard";
 import useIsMobile from "../hooks/useIsMobile";
@@ -452,6 +452,7 @@ function UsersTab() {
         <Space>
           <span>{v}</span>
           <Badge status={r.in_runtime ? "success" : "default"} />
+          {r.enabled === false && <Tag color="orange">disabled</Tag>}
         </Space>
       ),
     },
@@ -544,6 +545,7 @@ function UsersTab() {
             />
             <Badge status={user.in_runtime ? "success" : "default"} />
             <span style={{ wordBreak: "break-all" }}>{user.username}</span>
+            {user.enabled === false && <Tag color="orange">disabled</Tag>}
           </Space>
         }
         extra={
@@ -1009,7 +1011,7 @@ function OperationsTab() {
   const [connSummary, setConnSummary] = useState<TelmtRuntimeConnectionsSummary | null>(null);
   const [recentEvents, setRecentEvents] = useState<TelmtRuntimeRecentEvents | null>(null);
   const [fingerprints, setFingerprints] = useState<TelmtTlsFingerprints | null>(null);
-  const [quota, setQuota] = useState<TelmtUsersQuotaResponse | null>(null);
+  const [usersWithQuota, setUsersWithQuota] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1020,7 +1022,9 @@ function OperationsTab() {
       api.get<TelmtEnvelope<TelmtRuntimeConnectionsSummary>>("/telemt/runtime/connections/summary"),
       api.get<TelmtEnvelope<TelmtRuntimeRecentEvents>>("/telemt/runtime/events/recent"),
       api.get<TelmtEnvelope<TelmtTlsFingerprints>>("/telemt/runtime/tls-fingerprints"),
-      api.get<TelmtEnvelope<TelmtUsersQuotaResponse>>("/telemt/users/quota"),
+      // /v1/users/quota is missing on Telemt 3.4.x (matched as username "quota").
+      // Derive quota presence from full user list instead.
+      api.get<TelmtEnvelope<TelmtUser[]>>("/telemt/users"),
     ]);
 
     const pick = <T,>(idx: number): T | null =>
@@ -1032,7 +1036,8 @@ function OperationsTab() {
     setConnSummary(pick<TelmtEnvelope<TelmtRuntimeConnectionsSummary>>(3)?.data ?? null);
     setRecentEvents(pick<TelmtEnvelope<TelmtRuntimeRecentEvents>>(4)?.data ?? null);
     setFingerprints(pick<TelmtEnvelope<TelmtTlsFingerprints>>(5)?.data ?? null);
-    setQuota(pick<TelmtEnvelope<TelmtUsersQuotaResponse>>(6)?.data ?? null);
+    const users = pick<TelmtEnvelope<TelmtUser[]>>(6)?.data ?? [];
+    setUsersWithQuota(users.filter((u) => u.data_quota_bytes != null && u.data_quota_bytes > 0).length);
 
     const failed = results.filter((r) => r.status === "rejected").length;
     if (failed === results.length) {
@@ -1047,83 +1052,241 @@ function OperationsTab() {
     load();
   }, [load]);
 
-  const jsonBlock = (value: unknown) => (
-    <pre
-      style={{
-        margin: 0,
-        whiteSpace: "pre-wrap",
-        wordBreak: "break-word",
-        fontSize: isMobile ? 11 : 12,
-        maxHeight: isMobile ? 220 : 360,
-        overflow: "auto",
-      }}
-    >
-      {JSON.stringify(value, null, 2)}
-    </pre>
-  );
+  const events = recentEvents?.data?.events ?? recentEvents?.events ?? [];
+  const connTotals = connSummary?.data?.totals;
+  const topByConns = connSummary?.data?.top?.by_connections ?? [];
+  const topByTraffic = connSummary?.data?.top?.by_throughput ?? [];
+  const fpByUser = fingerprints?.data?.by_user ?? [];
+  const fpByIp = fingerprints?.data?.by_ip ?? [];
+  const limitRows = limits
+    ? [
+        ...(limits.timeouts
+          ? Object.entries(limits.timeouts).map(([k, v]) => ({ group: "timeouts", key: k, value: String(v) }))
+          : []),
+        ...(limits.upstream
+          ? Object.entries(limits.upstream).map(([k, v]) => ({ group: "upstream", key: k, value: String(v) }))
+          : []),
+        ...(limits.user_ip_policy
+          ? Object.entries(limits.user_ip_policy).map(([k, v]) => ({ group: "user_ip_policy", key: k, value: String(v) }))
+          : []),
+        ...(limits.user_tcp_policy
+          ? Object.entries(limits.user_tcp_policy).map(([k, v]) => ({ group: "user_tcp_policy", key: k, value: String(v) }))
+          : []),
+        ...(limits.update_every_secs != null
+          ? [{ group: "general", key: "update_every_secs", value: String(limits.update_every_secs) }]
+          : []),
+        ...(limits.me_reinit_every_secs != null
+          ? [{ group: "general", key: "me_reinit_every_secs", value: String(limits.me_reinit_every_secs) }]
+          : []),
+        ...(limits.me_pool_force_close_secs != null
+          ? [{ group: "general", key: "me_pool_force_close_secs", value: String(limits.me_pool_force_close_secs) }]
+          : []),
+      ]
+    : [];
 
   return (
-    <div>
-      <div style={{ marginBottom: 16, display: "flex", justifyContent: "flex-end" }}>
-        <Button icon={<ReloadOutlined />} onClick={load} loading={loading} block={isMobile}>
-          Refresh
-        </Button>
+    <Spin spinning={loading && !healthReady}>
+      <div>
+        <div style={{ marginBottom: 16, display: "flex", justifyContent: "flex-end" }}>
+          <Button icon={<ReloadOutlined />} onClick={load} loading={loading} block={isMobile}>
+            Refresh
+          </Button>
+        </div>
+
+        <Row gutter={[isMobile ? 8 : 16, isMobile ? 8 : 16]}>
+          <Col xs={24} sm={12} lg={6}>
+            <Card title="Readiness" size="small">
+              <Space direction="vertical" size={4}>
+                <Tag color={healthReady?.ready ? "green" : "red"}>
+                  {healthReady?.status || (healthReady?.ready ? "ready" : "not_ready")}
+                </Tag>
+                <Typography.Text type="secondary">
+                  Upstreams: {healthReady?.healthy_upstreams ?? "—"}/{healthReady?.total_upstreams ?? "—"}
+                </Typography.Text>
+                <Typography.Text type="secondary">
+                  Admission: {healthReady?.admission_open ? "open" : "closed"}
+                </Typography.Text>
+              </Space>
+            </Card>
+          </Col>
+          <Col xs={24} sm={12} lg={6}>
+            <Card title="Live Connections" size="small">
+              <Typography.Title level={4} style={{ margin: 0 }}>
+                {connTotals?.current_connections ?? 0}
+              </Typography.Title>
+              <Typography.Text type="secondary">
+                ME {connTotals?.current_connections_me ?? 0} · Direct {connTotals?.current_connections_direct ?? 0} · Active users {connTotals?.active_users ?? 0}
+              </Typography.Text>
+            </Card>
+          </Col>
+          <Col xs={24} sm={12} lg={6}>
+            <Card title="Quota Users" size="small">
+              <Typography.Title level={4} style={{ margin: 0 }}>
+                {usersWithQuota}
+              </Typography.Title>
+              <Typography.Text type="secondary">users with data_quota_bytes &gt; 0</Typography.Text>
+            </Card>
+          </Col>
+          <Col xs={24} sm={12} lg={6}>
+            <Card title="Recent Events" size="small">
+              <Typography.Title level={4} style={{ margin: 0 }}>
+                {events.length}
+              </Typography.Title>
+              <Typography.Text type="secondary">
+                capacity {recentEvents?.data?.capacity ?? "—"} · dropped {recentEvents?.data?.dropped_total ?? 0}
+              </Typography.Text>
+            </Card>
+          </Col>
+        </Row>
+
+        <Row gutter={[isMobile ? 8 : 16, isMobile ? 8 : 16]} style={{ marginTop: 8 }}>
+          <Col xs={24} lg={12}>
+            <Card title="Top by Connections" size="small">
+              <Table
+                size="small"
+                pagination={false}
+                rowKey="username"
+                dataSource={topByConns}
+                scroll={{ x: 360 }}
+                columns={[
+                  { title: "User", dataIndex: "username", key: "u" },
+                  { title: "Conns", dataIndex: "current_connections", key: "c", width: 80 },
+                  {
+                    title: "Traffic",
+                    dataIndex: "total_octets",
+                    key: "t",
+                    width: 100,
+                    render: (v: number) => formatBytes(v || 0),
+                  },
+                ]}
+              />
+            </Card>
+          </Col>
+          <Col xs={24} lg={12}>
+            <Card title="Top by Traffic" size="small">
+              <Table
+                size="small"
+                pagination={false}
+                rowKey="username"
+                dataSource={topByTraffic}
+                scroll={{ x: 360 }}
+                columns={[
+                  { title: "User", dataIndex: "username", key: "u" },
+                  { title: "Conns", dataIndex: "current_connections", key: "c", width: 80 },
+                  {
+                    title: "Traffic",
+                    dataIndex: "total_octets",
+                    key: "t",
+                    width: 100,
+                    render: (v: number) => formatBytes(v || 0),
+                  },
+                ]}
+              />
+            </Card>
+          </Col>
+        </Row>
+
+        <Row gutter={[isMobile ? 8 : 16, isMobile ? 8 : 16]} style={{ marginTop: 8 }}>
+          <Col xs={24} lg={14}>
+            <Card title="Runtime Events" size="small">
+              <Table
+                size="small"
+                pagination={{ pageSize: 8, size: "small" }}
+                rowKey={(r) => String(r.seq)}
+                dataSource={[...events].reverse()}
+                scroll={{ x: 520 }}
+                columns={[
+                  { title: "#", dataIndex: "seq", key: "seq", width: 70 },
+                  {
+                    title: "Time",
+                    dataIndex: "ts_epoch_secs",
+                    key: "ts",
+                    width: 150,
+                    render: (v: number) => dayjs.unix(v).format("DD.MM HH:mm:ss"),
+                  },
+                  { title: "Event", dataIndex: "event_type", key: "type", ellipsis: true },
+                  { title: "Context", dataIndex: "context", key: "ctx", ellipsis: true },
+                ]}
+              />
+            </Card>
+          </Col>
+          <Col xs={24} lg={10}>
+            <Card title="Security Whitelist" size="small">
+              <Space wrap style={{ marginBottom: 8 }}>
+                <Tag color={whitelist?.enabled ? "green" : "default"}>
+                  {whitelist?.enabled ? "Enabled" : "Disabled"}
+                </Tag>
+                <Tag>{whitelist?.entries_total ?? 0} entries</Tag>
+              </Space>
+              <Space direction="vertical" style={{ width: "100%" }}>
+                {(whitelist?.entries ?? []).map((e) => (
+                  <Tag key={e} style={{ marginInlineEnd: 0 }}>{e}</Tag>
+                ))}
+                {!whitelist?.entries?.length && (
+                  <Typography.Text type="secondary">No whitelist entries</Typography.Text>
+                )}
+              </Space>
+            </Card>
+          </Col>
+        </Row>
+
+        <Row gutter={[isMobile ? 8 : 16, isMobile ? 8 : 16]} style={{ marginTop: 8 }}>
+          <Col xs={24} lg={12}>
+            <Card title="TLS Fingerprints by User" size="small">
+              <Table
+                size="small"
+                pagination={{ pageSize: 6, size: "small" }}
+                rowKey={(r, i) => `${r.scope}-${r.ja4}-${i}`}
+                dataSource={fpByUser}
+                scroll={{ x: 480 }}
+                columns={[
+                  { title: "User", dataIndex: "scope", key: "scope", width: 120, ellipsis: true },
+                  { title: "JA4", dataIndex: "ja4", key: "ja4", ellipsis: true },
+                  { title: "OK", dataIndex: "auth_success", key: "ok", width: 60 },
+                  { title: "Bad", dataIndex: "bad_or_probe", key: "bad", width: 60 },
+                ]}
+              />
+            </Card>
+          </Col>
+          <Col xs={24} lg={12}>
+            <Card title="TLS Fingerprints by IP" size="small">
+              <Table
+                size="small"
+                pagination={{ pageSize: 6, size: "small" }}
+                rowKey={(r, i) => `${r.scope}-${r.ja3}-${i}`}
+                dataSource={fpByIp}
+                scroll={{ x: 480 }}
+                columns={[
+                  { title: "IP", dataIndex: "scope", key: "scope", width: 130 },
+                  { title: "JA4", dataIndex: "ja4", key: "ja4", ellipsis: true },
+                  { title: "OK", dataIndex: "auth_success", key: "ok", width: 60 },
+                  { title: "Bad", dataIndex: "bad_or_probe", key: "bad", width: 60 },
+                ]}
+              />
+            </Card>
+          </Col>
+        </Row>
+
+        <Row gutter={[isMobile ? 8 : 16, isMobile ? 8 : 16]} style={{ marginTop: 8 }}>
+          <Col span={24}>
+            <Card title="Effective Limits" size="small">
+              <Table
+                size="small"
+                pagination={{ pageSize: isMobile ? 8 : 12, size: "small" }}
+                rowKey={(r) => `${r.group}.${r.key}`}
+                dataSource={limitRows}
+                scroll={{ x: 420 }}
+                columns={[
+                  { title: "Group", dataIndex: "group", key: "group", width: 140 },
+                  { title: "Key", dataIndex: "key", key: "key", ellipsis: true },
+                  { title: "Value", dataIndex: "value", key: "value", width: 140 },
+                ]}
+              />
+            </Card>
+          </Col>
+        </Row>
       </div>
-      <Row gutter={[isMobile ? 8 : 16, isMobile ? 8 : 16]}>
-        <Col xs={24} sm={12} lg={8}>
-          <Card title="Readiness" size={isMobile ? "small" : "default"}>
-            <Space direction="vertical">
-              <Tag color={healthReady?.ready ? "green" : "red"}>
-                {healthReady?.ready ? "Ready" : "Not ready"}
-              </Tag>
-              {healthReady?.reason && <Typography.Text type="secondary">{healthReady.reason}</Typography.Text>}
-            </Space>
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} lg={8}>
-          <Card title="Quota Users" size={isMobile ? "small" : "default"}>
-            <Typography.Title level={4} style={{ margin: 0 }}>
-              {quota?.users?.length ?? 0}
-            </Typography.Title>
-            <Typography.Text type="secondary">users with configured quota</Typography.Text>
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} lg={8}>
-          <Card title="Recent Events" size={isMobile ? "small" : "default"}>
-            <Typography.Title level={4} style={{ margin: 0 }}>
-              {recentEvents?.events?.length ?? 0}
-            </Typography.Title>
-            <Typography.Text type="secondary">recent runtime events</Typography.Text>
-          </Card>
-        </Col>
-      </Row>
-
-      <Row gutter={[isMobile ? 8 : 16, isMobile ? 8 : 16]} style={{ marginTop: isMobile ? 8 : 8 }}>
-        <Col xs={24} lg={12}>
-          <Card title="Effective Limits" size={isMobile ? "small" : "default"}>
-            {jsonBlock(limits)}
-          </Card>
-        </Col>
-        <Col xs={24} lg={12}>
-          <Card title="Security Whitelist" size={isMobile ? "small" : "default"}>
-            {jsonBlock(whitelist)}
-          </Card>
-        </Col>
-      </Row>
-
-      <Row gutter={[isMobile ? 8 : 16, isMobile ? 8 : 16]} style={{ marginTop: 8 }}>
-        <Col xs={24} lg={12}>
-          <Card title="Connections Summary" size={isMobile ? "small" : "default"}>
-            {jsonBlock(connSummary)}
-          </Card>
-        </Col>
-        <Col xs={24} lg={12}>
-          <Card title="TLS Fingerprints" size={isMobile ? "small" : "default"}>
-            {jsonBlock(fingerprints)}
-          </Card>
-        </Col>
-      </Row>
-    </div>
+    </Spin>
   );
 }
 

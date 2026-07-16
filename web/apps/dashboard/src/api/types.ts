@@ -179,11 +179,6 @@ export interface TelmtHealth {
   read_only: boolean;
 }
 
-export interface TelmtHealthReady {
-  ready: boolean;
-  reason?: string;
-}
-
 export interface TelmtRuntimeGates {
   accepting_new_connections: boolean;
   conditional_cast_enabled: boolean;
@@ -199,10 +194,12 @@ export interface TelmtUserLink {
   classic: string[];
   secure: string[];
   tls: string[];
+  tls_domains?: string[];
 }
 
 export interface TelmtUser {
   username: string;
+  enabled?: boolean;
   in_runtime: boolean;
   user_ad_tag: string | null;
   max_tcp_conns: number | null;
@@ -231,26 +228,108 @@ export interface TelmtUsersQuotaResponse {
   users: TelmtUserQuota[];
 }
 
+export interface TelmtHealthReady {
+  ready: boolean;
+  status?: string;
+  reason?: string;
+  admission_open?: boolean;
+  healthy_upstreams?: number;
+  total_upstreams?: number;
+}
+
+export interface TelmtConnTopUser {
+  username: string;
+  current_connections: number;
+  total_octets: number;
+}
+
 export interface TelmtRuntimeConnectionsSummary {
-  [key: string]: unknown;
+  enabled?: boolean;
+  generated_at_epoch_secs?: number;
+  reason?: string;
+  data?: {
+    totals?: {
+      current_connections?: number;
+      current_connections_me?: number;
+      current_connections_direct?: number;
+      active_users?: number;
+    };
+    top?: {
+      limit?: number;
+      by_connections?: TelmtConnTopUser[];
+      by_throughput?: TelmtConnTopUser[];
+    };
+    telemetry?: {
+      user_enabled?: boolean;
+      throughput_is_cumulative?: boolean;
+    };
+  };
+}
+
+export interface TelmtRuntimeEvent {
+  seq: number;
+  ts_epoch_secs: number;
+  event_type: string;
+  context?: string;
 }
 
 export interface TelmtRuntimeRecentEvents {
-  events?: Array<Record<string, unknown>>;
-  [key: string]: unknown;
+  enabled?: boolean;
+  generated_at_epoch_secs?: number;
+  reason?: string;
+  data?: {
+    capacity?: number;
+    dropped_total?: number;
+    events?: TelmtRuntimeEvent[];
+  };
+  /** legacy/flat shape fallback */
+  events?: TelmtRuntimeEvent[];
+}
+
+export interface TelmtTlsFingerprintRow {
+  scope?: string;
+  ja3?: string;
+  ja4?: string;
+  total?: number;
+  auth_success?: number;
+  bad_or_probe?: number;
+  first_seen_epoch_secs?: number;
+  last_seen_epoch_secs?: number;
 }
 
 export interface TelmtTlsFingerprints {
-  fingerprints?: Array<Record<string, unknown>>;
-  [key: string]: unknown;
+  enabled?: boolean;
+  generated_at_epoch_secs?: number;
+  reason?: string;
+  data?: {
+    limit?: number;
+    retention_secs?: number;
+    capacity?: number;
+    dropped_total?: number;
+    parse_error_total?: number;
+    by_fingerprint?: TelmtTlsFingerprintRow[];
+    by_ip?: TelmtTlsFingerprintRow[];
+    by_cidr?: TelmtTlsFingerprintRow[];
+    by_user?: TelmtTlsFingerprintRow[];
+  };
 }
 
 export interface TelmtLimitsEffective {
-  [key: string]: unknown;
+  update_every_secs?: number;
+  me_reinit_every_secs?: number;
+  me_pool_force_close_secs?: number;
+  timeouts?: Record<string, number | boolean | string>;
+  upstream?: Record<string, number | boolean | string>;
+  middle_proxy?: Record<string, number | boolean | string>;
+  user_ip_policy?: Record<string, number | boolean | string>;
+  user_tcp_policy?: Record<string, number | boolean | string>;
 }
 
 export interface TelmtSecurityWhitelist {
-  [key: string]: unknown;
+  enabled?: boolean;
+  entries_total?: number;
+  entries?: string[];
+  generated_at_epoch_secs?: number;
 }
 
 export interface TelmtFreeParams {
