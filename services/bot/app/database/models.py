@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 # keeps working for every class.
 from common_db import Base  # noqa: F401
 from common_db.models import (  # noqa: F401
+    AndroidFcmToken,
     BotFeatureFlags,
     CacheVersion,
     CrmCampaign,
@@ -39,6 +40,8 @@ from common_db.models import (  # noqa: F401
     Promo,
     PromoRedemption,
     PromoSettings,
+    PushCampaign,
+    PushCampaignDelivery,
     RefreshToken,
     SquadProfile,
     SupportAttachment,
@@ -79,6 +82,7 @@ __all__ = [
     "async_session",
     "async_main",
     # models (re-exported from common_db.models)
+    "AndroidFcmToken",
     "BotFeatureFlags",
     "CacheVersion",
     "CrmCampaign",
@@ -93,6 +97,8 @@ __all__ = [
     "Promo",
     "PromoRedemption",
     "PromoSettings",
+    "PushCampaign",
+    "PushCampaignDelivery",
     "RefreshToken",
     "SquadProfile",
     "SupportAttachment",

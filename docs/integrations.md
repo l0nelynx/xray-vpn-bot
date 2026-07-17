@@ -52,6 +52,10 @@ gateway → bot verifies webhook signature → subscription delivered via Remnaw
 Also supported outside `packages/payments`: **Telegram Stars** (legacy bot) and
 **Google Play IAP** (Android — see [android-api.md](android-api.md)).
 
+**FCM push** (Android): clients register device tokens via `/api/android/fcm`;
+operators send campaigns from Dashboard → **Push**. Config: `fcm_project_id`,
+`fcm_service_account_path` (readable by `dashboard` and `crm-worker`).
+
 ## Server monitoring: Telemt
 
 **Telemt** exposes VPN-server health/usage; the Dashboard surfaces CPU/RAM,

@@ -485,6 +485,42 @@ UX: открыть `deep_link` системным интентом → бот в
 
 ---
 
+## 7. FCM push tokens (`/api/android/fcm`)
+
+Регистрация Firebase Cloud Messaging токена для пушей из Dashboard
+(страница **Push**). Email verify **не** требуется.
+
+| Метод | Путь | Auth | Rate | Назначение |
+|---|---|---|---|---|
+| POST | `/token` | Bearer | 30/min | Зарегистрировать / обновить токен |
+| DELETE | `/token` | Bearer | 30/min | Снять токен (logout) |
+
+### POST /token
+
+```jsonc
+{
+  "token": "<fcm-device-token>",
+  "app_version": "1.2.3",   // optional
+  "platform": "android"     // optional, default android
+}
+```
+
+**200** `{"status":"ok"}`. Один физический токен привязывается к одному
+`user_id` (при смене аккаунта на устройстве — перепривязка).
+
+### DELETE /token
+
+```jsonc
+{ "token": "<fcm-device-token>" }
+```
+
+**200** `{"status":"ok"}` даже если токена уже нет.
+
+Клиент: после login/refresh — `POST /token`; на logout — `DELETE /token`.
+Рассылка создаётся в Dashboard → Push (не из Android API).
+
+---
+
 ## Конвенции
 
 - **Время** — ISO-8601 UTC (`...Z` или `+00:00`).
@@ -521,6 +557,10 @@ email_code_max_attempts: 5
 google_play_package_name: "com.example.app"
 google_play_service_account_path: "/run/secrets/play-sa.json"
 google_play_rtdn_token: "<random>"
+
+# нужно только для FCM push из Dashboard (регистрация токенов работает и без этого)
+fcm_project_id: "your-firebase-project-id"
+fcm_service_account_path: "/app/fcm-sa.json"       # host: ./fcm-sa.json (compose mount)
 ```
 
 Без Android-секции `/api/android/*` отвечает 500 на auth-ручках. Без SMTP —

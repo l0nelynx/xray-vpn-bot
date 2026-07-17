@@ -142,6 +142,12 @@ google_play_package_name: ""                       # e.g. com.example.xrayvpn �
 google_play_service_account_path: ""               # Container-side path to the service-account JSON file
 google_play_rtdn_token: ""                         # Shared secret for Play RTDN push endpoint (strongly recommended)
 
+# FCM push (Dashboard → Android). Leave blank to disable sending; token
+# registration via /api/android/fcm still works. Place the SA JSON at repo
+# root as fcm-sa.json (mounted into dashboard + crm-worker as /app/fcm-sa.json).
+fcm_project_id: ""                                 # Firebase / GCP project id
+fcm_service_account_path: "/app/fcm-sa.json"       # Container path (see docker-compose volumes)
+
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
 # ║  WEB PORTAL (CORS)                                                          ║

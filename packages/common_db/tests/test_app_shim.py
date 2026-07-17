@@ -21,6 +21,7 @@ app_url = pytest.importorskip("app.database.url")
 
 
 SHIMMED_MODEL_NAMES = [
+    "AndroidFcmToken",
     "CacheVersion",
     "CrmCampaign",
     "CrmCampaignDelivery",
@@ -33,6 +34,8 @@ SHIMMED_MODEL_NAMES = [
     "Promo",
     "PromoRedemption",
     "PromoSettings",
+    "PushCampaign",
+    "PushCampaignDelivery",
     "RefreshToken",
     "SquadProfile",
     "SupportMessage",

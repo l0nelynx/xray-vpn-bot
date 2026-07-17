@@ -94,3 +94,11 @@ def get_remnawave_token() -> str:
 
 def get_redis_url() -> str:
     return os.environ.get("REDIS_URL", "redis://redis:6379/0")
+
+
+def get_fcm_project_id() -> str:
+    return (get_config().get("fcm_project_id") or "").strip()
+
+
+def get_fcm_service_account_path() -> str:
+    return (get_config().get("fcm_service_account_path") or "").strip()

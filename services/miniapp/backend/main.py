@@ -16,6 +16,7 @@ logging.basicConfig(
 from .android import auth_router as android_auth_router
 from .android import data_router as android_data_router
 from .android import email_router as android_email_router
+from .android import fcm_router as android_fcm_router
 from .android import iap_router as android_iap_router
 from .android import link_router as android_link_router
 from .android import payments_router as android_payments_router
@@ -108,6 +109,7 @@ app.include_router(android_link_router.router, prefix=BASE_PATH)
 app.include_router(android_subscription_router.router, prefix=BASE_PATH)
 app.include_router(android_promo_router.router, prefix=BASE_PATH)
 app.include_router(android_support_router.router, prefix=BASE_PATH)
+app.include_router(android_fcm_router.router, prefix=BASE_PATH)
 app.include_router(web_router.router, prefix=BASE_PATH)
 app.include_router(connect_router, prefix=BASE_PATH)
 

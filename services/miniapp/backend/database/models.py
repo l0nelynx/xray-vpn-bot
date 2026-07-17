@@ -14,6 +14,7 @@ reach for what it needs without re-introducing a local class.
 """
 from common_db import Base  # noqa: F401  (legacy: miniapp code may reference Base)
 from common_db.models import (  # noqa: F401
+    AndroidFcmToken,
     BotFeatureFlags,
     CacheVersion,
     CrmCampaign,
@@ -28,6 +29,8 @@ from common_db.models import (  # noqa: F401
     Promo,
     PromoRedemption,
     PromoSettings,
+    PushCampaign,
+    PushCampaignDelivery,
     RefreshToken,
     SquadProfile,
     SupportAttachment,
@@ -44,6 +47,7 @@ from common_db.models import (  # noqa: F401
 
 __all__ = [
     "Base",
+    "AndroidFcmToken",
     "BotFeatureFlags",
     "CacheVersion",
     "CrmCampaign",
@@ -58,6 +62,8 @@ __all__ = [
     "Promo",
     "PromoRedemption",
     "PromoSettings",
+    "PushCampaign",
+    "PushCampaignDelivery",
     "RefreshToken",
     "SquadProfile",
     "SupportAttachment",

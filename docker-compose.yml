@@ -148,6 +148,9 @@ services:
         REGISTRY: ${REGISTRY:-ghcr.io/l0nelynx/}
     volumes:
       - ./config.yml:/app/config.yml:ro
+      # FCM service-account JSON (repo root fcm-sa.json). Required to send
+      # pushes from Dashboard; token registration works without it.
+      - ./fcm-sa.json:/app/fcm-sa.json:ro
       # Support-ticket image attachments — shared read-write with `miniapp`:
       # admin (this container) reads images the user uploaded via miniapp;
       # miniapp reads images the admin uploads here. See docs/deployment.md.
@@ -189,6 +192,7 @@ services:
     command: ["arq", "backend.worker.WorkerSettings"]
     volumes:
       - ./config.yml:/app/config.yml:ro
+      - ./fcm-sa.json:/app/fcm-sa.json:ro
     networks:
       - data-network
     environment:

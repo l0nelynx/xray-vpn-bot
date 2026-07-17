@@ -1,6 +1,7 @@
 # Env / secrets
 .env
 config.yml
+fcm-sa.json
 
 # Editors / tooling
 .idea

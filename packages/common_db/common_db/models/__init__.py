@@ -9,7 +9,9 @@ Import any class you need from here:
 from .auth import EmailVerification, RefreshToken, TelegramLinkCode
 from .credit_ledger import CreditLedger
 from .crm import CrmCampaign, CrmCampaignDelivery, CrmEvent, CrmEventDelivery
+from .fcm import AndroidFcmToken
 from .google_play import GooglePlayPurchase, GooglePlaySku
+from .push import PushCampaign, PushCampaignDelivery
 from .menus import MenuButton, MenuScreen, WebAppMenuNode
 from .promo_redemptions import PromoRedemption
 from .promos import Promo, PromoSettings
@@ -55,6 +57,10 @@ __all__ = [
     # google play
     "GooglePlayPurchase",
     "GooglePlaySku",
+    # fcm / push
+    "AndroidFcmToken",
+    "PushCampaign",
+    "PushCampaignDelivery",
     # system
     "BotFeatureFlags",
     "CacheVersion",

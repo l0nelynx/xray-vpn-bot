@@ -135,6 +135,15 @@ Required for Android/web email verification. Miniapp joins `mail-net` for outbou
 | `google_play_service_account_path` | Path to service-account JSON inside container |
 | `google_play_rtdn_token` | RTDN webhook shared secret — required when package name is set |
 
+## FCM push (optional)
+
+Token registration works without these keys; sending from Dashboard requires both.
+
+| Key | Description |
+|-----|-------------|
+| `fcm_project_id` | Firebase / GCP project id |
+| `fcm_service_account_path` | Container path to SA JSON (`/app/fcm-sa.json`; host file `./fcm-sa.json`, mounted into `dashboard` and `crm-worker`) |
+
 ## Web portal (CORS)
 
 | Key | Description |
