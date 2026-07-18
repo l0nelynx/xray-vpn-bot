@@ -32,6 +32,23 @@ export function defaultActions(): CrmAction[] {
   ];
 }
 
+/** Merge saved actions onto the full default set so the builder shows every type. */
+export function mergeActions(stored?: CrmAction[] | null): CrmAction[] {
+  const base = defaultActions();
+  if (!stored?.length) return base;
+  const byType = new Map(stored.map((a) => [a.type, a]));
+  const merged = base.map((def) => {
+    const found = byType.get(def.type);
+    return found ? { ...def, ...found } : def;
+  });
+  for (const act of stored) {
+    if (!base.some((d) => d.type === act.type)) {
+      merged.push(act);
+    }
+  }
+  return merged;
+}
+
 export function applyTemplateToActions(
   actions: CrmAction[],
   tpl: {

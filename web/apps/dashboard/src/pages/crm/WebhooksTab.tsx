@@ -24,7 +24,7 @@ import {
   fetchWebhookRules,
   updateWebhookRule,
 } from "./api";
-import { actionSummary, defaultActions } from "./helpers";
+import { actionSummary, defaultActions, mergeActions } from "./helpers";
 import type { CrmAction, CrmWebhookRuleRow, WebhookScopeGroup } from "./types";
 
 export default function WebhooksTab() {
@@ -81,7 +81,7 @@ export default function WebhooksTab() {
   const openEdit = (row: CrmWebhookRuleRow) => {
     setEditing(row);
     setScope(row.scope);
-    setActions(row.actions?.length ? row.actions : defaultActions());
+    setActions(mergeActions(row.actions));
     form.setFieldsValue({
       name: row.name,
       enabled: row.enabled,
@@ -115,6 +115,7 @@ export default function WebhooksTab() {
         message.success("Rule created");
       }
       setDrawerOpen(false);
+      setEditing(null);
       load();
     } catch {
       message.error("Failed to save");
@@ -194,24 +195,29 @@ export default function WebhooksTab() {
     },
     {
       title: "",
-      width: 80,
+      width: isMobile ? 100 : 140,
       render: (_: unknown, row: CrmWebhookRuleRow) => (
-        <Popconfirm
-          title="Delete this rule?"
-          onConfirm={async () => {
-            try {
-              await deleteWebhookRule(row.id);
-              message.success("Deleted");
-              load();
-            } catch {
-              message.error("Failed to delete");
-            }
-          }}
-        >
-          <Button danger size="small" type="link">
-            Delete
+        <Space size={4}>
+          <Button size="small" onClick={() => openEdit(row)}>
+            Edit
           </Button>
-        </Popconfirm>
+          <Popconfirm
+            title="Delete this rule?"
+            onConfirm={async () => {
+              try {
+                await deleteWebhookRule(row.id);
+                message.success("Deleted");
+                load();
+              } catch {
+                message.error("Failed to delete");
+              }
+            }}
+          >
+            <Button danger size="small" type="link">
+              Delete
+            </Button>
+          </Popconfirm>
+        </Space>
       ),
     },
   ];
@@ -253,21 +259,26 @@ export default function WebhooksTab() {
                 </Space>
               }
               extra={
-                <Popconfirm
-                  title="Delete?"
-                  onConfirm={async () => {
-                    try {
-                      await deleteWebhookRule(row.id);
-                      load();
-                    } catch {
-                      message.error("Failed to delete");
-                    }
-                  }}
-                >
-                  <Button danger size="small" type="link">
-                    Del
+                <Space size={0}>
+                  <Button size="small" type="link" onClick={() => openEdit(row)}>
+                    Edit
                   </Button>
-                </Popconfirm>
+                  <Popconfirm
+                    title="Delete?"
+                    onConfirm={async () => {
+                      try {
+                        await deleteWebhookRule(row.id);
+                        load();
+                      } catch {
+                        message.error("Failed to delete");
+                      }
+                    }}
+                  >
+                    <Button danger size="small" type="link">
+                      Del
+                    </Button>
+                  </Popconfirm>
+                </Space>
               }
             >
               <Typography.Text code style={{ fontSize: 11 }}>
@@ -305,17 +316,28 @@ export default function WebhooksTab() {
       )}
 
       <Drawer
-        title={editing ? "Edit webhook rule" : "New webhook rule"}
+        title={editing ? `Edit: ${editing.name || `#${editing.id}`}` : "New webhook rule"}
         open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
+        onClose={() => {
+          setDrawerOpen(false);
+          setEditing(null);
+        }}
         width={isMobile ? "100%" : 560}
         destroyOnHidden
         extra={
           <Button type="primary" onClick={saveRule}>
-            Save
+            {editing ? "Save changes" : "Create"}
           </Button>
         }
       >
+        {editing && (
+          <Alert
+            type="info"
+            showIcon
+            style={{ marginBottom: 12 }}
+            message={`Stats: received ${editing.webhooks_received ?? 0}, sent ${editing.messages_sent ?? 0}, failed ${editing.messages_failed ?? 0}`}
+          />
+        )}
         <Form form={form} layout="vertical">
           <Form.Item name="name" label="Name" rules={[{ required: true }]}>
             <Input placeholder="Torrent warning" />
@@ -336,10 +358,7 @@ export default function WebhooksTab() {
               />
             </Form.Item>
             <Form.Item name="event" label="Event" rules={[{ required: true }]}>
-              <Select
-                options={eventOptions}
-                disabled={!scope}
-              />
+              <Select options={eventOptions} disabled={!scope} />
             </Form.Item>
             <Form.Item
               name="cooldown_hours"
