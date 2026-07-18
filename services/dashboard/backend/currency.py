@@ -29,6 +29,9 @@ PAYMENT_CURRENCY: dict[str, str] = {
     "FREE": "RUB",
 }
 
+# Wallet spend / non-cash settlement — not real money turnover for revenue KPIs.
+NON_REVENUE_PAYMENT_METHODS: frozenset[str] = frozenset({"BONUS_CREDITS"})
+
 _USD_RUB_FALLBACK = 75.0
 _STAR_RUB_DEFAULT = 1.3
 _CBR_URL = "https://www.cbr-xml-daily.ru/daily_json.js"
@@ -81,6 +84,11 @@ async def get_rates() -> dict[str, float]:
 
 
 def convert_to_rub(amount: float, payment_method: str | None, rates: dict[str, float]) -> float:
-    """Convert a single amount in its native currency to RUB."""
+    """Convert a single amount in its native currency to RUB.
+
+    Non-cash methods (e.g. BONUS_CREDITS) contribute 0 to revenue.
+    """
+    if payment_method in NON_REVENUE_PAYMENT_METHODS:
+        return 0.0
     currency = PAYMENT_CURRENCY.get(payment_method or "", "RUB")
     return amount * rates.get(currency, 1.0)
