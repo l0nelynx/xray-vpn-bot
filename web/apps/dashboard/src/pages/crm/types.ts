@@ -141,6 +141,9 @@ export interface CrmWebhookRuleRow {
   event: string;
   actions: CrmAction[];
   cooldown_hours: number | null;
+  webhooks_received: number;
+  messages_sent: number;
+  messages_failed: number;
   created_at: string;
   updated_at: string;
   created_by: string;

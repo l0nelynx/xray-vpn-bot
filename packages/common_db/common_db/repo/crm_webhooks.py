@@ -130,3 +130,21 @@ def get_actions(rule: CrmWebhookRule) -> list[dict]:
     except json.JSONDecodeError:
         return []
     return data if isinstance(data, list) else []
+
+
+async def bump_stats(
+    session: AsyncSession,
+    rule: CrmWebhookRule,
+    *,
+    webhooks_received: int = 0,
+    messages_sent: int = 0,
+    messages_failed: int = 0,
+) -> None:
+    """Atomically bump per-rule counters (in-memory + flush)."""
+    if webhooks_received:
+        rule.webhooks_received = int(rule.webhooks_received or 0) + webhooks_received
+    if messages_sent:
+        rule.messages_sent = int(rule.messages_sent or 0) + messages_sent
+    if messages_failed:
+        rule.messages_failed = int(rule.messages_failed or 0) + messages_failed
+    await session.flush()

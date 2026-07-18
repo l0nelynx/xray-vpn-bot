@@ -80,6 +80,10 @@ async def execute_crm_webhook(payload_dict: dict[str, Any]) -> None:
             await session.commit()
             return
 
+        # Count a match as soon as the inbound event hits an enabled rule.
+        for rule in rules:
+            await webhooks_repo.bump_stats(session, rule, webhooks_received=1)
+
         db_user = await _resolve_db_user(session, payload)
         if db_user is None:
             logger.info(
@@ -139,6 +143,17 @@ async def execute_crm_webhook(payload_dict: dict[str, Any]) -> None:
                 session=session,
                 message_ctx=message_ctx,
             )
+
+            sent_delta = 1 if result.message_sent else 0
+            failed_delta = 1 if result.message_failed else 0
+            if sent_delta or failed_delta:
+                await webhooks_repo.bump_stats(
+                    session,
+                    rule,
+                    messages_sent=sent_delta,
+                    messages_failed=failed_delta,
+                )
+
             if result.message_sent or result.perks_applied:
                 await webhooks_repo.record_delivery(
                     session, rule_id=rule.id, tg_id=db_user.tg_id

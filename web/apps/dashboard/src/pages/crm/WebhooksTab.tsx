@@ -156,6 +156,25 @@ export default function WebhooksTab() {
       render: (_: unknown, row: CrmWebhookRuleRow) => actionSummary(row.actions),
     },
     {
+      title: "Received",
+      width: 90,
+      render: (_: unknown, row: CrmWebhookRuleRow) => row.webhooks_received ?? 0,
+    },
+    {
+      title: "Sent",
+      width: 70,
+      render: (_: unknown, row: CrmWebhookRuleRow) => row.messages_sent ?? 0,
+    },
+    {
+      title: "Failed",
+      width: 80,
+      render: (_: unknown, row: CrmWebhookRuleRow) => (
+        <Typography.Text type={(row.messages_failed ?? 0) > 0 ? "danger" : undefined}>
+          {row.messages_failed ?? 0}
+        </Typography.Text>
+      ),
+    },
+    {
       title: "Cooldown",
       width: 90,
       responsive: ["md" as const],
@@ -257,6 +276,16 @@ export default function WebhooksTab() {
               <div style={{ marginTop: 6, fontSize: 12, opacity: 0.7 }}>
                 {actionSummary(row.actions)}
                 {row.cooldown_hours != null ? ` · cooldown ${row.cooldown_hours}h` : ""}
+              </div>
+              <div style={{ marginTop: 4, fontSize: 12 }}>
+                recv {row.webhooks_received ?? 0} · sent {row.messages_sent ?? 0}
+                {(row.messages_failed ?? 0) > 0 ? (
+                  <Typography.Text type="danger">
+                    {` · fail ${row.messages_failed}`}
+                  </Typography.Text>
+                ) : (
+                  ` · fail ${row.messages_failed ?? 0}`
+                )}
               </div>
             </Card>
           ))}

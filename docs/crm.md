@@ -166,7 +166,7 @@ Catalog: `GET /crm/variables`. For webhook rules use `GET /crm/variables?context
 | `crm_campaign_deliveries` | Per-recipient result for a campaign |
 | `crm_events` | Scheduled event definitions + `next_run_at` |
 | `crm_event_deliveries` | De-dup / repeat-policy tracking for events |
-| `crm_webhook_rules` | Remnawave webhook scope/event → actions |
+| `crm_webhook_rules` | Remnawave webhook scope/event → actions (+ received/sent/failed counters) |
 | `crm_webhook_deliveries` | Cooldown tracking for webhook rules |
 
 Repos: `common_db.repo.crm`, `crm_events`, `crm_webhooks`, `crm_segments`.

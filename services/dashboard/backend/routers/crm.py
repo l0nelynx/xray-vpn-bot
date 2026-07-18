@@ -874,6 +874,9 @@ class CrmWebhookRuleSummary(BaseModel):
     event: str
     actions: list[dict]
     cooldown_hours: int | None
+    webhooks_received: int = 0
+    messages_sent: int = 0
+    messages_failed: int = 0
     created_at: str
     updated_at: str
     created_by: str
@@ -888,6 +891,9 @@ def _webhook_summary(rule) -> CrmWebhookRuleSummary:
         event=rule.event,
         actions=webhooks_repo.get_actions(rule),
         cooldown_hours=rule.cooldown_hours,
+        webhooks_received=int(getattr(rule, "webhooks_received", 0) or 0),
+        messages_sent=int(getattr(rule, "messages_sent", 0) or 0),
+        messages_failed=int(getattr(rule, "messages_failed", 0) or 0),
         created_at=rule.created_at,
         updated_at=rule.updated_at,
         created_by=rule.created_by,

@@ -56,6 +56,17 @@ def test_create_list_matching_and_cooldown() -> None:
                 assert await webhooks_repo.has_recent_delivery(
                     session, rule_id=rule.id, tg_id=1, cooldown_hours=24
                 )
+
+                await webhooks_repo.bump_stats(
+                    session,
+                    rule,
+                    webhooks_received=2,
+                    messages_sent=1,
+                    messages_failed=1,
+                )
+                assert rule.webhooks_received == 2
+                assert rule.messages_sent == 1
+                assert rule.messages_failed == 1
         finally:
             await engine.dispose()
 
