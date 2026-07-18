@@ -140,6 +140,7 @@ async def execute_user_actions(
     event_id: int | None = None,
     on_message_sent=None,
     session=None,
+    message_ctx: dict[str, str] | None = None,
 ) -> UserActionResult:
     """Run enabled actions for one user. RW actions first, then Telegram."""
     result = UserActionResult()
@@ -244,7 +245,9 @@ async def execute_user_actions(
             button_type = act.get("button_type") or BUTTON_OPEN_BOT
 
     if message_text and not result.message_skipped:
-        ctx = build_message_context(username=db_user.username, crm_user=crm_user)
+        ctx = message_ctx or build_message_context(
+            username=db_user.username, crm_user=crm_user
+        )
         personalized = render_crm_message(message_text, ctx)
         reply_markup = None
         if attach_button:

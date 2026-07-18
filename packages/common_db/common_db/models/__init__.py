@@ -8,7 +8,14 @@ Import any class you need from here:
 """
 from .auth import EmailVerification, RefreshToken, TelegramLinkCode
 from .credit_ledger import CreditLedger
-from .crm import CrmCampaign, CrmCampaignDelivery, CrmEvent, CrmEventDelivery
+from .crm import (
+    CrmCampaign,
+    CrmCampaignDelivery,
+    CrmEvent,
+    CrmEventDelivery,
+    CrmWebhookDelivery,
+    CrmWebhookRule,
+)
 from .fcm import AndroidFcmToken
 from .google_play import GooglePlayPurchase, GooglePlaySku
 from .push import PushCampaign, PushCampaignDelivery
@@ -34,6 +41,8 @@ __all__ = [
     "CrmCampaignDelivery",
     "CrmEvent",
     "CrmEventDelivery",
+    "CrmWebhookRule",
+    "CrmWebhookDelivery",
     # transactions
     "Transaction",
     # support

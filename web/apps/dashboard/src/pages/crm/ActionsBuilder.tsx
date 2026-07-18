@@ -25,6 +25,8 @@ interface ActionsBuilderProps {
   onChange: (actions: CrmAction[]) => void;
   segmentId: string | null;
   templates?: MessageTemplate[];
+  /** When "webhook", loads base + webhook-only template variables. */
+  variablesContext?: "webhook" | null;
 }
 
 export default function ActionsBuilder({
@@ -32,6 +34,7 @@ export default function ActionsBuilder({
   onChange,
   segmentId,
   templates: templatesProp,
+  variablesContext = null,
 }: ActionsBuilderProps) {
   const { message } = App.useApp();
   const isMobile = useIsMobile();
@@ -44,10 +47,14 @@ export default function ActionsBuilder({
     api.get<{ action_types: ActionTypeMeta[] }>("/crm/actions/types").then((r) => {
       setActionTypes(r.action_types);
     });
-    api.get<{ variables: CrmVariable[] }>("/crm/variables").then((r) => {
+    const varsUrl =
+      variablesContext === "webhook"
+        ? "/crm/variables?context=webhook"
+        : "/crm/variables";
+    api.get<{ variables: CrmVariable[] }>(varsUrl).then((r) => {
       setVariables(r.variables);
     });
-  }, []);
+  }, [variablesContext]);
 
   useEffect(() => {
     if (templatesProp) {

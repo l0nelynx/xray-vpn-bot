@@ -99,10 +99,13 @@ services:
 #      - "5000:5000"
     environment:
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-xray}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-xray_vpn_bot}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
     restart: unless-stopped
     depends_on:
       migrate:
         condition: service_completed_successfully
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
       interval: 60s

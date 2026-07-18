@@ -29,6 +29,8 @@ CANONICAL_TABLES = frozenset({
     "crm_campaigns",
     "crm_event_deliveries",
     "crm_events",
+    "crm_webhook_deliveries",
+    "crm_webhook_rules",
     "credit_ledger",
     "disabled_users",
     "email_verifications",

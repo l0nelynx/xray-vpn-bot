@@ -81,7 +81,8 @@ Implementation: `services/bot/app/api/handlers.py` → `payment_process_backgrou
 
 ### Remnawave inbound webhook
 
-Handles torrent-blocker reports from the panel. See [Integrations](integrations.md).
+Verifies HMAC, acks, and enqueues to `crm-worker` for CRM Webhook rules.
+See [Integrations](integrations.md) and [CRM](crm.md).
 
 ## Legacy bot constructor (optional)
 

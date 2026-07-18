@@ -7,7 +7,16 @@ import math
 import re
 from typing import Any
 
-_VAR_PATTERN = re.compile(r"\{\{\s*([a-z_]+)\s*\}\}")
+from remnawave_client.webhooks import (
+    RemnawaveWebhookPayload,
+    extract_device_model,
+    extract_not_connected_after_hours,
+    torrent_block_ip,
+    torrent_block_minutes,
+)
+
+# Allow snake_case and camelCase placeholders (webhook vars use camelCase).
+_VAR_PATTERN = re.compile(r"\{\{\s*([a-zA-Z][a-zA-Z0-9_]*)\s*\}\}")
 
 VARIABLE_CATALOG: list[dict[str, str]] = [
     {
@@ -48,9 +57,42 @@ VARIABLE_CATALOG: list[dict[str, str]] = [
     },
 ]
 
+WEBHOOK_VARIABLE_CATALOG: list[dict[str, str]] = [
+    {
+        "key": "notConnectedAfterHours",
+        "label": "Not connected (hours)",
+        "description": "Hours offline from user.not_connected meta",
+        "example": "24",
+    },
+    {
+        "key": "deviceModel",
+        "label": "Device model",
+        "description": "HWID device model from user_hwid_devices events",
+        "example": "iPhone 15",
+    },
+    {
+        "key": "ip",
+        "label": "Blocked IP",
+        "description": "IP from torrent_blocker.report",
+        "example": "203.0.113.42",
+    },
+    {
+        "key": "blockMinutes",
+        "label": "Block minutes",
+        "description": "Torrent block duration in minutes",
+        "example": "30",
+    },
+]
 
-def variable_catalog() -> list[dict[str, str]]:
+
+def variable_catalog(*, context: str | None = None) -> list[dict[str, str]]:
+    if context == "webhook":
+        return list(VARIABLE_CATALOG) + list(WEBHOOK_VARIABLE_CATALOG)
     return list(VARIABLE_CATALOG)
+
+
+def webhook_variable_catalog() -> list[dict[str, str]]:
+    return list(WEBHOOK_VARIABLE_CATALOG)
 
 
 def _format_traffic_left(crm_user: dict | None) -> str:
@@ -79,6 +121,7 @@ def build_message_context(
     username: str | None,
     crm_user: dict | None,
     meta: dict | None = None,
+    extra: dict[str, str] | None = None,
 ) -> dict[str, str]:
     """Build substitution map for one recipient."""
     meta = meta or {}
@@ -106,7 +149,7 @@ def build_message_context(
     else:
         traffic_percent_str = _format_traffic_percent(crm_user)
 
-    return {
+    ctx = {
         "username": html.escape(display_name),
         "days_left": html.escape(days_str),
         "traffic_left": html.escape(_format_traffic_left(crm_user)),
@@ -114,6 +157,39 @@ def build_message_context(
         "traffic_percent": html.escape(traffic_percent_str),
         "status": html.escape(status_str),
     }
+    if extra:
+        for key, value in extra.items():
+            ctx[key] = html.escape(str(value)) if value is not None else ""
+    return ctx
+
+
+def build_webhook_extra_vars(payload: RemnawaveWebhookPayload) -> dict[str, str]:
+    """Webhook-only placeholders; missing fields become empty strings."""
+    hours = extract_not_connected_after_hours(payload)
+    model = extract_device_model(payload)
+    ip = torrent_block_ip(payload)
+    minutes = torrent_block_minutes(payload) if payload.scope == "torrent_blocker" else None
+    return {
+        "notConnectedAfterHours": "" if hours is None else str(hours),
+        "deviceModel": model or "",
+        "ip": ip or "",
+        "blockMinutes": "" if minutes is None else str(minutes),
+    }
+
+
+def build_webhook_message_context(
+    *,
+    username: str | None,
+    crm_user: dict | None,
+    payload: RemnawaveWebhookPayload,
+    meta: dict | None = None,
+) -> dict[str, str]:
+    return build_message_context(
+        username=username,
+        crm_user=crm_user,
+        meta=meta,
+        extra=build_webhook_extra_vars(payload),
+    )
 
 
 def render_crm_message(template: str, ctx: dict[str, str]) -> str:

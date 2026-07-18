@@ -122,6 +122,30 @@ export interface CrmEventRow {
   created_by: string;
 }
 
+export interface WebhookEventOption {
+  value: string;
+  label: string;
+}
+
+export interface WebhookScopeGroup {
+  scope: string;
+  label: string;
+  events: WebhookEventOption[];
+}
+
+export interface CrmWebhookRuleRow {
+  id: number;
+  name: string;
+  enabled: boolean;
+  scope: string;
+  event: string;
+  actions: CrmAction[];
+  cooldown_hours: number | null;
+  created_at: string;
+  updated_at: string;
+  created_by: string;
+}
+
 export interface MessageTemplate {
   id: string;
   segment_id: string;

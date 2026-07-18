@@ -38,6 +38,8 @@ from ..database.session import async_session
 from ..tasks.crm import enqueue_campaign
 
 from common_db.repo import crm_events as events_repo
+from common_db.repo import crm_webhooks as webhooks_repo
+from remnawave_client.webhooks import is_known_webhook_pair, webhook_event_catalog
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/crm", tags=["crm"])
@@ -361,8 +363,11 @@ def _event_summary(e) -> CrmEventSummary:
 
 
 @router.get("/variables")
-async def list_variables(_: str = Depends(get_current_user)):
-    return {"variables": variable_catalog()}
+async def list_variables(
+    context: str | None = None,
+    _: str = Depends(get_current_user),
+):
+    return {"variables": variable_catalog(context=context)}
 
 
 @router.get("/templates")
@@ -836,3 +841,155 @@ async def list_event_campaigns(event_id: int, _: str = Depends(get_current_user)
         related = [c for c in all_campaigns if c.event_id == event_id]
         await session.commit()
     return {"campaigns": [_campaign_summary(c) for c in related]}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Remnawave webhook rules
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class CrmWebhookRuleCreate(BaseModel):
+    name: str = ""
+    enabled: bool = True
+    scope: str
+    event: str
+    actions: list[dict] = Field(default_factory=list)
+    cooldown_hours: int | None = None
+
+
+class CrmWebhookRuleUpdate(BaseModel):
+    name: str | None = None
+    enabled: bool | None = None
+    scope: str | None = None
+    event: str | None = None
+    actions: list[dict] | None = None
+    cooldown_hours: int | None = None
+
+
+class CrmWebhookRuleSummary(BaseModel):
+    id: int
+    name: str
+    enabled: bool
+    scope: str
+    event: str
+    actions: list[dict]
+    cooldown_hours: int | None
+    created_at: str
+    updated_at: str
+    created_by: str
+
+
+def _webhook_summary(rule) -> CrmWebhookRuleSummary:
+    return CrmWebhookRuleSummary(
+        id=rule.id,
+        name=rule.name,
+        enabled=rule.enabled,
+        scope=rule.scope,
+        event=rule.event,
+        actions=webhooks_repo.get_actions(rule),
+        cooldown_hours=rule.cooldown_hours,
+        created_at=rule.created_at,
+        updated_at=rule.updated_at,
+        created_by=rule.created_by,
+    )
+
+
+def _validate_webhook_pair(scope: str, event: str) -> None:
+    if not scope or not event:
+        raise HTTPException(400, "scope and event are required")
+    if not is_known_webhook_pair(scope, event):
+        raise HTTPException(400, f"unknown webhook pair: {scope}/{event}")
+
+
+@router.get("/webhooks/catalog")
+async def list_webhook_catalog(_: str = Depends(get_current_user)):
+    return {"scopes": webhook_event_catalog()}
+
+
+@router.get("/webhooks")
+async def list_webhook_rules(_: str = Depends(get_current_user)):
+    async with async_session() as session:
+        rows = await webhooks_repo.list_rules(session)
+        await session.commit()
+    return {"rules": [_webhook_summary(r) for r in rows]}
+
+
+@router.post("/webhooks", response_model=CrmWebhookRuleSummary)
+async def create_webhook_rule(
+    body: CrmWebhookRuleCreate,
+    user: str = Depends(get_current_user),
+):
+    _validate_webhook_pair(body.scope, body.event)
+    try:
+        validate_actions(body.actions)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+    async with async_session() as session:
+        rule = await webhooks_repo.create_rule(
+            session,
+            name=body.name or f"{body.scope}/{body.event}",
+            scope=body.scope,
+            event=body.event,
+            actions=body.actions,
+            created_by=user,
+            enabled=body.enabled,
+            cooldown_hours=body.cooldown_hours,
+        )
+        await session.commit()
+        return _webhook_summary(rule)
+
+
+@router.get("/webhooks/{rule_id}", response_model=CrmWebhookRuleSummary)
+async def get_webhook_rule(rule_id: int, _: str = Depends(get_current_user)):
+    async with async_session() as session:
+        rule = await webhooks_repo.get_rule(session, rule_id)
+        if not rule:
+            raise HTTPException(404, "Webhook rule not found")
+        summary = _webhook_summary(rule)
+        await session.commit()
+    return summary
+
+
+@router.patch("/webhooks/{rule_id}", response_model=CrmWebhookRuleSummary)
+async def update_webhook_rule(
+    rule_id: int,
+    body: CrmWebhookRuleUpdate,
+    _: str = Depends(get_current_user),
+):
+    async with async_session() as session:
+        rule = await webhooks_repo.get_rule(session, rule_id)
+        if not rule:
+            raise HTTPException(404, "Webhook rule not found")
+
+        scope = body.scope if body.scope is not None else rule.scope
+        event = body.event if body.event is not None else rule.event
+        if body.scope is not None or body.event is not None:
+            _validate_webhook_pair(scope, event)
+
+        updates: dict = {}
+        data = body.model_dump(exclude_unset=True)
+        for field in ("name", "enabled", "scope", "event", "cooldown_hours"):
+            if field in data:
+                updates[field] = data[field]
+        if "actions" in data and body.actions is not None:
+            try:
+                validate_actions(body.actions)
+            except ValueError as exc:
+                raise HTTPException(400, str(exc)) from exc
+            updates["actions_json"] = json.dumps(body.actions, ensure_ascii=False)
+
+        await webhooks_repo.update_rule(session, rule, **updates)
+        await session.commit()
+        return _webhook_summary(rule)
+
+
+@router.delete("/webhooks/{rule_id}")
+async def delete_webhook_rule(rule_id: int, _: str = Depends(get_current_user)):
+    async with async_session() as session:
+        rule = await webhooks_repo.get_rule(session, rule_id)
+        if not rule:
+            raise HTTPException(404, "Webhook rule not found")
+        await webhooks_repo.delete_rule(session, rule)
+        await session.commit()
+    return {"status": "deleted"}

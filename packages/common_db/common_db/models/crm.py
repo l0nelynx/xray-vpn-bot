@@ -131,3 +131,48 @@ class CrmCampaignDelivery(Base):
         Index("ix_crm_campaign_deliveries_campaign_id", "campaign_id"),
         Index("ix_crm_campaign_deliveries_tg_id", "tg_id"),
     )
+
+
+class CrmWebhookRule(Base):
+    """Remnawave inbound webhook → CRM actions rule (scope + event match)."""
+
+    __tablename__ = "crm_webhook_rules"
+
+    id: Mapped[int] = mapped_column(_BIGINT_PK, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(200), default="", server_default="")
+    enabled: Mapped[bool] = mapped_column(default=True, server_default="true")
+    scope: Mapped[str] = mapped_column(String(50), default="", server_default="")
+    event: Mapped[str] = mapped_column(String(100), default="", server_default="")
+    actions_json: Mapped[str] = mapped_column(Text, default="[]", server_default="[]")
+    cooldown_hours: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[str] = mapped_column(String(30))
+    updated_at: Mapped[str] = mapped_column(String(30))
+    created_by: Mapped[str] = mapped_column(String(100), default="", server_default="")
+
+    deliveries: Mapped[list["CrmWebhookDelivery"]] = relationship(
+        back_populates="rule", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        Index("ix_crm_webhook_rules_enabled", "enabled"),
+        Index("ix_crm_webhook_rules_scope_event", "scope", "event"),
+    )
+
+
+class CrmWebhookDelivery(Base):
+    __tablename__ = "crm_webhook_deliveries"
+
+    id: Mapped[int] = mapped_column(_BIGINT_PK, primary_key=True, autoincrement=True)
+    rule_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("crm_webhook_rules.id", ondelete="CASCADE")
+    )
+    tg_id: Mapped[int] = mapped_column(BigInteger)
+    sent_at: Mapped[str] = mapped_column(String(30))
+
+    rule: Mapped["CrmWebhookRule"] = relationship(back_populates="deliveries")
+
+    __table_args__ = (
+        Index("ix_crm_webhook_deliveries_rule_id", "rule_id"),
+        Index("ix_crm_webhook_deliveries_tg_id", "tg_id"),
+        Index("ix_crm_webhook_deliveries_rule_tg", "rule_id", "tg_id"),
+    )

@@ -55,3 +55,47 @@ def test_build_message_context_unlimited_traffic() -> None:
         crm_user={"traffic_limit_bytes": 0, "used_traffic_bytes": 0},
     )
     assert ctx["traffic_left"] == "—"
+
+
+def test_webhook_variables_catalog_and_camel_case_render() -> None:
+    from dashboard.backend.crm_variables import (
+        render_crm_message,
+        variable_catalog,
+        build_webhook_message_context,
+    )
+    from remnawave_client.webhooks import RemnawaveWebhookPayload
+
+    keys = {v["key"] for v in variable_catalog(context="webhook")}
+    assert "notConnectedAfterHours" in keys
+    assert "deviceModel" in keys
+    assert "ip" in keys
+    assert "blockMinutes" in keys
+    assert "notConnectedAfterHours" not in {v["key"] for v in variable_catalog()}
+
+    payload = RemnawaveWebhookPayload.model_validate(
+        {
+            "scope": "torrent_blocker",
+            "event": "torrent_blocker.report",
+            "timestamp": "2026-03-07T16:02:50.564Z",
+            "data": {
+                "user": {"uuid": "u-1"},
+                "report": {
+                    "actionReport": {
+                        "blocked": True,
+                        "ip": "1.2.3.4",
+                        "blockDuration": 1800,
+                    }
+                },
+            },
+        }
+    )
+    ctx = build_webhook_message_context(
+        username="alice", crm_user=None, payload=payload
+    )
+    assert ctx["ip"] == "1.2.3.4"
+    assert ctx["blockMinutes"] == "30"
+    rendered = render_crm_message(
+        "IP {{ip}} for {{blockMinutes}} min, {{username}}", ctx
+    )
+    assert "1.2.3.4" in rendered
+    assert "30" in rendered

@@ -49,6 +49,16 @@ def test_enqueue_campaign_raises_without_pool() -> None:
     _run(go())
 
 
+def test_enqueue_webhook_job_name() -> None:
+    mod = pytest.importorskip("dashboard.backend.tasks.crm_webhooks")
+    from dashboard.backend.worker import WorkerSettings
+
+    assert mod.JOB_NAME == "execute_crm_webhook"
+    names = {fn.__name__ if callable(fn) else getattr(fn, "__name__", "") for fn in WorkerSettings.functions}
+    # ARQ may wrap functions; check by string presence
+    assert any("execute_crm_webhook" in str(fn) for fn in WorkerSettings.functions) or "execute_crm_webhook" in names
+
+
 def test_queue_campaign_sets_status_queued() -> None:
     async def go() -> None:
         engine = _make_engine()

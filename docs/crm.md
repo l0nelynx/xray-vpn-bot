@@ -23,7 +23,7 @@ Ops notes (Redis, worker, UTC schedule): [Deployment](deployment.md).
 | Dependency | Role |
 |------------|------|
 | `redis` | Job queue for campaign execution |
-| `crm-worker` | ARQ worker — runs campaigns and polls scheduled events |
+| `crm-worker` | ARQ worker — runs campaigns, scheduled events, and Remnawave webhook rules |
 | Remnawave | Segment scans and perk actions |
 | Bot token | Telegram delivery (`send_message` / buttons) |
 
@@ -41,12 +41,13 @@ docker compose up -d redis crm-worker
 
 **Route:** `/crm`
 
-Three tabs:
+Tabs:
 
 | Tab | Purpose |
 |-----|---------|
 | **Кампании (Campaigns)** | Build conditions + actions → preview audience → launch once |
 | **События (Events)** | Recurring schedules (UTC); worker fires them automatically |
+| **Webhooks** | Remnawave inbound events (`scope` + `event`) → CRM actions |
 | **История (History)** | Past campaigns: sent / failed / perk counters, delivery detail |
 
 ### Typical campaign workflow
@@ -69,6 +70,17 @@ Three tabs:
 5. **Run now:** `POST /crm/events/{id}/run-now` from the Events tab.
 
 Postgres stores `next_run_at` so schedules survive Redis restarts.
+
+### Remnawave webhook rules
+
+1. Open **Webhooks** → create a rule with **scope** + **event** (from the Remnawave
+   catalog: `user`, `torrent_blocker`, `user_hwid_devices`).
+2. Configure the same **actions** as campaigns (message, perks, credits).
+3. Optional **cooldown hours** — skip re-delivery to the same user within the window.
+4. Panel POSTs to `/bot/remnawave_webhook` → bot enqueues → `crm-worker` runs matching rules.
+
+Webhook-only variables (also available with the usual CRM placeholders):
+`{{notConnectedAfterHours}}`, `{{deviceModel}}`, `{{ip}}`, `{{blockMinutes}}`.
 
 ---
 
@@ -141,7 +153,8 @@ Templates support `{{ key }}` placeholders:
 | `hwid_devices` | `2` |
 | `status` | `limited` |
 
-Catalog: `GET /crm/variables`. Segment-specific canned texts: `GET /crm/templates?segment_id=…`.
+Catalog: `GET /crm/variables`. For webhook rules use `GET /crm/variables?context=webhook`
+(adds webhook-only keys). Segment-specific canned texts: `GET /crm/templates?segment_id=…`.
 
 ---
 
@@ -153,8 +166,10 @@ Catalog: `GET /crm/variables`. Segment-specific canned texts: `GET /crm/template
 | `crm_campaign_deliveries` | Per-recipient result for a campaign |
 | `crm_events` | Scheduled event definitions + `next_run_at` |
 | `crm_event_deliveries` | De-dup / repeat-policy tracking for events |
+| `crm_webhook_rules` | Remnawave webhook scope/event → actions |
+| `crm_webhook_deliveries` | Cooldown tracking for webhook rules |
 
-Repos: `common_db.repo.crm`, `crm_events`, `crm_segments`.
+Repos: `common_db.repo.crm`, `crm_events`, `crm_webhooks`, `crm_segments`.
 
 ---
 
@@ -168,6 +183,7 @@ All under `/bot/dashboard/api/crm/` (JWT required):
 | Preview | `POST /conditions/evaluate` |
 | Campaigns | `GET /campaigns`, `POST /campaigns/launch`, `GET /campaigns/{id}` |
 | Events | `GET/POST /events`, `PATCH/DELETE /events/{id}`, `POST /events/{id}/run-now` |
+| Webhooks | `GET /webhooks/catalog`, `GET/POST /webhooks`, `PATCH/DELETE /webhooks/{id}` |
 | Remnawave helpers | `GET /remnawave/internal-squads` |
 
 ---
@@ -185,6 +201,8 @@ flowchart LR
     Worker --> Perks[Perks / credits]
     Worker --> TG[Telegram send]
     Cron[tick_crm_events every 15m] --> Worker
+    Panel[Remnawave panel] --> BotWH[bot /remnawave_webhook]
+    BotWH -->|enqueue execute_crm_webhook| Redis
 ```
 
 ---
@@ -195,6 +213,7 @@ flowchart LR
 |---------|-----|
 | Launch returns 503 | Start `redis` + `crm-worker`; check `REDIS_URL` |
 | Events never fire | Confirm `crm-worker` logs for `tick_crm_events`; times are **UTC** |
+| Webhook rules never run | Confirm bot has `REDIS_URL`, `crm-worker` running, rule enabled + matching scope/event |
 | Empty audience | Preview conditions; Remnawave connectivity; `user_type` filter too strict |
 | Message sent, no perk | Check History delivery errors; Remnawave token / user UUID mapping |
 | UI/API mismatch after update | Redeploy dashboard **frontend and backend** together |
@@ -204,4 +223,4 @@ flowchart LR
 - [Referral & promocodes](referral.md) — bonus credits wallet used by `credit_balance`
 - [Dashboard](dashboard.md) — nav overview
 - [Deployment](deployment.md) — Redis / worker / scheduling
-- [Integrations](integrations.md) — Remnawave torrent webhook feeds the `torrent` segment
+- [Integrations](integrations.md) — Remnawave inbound webhooks → CRM Webhooks tab

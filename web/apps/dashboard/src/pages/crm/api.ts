@@ -4,8 +4,10 @@ import type {
   CrmAction,
   CrmCondition,
   CrmEventRow,
+  CrmWebhookRuleRow,
   ScanResult,
   SegmentDef,
+  WebhookScopeGroup,
 } from "./types";
 
 export async function fetchSegments(): Promise<SegmentDef[]> {
@@ -66,4 +68,31 @@ export async function runEventNow(
   id: number
 ): Promise<{ status: string; total?: number; campaign_id?: number }> {
   return api.post(`/crm/events/${id}/run-now`);
+}
+
+export async function fetchWebhookCatalog(): Promise<WebhookScopeGroup[]> {
+  const res = await api.get<{ scopes: WebhookScopeGroup[] }>("/crm/webhooks/catalog");
+  return res.scopes;
+}
+
+export async function fetchWebhookRules(): Promise<CrmWebhookRuleRow[]> {
+  const res = await api.get<{ rules: CrmWebhookRuleRow[] }>("/crm/webhooks");
+  return res.rules;
+}
+
+export async function createWebhookRule(
+  payload: Record<string, unknown>
+): Promise<CrmWebhookRuleRow> {
+  return api.post("/crm/webhooks", payload);
+}
+
+export async function updateWebhookRule(
+  id: number,
+  payload: Record<string, unknown>
+): Promise<CrmWebhookRuleRow> {
+  return api.patch(`/crm/webhooks/${id}`, payload);
+}
+
+export async function deleteWebhookRule(id: number): Promise<void> {
+  await api.delete(`/crm/webhooks/${id}`);
 }
