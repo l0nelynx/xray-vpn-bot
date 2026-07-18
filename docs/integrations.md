@@ -48,7 +48,8 @@ hardcoded torrent message anymore. Optional per-rule `cooldown_hours` limits
 repeat sends to the same user.
 
 Webhook-only message variables: `{{notConnectedAfterHours}}`, `{{deviceModel}}`,
-`{{ip}}`, `{{blockMinutes}}` (plus the usual CRM placeholders).
+`{{platform}}`, `{{osVersion}}`, `{{ip}}`, `{{blockMinutes}}` (plus the usual CRM
+placeholders).
 
 ## Payments
 

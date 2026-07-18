@@ -68,6 +68,8 @@ def test_webhook_variables_catalog_and_camel_case_render() -> None:
     keys = {v["key"] for v in variable_catalog(context="webhook")}
     assert "notConnectedAfterHours" in keys
     assert "deviceModel" in keys
+    assert "platform" in keys
+    assert "osVersion" in keys
     assert "ip" in keys
     assert "blockMinutes" in keys
     assert "notConnectedAfterHours" not in {v["key"] for v in variable_catalog()}

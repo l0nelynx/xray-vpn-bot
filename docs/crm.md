@@ -80,7 +80,8 @@ Postgres stores `next_run_at` so schedules survive Redis restarts.
 4. Panel POSTs to `/bot/remnawave_webhook` → bot enqueues → `crm-worker` runs matching rules.
 
 Webhook-only variables (also available with the usual CRM placeholders):
-`{{notConnectedAfterHours}}`, `{{deviceModel}}`, `{{ip}}`, `{{blockMinutes}}`.
+`{{notConnectedAfterHours}}`, `{{deviceModel}}`, `{{platform}}`, `{{osVersion}}`,
+`{{ip}}`, `{{blockMinutes}}`.
 
 ---
 

@@ -147,7 +147,12 @@ def test_extract_not_connected_after_hours():
 
 
 def test_extract_device_model():
-    from remnawave_client.webhooks import extract_device_model, extract_telegram_id
+    from remnawave_client.webhooks import (
+        extract_device_model,
+        extract_device_os_version,
+        extract_device_platform,
+        extract_telegram_id,
+    )
 
     data = {
         "scope": "user_hwid_devices",
@@ -155,9 +160,16 @@ def test_extract_device_model():
         "timestamp": "2026-03-07T16:02:50.564Z",
         "data": {
             "user": {"uuid": "u-1", "telegramId": 99},
-            "hwidDevice": {"deviceModel": "Pixel 8", "hwid": "abc"},
+            "hwidUserDevice": {
+                "deviceModel": "Pixel 8",
+                "platform": "android",
+                "osVersion": "14",
+                "hwid": "abc",
+            },
         },
     }
     payload = parse_webhook(json.dumps(data).encode())
     assert extract_device_model(payload) == "Pixel 8"
+    assert extract_device_platform(payload) == "android"
+    assert extract_device_os_version(payload) == "14"
     assert extract_telegram_id(payload) == 99

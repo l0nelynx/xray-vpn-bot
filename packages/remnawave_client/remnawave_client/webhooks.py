@@ -247,6 +247,8 @@ def extract_not_connected_after_hours(
 
 def _find_device_dict(data: dict[str, Any]) -> dict[str, Any] | None:
     for key in (
+        "hwidUserDevice",
+        "hwid_user_device",
         "hwidDevice",
         "hwid_device",
         "device",
@@ -257,22 +259,51 @@ def _find_device_dict(data: dict[str, Any]) -> dict[str, Any] | None:
         if isinstance(device, dict):
             return device
     # Payload may be the device itself
-    if "deviceModel" in data or "device_model" in data or "hwid" in data:
+    if any(
+        k in data
+        for k in (
+            "deviceModel",
+            "device_model",
+            "platform",
+            "osVersion",
+            "os_version",
+            "hwid",
+        )
+    ):
         return data
+    return None
+
+
+def _device_str_field(
+    payload: RemnawaveWebhookPayload, *keys: str
+) -> str | None:
+    data = _data_dict(payload)
+    device = _find_device_dict(data)
+    if not device:
+        return None
+    for key in keys:
+        value = device.get(key)
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            return text
     return None
 
 
 def extract_device_model(payload: RemnawaveWebhookPayload) -> str | None:
     """Device model from HWID device webhook payloads."""
-    data = _data_dict(payload)
-    device = _find_device_dict(data)
-    if not device:
-        return None
-    model = device.get("deviceModel", device.get("device_model"))
-    if model is None:
-        return None
-    text = str(model).strip()
-    return text or None
+    return _device_str_field(payload, "deviceModel", "device_model")
+
+
+def extract_device_platform(payload: RemnawaveWebhookPayload) -> str | None:
+    """Platform from HWID device webhook payloads (e.g. ios, android)."""
+    return _device_str_field(payload, "platform")
+
+
+def extract_device_os_version(payload: RemnawaveWebhookPayload) -> str | None:
+    """OS version from HWID device webhook payloads."""
+    return _device_str_field(payload, "osVersion", "os_version")
 
 
 def is_torrent_block_report(payload: RemnawaveWebhookPayload) -> bool:

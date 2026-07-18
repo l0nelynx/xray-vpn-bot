@@ -10,6 +10,8 @@ from typing import Any
 from remnawave_client.webhooks import (
     RemnawaveWebhookPayload,
     extract_device_model,
+    extract_device_os_version,
+    extract_device_platform,
     extract_not_connected_after_hours,
     torrent_block_ip,
     torrent_block_minutes,
@@ -69,6 +71,18 @@ WEBHOOK_VARIABLE_CATALOG: list[dict[str, str]] = [
         "label": "Device model",
         "description": "HWID device model from user_hwid_devices events",
         "example": "iPhone 15",
+    },
+    {
+        "key": "platform",
+        "label": "Device platform",
+        "description": "HWID device platform (ios, android, …)",
+        "example": "android",
+    },
+    {
+        "key": "osVersion",
+        "label": "OS version",
+        "description": "HWID device OS version",
+        "example": "14",
     },
     {
         "key": "ip",
@@ -167,11 +181,15 @@ def build_webhook_extra_vars(payload: RemnawaveWebhookPayload) -> dict[str, str]
     """Webhook-only placeholders; missing fields become empty strings."""
     hours = extract_not_connected_after_hours(payload)
     model = extract_device_model(payload)
+    platform = extract_device_platform(payload)
+    os_version = extract_device_os_version(payload)
     ip = torrent_block_ip(payload)
     minutes = torrent_block_minutes(payload) if payload.scope == "torrent_blocker" else None
     return {
         "notConnectedAfterHours": "" if hours is None else str(hours),
         "deviceModel": model or "",
+        "platform": platform or "",
+        "osVersion": os_version or "",
         "ip": ip or "",
         "blockMinutes": "" if minutes is None else str(minutes),
     }
