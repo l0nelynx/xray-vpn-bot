@@ -115,7 +115,9 @@ class _Resolved:
         self.short_uuid = short_uuid
         self.rw_data = rw_data
         self.user = user
-        self.vless_uuid = str(rw_data.get("vlessUuid") or rw_data.get("uuid") or "")
+        # Legacy: users.vless_uuid stores Remnawave panel `uuid`, not protocol
+        # `vlessUuid` (those differ). Match the rest of the codebase.
+        self.vless_uuid = str(rw_data.get("uuid") or rw_data.get("vlessUuid") or "")
         # Username is often the real mailbox when the dedicated email field
         # is empty or filled with a synthetic placeholder.
         self.rw_email = _usable_email(rw_data.get("email")) or _usable_email(
@@ -148,9 +150,9 @@ async def _resolve_state(short_uuid: str) -> _Resolved:
     if rw_data is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail={"code": "not_found"})
 
-    vless_uuid = rw_data.get("vlessUuid") or rw_data.get("uuid")
+    vless_uuid = rw_data.get("uuid") or rw_data.get("vlessUuid")
     if not vless_uuid:
-        logger.error("Remnawave DTO missing vlessUuid for short_uuid=%s", short_uuid)
+        logger.error("Remnawave DTO missing uuid for short_uuid=%s", short_uuid)
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY, detail={"code": "upstream_invalid"}
         )

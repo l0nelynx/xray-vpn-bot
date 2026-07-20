@@ -112,7 +112,7 @@ async def migrate(req: MigrateRequest, request: Request) -> AuthResponse:
     the `short_uuid` and a matching `identifier` (email or username).
 
     Local-row resolution priority:
-      1. `users.vless_uuid == rw.vlessUuid`
+      1. `users.vless_uuid == rw.uuid` (panel user UUID; legacy column name)
       2. `users.email`-derived username == rw.username
       3. `users.email == rw.email`
 
@@ -149,11 +149,12 @@ async def migrate(req: MigrateRequest, request: Request) -> AuthResponse:
             detail={"code": "identifier_mismatch"},
         )
 
-    vless_uuid = rw_data.get("vlessUuid") or rw_data.get("uuid")
+    # Legacy: users.vless_uuid stores Remnawave panel `uuid`, not protocol vlessUuid.
+    vless_uuid = rw_data.get("uuid") or rw_data.get("vlessUuid")
     if not vless_uuid:
-        # Should be impossible — Remnawave always returns vlessUuid for an
+        # Should be impossible — Remnawave always returns uuid for an
         # active user — but guard so we don't write NULL into our column.
-        logger.error("Remnawave DTO missing vlessUuid for short_uuid=%s", req.short_uuid)
+        logger.error("Remnawave DTO missing uuid for short_uuid=%s", req.short_uuid)
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY,
             detail={"code": "upstream_invalid"},

@@ -96,7 +96,7 @@ email/password для входа.
 бесплатной (free-provisioning пропускается).
 
 Логика выбора локальной строки `users`:
-1. `vless_uuid == rw.vlessUuid`
+1. `vless_uuid == rw.uuid` (panel user UUID; legacy имя колонки)
 2. `users.email`-derived username совпал с `rw.username`
 3. `users.email == rw.email`
 
@@ -113,7 +113,7 @@ email/password для входа.
 - **409 `already_registered`** — нашли локальную строку с уже заполненной
   парой email+password (вход через `/login`).
 - **409 `email_taken`** — `acc_email` принадлежит другому пользователю.
-- **502 `upstream_invalid`** — DTO Remnawave без `vlessUuid` (не должно
+- **502 `upstream_invalid`** — DTO Remnawave без `uuid` (не должно
   случаться, защитный код).
 
 ### Claim flow (`/claim/*`) — shortID-first онбординг
