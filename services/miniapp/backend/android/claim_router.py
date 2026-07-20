@@ -125,16 +125,21 @@ class _Resolved:
             rw_data.get("subscriptionUrl") or rw_data.get("subscription_url") or None
         )
 
-        if user is not None and user.email and user.password_hash:
+        if (
+            user is not None
+            and user.email
+            and user.password_hash
+            and user.email_verified_at
+        ):
             self.status = STATUS_READY_LOGIN
             self.owner_email: str | None = user.email
-        elif user is not None and user.email:
+        elif user is not None and user.email and not user.password_hash:
             self.status = STATUS_NEEDS_PASSWORD
             self.owner_email = user.email
         else:
-            # Remnawave-only (or bare TG/claim row without credentials):
-            # client always opens registration + bind. OTP only when we
-            # actually have a deliverable owner mailbox.
+            # Remnawave-only, bare TG/claim row, or abandoned registration
+            # (email+password bound but never verified): client opens
+            # registration + bind so a mistyped email can be corrected.
             self.status = STATUS_RW_ONLY
             self.owner_email = self.rw_email
 
@@ -349,7 +354,8 @@ async def claim_complete(req: ClaimCompleteRequest, request: Request) -> AuthRes
       otherwise the normal /email/send-code + /verify flow follows.
     - rw_only without owner email: register + bind using subscription URL
       possession as ownership proof; new email stays unverified until the
-      standard verify step.
+      standard verify step. An abandoned (unverified) prior bind on the same
+      vless_uuid is overwritten so a mistyped email can be corrected.
     """
     short_uuid = _short_uuid_from_claim_token(req.claim_token)
     resolved = await _resolve_state(short_uuid)
