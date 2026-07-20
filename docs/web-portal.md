@@ -65,9 +65,33 @@ list). Highlights:
 | Devices | list, reset traffic |
 | Support | tickets CRUD + attachments |
 | Landing | partnership / feedback form |
+| Claim | browser onboarding for a subscription URL → account (see below) |
 
 Invoice creation matches Android/MiniApp security: the client sends only
 `node_id`; price, days, provider and `tariff_slug` come from `webapp_menu_nodes`.
+
+## Claim page (`/claim`) + desktop handoff
+
+Public SPA route that turns a Remnawave subscription link into a full portal
+account (and optionally signs the desktop/mobile app in).
+
+1. Catalog / Remnawave subscription page links to
+   `https://<portal>/claim#url={{SUBSCRIPTION_LINK}}` (fragment, not query —
+   the URL never hits server access logs).
+2. SPA calls `POST /android/claim/resolve` → status + masked `email_hint` +
+   `claim_token`, then branches:
+   - `ready_login` → `/android/auth/login` (or `/forgot-password`)
+   - `needs_password` / `rw_only` → OTP + `/android/claim/complete`
+   - `no_email` → Telegram OIDC or import-only deeplink
+3. After auth, **Open in app** mints
+   `POST /android/auth/app-login/create` and navigates to
+   `cheezy://login/<token>`. Fallback: `cheezy://add/<url>` (import without
+   account).
+4. Forgot-password UI lives at `/forgot-password` (request + confirm against
+   existing `/android/auth/password/reset-*`).
+
+Full claim API: [android-api.md](android-api.md) (`/claim/*`, `/auth/app-login/*`).
+Connect-page catalog entries: [connect-page.md](connect-page.md).
 
 ## Deployment checklist
 

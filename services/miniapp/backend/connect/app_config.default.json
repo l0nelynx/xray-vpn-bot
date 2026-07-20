@@ -450,6 +450,82 @@
     "linux": {
       "apps": [
         {
+          "name": "CheezyClash",
+          "featured": true,
+          "svgIconKey": "CheezyVPN",
+          "blocks": [
+            {
+              "title": {
+                "en": "App Installation",
+                "ru": "Установка приложения"
+              },
+              "description": {
+                "en": "Download the CheezyClash build for Linux from GitHub Releases and install it.",
+                "ru": "Скачайте сборку CheezyClash для Linux со страницы GitHub Releases и установите её."
+              },
+              "svgIconKey": "DownloadIcon",
+              "svgIconColor": "yellow",
+              "buttons": [
+                {
+                  "link": "https://github.com/l0nelynx/CheezyClash/releases",
+                  "text": {
+                    "en": "Download from GitHub",
+                    "ru": "Скачать с GitHub"
+                  },
+                  "type": "external",
+                  "svgIconKey": "ExternalLink"
+                }
+              ]
+            },
+            {
+              "title": {
+                "en": "Connect your account",
+                "ru": "Подключение аккаунта"
+              },
+              "description": {
+                "en": "Open the connection page in your browser: sign in or create an account for this subscription, then press “Open in app” to sign the app in instantly.",
+                "ru": "Откройте страницу подключения в браузере: войдите или создайте аккаунт для этой подписки, затем нажмите «Открыть в приложении» — приложение авторизуется автоматически."
+              },
+              "svgIconKey": "CloudDownload",
+              "svgIconColor": "yellow",
+              "buttons": [
+                {
+                  "link": "https://web-portal-cheezy.vercel.app/claim#url={{SUBSCRIPTION_LINK}}",
+                  "text": {
+                    "en": "Connect via browser",
+                    "ru": "Подключить через браузер"
+                  },
+                  "type": "external",
+                  "svgIconKey": "ExternalLink"
+                }
+              ]
+            },
+            {
+              "title": {
+                "en": "Add subscription manually",
+                "ru": "Добавить подписку вручную"
+              },
+              "description": {
+                "en": "Alternatively, copy the subscription link and paste it in the app: Profiles → Import URL.",
+                "ru": "Либо скопируйте ссылку подписки и вставьте её в приложении: Профили → Импорт URL."
+              },
+              "svgIconKey": "copyButton",
+              "svgIconColor": "yellow",
+              "buttons": [
+                {
+                  "link": "{{SUBSCRIPTION_LINK}}",
+                  "text": {
+                    "en": "Copy link",
+                    "ru": "Скопировать ссылку"
+                  },
+                  "type": "copyButton",
+                  "svgIconKey": "copyButton"
+                }
+              ]
+            }
+          ]
+        },
+        {
           "name": "FlClashX",
           "blocks": [
             {
@@ -1189,6 +1265,82 @@
     "macos": {
       "apps": [
         {
+          "name": "CheezyClash",
+          "featured": true,
+          "svgIconKey": "CheezyVPN",
+          "blocks": [
+            {
+              "title": {
+                "en": "App Installation",
+                "ru": "Установка приложения"
+              },
+              "description": {
+                "en": "Download the CheezyClash build for macOS from GitHub Releases and install it.",
+                "ru": "Скачайте сборку CheezyClash для macOS со страницы GitHub Releases и установите её."
+              },
+              "svgIconKey": "DownloadIcon",
+              "svgIconColor": "yellow",
+              "buttons": [
+                {
+                  "link": "https://github.com/l0nelynx/CheezyClash/releases",
+                  "text": {
+                    "en": "Download from GitHub",
+                    "ru": "Скачать с GitHub"
+                  },
+                  "type": "external",
+                  "svgIconKey": "ExternalLink"
+                }
+              ]
+            },
+            {
+              "title": {
+                "en": "Connect your account",
+                "ru": "Подключение аккаунта"
+              },
+              "description": {
+                "en": "Open the connection page in your browser: sign in or create an account for this subscription, then press “Open in app” to sign the app in instantly.",
+                "ru": "Откройте страницу подключения в браузере: войдите или создайте аккаунт для этой подписки, затем нажмите «Открыть в приложении» — приложение авторизуется автоматически."
+              },
+              "svgIconKey": "CloudDownload",
+              "svgIconColor": "yellow",
+              "buttons": [
+                {
+                  "link": "https://web-portal-cheezy.vercel.app/claim#url={{SUBSCRIPTION_LINK}}",
+                  "text": {
+                    "en": "Connect via browser",
+                    "ru": "Подключить через браузер"
+                  },
+                  "type": "external",
+                  "svgIconKey": "ExternalLink"
+                }
+              ]
+            },
+            {
+              "title": {
+                "en": "Add subscription manually",
+                "ru": "Добавить подписку вручную"
+              },
+              "description": {
+                "en": "Alternatively, copy the subscription link and paste it in the app: Profiles → Import URL.",
+                "ru": "Либо скопируйте ссылку подписки и вставьте её в приложении: Профили → Импорт URL."
+              },
+              "svgIconKey": "copyButton",
+              "svgIconColor": "yellow",
+              "buttons": [
+                {
+                  "link": "{{SUBSCRIPTION_LINK}}",
+                  "text": {
+                    "en": "Copy link",
+                    "ru": "Скопировать ссылку"
+                  },
+                  "type": "copyButton",
+                  "svgIconKey": "copyButton"
+                }
+              ]
+            }
+          ]
+        },
+        {
           "name": "RabbitHole",
           "blocks": [
             {
@@ -1826,6 +1978,94 @@
     "android": {
       "apps": [
         {
+          "name": "CheezyVPN",
+          "featured": true,
+          "svgIconKey": "CheezyVPN",
+          "blocks": [
+            {
+              "title": {
+                "en": "App Installation",
+                "ru": "Установка приложения"
+              },
+              "description": {
+                "en": "Download and install the CheezyVPN APK",
+                "ru": "Скачайте и установите CheezyVPN APK"
+              },
+              "svgIconKey": "DownloadIcon",
+              "svgIconColor": "yellow",
+              "buttons": [
+                {
+                  "link": "https://github.com/l0nelynx/CheezyVPN-Releases/releases/latest/download/app-direct-proprietary-universal-release.apk",
+                  "text": {
+                    "en": "Download APK",
+                    "ru": "Скачать APK"
+                  },
+                  "type": "external",
+                  "svgIconKey": "ExternalLink"
+                },
+                {
+                  "link": "https://github.com/l0nelynx/CheezyVPN-Releases/releases",
+                  "text": {
+                    "en": "All releases",
+                    "ru": "Все версии"
+                  },
+                  "type": "external",
+                  "svgIconKey": "ExternalLink"
+                }
+              ]
+            },
+            {
+              "title": {
+                "en": "Add Subscription",
+                "ru": "Добавление подписки"
+              },
+              "description": {
+                "en": "Tap the button below — the app will import your subscription and offer to sign in or create an account for it.",
+                "ru": "Нажмите кнопку ниже — приложение импортирует подписку и предложит войти или создать для неё аккаунт."
+              },
+              "svgIconKey": "CloudDownload",
+              "svgIconColor": "yellow",
+              "buttons": [
+                {
+                  "link": "cheezy://add/{{SUBSCRIPTION_LINK}}",
+                  "text": {
+                    "en": "Add Subscription",
+                    "ru": "Добавить подписку"
+                  },
+                  "type": "subscriptionLink",
+                  "svgIconKey": "Plus"
+                }
+              ]
+            },
+            {
+              "title": {
+                "en": "If the subscription is not added",
+                "ru": "Если подписка не добавилась"
+              },
+              "description": {
+                "en": "Copy your subscription link (Get link button in the top right corner of this page), open CheezyVPN, go to Profiles, tap + and paste the link.",
+                "ru": "Скопируйте ссылку подписки (кнопка Получить ссылку в правом верхнем углу этой страницы), откройте CheezyVPN, перейдите в Профили, нажмите + и вставьте ссылку."
+              },
+              "svgIconKey": "Gear",
+              "svgIconColor": "yellow",
+              "buttons": []
+            },
+            {
+              "title": {
+                "en": "Connect and use",
+                "ru": "Подключение и использование"
+              },
+              "description": {
+                "en": "Press the big power button on the main screen. Your account and devices are available in Settings.",
+                "ru": "Нажмите большую кнопку включения на главном экране. Аккаунт и устройства доступны в Настройках."
+              },
+              "svgIconKey": "Check",
+              "svgIconColor": "teal",
+              "buttons": []
+            }
+          ]
+        },
+        {
           "name": "FlClashX",
           "blocks": [
             {
@@ -2194,6 +2434,82 @@
     },
     "windows": {
       "apps": [
+        {
+          "name": "CheezyClash",
+          "featured": true,
+          "svgIconKey": "CheezyVPN",
+          "blocks": [
+            {
+              "title": {
+                "en": "App Installation",
+                "ru": "Установка приложения"
+              },
+              "description": {
+                "en": "Download the CheezyClash build for Windows from GitHub Releases and install it.",
+                "ru": "Скачайте сборку CheezyClash для Windows со страницы GitHub Releases и установите её."
+              },
+              "svgIconKey": "DownloadIcon",
+              "svgIconColor": "yellow",
+              "buttons": [
+                {
+                  "link": "https://github.com/l0nelynx/CheezyClash/releases",
+                  "text": {
+                    "en": "Download from GitHub",
+                    "ru": "Скачать с GitHub"
+                  },
+                  "type": "external",
+                  "svgIconKey": "ExternalLink"
+                }
+              ]
+            },
+            {
+              "title": {
+                "en": "Connect your account",
+                "ru": "Подключение аккаунта"
+              },
+              "description": {
+                "en": "Open the connection page in your browser: sign in or create an account for this subscription, then press “Open in app” to sign the app in instantly.",
+                "ru": "Откройте страницу подключения в браузере: войдите или создайте аккаунт для этой подписки, затем нажмите «Открыть в приложении» — приложение авторизуется автоматически."
+              },
+              "svgIconKey": "CloudDownload",
+              "svgIconColor": "yellow",
+              "buttons": [
+                {
+                  "link": "https://web-portal-cheezy.vercel.app/claim#url={{SUBSCRIPTION_LINK}}",
+                  "text": {
+                    "en": "Connect via browser",
+                    "ru": "Подключить через браузер"
+                  },
+                  "type": "external",
+                  "svgIconKey": "ExternalLink"
+                }
+              ]
+            },
+            {
+              "title": {
+                "en": "Add subscription manually",
+                "ru": "Добавить подписку вручную"
+              },
+              "description": {
+                "en": "Alternatively, copy the subscription link and paste it in the app: Profiles → Import URL.",
+                "ru": "Либо скопируйте ссылку подписки и вставьте её в приложении: Профили → Импорт URL."
+              },
+              "svgIconKey": "copyButton",
+              "svgIconColor": "yellow",
+              "buttons": [
+                {
+                  "link": "{{SUBSCRIPTION_LINK}}",
+                  "text": {
+                    "en": "Copy link",
+                    "ru": "Скопировать ссылку"
+                  },
+                  "type": "copyButton",
+                  "svgIconKey": "copyButton"
+                }
+              ]
+            }
+          ]
+        },
         {
           "name": "FlClashX",
           "blocks": [
@@ -3243,7 +3559,8 @@
     "DownloadIcon": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0\n          0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\"\n          stroke-linejoin=\"round\"><path\n          stroke=\"none\" d=\"M0 0h24v24H0z\" fill=\"none\"/><path d=\"M4 17v2a2 2 0 0 0\n          2 2h12a2 2 0 0 0 2 -2v-2\" /><path d=\"M7 11l5 5l5 -5\" /><path d=\"M12 4l0\n          12\" /></svg>",
     "ExternalLink": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\"\n            viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"\n            stroke-linecap=\"round\" stroke-linejoin=\"round\"><path stroke=\"none\" d=\"M0\n            0h24v24H0z\" fill=\"none\"/><path d=\"M12 6h-6a2 2 0 0 0 -2 2v10a2 2 0 0 0\n            2 2h10a2 2 0 0 0 2 -2v-6\" /><path d=\"M11 13l9 -9\" /><path d=\"M15 4h5v5\"\n            /></svg>",
     "Shadowrocket": "<svg width=\"50\" height=\"50\" viewBox=\"0 0 50 50\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\">\n<path d=\"M21.2394 36.832L16.5386 39.568C16.5386 39.568 13.7182 36.832 11.8379 33.184C9.95756 29.536 16.5386 23.152 16.5386 23.152M21.2394 36.832H28.7606M21.2394 36.832C21.2394 36.832 15.5985 24.064 17.4788 16.768C19.3591 9.472 25 4 25 4C25 4 30.6409 9.472 32.5212 16.768C34.4015 24.064 28.7606 36.832 28.7606 36.832M28.7606 36.832L33.4614 39.568C33.4614 39.568 36.2818 36.832 38.1621 33.184C40.0424 29.536 33.4614 23.152 33.4614 23.152M25 46L26.8803 40.528H23.1197L25 46ZM25.9402 17.68C26.4594 18.1837 26.4594 19.0003 25.9402 19.504C25.4209 20.0077 24.5791 20.0077 24.0598 19.504C23.5406 19.0003 23.5406 18.1837 24.0598 17.68C24.5791 17.1763 25.4209 17.1763 25.9402 17.68Z\" stroke=\"#FAFAFA\" stroke-width=\"2.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>\n</svg>\n",
-    "CloudDownload": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0\n          0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\"\n          stroke-linejoin=\"round\"><path\n          stroke=\"none\" d=\"M0 0h24v24H0z\" fill=\"none\"/><path d=\"M19 18a3.5 3.5 0 0\n          0 0 -7h-1a5 4.5 0 0 0 -11 -2a4.6 4.4 0 0 0 -2.1 8.4\" /><path d=\"M12 13l0\n          9\" /><path d=\"M9 19l3 3l3 -3\" /></svg>"
+    "CloudDownload": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0\n          0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\"\n          stroke-linejoin=\"round\"><path\n          stroke=\"none\" d=\"M0 0h24v24H0z\" fill=\"none\"/><path d=\"M19 18a3.5 3.5 0 0\n          0 0 -7h-1a5 4.5 0 0 0 -11 -2a4.6 4.4 0 0 0 -2.1 8.4\" /><path d=\"M12 13l0\n          9\" /><path d=\"M9 19l3 3l3 -3\" /></svg>",
+    "CheezyVPN": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M4.519 20.008l16.481 -.008v-3.5a2 2 0 1 1 0 -4v-3.5h-16.722\" /><path d=\"M21 9l-9.385 -4.992c-2.512 .12 -4.758 1.42 -6.327 3.425c-1.423 1.82 -2.288 4.221 -2.288 6.854c0 2.117 .56 4.085 1.519 5.721\" /><path d=\"M15 13v.01\" /><path d=\"M8 13v.01\" /><path d=\"M11 16v.01\" /></svg>"
   },
   "baseSettings": {
     "metaTitle": "VPN",

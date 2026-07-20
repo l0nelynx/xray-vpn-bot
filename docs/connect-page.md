@@ -121,6 +121,39 @@ Add an entry under the relevant `platforms.<os>.apps[]`. Reuse an existing
 `svgIconKey` to get an icon immediately, set `featured: true` to surface it, and
 provide at least `en` + `ru` strings (other locales fall back to `en`).
 
+## CheezyVPN / CheezyClash entries
+
+The bundled default ships our own clients as `featured` on four platforms:
+
+| Platform | App | Key buttons |
+|---|---|---|
+| `android` | CheezyVPN | APK download + `cheezy://add/{{SUBSCRIPTION_LINK}}` (subscriptionLink) |
+| `windows` / `macos` / `linux` | CheezyClash | GitHub Releases + browser claim page (`external`) + copy-link fallback |
+
+Notes:
+
+- `cheezy://add/…` expects the **raw** subscription URL after the host segment.
+  The client's deep-link parser percent-decodes `%XX` only when present, so the
+  raw substitution `fillLink` performs is parsed correctly. Senders that build
+  the link by hand may percent-encode; both forms work.
+- The desktop "Connect via browser" button points at the web portal `/claim`
+  page and passes the subscription URL in the **fragment**
+  (`/claim#url={{SUBSCRIPTION_LINK}}`) so it never reaches server access logs.
+  The portal resolves the claim status via `POST /api/android/claim/resolve`
+  (see [android-api.md](android-api.md)) and, after auth, hands the session to
+  the installed app via `cheezy://login/<one-time token>`.
+
+## Using the catalog on the Remnawave subscription page
+
+The format is the upstream Remnawave subscription-page `app-config.json`, so
+the same document can be uploaded as-is: in the Remnawave panel open the
+**Subscription Page** template settings and paste the catalog JSON (or point
+the subscription-page container at the file, depending on your deployment).
+Remnawave performs the same `{{SUBSCRIPTION_LINK}}` substitution, so the
+CheezyVPN deep-link buttons work identically there. Remember to fill
+`brandingSettings` / `baseSettings` in the copy you upload — the bundled
+default ships them neutralised.
+
 ## Icons
 
 Icons ship **inside the app-config** under the top-level `svgLibrary` map

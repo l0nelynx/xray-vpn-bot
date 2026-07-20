@@ -24,11 +24,16 @@
 |---|---|---|---|---|
 | POST | `/check-uuid` | — | 10/min | Проверить short_uuid+identifier → полный SDK-DTO Remnawave |
 | POST | `/migrate` | — | 5/min | Привязать Android-учётку к существующей Remnawave-подписке |
+| POST | `/claim/resolve` | — | 5/min | ShortID-first онбординг: статус + email-hint + claim_token |
+| POST | `/claim/otp-request` | — | 3/min | Отправить OTP-код на email владельца подписки |
+| POST | `/claim/complete` | — | 10/min | OTP + пароль (+ acc_email) → `AuthResponse` |
 | POST | `/register` | — | 5/min | Создать пользователя по email + password |
 | POST | `/login` | — | 10/min | Получить пару токенов |
 | POST | `/refresh` | — | 60/min | Ротация refresh-семейства |
 | POST | `/logout` | — | — | Отозвать одно семейство по refresh-токену |
 | POST | `/logout-all` | Bearer | — | Отозвать все семейства пользователя |
+| POST | `/auth/app-login/create` | Bearer | 5/min | One-time токен для входа приложения (web → app) |
+| POST | `/auth/app-login/exchange` | — | 10/min | Обменять one-time токен на `AuthResponse` |
 | POST | `/password/change` | Bearer | — | Сменить пароль (нужен текущий) |
 
 ### POST /check-uuid
@@ -110,6 +115,96 @@ email/password для входа.
 - **409 `email_taken`** — `acc_email` принадлежит другому пользователю.
 - **502 `upstream_invalid`** — DTO Remnawave без `vlessUuid` (не должно
   случаться, защитный код).
+
+### Claim flow (`/claim/*`) — shortID-first онбординг
+
+Эволюция `/check-uuid` + `/migrate`: клиенту больше не нужно заранее знать
+Remnawave-identifier. По shortID из subscription-ссылки сервер сам решает,
+какая ветка онбординга применима. **Сессионные токены по одному shortID не
+выдаются никогда** — любая мутация требует либо пароль (`ready_login` →
+обычный `/login`), либо доказательство владения почтой через OTP.
+
+#### POST /claim/resolve
+
+```jsonc
+// request — одно из двух полей
+{ "short_uuid": "<remnawave short uuid>" }
+{ "url": "https://<subscription_host>/<short_uuid>" }
+```
+
+**200:**
+
+```jsonc
+{
+  "status": "ready_login | needs_password | rw_only | no_email",
+  "email_hint": "u***@ex***.com",   // null, если email неизвестен
+  "has_telegram": false,
+  "claim_token": "<jwt, TTL 15 мин>",
+  "subscription_url": "https://..."
+}
+```
+
+Статусы:
+
+- `ready_login` — в БД есть строка с email+password → вход через `/login`
+  (hint префиллит форму) либо `password/reset-*`.
+- `needs_password` — строка с email, но без пароля → OTP на этот email →
+  установка пароля.
+- `rw_only` — подписка есть в Remnawave, но credentials в БД нет → OTP на
+  Remnawave-email → регистрация `acc_email` + password с привязкой
+  `vless_uuid`.
+- `no_email` — пригодного email нет нигде → fallback на identifier-flow
+  (`/check-uuid` + `/migrate`) или привязку Telegram.
+
+`claim_token` не содержит PII (только short_uuid) — каждый следующий вызов
+заново резолвит состояние. Ошибки: `400 bad_short_uuid`, `422 invalid_url`,
+`404 not_found`, `403 banned`, `502 upstream_invalid`.
+
+#### POST /claim/otp-request
+
+```jsonc
+{ "claim_token": "<jwt>" }
+```
+
+Шлёт 6-значный код на канонический email владельца (БД-email, иначе
+Remnawave-email). **200** `{"status": "ok"}`. Ошибки: `401 bad_claim_token`,
+`409 already_registered` (для `ready_login`), `400 email_missing` (для
+`no_email`), `503 email_send_failed`.
+
+#### POST /claim/complete
+
+```jsonc
+{
+  "claim_token": "<jwt>",
+  "code": "123456",
+  "new_password": "min8chars",
+  "acc_email": "login@example.com"   // обязателен только для rw_only
+}
+```
+
+**200** → `AuthResponse { tokens, user }`.
+
+- `needs_password`: пароль установлен, email помечен подтверждённым (OTP на
+  него и был доставлен).
+- `rw_only`: строка создана/дозаполнена как в `/migrate` (email=acc_email,
+  password, `vless_uuid`). Если `acc_email` совпал с адресом, куда слался
+  OTP — email сразу подтверждён; иначе дальше обычный
+  `/email/send-code` + `/verify`.
+
+Ошибки: `401 bad_claim_token`, `400 code_invalid | code_expired |
+acc_email_required | email_missing`, `429 code_exhausted`,
+`409 already_registered | email_taken`.
+
+### One-time app login (`/auth/app-login/*`)
+
+Хендофф web → приложение: авторизованная web-сессия чеканит короткоживущий
+одноразовый токен, приложение получает его через deeplink
+`cheezy://login/<token>` и обменивает на обычную пару токенов.
+
+- `POST /auth/app-login/create` (Bearer) → `{"token": "...", "expires_in": 90}`.
+  В БД хранится только sha256 токена; активен один токен на пользователя.
+- `POST /auth/app-login/exchange` — `{"token": "..."}` → `AuthResponse`.
+  Consume-on-use: повторный обмен → `401 bad_app_login_token`.
 
 ### POST /register
 

@@ -14,6 +14,7 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
 )
 from .android import auth_router as android_auth_router
+from .android import claim_router as android_claim_router
 from .android import data_router as android_data_router
 from .android import email_router as android_email_router
 from .android import fcm_router as android_fcm_router
@@ -107,6 +108,7 @@ app.include_router(android_iap_router.router, prefix=BASE_PATH)
 app.include_router(android_data_router.router, prefix=BASE_PATH)
 app.include_router(android_link_router.router, prefix=BASE_PATH)
 app.include_router(android_subscription_router.router, prefix=BASE_PATH)
+app.include_router(android_claim_router.router, prefix=BASE_PATH)
 app.include_router(android_promo_router.router, prefix=BASE_PATH)
 app.include_router(android_support_router.router, prefix=BASE_PATH)
 app.include_router(android_fcm_router.router, prefix=BASE_PATH)

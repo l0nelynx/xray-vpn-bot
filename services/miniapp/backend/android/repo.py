@@ -158,6 +158,29 @@ async def create_user_with_password_and_vless(
         return int(new_id)
 
 
+async def create_bare_user_with_vless(vless_uuid: str) -> int:
+    """Create a credential-less user row pre-bound to a Remnawave
+    `vless_uuid`. Used by the claim flow when a subscription exists in
+    Remnawave but no `users` row references it yet — verification codes
+    need a user_id anchor before credentials are chosen. The row is
+    indistinguishable from a Telegram-created one and is picked up by
+    `find_user_by_vless_uuid` on the next resolve, so abandoned claims
+    leave no duplicates."""
+    async with async_session() as s:
+        user = User(
+            tg_id=None,
+            email=None,
+            password_hash=None,
+            vless_uuid=vless_uuid,
+            api_provider="remnawave",
+        )
+        s.add(user)
+        await s.flush()
+        new_id = user.id
+        await s.commit()
+        return int(new_id)
+
+
 async def adopt_user_for_migration(
     user_id: int,
     email: str,
@@ -433,6 +456,8 @@ PURPOSE_EMAIL_CHANGE = "email_change"
 PURPOSE_TG_LINK = "tg_link"
 PURPOSE_SETUP_EMAIL = "setup_email"       # set email+password for users who have neither
 PURPOSE_SETUP_PASSWORD = "setup_password"  # set password for users who have email but not pwd
+PURPOSE_CLAIM = "claim"                    # subscription claim flow (shortID onboarding)
+PURPOSE_APP_LOGIN = "app_login"            # one-time web→app login handoff token
 
 
 async def invalidate_pending_codes(user_id: int, purpose: str) -> None:
