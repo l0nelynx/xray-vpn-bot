@@ -106,19 +106,19 @@ The override path is configurable via `connect_app_config_path` in `config.yml`
 | `subscriptionLink` | Custom-scheme deep-link (`happ://…`). Navigates directly so the OS opens the app. Rendered as the primary button. |
 | `copyButton` | Copies the (substituted) link to the clipboard with a toast. |
 
-> **Deep-link / fragment handling.** The Mini App webview can't launch custom
-> schemes (`happ://…`) directly — `tg.openLink` only opens `http(s)`. Worse,
-> Telegram's `openLink` **strips URL fragments** on external https targets, so
-> a portal claim link like `/claim#url={{SUBSCRIPTION_LINK}}` would arrive
-> without the subscription. Both custom-scheme buttons and https links that
-> carry a `#fragment` therefore open a static redirector,
-> `web/apps/miniapp/public/connect-open.html` (served at
-> `/bot/miniapp/connect-open.html`), in the external browser; the real target
-> rides in the redirector's own `#fragment` (same-origin, so Telegram keeps
-> it) and `connect-open.html` then `location.replace`s. Plain `external`
-> buttons without a fragment (App Store / Google Play / GitHub) still open
-> directly. Adding the redirector file needs a `frontend` image rebuild
-> (it's a build-time asset).
+> **Deep-link / query handling.** The Mini App webview can't launch custom
+> schemes (`happ://…`) directly — `tg.openLink` only opens `http(s)`. Telegram's
+> `openLink` also **strips URL fragments** on external https, and Remnawave
+> often does **not** substitute `{{SUBSCRIPTION_LINK}}` inside a `#fragment`.
+> Desktop claim buttons therefore use a **query** param
+> (`https://cheezyvpn.uk/claim?url={{SUBSCRIPTION_LINK}}`). Custom-scheme
+> buttons and any https URL that still carries `?`/`#` with the subscription
+> open a static redirector, `web/apps/miniapp/public/connect-open.html`
+> (served at `/bot/miniapp/connect-open.html`); the real target rides in the
+> redirector's own `#fragment` (same-origin) and `connect-open.html` then
+> `location.replace`s. Plain `external` buttons without query/fragment
+> (App Store / Google Play / GitHub) still open directly. Adding the
+> redirector file needs a `frontend` image rebuild (it's a build-time asset).
 
 ## Adding an app
 
@@ -142,9 +142,10 @@ Notes:
   raw substitution `fillLink` performs is parsed correctly. Senders that build
   the link by hand may percent-encode; both forms work.
 - The desktop "Connect via browser" button points at the web portal `/claim`
-  page and passes the subscription URL in the **fragment**
-  (`/claim#url={{SUBSCRIPTION_LINK}}`) so it never reaches server access logs.
-  The portal resolves the claim status via `POST /api/android/claim/resolve`
+  with the subscription in a **query** param
+  (`https://cheezyvpn.uk/claim?url={{SUBSCRIPTION_LINK}}`) so Remnawave
+  substitutes the placeholder (it often skips `#fragment`s). The portal
+  resolves the claim status via `POST /api/android/claim/resolve`
   (see [android-api.md](android-api.md)) and, after auth, hands the session to
   the installed app via `cheezy://login/<one-time token>`.
 

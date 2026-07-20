@@ -48,15 +48,34 @@ function detectPlatform(available: string[]): string {
 }
 
 function fillLink(link: string, subUrl: string, username: string): string {
-  // Encode placeholders that land inside a #fragment so ?&= in the
-  // subscription URL don't break URLSearchParams on /claim#url=….
+  // Encode subscription/username when they land in a query (?url= / &url=)
+  // or a #fragment so ?&= inside the value don't break URL parsing.
   const hashIdx = link.indexOf("#");
   const before = hashIdx >= 0 ? link.slice(0, hashIdx) : link;
   const after = hashIdx >= 0 ? link.slice(hashIdx) : "";
-  const fill = (s: string, value: string, enc: boolean) =>
-    s.split("{{SUBSCRIPTION_LINK}}").join(enc ? encodeURIComponent(value) : value)
-      .split("{{USERNAME}}").join(enc ? encodeURIComponent(username) : username);
-  return fill(before, subUrl, false) + fill(after, subUrl, true);
+
+  const fillQueryAware = (s: string, value: string, user: string) => {
+    // Prefer encoding for url= / name= style placeholders in query strings.
+    let out = s.replace(
+      /([?&](?:url|name)=)\{\{SUBSCRIPTION_LINK\}\}/g,
+      (_m, prefix: string) => prefix + encodeURIComponent(value),
+    );
+    out = out.replace(
+      /([?&](?:url|name)=)\{\{USERNAME\}\}/g,
+      (_m, prefix: string) => prefix + encodeURIComponent(user),
+    );
+    // Remaining placeholders (path segments, custom schemes) stay raw.
+    return out
+      .split("{{SUBSCRIPTION_LINK}}").join(value)
+      .split("{{USERNAME}}").join(user);
+  };
+
+  const fillHash = (s: string, value: string, user: string) =>
+    s
+      .split("{{SUBSCRIPTION_LINK}}").join(encodeURIComponent(value))
+      .split("{{USERNAME}}").join(encodeURIComponent(user));
+
+  return fillQueryAware(before, subUrl, username) + fillHash(after, subUrl, username);
 }
 
 export default function ConnectPage() {
@@ -118,11 +137,11 @@ export default function ConnectPage() {
       message[ok ? "success" : "error"](ok ? "Скопировано" : "Не удалось скопировать");
       return;
     }
-    // Plain https without a fragment (App Store / GitHub) — open directly.
-    // Anything with a #fragment (claim#url=…, custom schemes) must bounce
-    // through connect-open.html: Telegram's openLink strips fragments on
-    // external https URLs, but preserves them for our same-origin redirector.
-    const needsRedirector = !/^https?:\/\//i.test(url) || url.includes("#");
+    // Plain https without query/fragment (App Store / GitHub) — open directly.
+    // Custom schemes and claim links (?url= / #url=) bounce through
+    // connect-open.html so Telegram cannot strip the subscription payload.
+    const needsRedirector =
+      !/^https?:\/\//i.test(url) || url.includes("#") || /[?&]url=/.test(url);
     if (needsRedirector) {
       const redirector =
         `${window.location.origin}/bot/miniapp/connect-open.html#${encodeURIComponent(url)}`;

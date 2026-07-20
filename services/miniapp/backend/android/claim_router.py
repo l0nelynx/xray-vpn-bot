@@ -125,21 +125,16 @@ class _Resolved:
             rw_data.get("subscriptionUrl") or rw_data.get("subscription_url") or None
         )
 
-        if (
-            user is not None
-            and user.email
-            and user.password_hash
-            and user.email_verified_at
-        ):
+        if user is not None and user.email and user.password_hash:
             self.status = STATUS_READY_LOGIN
             self.owner_email: str | None = user.email
         elif user is not None and user.email and not user.password_hash:
             self.status = STATUS_NEEDS_PASSWORD
             self.owner_email = user.email
         else:
-            # Remnawave-only, bare TG/claim row, or abandoned registration
-            # (email+password bound but never verified): client opens
-            # registration + bind so a mistyped email can be corrected.
+            # Remnawave-only or bare TG/claim row without credentials:
+            # client always opens registration + bind. OTP only when we
+            # actually have a deliverable owner mailbox.
             self.status = STATUS_RW_ONLY
             self.owner_email = self.rw_email
 
@@ -212,6 +207,10 @@ class ClaimResolveResponse(BaseModel):
     has_telegram: bool = False
     claim_token: str
     subscription_url: str | None = None
+    # False when the bound row has credentials but email_verified_at is null
+    # (client may offer "use a different email" rebind). True/False for
+    # ready_login; False for needs_password/rw_only when no verified mailbox.
+    email_verified: bool = False
 
 
 class ClaimOtpRequest(BaseModel):
@@ -262,6 +261,7 @@ async def claim_resolve(
         has_telegram=bool(resolved.user and resolved.user.tg_id),
         claim_token=security.issue_claim_token(short_uuid),
         subscription_url=resolved.subscription_url,
+        email_verified=bool(resolved.user and resolved.user.email_verified_at),
     )
 
 
@@ -356,19 +356,27 @@ async def claim_complete(req: ClaimCompleteRequest, request: Request) -> AuthRes
       possession as ownership proof; new email stays unverified until the
       standard verify step. An abandoned (unverified) prior bind on the same
       vless_uuid is overwritten so a mistyped email can be corrected.
+    - ready_login + unverified + acc_email: same overwrite without OTP
+      (claim_token already proves subscription URL possession).
     """
     short_uuid = _short_uuid_from_claim_token(req.claim_token)
     resolved = await _resolve_state(short_uuid)
+    user = resolved.user
 
-    if resolved.status == STATUS_READY_LOGIN:
+    allow_unverified_rebind = (
+        resolved.status == STATUS_READY_LOGIN
+        and user is not None
+        and not user.email_verified_at
+        and req.acc_email is not None
+    )
+    if resolved.status == STATUS_READY_LOGIN and not allow_unverified_rebind:
         raise HTTPException(
             status.HTTP_409_CONFLICT, detail={"code": "already_registered"}
         )
 
-    needs_otp = resolved.owner_email is not None
+    needs_otp = resolved.owner_email is not None and not allow_unverified_rebind
     otp_email = ""
 
-    user = resolved.user
     if needs_otp:
         if not req.code:
             raise HTTPException(
@@ -397,7 +405,7 @@ async def claim_complete(req: ClaimCompleteRequest, request: Request) -> AuthRes
         await repo.set_password(user.id, pwd_hash)
         if not user.email_verified_at:
             await repo.mark_email_verified(user.id)
-    else:  # rw_only
+    else:  # rw_only or unverified ready_login rebind
         if req.acc_email is None:
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST, detail={"code": "acc_email_required"}

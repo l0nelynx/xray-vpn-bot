@@ -142,24 +142,25 @@ Remnawave-identifier. По shortID из subscription-ссылки сервер �
   "email_hint": "u***@ex***.com",   // null, если deliverable email неизвестен
   "has_telegram": false,
   "claim_token": "<jwt, TTL 15 мин>",
-  "subscription_url": "https://..."
+  "subscription_url": "https://...",
+  "email_verified": false
 }
 ```
 
 Статусы:
 
-- `ready_login` — в БД есть строка с **подтверждённым** email+password →
-  `/claim/login` (hint + пароль; forgot → `password/reset-*`).
+- `ready_login` — в БД есть строка с email+password → `/claim/login`
+  (hint + пароль; forgot → `password/reset-*`). Поле `email_verified`
+  показывает, подтверждён ли mailbox; если `false`, клиент может
+  предложить «указать другой email» (rebind через `/claim/complete` с
+  `acc_email` без OTP).
 - `needs_password` — строка с email, но без пароля → OTP на этот email →
   установка пароля.
-- `rw_only` — подписка есть в Remnawave, credentials в БД нет **или**
-  регистрация брошена до verify (`email`+`password` есть, но
-  `email_verified_at` null) → регистрация `acc_email` + password с
-  привязкой `vless_uuid` (повторный complete перезаписывает
-  незавершённый bind). Если есть deliverable owner-email (не
-  `@bot.local` / `@miniapp.xyz`) — сначала OTP на него; иначе OTP не
-  нужен, новый email подтверждается обычным `/email/send-code` +
-  `/verify`.
+- `rw_only` — подписка есть в Remnawave, credentials в БД нет → регистрация
+  `acc_email` + password с привязкой `vless_uuid`. Если есть deliverable
+  owner-email (не `@bot.local` / `@miniapp.xyz`) — сначала OTP на него;
+  иначе OTP не нужен, новый email подтверждается обычным
+  `/email/send-code` + `/verify`.
 
 `claim_token` не содержит PII (только short_uuid) — каждый следующий вызов
 заново резолвит состояние. Lookup локальной строки: сначала `vless_uuid`,
@@ -209,6 +210,8 @@ deliverable mailbox — клиент идёт в регистрацию без O
 - `rw_only` без owner-email: то же связывание без OTP; email unverified.
   Повторный complete на ту же `vless_uuid` при незавершённом verify
   перезаписывает email/password (исправление опечатки).
+- `ready_login` + `email_verified=false` + `acc_email`: overwrite без OTP
+  (исправление опечатки с экрана login).
 
 Ошибки: `401 bad_claim_token`, `400 code_invalid | code_expired |
 acc_email_required`, `429 code_exhausted`,

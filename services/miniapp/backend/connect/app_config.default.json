@@ -517,7 +517,7 @@
               "svgIconColor": "yellow",
               "buttons": [
                 {
-                  "link": "https://web-portal-cheezy.vercel.app/claim#url={{SUBSCRIPTION_LINK}}",
+                  "link": "https://cheezyvpn.uk/claim?url={{SUBSCRIPTION_LINK}}",
                   "text": {
                     "en": "Connect via browser",
                     "ru": "Подключить через браузер",
@@ -1371,7 +1371,7 @@
               "svgIconColor": "yellow",
               "buttons": [
                 {
-                  "link": "https://web-portal-cheezy.vercel.app/claim#url={{SUBSCRIPTION_LINK}}",
+                  "link": "https://cheezyvpn.uk/claim?url={{SUBSCRIPTION_LINK}}",
                   "text": {
                     "en": "Connect via browser",
                     "ru": "Подключить через браузер",
@@ -2613,7 +2613,7 @@
               "svgIconColor": "yellow",
               "buttons": [
                 {
-                  "link": "https://web-portal-cheezy.vercel.app/claim#url={{SUBSCRIPTION_LINK}}",
+                  "link": "https://cheezyvpn.uk/claim?url={{SUBSCRIPTION_LINK}}",
                   "text": {
                     "en": "Connect via browser",
                     "ru": "Подключить через браузер",

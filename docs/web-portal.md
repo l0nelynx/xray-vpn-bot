@@ -76,12 +76,15 @@ Public SPA route that turns a Remnawave subscription link into a full portal
 account (and optionally signs the desktop/mobile app in).
 
 1. Catalog / Remnawave subscription page links to
-   `https://<portal>/claim#url={{SUBSCRIPTION_LINK}}` (fragment, not query —
-   the URL never hits server access logs).
+   `https://cheezyvpn.uk/claim?url={{SUBSCRIPTION_LINK}}` (query — Remnawave
+   substitutes placeholders in the query string; `#fragment` often stays
+   literal `{{SUBSCRIPTION_LINK}}`). The SPA also still accepts legacy
+   `/claim#url=…`.
 2. SPA calls `POST /android/claim/resolve` → status + masked `email_hint` +
-   `claim_token`, then branches:
+   `claim_token` + `email_verified`, then branches:
    - `ready_login` → `/android/claim/login` (password only + hint; or
-     `/forgot-password`)
+     `/forgot-password`; if `email_verified=false`, “use a different email”
+     → `/claim/complete` rebind)
    - `needs_password` → OTP + `/android/claim/complete` (set password)
    - `rw_only` → registration + bind (`acc_email` + password); OTP only when
      resolve returned a deliverable `email_hint`
