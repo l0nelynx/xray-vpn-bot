@@ -106,14 +106,19 @@ The override path is configurable via `connect_app_config_path` in `config.yml`
 | `subscriptionLink` | Custom-scheme deep-link (`happ://…`). Navigates directly so the OS opens the app. Rendered as the primary button. |
 | `copyButton` | Copies the (substituted) link to the clipboard with a toast. |
 
-> **Deep-link handling.** The Mini App webview can't launch custom schemes
-> (`happ://…`) directly — `tg.openLink` only opens `http(s)`. So `subscriptionLink`
-> buttons open a static redirector, `web/apps/miniapp/public/connect-open.html`
-> (served at `/bot/miniapp/connect-open.html`), in the external browser, which
-> then fires the scheme. The deep-link is passed in the URL `#fragment`, so the
-> user's subscription URL never reaches server access logs. `external` (App
-> Store / Google Play) buttons are plain `http(s)` and open directly. Adding the
-> redirector file needs a `frontend` image rebuild (it's a build-time asset).
+> **Deep-link / fragment handling.** The Mini App webview can't launch custom
+> schemes (`happ://…`) directly — `tg.openLink` only opens `http(s)`. Worse,
+> Telegram's `openLink` **strips URL fragments** on external https targets, so
+> a portal claim link like `/claim#url={{SUBSCRIPTION_LINK}}` would arrive
+> without the subscription. Both custom-scheme buttons and https links that
+> carry a `#fragment` therefore open a static redirector,
+> `web/apps/miniapp/public/connect-open.html` (served at
+> `/bot/miniapp/connect-open.html`), in the external browser; the real target
+> rides in the redirector's own `#fragment` (same-origin, so Telegram keeps
+> it) and `connect-open.html` then `location.replace`s. Plain `external`
+> buttons without a fragment (App Store / Google Play / GitHub) still open
+> directly. Adding the redirector file needs a `frontend` image rebuild
+> (it's a build-time asset).
 
 ## Adding an app
 

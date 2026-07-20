@@ -48,9 +48,15 @@ function detectPlatform(available: string[]): string {
 }
 
 function fillLink(link: string, subUrl: string, username: string): string {
-  return link
-    .split("{{SUBSCRIPTION_LINK}}").join(subUrl)
-    .split("{{USERNAME}}").join(username);
+  // Encode placeholders that land inside a #fragment so ?&= in the
+  // subscription URL don't break URLSearchParams on /claim#url=….
+  const hashIdx = link.indexOf("#");
+  const before = hashIdx >= 0 ? link.slice(0, hashIdx) : link;
+  const after = hashIdx >= 0 ? link.slice(hashIdx) : "";
+  const fill = (s: string, value: string, enc: boolean) =>
+    s.split("{{SUBSCRIPTION_LINK}}").join(enc ? encodeURIComponent(value) : value)
+      .split("{{USERNAME}}").join(enc ? encodeURIComponent(username) : username);
+  return fill(before, subUrl, false) + fill(after, subUrl, true);
 }
 
 export default function ConnectPage() {
@@ -112,18 +118,17 @@ export default function ConnectPage() {
       message[ok ? "success" : "error"](ok ? "Скопировано" : "Не удалось скопировать");
       return;
     }
-    if (/^https?:\/\//i.test(url)) {
-      // External http(s) link (App Store / Google Play) — open as-is.
-      openLink(url);
-    } else {
-      // Custom-scheme deep-link (happ://, rabbithole://…). tg.openLink only
-      // handles http(s) and the Mini App webview can't launch a custom scheme
-      // itself, so bounce through a static https redirector opened in the
-      // external browser, which then fires the scheme. The deep-link rides in
-      // the #fragment so the subscription URL never reaches server logs.
+    // Plain https without a fragment (App Store / GitHub) — open directly.
+    // Anything with a #fragment (claim#url=…, custom schemes) must bounce
+    // through connect-open.html: Telegram's openLink strips fragments on
+    // external https URLs, but preserves them for our same-origin redirector.
+    const needsRedirector = !/^https?:\/\//i.test(url) || url.includes("#");
+    if (needsRedirector) {
       const redirector =
         `${window.location.origin}/bot/miniapp/connect-open.html#${encodeURIComponent(url)}`;
       openLink(redirector);
+    } else {
+      openLink(url);
     }
   }
 
