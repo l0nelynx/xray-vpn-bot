@@ -80,9 +80,11 @@ account (and optionally signs the desktop/mobile app in).
    the URL never hits server access logs).
 2. SPA calls `POST /android/claim/resolve` → status + masked `email_hint` +
    `claim_token`, then branches:
-   - `ready_login` → `/android/auth/login` (or `/forgot-password`)
-   - `needs_password` / `rw_only` → OTP + `/android/claim/complete`
-   - `no_email` → Telegram OIDC or import-only deeplink
+   - `ready_login` → `/android/claim/login` (password only + hint; or
+     `/forgot-password`)
+   - `needs_password` → OTP + `/android/claim/complete` (set password)
+   - `rw_only` → registration + bind (`acc_email` + password); OTP only when
+     resolve returned a deliverable `email_hint`
 3. After auth, **Open in app** mints
    `POST /android/auth/app-login/create` and navigates to
    `cheezy://login/<token>`. Fallback: `cheezy://add/<url>` (import without

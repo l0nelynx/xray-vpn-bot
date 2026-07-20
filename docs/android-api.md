@@ -121,8 +121,10 @@ email/password для входа.
 Эволюция `/check-uuid` + `/migrate`: клиенту больше не нужно заранее знать
 Remnawave-identifier. По shortID из subscription-ссылки сервер сам решает,
 какая ветка онбординга применима. **Сессионные токены по одному shortID не
-выдаются никогда** — любая мутация требует либо пароль (`ready_login` →
-обычный `/login`), либо доказательство владения почтой через OTP.
+выдаются никогда** — любая мутация требует либо пароль
+(`ready_login` → `/claim/login`), либо OTP на owner-email (когда он есть),
+либо (для Remnawave-only без mailbox) регистрацию с привязкой по владению
+ссылкой подписки.
 
 #### POST /claim/resolve
 
@@ -136,8 +138,8 @@ Remnawave-identifier. По shortID из subscription-ссылки сервер �
 
 ```jsonc
 {
-  "status": "ready_login | needs_password | rw_only | no_email",
-  "email_hint": "u***@ex***.com",   // null, если email неизвестен
+  "status": "ready_login | needs_password | rw_only",
+  "email_hint": "u***@ex***.com",   // null, если deliverable email неизвестен
   "has_telegram": false,
   "claim_token": "<jwt, TTL 15 мин>",
   "subscription_url": "https://..."
@@ -146,19 +148,30 @@ Remnawave-identifier. По shortID из subscription-ссылки сервер �
 
 Статусы:
 
-- `ready_login` — в БД есть строка с email+password → вход через `/login`
-  (hint префиллит форму) либо `password/reset-*`.
+- `ready_login` — в БД есть строка с email+password → `/claim/login`
+  (hint + пароль; forgot → `password/reset-*`).
 - `needs_password` — строка с email, но без пароля → OTP на этот email →
   установка пароля.
-- `rw_only` — подписка есть в Remnawave, но credentials в БД нет → OTP на
-  Remnawave-email → регистрация `acc_email` + password с привязкой
-  `vless_uuid`.
-- `no_email` — пригодного email нет нигде → fallback на identifier-flow
-  (`/check-uuid` + `/migrate`) или привязку Telegram.
+- `rw_only` — подписка есть в Remnawave, credentials в БД нет → регистрация
+  `acc_email` + password с привязкой `vless_uuid`. Если есть deliverable
+  owner-email (не `@bot.local` / `@miniapp.xyz`) — сначала OTP на него;
+  иначе OTP не нужен, новый email подтверждается обычным
+  `/email/send-code` + `/verify`.
 
 `claim_token` не содержит PII (только short_uuid) — каждый следующий вызов
-заново резолвит состояние. Ошибки: `400 bad_short_uuid`, `422 invalid_url`,
-`404 not_found`, `403 banned`, `502 upstream_invalid`.
+заново резолвит состояние. Lookup локальной строки: сначала `vless_uuid`,
+затем username/email **только если** у кандидата нет чужого `vless_uuid`
+(иначе `ready_login` привязал бы не тот аккаунт). Ошибки: `400 bad_short_uuid`,
+`422 invalid_url`, `404 not_found`, `403 banned`, `502 upstream_invalid`.
+
+#### POST /claim/login
+
+```jsonc
+{ "claim_token": "<jwt>", "password": "..." }
+```
+
+Password-only вход для `ready_login`. **200** → `AuthResponse`.
+Ошибки: `401 invalid_credentials`, `401 bad_claim_token`, `403 banned`.
 
 #### POST /claim/otp-request
 
@@ -168,17 +181,18 @@ Remnawave-identifier. По shortID из subscription-ссылки сервер �
 
 Шлёт 6-значный код на канонический email владельца (БД-email, иначе
 Remnawave-email). **200** `{"status": "ok"}`. Ошибки: `401 bad_claim_token`,
-`409 already_registered` (для `ready_login`), `400 email_missing` (для
-`no_email`), `503 email_send_failed`.
+`409 already_registered` (для `ready_login`), `400 email_missing` (нет
+deliverable mailbox — клиент идёт в регистрацию без OTP),
+`503 email_send_failed`.
 
 #### POST /claim/complete
 
 ```jsonc
 {
   "claim_token": "<jwt>",
-  "code": "123456",
+  "code": "123456",                 // обязателен, если resolve вернул email_hint
   "new_password": "min8chars",
-  "acc_email": "login@example.com"   // обязателен только для rw_only
+  "acc_email": "login@example.com"  // обязателен для rw_only
 }
 ```
 
@@ -186,13 +200,13 @@ Remnawave-email). **200** `{"status": "ok"}`. Ошибки: `401 bad_claim_token
 
 - `needs_password`: пароль установлен, email помечен подтверждённым (OTP на
   него и был доставлен).
-- `rw_only`: строка создана/дозаполнена как в `/migrate` (email=acc_email,
-  password, `vless_uuid`). Если `acc_email` совпал с адресом, куда слался
-  OTP — email сразу подтверждён; иначе дальше обычный
-  `/email/send-code` + `/verify`.
+- `rw_only` + owner-email: строка создана/дозаполнена как в `/migrate`. Если
+  `acc_email` совпал с адресом OTP — email сразу подтверждён; иначе дальше
+  обычный `/email/send-code` + `/verify`.
+- `rw_only` без owner-email: то же связывание без OTP; email unverified.
 
 Ошибки: `401 bad_claim_token`, `400 code_invalid | code_expired |
-acc_email_required | email_missing`, `429 code_exhausted`,
+acc_email_required`, `429 code_exhausted`,
 `409 already_registered | email_taken`.
 
 ### One-time app login (`/auth/app-login/*`)

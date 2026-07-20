@@ -237,11 +237,12 @@ async def app_login_exchange(
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED, detail={"code": "bad_app_login_token"}
         )
-    await repo.mark_code_used(row.id)
     if row.expires_at <= datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S"):
+        await repo.mark_code_used(row.id)
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED, detail={"code": "bad_app_login_token"}
         )
+    await repo.mark_code_used(row.id)
     user = await repo.find_user_by_id(row.user_id)
     if user is None or user.is_banned:
         raise HTTPException(
