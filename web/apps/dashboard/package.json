@@ -9,13 +9,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@xray/api": "*",
-    "@xray/ui": "*",
     "@ant-design/charts": "^2.6.7",
     "@ant-design/icons": "^6.2.5",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
+    "@xray/api": "*",
+    "@xray/ui": "*",
     "antd": "^6.4.3",
     "dayjs": "^1.11.13",
     "react": "^18.3.1",
@@ -27,6 +27,7 @@
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
     "typescript": "^5.7.2",
-    "vite": "^6.0.3"
+    "vite": "^6.0.3",
+    "vite-plugin-pwa": "^1.3.0"
   }
 }

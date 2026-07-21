@@ -23,9 +23,15 @@ import {
   CustomerServiceOutlined,
   RobotOutlined,
   NotificationOutlined,
+  DownloadOutlined,
 } from "@ant-design/icons";
 import { api, clearToken } from "../api/client";
 import useIsMobile from "../hooks/useIsMobile";
+
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+}
 
 const { Sider, Content } = AntLayout;
 
@@ -116,6 +122,7 @@ export default function Layout() {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [legacyEnabled, setLegacyEnabled] = useState<boolean>(true);
+  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
   const isMobile = useIsMobile();
@@ -126,6 +133,27 @@ export default function Layout() {
       .then((r) => setLegacyEnabled(r.legacy_bot_constructor))
       .catch(() => setLegacyEnabled(true));
   }, []);
+
+  useEffect(() => {
+    const onBeforeInstall = (e: Event) => {
+      e.preventDefault();
+      setInstallPrompt(e as BeforeInstallPromptEvent);
+    };
+    const onInstalled = () => setInstallPrompt(null);
+    window.addEventListener("beforeinstallprompt", onBeforeInstall);
+    window.addEventListener("appinstalled", onInstalled);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onBeforeInstall);
+      window.removeEventListener("appinstalled", onInstalled);
+    };
+  }, []);
+
+  const handleInstall = async () => {
+    if (!installPrompt) return;
+    await installPrompt.prompt();
+    await installPrompt.userChoice;
+    setInstallPrompt(null);
+  };
 
   const menuItems = useMemo(() => buildMenuItems(legacyEnabled), [legacyEnabled]);
 
@@ -214,14 +242,37 @@ export default function Layout() {
         />
       </div>
 
-      {/* Footer logout */}
+      {/* Footer: install + logout */}
       <div
         style={{
           padding: "12px 10px",
           borderTop: "1px solid #1A2038",
           flexShrink: 0,
+          display: "flex",
+          flexDirection: "column",
+          gap: 4,
         }}
       >
+        {installPrompt && (
+          <Button
+            type="text"
+            icon={<DownloadOutlined />}
+            aria-label="Install app"
+            onClick={handleInstall}
+            style={{
+              width: "100%",
+              textAlign: "left",
+              color: "rgba(108,142,255,0.85)",
+              fontSize: 13,
+              height: 34,
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+            }}
+          >
+            {(!collapsed || isMobile) && "Install app"}
+          </Button>
+        )}
         <Popconfirm
           title="Log out?"
           description="You will need to sign in again."
