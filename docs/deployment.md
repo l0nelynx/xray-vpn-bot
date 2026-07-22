@@ -421,13 +421,16 @@ Migrations run automatically via the `migrate` container on each `up`.
 
 ## Documentation site
 
-MkDocs Material builds `docs/` into a static site.
+GitHub Pages serves a shadcn-style **landing** at the site root and **MkDocs Material**
+under `/docs/`.
 
 | Item | Value |
 |------|-------|
-| URL | https://l0nelynx.github.io/xray-vpn-bot/ |
+| Landing | https://l0nelynx.github.io/xray-vpn-bot/ |
+| Docs | https://l0nelynx.github.io/xray-vpn-bot/docs/ |
+| Sources | `landing/` + `docs/` + `mkdocs.yml` |
 | Workflow | `.github/workflows/docs.yml` |
-| Local preview | `pip install -r requirements-docs.txt && mkdocs serve` |
+| Local preview | see `docs/README.md` |
 
 First-time: repo **Settings → Pages → Source → GitHub Actions**.
 

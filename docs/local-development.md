@@ -7,11 +7,14 @@ stack, and previewing documentation changes.
 
 ```bash
 pip install -r requirements-docs.txt
-mkdocs serve
+mkdocs serve   # docs only → http://127.0.0.1:8000
+
+# Full Pages layout (landing at / + MkDocs at /docs/) — see docs/README.md
 ```
 
 Open [http://127.0.0.1:8000](http://127.0.0.1:8000). Config: `mkdocs.yml`.
 
+Production layout: landing at `/`, MkDocs at `/docs/` (see `landing/` and `docs/README.md`).
 The site deploys automatically on push to `main` via `.github/workflows/docs.yml`.
 First-time setup: repo **Settings → Pages → Source → GitHub Actions**.
 

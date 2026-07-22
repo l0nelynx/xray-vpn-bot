@@ -123,9 +123,10 @@ in `.env` (`POSTGRES_*`, `IMAGE_TAG`, optional `REGISTRY`).
 
 ## Docs
 
-Published site: **https://l0nelynx.github.io/xray-vpn-bot/** (MkDocs Material, GitHub Actions Pages).
+Published site: **https://l0nelynx.github.io/xray-vpn-bot/** (landing + MkDocs at `/docs/`).
 
-Local preview: `pip install -r requirements-docs.txt && mkdocs serve`
+Local preview: `pip install -r requirements-docs.txt && mkdocs serve` (docs only), or assemble
+landing + docs as in `docs/README.md`.
 
 Source: [architecture](docs/architecture.md), [deployment](docs/deployment.md),
 [database](docs/database.md), [crm](docs/crm.md), [referral](docs/referral.md),

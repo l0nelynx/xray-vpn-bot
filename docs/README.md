@@ -1,6 +1,7 @@
 # XRAY VPN Bot — Documentation
 
-**Published:** [l0nelynx.github.io/xray-vpn-bot](https://l0nelynx.github.io/xray-vpn-bot/)
+**Project site:** [l0nelynx.github.io/xray-vpn-bot](https://l0nelynx.github.io/xray-vpn-bot/)  
+**This documentation:** [l0nelynx.github.io/xray-vpn-bot/docs](https://l0nelynx.github.io/xray-vpn-bot/docs/)
 
 Telegram VPN subscription suite backed by **Remnawave**: seller bot, admin
 Dashboard, Telegram MiniApp, browser [web portal](https://github.com/l0nelynx/web-portal),
@@ -65,9 +66,17 @@ and Android app — all on a shared PostgreSQL database.
 ## Local preview
 
 ```bash
+# MkDocs only (docs live under /docs/ in production)
 pip install -r requirements-docs.txt
 mkdocs serve   # http://127.0.0.1:8000
+
+# Full GitHub Pages layout (landing + /docs)
+mkdocs build --strict --site-dir site/docs
+cp landing/index.html landing/styles.css landing/carousel.js landing/stats.js site/
+mkdir -p site/assets/screenshots && cp docs/screenshots/*.png site/assets/screenshots/
+python -m http.server -d site 8080   # http://127.0.0.1:8080/
 ```
 
 The site is deployed automatically on push to `main` via `.github/workflows/docs.yml`
-(GitHub Pages → Source: **GitHub Actions**).
+(GitHub Pages → Source: **GitHub Actions**). Landing is the site root; MkDocs is
+published at `/docs/`.

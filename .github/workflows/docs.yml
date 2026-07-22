@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - 'docs/**'
+      - 'landing/**'
       - 'mkdocs.yml'
       - 'requirements-docs.txt'
       - '.github/workflows/docs.yml'
@@ -35,8 +36,17 @@ jobs:
       - name: Install MkDocs
         run: pip install -r requirements-docs.txt
 
-      - name: Build site
-        run: mkdocs build --strict
+      - name: Build MkDocs into /docs
+        run: mkdocs build --strict --site-dir site/docs
+
+      - name: Assemble project landing at site root
+        run: |
+          cp landing/index.html site/
+          cp landing/styles.css site/
+          cp landing/carousel.js site/
+          cp landing/stats.js site/
+          mkdir -p site/assets/screenshots
+          cp docs/screenshots/*.png site/assets/screenshots/
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

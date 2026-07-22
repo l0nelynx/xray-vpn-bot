@@ -192,7 +192,7 @@ export const en: Messages = {
   "settings.privacy": "Privacy policy",
   "settings.agreement": "Terms of service",
   "settings.language": "Language",
-  "settings.language.ru": "Русский",
+  "settings.language.ru": "Russian",
   "settings.language.en": "English",
   "settings.promo.modalTitle": "Activate promo code",
   "settings.promo.modalBody":

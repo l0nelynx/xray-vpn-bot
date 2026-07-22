@@ -50,7 +50,7 @@ published to **GHCR** and **Docker Hub** (`ghcr.io/l0nelynx/*` and
 Application version lives in the root `VERSION` file.
 
 **Documentation site:** [l0nelynx.github.io/xray-vpn-bot](https://l0nelynx.github.io/xray-vpn-bot/)
-(built from `docs/` via MkDocs on push to `main`).
+(project landing + MkDocs docs at `/docs/`, deployed on push to `main`).
 
 Guides: [Getting started](docs/getting-started.md) · [Deployment](docs/deployment.md) ·
 [Dashboard](docs/dashboard.md) · [MiniApp](docs/miniapp.md) ·

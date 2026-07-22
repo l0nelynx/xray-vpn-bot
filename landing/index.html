@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CheezyShop — Remnawave subscription store</title>
+    <meta
+      name="description"
+      content="CheezyShop is a Remnawave subscription store: Telegram bot, MiniApp, and an admin Dashboard with a rich toolkit. Python, FastAPI, React, PostgreSQL, Docker."
+    />
+    <meta property="og:title" content="CheezyShop" />
+    <meta
+      property="og:description"
+      content="Remnawave subscription store — Telegram bot, MiniApp, and admin Dashboard."
+    />
+    <meta property="og:type" content="website" />
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/@fontsource-variable/geist@5.2.5/index.css"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="bg-glow" aria-hidden="true"></div>
+    <div class="bg-grid" aria-hidden="true"></div>
+
+    <header class="site-header">
+      <div class="container header-inner">
+        <a class="brand" href="./">
+          <span class="brand-mark">CS</span>
+          <span class="brand-name">CheezyShop</span>
+        </a>
+        <nav class="header-nav" aria-label="Primary">
+          <a href="#features">Features</a>
+          <a href="#product">Product</a>
+          <a href="./docs/">Docs</a>
+          <a
+            class="btn btn-ghost btn-sm"
+            href="https://github.com/l0nelynx/xray-vpn-bot"
+            target="_blank"
+            rel="noopener noreferrer"
+            >GitHub</a
+          >
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="container hero-inner">
+          <p class="eyebrow">Remnawave · Telegram · Docker</p>
+          <h1>CheezyShop</h1>
+          <p class="hero-lead">
+            A Remnawave subscription store — Python, FastAPI, React, PostgreSQL,
+            and Docker Compose. Includes a Telegram bot, MiniApp, and a
+            <a class="text-link" href="#features">Dashboard with a rich set of tools</a>.
+          </p>
+          <div class="hero-cta">
+            <a class="btn btn-primary" href="./docs/getting-started/">Get Started</a>
+            <a
+              class="btn btn-outline"
+              href="https://github.com/l0nelynx/xray-vpn-bot"
+              target="_blank"
+              rel="noopener noreferrer"
+              >View on GitHub</a
+            >
+          </div>
+
+          <dl class="stats">
+            <div>
+              <dt>5+</dt>
+              <dd>Payment gateways</dd>
+            </div>
+            <div>
+              <dt>
+                <a
+                  class="stat-value"
+                  href="https://hub.docker.com/r/spicycheeze/dashboard"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-stat="docker-pulls"
+                  title="Docker Hub pulls (spicycheeze/dashboard)"
+                  >—</a
+                >
+              </dt>
+              <dd>Docker pulls</dd>
+            </div>
+            <div>
+              <dt>
+                <a
+                  class="stat-value"
+                  href="https://github.com/l0nelynx/xray-vpn-bot"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-stat="github-stars"
+                  title="GitHub stars"
+                  >—</a
+                >
+              </dt>
+              <dd>GitHub stars</dd>
+            </div>
+          </dl>
+        </div>
+      </section>
+
+      <section id="product" class="section product">
+        <div class="container">
+          <div class="section-head">
+            <p class="eyebrow">Dashboard</p>
+            <h2>Operate everything from one panel</h2>
+            <p class="section-desc">
+              Revenue, users, tariffs, support tickets, CRM campaigns, and
+              promocodes — a neutral dark admin UI built for daily ops.
+            </p>
+          </div>
+
+          <figure class="dash-frame">
+            <img
+              src="./assets/screenshots/dashboard-overview.png"
+              alt="VPN Admin dashboard overview with revenue charts and recent activity"
+              width="1440"
+              height="900"
+              loading="eager"
+            />
+          </figure>
+        </div>
+      </section>
+
+      <section class="section miniapp-section">
+        <div class="container">
+          <div class="section-head">
+            <p class="eyebrow">Telegram MiniApp</p>
+            <h2>A polished subscriber experience</h2>
+            <p class="section-desc">
+              Home, devices, support, and account — the same stack your users
+              open inside Telegram.
+            </p>
+          </div>
+
+          <div class="carousel" data-carousel>
+            <button
+              class="carousel-nav prev"
+              type="button"
+              data-carousel-prev
+              aria-label="Previous screenshot"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M15 18l-6-6 6-6" />
+              </svg>
+            </button>
+
+            <div class="carousel-viewport">
+              <div class="carousel-track" data-carousel-track>
+                <figure class="phone-slide is-active" data-carousel-slide>
+                  <div class="phone-bezel">
+                    <img src="./assets/screenshots/miniapp-home.png" alt="MiniApp home — subscription status" />
+                  </div>
+                  <figcaption>Home</figcaption>
+                </figure>
+                <figure class="phone-slide" data-carousel-slide>
+                  <div class="phone-bezel">
+                    <img src="./assets/screenshots/miniapp-devices.png" alt="MiniApp devices list" />
+                  </div>
+                  <figcaption>Devices</figcaption>
+                </figure>
+                <figure class="phone-slide" data-carousel-slide>
+                  <div class="phone-bezel">
+                    <img src="./assets/screenshots/miniapp-support.png" alt="MiniApp support tickets" />
+                  </div>
+                  <figcaption>Support</figcaption>
+                </figure>
+                <figure class="phone-slide" data-carousel-slide>
+                  <div class="phone-bezel">
+                    <img
+                      src="./assets/screenshots/miniapp-support-ticket.png"
+                      alt="MiniApp support ticket conversation"
+                    />
+                  </div>
+                  <figcaption>Ticket</figcaption>
+                </figure>
+                <figure class="phone-slide" data-carousel-slide>
+                  <div class="phone-bezel">
+                    <img src="./assets/screenshots/miniapp-settings.png" alt="MiniApp account settings" />
+                  </div>
+                  <figcaption>Account</figcaption>
+                </figure>
+              </div>
+            </div>
+
+            <button
+              class="carousel-nav next"
+              type="button"
+              data-carousel-next
+              aria-label="Next screenshot"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M9 18l6-6-6-6" />
+              </svg>
+            </button>
+
+            <div class="carousel-dots" data-carousel-dots role="tablist" aria-label="Screenshots"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="features" class="section features">
+        <div class="container">
+          <div class="section-head">
+            <p class="eyebrow">Key features</p>
+            <h2>Everything you need to sell VPN</h2>
+          </div>
+
+          <div class="feature-grid">
+            <article class="feature-card">
+              <div class="feature-icon" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                </svg>
+              </div>
+              <h3>Seller bot</h3>
+              <p>
+                Registration, subscription delivery, payment webhooks, and an
+                optional in-bot purchase menu — powered by aiogram.
+              </p>
+            </article>
+
+            <article class="feature-card">
+              <div class="feature-icon" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+                  <rect x="3" y="3" width="7" height="9" rx="1" />
+                  <rect x="14" y="3" width="7" height="5" rx="1" />
+                  <rect x="14" y="12" width="7" height="9" rx="1" />
+                  <rect x="3" y="16" width="7" height="5" rx="1" />
+                </svg>
+              </div>
+              <h3>Admin Dashboard</h3>
+              <p>
+                Users, transactions, stats, tariffs, menus, support, CRM, store,
+                and Telemt monitoring in one FastAPI + React panel.
+              </p>
+            </article>
+
+            <article class="feature-card">
+              <div class="feature-icon" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+                  <rect x="7" y="2" width="10" height="20" rx="2" />
+                  <path d="M11 18h2" />
+                </svg>
+              </div>
+              <h3>Telegram MiniApp</h3>
+              <p>
+                Buy and extend plans, manage devices, open support tickets, and
+                invite friends — native WebApp UX inside Telegram.
+              </p>
+            </article>
+
+            <article class="feature-card">
+              <div class="feature-icon" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+              </div>
+              <h3>Database auto-backup</h3>
+              <p>
+                Scheduled daily PostgreSQL dumps via the admin bot — zip archives
+                delivered to Telegram so you always have a recoverable snapshot.
+              </p>
+            </article>
+
+            <article class="feature-card">
+              <div class="feature-icon" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+                  <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                </svg>
+              </div>
+              <h3>Payments &amp; referrals</h3>
+              <p>
+                Multiple gateways, bonus credits wallet, promocodes, and referral
+                rewards — prices always resolved server-side from menu nodes.
+              </p>
+            </article>
+
+            <article class="feature-card">
+              <div class="feature-icon" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+                  <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                  <circle cx="9" cy="7" r="4" />
+                  <path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
+                </svg>
+              </div>
+              <h3>CRM &amp; support</h3>
+              <p>
+                Segmented campaigns, scheduled perks, in-app ticketing, and Remnawave
+                provisioning — growth tools next to day-to-day support.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section cta-band">
+        <div class="container cta-band-inner">
+          <div>
+            <h2>Ready to deploy?</h2>
+            <p>
+              Docker Compose, config walkthrough, and component guides — start
+              with the Getting started overview.
+            </p>
+          </div>
+          <a class="btn btn-primary" href="./docs/getting-started/">Get Started</a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container footer-inner">
+        <p>
+          Built for
+          <a href="https://t.me/remnawave" target="_blank" rel="noopener noreferrer"
+            >❤️&nbsp;Remnawave community</a
+          >
+        </p>
+        <div class="footer-links">
+          <a href="./docs/">Documentation</a>
+          <a href="./docs/architecture/">Architecture</a>
+          <a href="./docs/deployment/">Deployment</a>
+        </div>
+      </div>
+    </footer>
+
+    <script src="./carousel.js" defer></script>
+    <script src="./stats.js" defer></script>
+  </body>
+</html>

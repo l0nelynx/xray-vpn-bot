@@ -29,6 +29,9 @@ db.sqlite3
 support.db
 dig_data.json
 
+# MkDocs / Pages build output
+site/
+
 # Legacy / local scratch
 Deprecated
 freekassa.py

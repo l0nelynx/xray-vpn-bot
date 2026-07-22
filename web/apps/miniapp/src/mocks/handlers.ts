@@ -16,14 +16,14 @@ const menuTree = {
     {
       id: 1,
       parent_id: null,
-      text: "Подписка",
+      text: "Subscription",
       action: "buttons" as const,
       invoice: null,
       children: [
         {
           id: 2,
           parent_id: 1,
-          text: "1 месяц",
+          text: "1 month",
           action: "invoice" as const,
           invoice: {
             provider: "crypto" as const,
@@ -39,7 +39,7 @@ const menuTree = {
         {
           id: 3,
           parent_id: 1,
-          text: "3 месяца",
+          text: "3 months",
           action: "invoice" as const,
           invoice: {
             provider: "platega" as const,
@@ -57,27 +57,27 @@ const menuTree = {
 };
 
 let ticketSeq = 2;
-let mockLanguage = "ru";
+let mockLanguage = "en";
 const tickets = [
   {
     id: 1,
-    subject: "Не подключается",
+    subject: "Can't connect",
     status: "open",
     created_at: "2026-07-18T10:00:00Z",
     updated_at: "2026-07-18T11:00:00Z",
-    last_message_preview: "Помогите с подключением",
+    last_message_preview: "Need help with connection",
     messages: [
       {
         id: 1,
         sender: "user",
-        text: "Помогите с подключением",
+        text: "Need help with connection",
         created_at: "2026-07-18T10:00:00Z",
         attachments: [],
       },
       {
         id: 2,
         sender: "admin",
-        text: "Пришлите скриншот ошибки, пожалуйста.",
+        text: "Please send a screenshot of the error.",
         created_at: "2026-07-18T11:00:00Z",
         attachments: [],
       },
@@ -91,7 +91,7 @@ export const handlers: HttpHandler[] = [
       registered: true,
       user: { tg_id: 424242, username: "mock_user", language: mockLanguage },
       subscription: {
-        tariff: "1 месяц",
+        tariff: "1 month",
         status: "active",
         days_left: 18,
         expire_iso: new Date(Date.now() + 18 * 86400000).toISOString(),
@@ -144,7 +144,7 @@ export const handlers: HttpHandler[] = [
       points_spent: 300,
       balance_after: 0,
       subscription_url: "https://example.com/sub/mock",
-      message: "Оплачено баллами (mock)",
+      message: "Paid with credits (mock)",
     }),
   ),
 
