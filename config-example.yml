@@ -10,33 +10,33 @@
 # ║  CORE BOT IDENTITY                                                          ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
 
-branding_name: "YourVPN"                           # [REQUIRED] Service name shown to users in bot/portal
-token: "yourbottoken"                              # [REQUIRED] Main user-facing Telegram bot token
+branding_name: "YourVPN"                           # [REQUIRED] preferred: Dashboard → Settings → Runtime
+token: "yourbottoken"                              # [REQUIRED] Main user-facing Telegram bot token (bootstrap — stays in YAML)
 bot_url: "https://t.me/YourBot"                   # [REQUIRED] Direct t.me link to your bot (used in notifications)
 miniapp_url: "https://example.com/bot/miniapp"    # [REQUIRED] Direct HTTPS URL of the MiniApp web page — used inside WebApp button (must be HTTPS, reachable by Telegram)
 miniapp_tg_url: "https://t.me/YourBot/appname"    # [REQUIRED] Telegram-side link to the MiniApp — register the app name in BotFather, then use https://t.me/YourBot/appname. Shown as a clickable link in bot messages.
 
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  CHANNELS & PUBLIC LINKS                                                    ║
+# ║  CHANNELS & PUBLIC LINKS  (preferred: Dashboard → Settings → Runtime)       ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
 
-news_id: -1001234567890                            # [REQUIRED] News/announcements channel — numeric ID (the bot must be admin there)
-news_url: "https://t.me/YourNewsChannel"           # [REQUIRED] Public invite link to the news channel (shown to users)
-support_bot_id: "@YourSupportBot"                  # [REQUIRED] Support contact shown in bot menus (e.g. @BotUsername or https://t.me/…)
-agreement_url: "https://example.com/agreement"    # [REQUIRED] User agreement page URL
-policy_url: "https://example.com/policy"          # [REQUIRED] Privacy policy page URL
+news_id: -1001234567890                            # preferred: Dashboard Runtime — News/announcements channel numeric ID
+news_url: "https://t.me/YourNewsChannel"           # preferred: Dashboard Runtime — Public invite link
+support_bot_id: "@YourSupportBot"                  # preferred: Dashboard Runtime — Support contact
+agreement_url: "https://example.com/agreement"    # preferred: Dashboard Runtime
+policy_url: "https://example.com/policy"          # preferred: Dashboard Runtime
 
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
 # ║  ADMIN & NOTIFICATIONS                                                      ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
 
-admin_id: 123456789                                # [REQUIRED] Admin Telegram user ID (can use bot admin commands)
-admin_bot_token: "youradminbottoken"               # [optional] Separate admin bot token for broadcasts/log alerts; omit to disable
-logs_id: -1001234567890                            # [optional] Chat/channel ID for event log messages (registrations, invoices, deliveries). Omit → silent.
-web_id: -1001234567890                              # [optional] Chat/channel ID for web-portal partnership inquiries. Omit → silent.
-admin_logs_length: 20                              # [optional] Rows shown in the in-bot admin log panel (default: 20)
+admin_id: 123456789                                # [REQUIRED] Admin Telegram user ID (bootstrap)
+admin_bot_token: "youradminbottoken"               # [optional] Separate admin bot token; omit to disable
+logs_id: -1001234567890                            # preferred: Dashboard Runtime — event log chat/channel
+web_id: -1001234567890                              # preferred: Dashboard Runtime — web-portal inquiries chat
+admin_logs_length: 20                              # preferred: Dashboard Runtime — in-bot admin log rows
 
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
@@ -87,6 +87,11 @@ dashboard_password: change-me                      # [REQUIRED] Admin password �
 # can forge admin tokens. Generate one with:  openssl rand -hex 32
 dashboard_secret: change-me-to-a-random-string-of-at-least-32-bytes
 
+# Encrypts payment_integrations credentials stored in Postgres (Dashboard → Settings → Payments).
+# Optional: if unset, dashboard_secret is used as a fallback during the dual-source period.
+# Generate: openssl rand -hex 32
+# payments_secrets_key: change-me-payments-encryption-key-at-least-32-bytes
+
 # Serve Swagger UI (/api/docs) + openapi.json on the dashboard AND miniapp APIs.
 # Keep false in production — when true the full API surface (incl. admin/IAP
 # routes) is publicly enumerable. Can also be toggled with env EXPOSE_API_DOCS=1.
@@ -102,11 +107,11 @@ telemt_header: "your-telemt-auth-header"           # [optional] Authorization he
 
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  FREE PLAN                                                                  ║
+# ║  FREE PLAN  (preferred: Dashboard → Settings → Runtime)                     ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
 
-free_days: 30                                      # [optional] Free plan duration in days (default: 30)
-free_traffic: 10                                   # [optional] Free plan traffic limit in GB (default: 10)
+free_days: 30                                      # preferred: Dashboard Runtime — Free plan duration in days
+free_traffic: 10                                   # preferred: Dashboard Runtime — Free plan traffic limit in GB
 
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
@@ -176,51 +181,38 @@ support_token: "yoursupportbottoken"               # [optional] Token for the le
 
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  PAYMENT GATEWAY: TELEGRAM STARS + CRYPTOBOT                                ║
+# ║  PAYMENT GATEWAYS  (preferred: Dashboard → Settings → Payments)             ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
+# YAML remains a fallback until you save a provider in the Dashboard (then DB wins).
+# After Save, leave these blocks as-is or blank — Dashboard is the source of truth.
 
-crypto_bot_token: "your_cryptobot_api_token"       # CryptoBot (@CryptoBot) API token — enables USDT/Stars invoices
+# --- TELEGRAM STARS + CRYPTOBOT ---
+crypto_bot_token: "your_cryptobot_api_token"       # preferred: Dashboard Payments → crypto
 
-
-# ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  PAYMENT GATEWAY: CRYSTAL PAY                                               ║
-# ╚══════════════════════════════════════════════════════════════════════════════╝
-
+# --- CRYSTAL PAY ---
 crystal_login: "your_crystal_login"
 crystal_secret: "your_crystal_secret"
 crystal_salt: "your_crystal_salt"
-crystal_webhook: "https://example.com:5000/crystal_webhook"  # Must be reachable from Crystal Pay servers
+crystal_webhook: "https://example.com:5000/crystal_webhook"
 
+# --- A-PAYS (SBP) ---
+apay_id: 1234
+apay_secret: "your_apay_secret"
+apay_api_url: "https://apays.io"
 
-# ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  PAYMENT GATEWAY: A-PAYS (SBP)                                              ║
-# ╚══════════════════════════════════════════════════════════════════════════════╝
+# --- PLATEGA ---
+platega_merchant_id: "your-platega-merchant-uuid"
+platega_api_key: "your_platega_api_key"
+platega_url: "https://app.platega.io"
+platega_payment_method: 2
 
-apay_id: 1234                                      # A-Pays merchant ID
-apay_secret: "your_apay_secret"                    # A-Pays secret key
-apay_api_url: "https://apays.io"                   # A-Pays API base URL
-
-
-# ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  PAYMENT GATEWAY: PLATEGA                                                   ║
-# ╚══════════════════════════════════════════════════════════════════════════════╝
-
-platega_merchant_id: "your-platega-merchant-uuid"  # Platega merchant UUID (X-MerchantId header)
-platega_api_key: "your_platega_api_key"            # Platega API key (X-Secret header)
-platega_url: "https://app.platega.io"              # Platega API base URL
-platega_payment_method: 2                          # 2=SBP · 3=ERIP · 11=card · 12=intl · 13=crypto
-
-
-# ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  PAYMENT GATEWAY: PARITYPAY                                                 ║
-# ╚══════════════════════════════════════════════════════════════════════════════╝
-
-paritypay_shop_id: "your-paritypay-shop-uuid"      # ParityPay cassa (shop) UUID sent in every request
-paritypay_secret_1: "your_paritypay_secret_key_1"  # Secret key №1 — signs outgoing API requests (X-SIGNATURE)
-paritypay_secret_2: "your_paritypay_secret_key_2"  # Secret key №2 — verifies incoming webhooks
-paritypay_url: "https://api.paritypay.ru"          # ParityPay API base URL
-paritypay_webhook: ""                              # [optional] Public URL of /bot/paritypay_webhook; blank → set it in the ParityPay cassa settings
-paritypay_service: "sbp"                            # Default service when a node's method is unset: sbp or card
+# --- PARITYPAY ---
+paritypay_shop_id: "your-paritypay-shop-uuid"
+paritypay_secret_1: "your_paritypay_secret_key_1"
+paritypay_secret_2: "your_paritypay_secret_key_2"
+paritypay_url: "https://api.paritypay.ru"
+paritypay_webhook: ""
+paritypay_service: "sbp"
 
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗

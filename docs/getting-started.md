@@ -149,8 +149,11 @@ Point each gateway's callback URL to your public domain, e.g.:
 ### 7. Build your product in the Dashboard
 
 1. Open `https://your-domain/bot/dashboard/` and log in.
-2. **Squads** — map Remnawave squad UUIDs to named profiles.
-3. **WebApp → Tariff Constructor** — build the purchase menu tree (invoice leaves
+2. **WebApp → Settings** — Runtime (maintenance, branding, free plan, links) and
+   Payments (enable gateways / paste credentials). Until you save here,
+   `config.yml` remains the fallback ([dual-source](configuration.md#dual-source-configuration-yaml--dashboard)).
+3. **Squads** — map Remnawave squad UUIDs to named profiles.
+4. **WebApp → Tariff Constructor** — build the purchase menu tree (invoice leaves
    per payment method).
 4. **Promocodes** — set credit grants and referral reward points
    ([referral.md](referral.md)).

@@ -6,8 +6,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 
-from .config import get_expose_api_docs, get_log_level, get_web_allowed_origins
+from .config import get_expose_api_docs, get_log_level, get_web_allowed_origins, get_yaml_config
 from .security_config import validate_security_config
+from .maintenance import MaintenanceMiddleware
 
 logging.basicConfig(
     level=get_log_level(),
@@ -62,7 +63,24 @@ def _run_migrations() -> None:
 async def lifespan(app: FastAPI):
     validate_security_config()
     _run_migrations()
-    yield
+    from .database.session import async_session
+    from common_db.runtime_config import bootstrap_runtime_overlay, runtime_overlay_poll_loop
+    import asyncio
+
+    yaml_cfg = get_yaml_config()
+    crypto_secret = str(
+        yaml_cfg.get("payments_secrets_key") or yaml_cfg.get("dashboard_secret") or ""
+    )
+    await bootstrap_runtime_overlay(async_session, yaml_cfg, crypto_secret=crypto_secret)
+    poll_task = asyncio.create_task(runtime_overlay_poll_loop(async_session))
+    try:
+        yield
+    finally:
+        poll_task.cancel()
+        try:
+            await poll_task
+        except asyncio.CancelledError:
+            pass
 
 
 # Swagger UI / openapi.json are gated behind a config flag — off in production so
@@ -76,6 +94,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 app.state.limiter = limiter
+app.add_middleware(MaintenanceMiddleware)
 
 # CORS for the external web portal (separate static hosting)
 _cors_origins = get_web_allowed_origins()

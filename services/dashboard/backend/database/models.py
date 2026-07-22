@@ -11,6 +11,7 @@ directly from `common_db.models`.
 from common_db import Base  # noqa: F401  (legacy: dashboard code referenced Base)
 from common_db.models import (  # noqa: F401
     AndroidFcmToken,
+    AppRuntimeSettings,
     BotFeatureFlags,
     CacheVersion,
     CrmCampaign,
@@ -30,6 +31,7 @@ from common_db.models import (  # noqa: F401
     GiveawayWinner,
     MenuButton,
     MenuScreen,
+    PaymentIntegration,
     Promo,
     PromoRedemption,
     PromoSettings,
@@ -52,6 +54,7 @@ from common_db.models import (  # noqa: F401
 __all__ = [
     "Base",
     "AndroidFcmToken",
+    "AppRuntimeSettings",
     "BotFeatureFlags",
     "CacheVersion",
     "CrmCampaign",
@@ -71,6 +74,7 @@ __all__ = [
     "GiveawayWinner",
     "MenuButton",
     "MenuScreen",
+    "PaymentIntegration",
     "Promo",
     "PromoRedemption",
     "PromoSettings",

@@ -23,6 +23,7 @@ import common_db.models  # noqa: F401  -- side-effect: populate metadata
 
 CANONICAL_TABLES = frozenset({
     "android_fcm_tokens",
+    "app_runtime_settings",
     "bot_feature_flags",
     "cache_version",
     "crm_campaign_deliveries",
@@ -42,6 +43,7 @@ CANONICAL_TABLES = frozenset({
     "giveaways",
     "menu_buttons",
     "menu_screens",
+    "payment_integrations",
     "promo_redemptions",
     "promo_settings",
     "promos",

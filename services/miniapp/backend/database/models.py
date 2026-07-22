@@ -15,6 +15,7 @@ reach for what it needs without re-introducing a local class.
 from common_db import Base  # noqa: F401  (legacy: miniapp code may reference Base)
 from common_db.models import (  # noqa: F401
     AndroidFcmToken,
+    AppRuntimeSettings,
     BotFeatureFlags,
     CacheVersion,
     CrmCampaign,
@@ -26,6 +27,7 @@ from common_db.models import (  # noqa: F401
     GooglePlaySku,
     MenuButton,
     MenuScreen,
+    PaymentIntegration,
     Promo,
     PromoRedemption,
     PromoSettings,
@@ -48,6 +50,7 @@ from common_db.models import (  # noqa: F401
 __all__ = [
     "Base",
     "AndroidFcmToken",
+    "AppRuntimeSettings",
     "BotFeatureFlags",
     "CacheVersion",
     "CrmCampaign",
@@ -59,6 +62,7 @@ __all__ = [
     "GooglePlaySku",
     "MenuButton",
     "MenuScreen",
+    "PaymentIntegration",
     "Promo",
     "PromoRedemption",
     "PromoSettings",

@@ -26,6 +26,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from common_db import Base  # noqa: F401
 from common_db.models import (  # noqa: F401
     AndroidFcmToken,
+    AppRuntimeSettings,
     BotFeatureFlags,
     CacheVersion,
     CrmCampaign,
@@ -37,6 +38,7 @@ from common_db.models import (  # noqa: F401
     GooglePlaySku,
     MenuButton,
     MenuScreen,
+    PaymentIntegration,
     Promo,
     PromoRedemption,
     PromoSettings,
@@ -83,6 +85,7 @@ __all__ = [
     "async_main",
     # models (re-exported from common_db.models)
     "AndroidFcmToken",
+    "AppRuntimeSettings",
     "BotFeatureFlags",
     "CacheVersion",
     "CrmCampaign",
@@ -94,6 +97,7 @@ __all__ = [
     "GooglePlaySku",
     "MenuButton",
     "MenuScreen",
+    "PaymentIntegration",
     "Promo",
     "PromoRedemption",
     "PromoSettings",
@@ -131,6 +135,16 @@ async def async_main():
     await _seed_telemt_free_params()
     await _seed_promo_settings()
     await _seed_bot_feature_flags()
+    await _seed_runtime_settings()
+
+
+async def _seed_runtime_settings():
+    """Ensure app_runtime_settings singleton exists (migration also inserts)."""
+    from common_db.repo.runtime import get_runtime_settings
+
+    async with async_session() as session:
+        await get_runtime_settings(session)
+        await session.commit()
 
 
 async def _seed_cache_version():

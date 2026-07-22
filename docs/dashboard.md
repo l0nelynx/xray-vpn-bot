@@ -284,9 +284,15 @@ Changes are live immediately — clients read `webapp_menu_nodes` on each reques
 
 **Route:** `/webapp/settings`
 
-| Setting | Effect |
-|---------|--------|
-| `legacy_bot_constructor` | Show/hide Bot Constructor nav group; requires bot restart |
+Tabs:
+
+| Tab | Effect |
+|-----|--------|
+| **Runtime** | Maintenance mode; branding / links / free plan / log chat IDs. Saved values override `config.yml` without restart. |
+| **Payments** | Enable gateways and edit credentials (encrypted in DB). After Save, Dashboard is the source of truth for that provider. |
+| **Feature flags** | `legacy_bot_constructor` — show/hide Bot Constructor nav; requires bot restart |
+
+See [Configuration → Dual-source](configuration.md#dual-source-configuration-yaml--dashboard).
 
 ---
 
@@ -340,7 +346,7 @@ All endpoints require `Authorization: Bearer <JWT>` unless noted.
 | Store | `/api/store` | proxy to Store API |
 | Support | `/api/support` | tickets, reply, attachments |
 | WebApp menu | `/api/webapp-menu` | tree CRUD, providers |
-| Settings | `/api/settings` | feature flags |
+| Settings | `/api/settings` | feature flags, runtime overlay, payment integrations |
 | TG Admin | `/api/tg-admin` | broadcast, channel-post, clean tools |
 
 Health check (unauthenticated): `GET /health`.
