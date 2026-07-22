@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router";
 import { isAuthenticated } from "./api/client";
 import Layout from "./components/Layout";
 import LoginPage from "./pages/LoginPage";

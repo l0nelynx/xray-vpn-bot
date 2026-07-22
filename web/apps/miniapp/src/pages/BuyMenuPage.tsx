@@ -1,7 +1,10 @@
-import { Alert, Spin, Tag } from "antd";
-import { CheckOutlined, LeftOutlined } from "@ant-design/icons";
+import { Check, ChevronLeft } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
+import { Alert, AlertTitle } from "@xray/ui/components/alert";
+import { Badge } from "@xray/ui/components/badge";
+import { Button } from "@xray/ui/components/button";
+import { Spinner } from "@xray/ui/components/spinner";
 import { formatPoints, POINTS_ICON } from "../points";
 import {
   ApiError,
@@ -134,7 +137,10 @@ export default function BuyMenuPage() {
   if (error) {
     return (
       <div className="page">
-        <Alert type="error" title="Не удалось загрузить меню" description={error} />
+        <Alert variant="destructive">
+          <AlertTitle>Не удалось загрузить меню</AlertTitle>
+          <p>{error}</p>
+        </Alert>
       </div>
     );
   }
@@ -142,7 +148,7 @@ export default function BuyMenuPage() {
   if (!tree) {
     return (
       <div className="spinner-wrap">
-        <Spin size="large" />
+        <Spinner className="h-8 w-8" />
       </div>
     );
   }
@@ -172,7 +178,7 @@ export default function BuyMenuPage() {
               flexShrink: 0,
             }}
           >
-            <LeftOutlined style={{ fontSize: 14 }} />
+            <ChevronLeft style={{ width: 16, height: 16 }} />
           </button>
           <span style={{ fontSize: 20, fontWeight: 700, color: "#FFFFFF", letterSpacing: "-0.3px" }}>
             Тарифы
@@ -180,16 +186,10 @@ export default function BuyMenuPage() {
         </div>
 
         {balance > 0 && (
-          <Alert
-            type="info"
-            showIcon
-            style={{ marginBottom: 16 }}
-            title={
-              <span>
-                Бонусный баланс: <Tag color="blue">{formatPoints(balance)}</Tag>
-              </span>
-            }
-          />
+          <Alert style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
+            <span>Бонусный баланс:</span>
+            <Badge>{formatPoints(balance)}</Badge>
+          </Alert>
         )}
 
         {chipLevels.map((chips, depth) => (
@@ -260,7 +260,7 @@ export default function BuyMenuPage() {
                       )}
                       {isSelected && (
                         <div className="tariff-card__check">
-                          <CheckOutlined />
+                          <Check style={{ width: 12, height: 12 }} />
                         </div>
                       )}
                     </div>
@@ -281,27 +281,13 @@ export default function BuyMenuPage() {
       {selectedInvoice && (
         <div className="pay-bar" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {canPayCredits && (
-            <button
-              className="ant-btn ant-btn-primary pay-bar-btn"
-              onClick={handlePayCredits}
-              disabled={!!busyId}
-            >
-              {busyId ? <Spin size="small" /> : `Оплатить баллами · ${pointsCost} ${POINTS_ICON}`}
-            </button>
+            <Button className="pay-bar-btn" onClick={handlePayCredits} disabled={!!busyId}>
+              {busyId ? <Spinner /> : `Оплатить баллами · ${pointsCost} ${POINTS_ICON}`}
+            </Button>
           )}
-          <button
-            className="ant-btn pay-bar-btn"
-            onClick={handlePayFiat}
-            disabled={!!busyId}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 8,
-            }}
-          >
+          <Button className="pay-bar-btn" variant="outline" onClick={handlePayFiat} disabled={!!busyId}>
             {busyId ? (
-              <Spin size="small" />
+              <Spinner />
             ) : (
               <>
                 <span>Оплатить</span>
@@ -311,7 +297,7 @@ export default function BuyMenuPage() {
                 </span>
               </>
             )}
-          </button>
+          </Button>
         </div>
       )}
     </>

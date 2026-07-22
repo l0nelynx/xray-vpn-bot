@@ -181,19 +181,25 @@ async def stats_users_active_ips(_: str = Depends(get_current_user)):
     return await _telemt_request("GET", "/v1/stats/users/active-ips")
 
 
-_FORBIDDEN_TOP_LEVEL = frozenset({"access"})
-_FORBIDDEN_SERVER_KEYS = frozenset({"api", "admin_api"})
+# Telemt GET/PATCH /v1/config only manages this whitelist (see telemt
+# src/api/config_store.rs EDITABLE_SECTIONS). network/server/access are
+# intentionally omitted by Telemt (per-node identity + secrets).
+_EDITABLE_CONFIG_SECTIONS = frozenset(
+    {
+        "general",
+        "timeouts",
+        "censorship",
+        "upstreams",
+        "dc_overrides",
+    }
+)
 
 
-def _strip_forbidden_config(data: Any) -> Any:
-    """Remove access secrets and server.api from a Telemt config payload."""
+def _filter_editable_config(data: Any) -> Any:
+    """Keep only Telemt-managed sections from a GET /v1/config payload."""
     if not isinstance(data, dict):
         return data
-    out = {k: v for k, v in data.items() if k not in _FORBIDDEN_TOP_LEVEL}
-    server = out.get("server")
-    if isinstance(server, dict):
-        out["server"] = {k: v for k, v in server.items() if k not in _FORBIDDEN_SERVER_KEYS}
-    return out
+    return {k: v for k, v in data.items() if k in _EDITABLE_CONFIG_SECTIONS}
 
 
 def _assert_editable_patch(payload: dict[str, Any]) -> None:
@@ -202,27 +208,30 @@ def _assert_editable_patch(payload: dict[str, Any]) -> None:
             status_code=400,
             detail="access is not editable here; manage users via the Telemt Users API",
         )
-    server = payload.get("server")
-    if isinstance(server, dict):
-        bad = sorted(_FORBIDDEN_SERVER_KEYS & server.keys())
-        if bad:
-            raise HTTPException(
-                status_code=400,
-                detail=f"server.{', server.'.join(bad)} is not editable here",
-            )
+    unknown = sorted(set(payload) - _EDITABLE_CONFIG_SECTIONS)
+    if unknown:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "section not editable via Telemt API: "
+                + ", ".join(unknown)
+                + ". Allowed: "
+                + ", ".join(sorted(_EDITABLE_CONFIG_SECTIONS))
+            ),
+        )
 
 
 @router.get("/config")
 async def get_config(_: str = Depends(get_current_user)):
     raw = await _telemt_request("GET", "/v1/config")
     if isinstance(raw, dict) and "data" in raw:
-        return {**raw, "data": _strip_forbidden_config(raw.get("data"))}
-    return _strip_forbidden_config(raw)
+        return {**raw, "data": _filter_editable_config(raw.get("data"))}
+    return _filter_editable_config(raw)
 
 
 @router.patch("/config")
 async def patch_config(body: dict[str, Any], _: str = Depends(get_current_user)):
-    """Sparse patch of Telemt config. Forbidden: top-level access, server.api/admin_api."""
+    """Sparse patch of Telemt-managed config sections only."""
     if not isinstance(body, dict):
         raise HTTPException(status_code=400, detail="Config patch must be a JSON object")
     payload = dict(body)
@@ -230,7 +239,11 @@ async def patch_config(body: dict[str, Any], _: str = Depends(get_current_user))
     if revision is not None and not isinstance(revision, str):
         raise HTTPException(status_code=400, detail="revision must be a string")
     if not payload:
-        raise HTTPException(status_code=400, detail="Empty patch: provide at least one config key")
+        raise HTTPException(
+            status_code=400,
+            detail="Empty patch: provide at least one of "
+            + ", ".join(sorted(_EDITABLE_CONFIG_SECTIONS)),
+        )
     _assert_editable_patch(payload)
     extra = {}
     if revision:

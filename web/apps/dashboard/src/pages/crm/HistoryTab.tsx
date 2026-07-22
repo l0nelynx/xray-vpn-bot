@@ -1,11 +1,31 @@
-import { App, Button, Card, Space, Table, Tag } from "antd";
 import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
+import { Card, CardContent, CardHeader, CardTitle } from "@xray/ui/components/card";
+import { Button } from "@xray/ui/components/button";
+import { Badge } from "@xray/ui/components/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@xray/ui/components/table";
 import useIsMobile from "../../hooks/useIsMobile";
 import { fetchCampaigns } from "./api";
 import type { CampaignSummary } from "./types";
 
+type BadgeVariant = "default" | "secondary" | "destructive" | "outline" | "success" | "warning";
+
+function statusVariant(s: string): BadgeVariant {
+  if (s === "completed") return "success";
+  if (s === "running") return "default";
+  if (s === "queued") return "secondary";
+  if (s === "failed") return "destructive";
+  return "outline";
+}
+
 export default function HistoryTab() {
-  const { message } = App.useApp();
   const isMobile = useIsMobile();
   const [loading, setLoading] = useState(false);
   const [campaigns, setCampaigns] = useState<CampaignSummary[]>([]);
@@ -15,23 +35,15 @@ export default function HistoryTab() {
     try {
       setCampaigns(await fetchCampaigns());
     } catch {
-      message.error("Failed to load history");
+      toast.error("Failed to load history");
     } finally {
       setLoading(false);
     }
-  }, [message]);
+  }, []);
 
   useEffect(() => {
     load();
   }, [load]);
-
-  const statusColor = (s: string) => {
-    if (s === "completed") return "green";
-    if (s === "running") return "processing";
-    if (s === "queued") return "blue";
-    if (s === "failed") return "red";
-    return "default";
-  };
 
   const perksLabel = (r: CampaignSummary) => {
     const parts: string[] = [];
@@ -41,96 +53,86 @@ export default function HistoryTab() {
     return `${parts.join(", ")} (${r.perks_applied}/${r.perks_failed} failed)`;
   };
 
-  const columns = [
-    { title: "ID", dataIndex: "id", key: "id", width: 70 },
-    { title: "Name", dataIndex: "name", key: "name", ellipsis: true },
-    {
-      title: "Segment",
-      dataIndex: "segment_type",
-      key: "segment_type",
-      render: (v: string | null) => v ?? "—",
-    },
-    {
-      title: "Status",
-      dataIndex: "status",
-      key: "status",
-      render: (v: string) => <Tag color={statusColor(v)}>{v}</Tag>,
-    },
-    { title: "Targets", dataIndex: "total_targets", key: "total_targets", width: 80 },
-    {
-      title: "Sent",
-      key: "sent",
-      render: (_: unknown, r: CampaignSummary) =>
-        `${r.messages_sent} / ${r.messages_failed} failed`,
-    },
-    {
-      title: "Bonuses",
-      key: "perks",
-      render: (_: unknown, r: CampaignSummary) => perksLabel(r),
-    },
-    { title: "Created", dataIndex: "created_at", key: "created_at", width: 170 },
-  ];
-
   const renderMobileCampaignCard = (r: CampaignSummary) => (
-    <Card
-      key={r.id}
-      size="small"
-      style={{ marginBottom: 8 }}
-      styles={{ body: { padding: "12px" } }}
-    >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-        <Tag color={statusColor(r.status)} style={{ margin: 0 }}>
-          {r.status}
-        </Tag>
-        <span style={{ fontSize: 12, color: "rgba(255,255,255,0.45)" }}>#{r.id}</span>
-      </div>
-      <div style={{ fontWeight: 600, color: "rgba(255,255,255,0.88)", marginBottom: 4 }}>
-        {r.name || "—"}
-      </div>
-      <div style={{ fontSize: 12, color: "rgba(255,255,255,0.45)", marginBottom: 4 }}>
-        {r.segment_type ?? "—"} · {r.total_targets} targets
-      </div>
-      <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginBottom: 2 }}>
-        Sent: {r.messages_sent} / failed: {r.messages_failed}
-      </div>
-      <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginBottom: 2 }}>
-        Bonuses: {perksLabel(r)}
-      </div>
-      <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)" }}>
-        {r.created_at || "—"}
-      </div>
+    <Card key={r.id} className="mb-2">
+      <CardContent className="p-3">
+        <div className="mb-1.5 flex items-center justify-between">
+          <Badge variant={statusVariant(r.status)}>{r.status}</Badge>
+          <span className="text-xs text-muted-foreground">#{r.id}</span>
+        </div>
+        <div className="mb-1 font-semibold text-foreground/85">{r.name || "—"}</div>
+        <div className="mb-1 text-xs text-muted-foreground">
+          {r.segment_type ?? "—"} · {r.total_targets} targets
+        </div>
+        <div className="text-[11px] text-muted-foreground/70">
+          Sent: {r.messages_sent} / failed: {r.messages_failed}
+        </div>
+        <div className="text-[11px] text-muted-foreground/70">Bonuses: {perksLabel(r)}</div>
+        <div className="text-[11px] text-muted-foreground/70">{r.created_at || "—"}</div>
+      </CardContent>
     </Card>
   );
 
   return (
-    <Card
-      title="Campaign history"
-      extra={
-        <Button onClick={load} loading={loading} block={isMobile}>
+    <Card>
+      <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="text-sm">Campaign history</CardTitle>
+        <Button variant="outline" size="sm" onClick={load} disabled={loading}>
           Refresh
         </Button>
-      }
-    >
-      {isMobile ? (
-        loading ? (
-          <div style={{ textAlign: "center", padding: 40, color: "rgba(255,255,255,0.4)" }}>
-            Loading...
-          </div>
+      </CardHeader>
+      <CardContent>
+        {isMobile ? (
+          loading ? (
+            <div className="py-10 text-center text-muted-foreground">Loading...</div>
+          ) : (
+            campaigns.map(renderMobileCampaignCard)
+          )
         ) : (
-          <Space direction="vertical" style={{ width: "100%" }} size={0}>
-            {campaigns.map(renderMobileCampaignCard)}
-          </Space>
-        )
-      ) : (
-        <Table
-          rowKey="id"
-          loading={loading}
-          columns={columns}
-          dataSource={campaigns}
-          size="small"
-          pagination={{ pageSize: 20 }}
-        />
-      )}
+          <div className="overflow-auto rounded-lg border border-border">
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead>ID</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Segment</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Targets</TableHead>
+                  <TableHead>Sent</TableHead>
+                  <TableHead>Bonuses</TableHead>
+                  <TableHead>Created</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {campaigns.length === 0 ? (
+                  <TableRow className="hover:bg-transparent">
+                    <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
+                      {loading ? "Loading..." : "No campaigns"}
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  campaigns.map((r) => (
+                    <TableRow key={r.id}>
+                      <TableCell>{r.id}</TableCell>
+                      <TableCell>{r.name}</TableCell>
+                      <TableCell>{r.segment_type ?? "—"}</TableCell>
+                      <TableCell>
+                        <Badge variant={statusVariant(r.status)}>{r.status}</Badge>
+                      </TableCell>
+                      <TableCell>{r.total_targets}</TableCell>
+                      <TableCell>
+                        {r.messages_sent} / {r.messages_failed} failed
+                      </TableCell>
+                      <TableCell>{perksLabel(r)}</TableCell>
+                      <TableCell>{r.created_at}</TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </CardContent>
     </Card>
   );
 }

@@ -1,13 +1,23 @@
-import { useEffect, useState, useMemo } from "react";
-import { Card, Spin, Empty, Alert, Button } from "antd";
-import { Column } from "@ant-design/charts";
+import { useEffect, useState } from "react";
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { api } from "../api/client";
 import type { GrowthPoint } from "../api/types";
 import useIsMobile from "../hooks/useIsMobile";
+import ChartCard from "./ChartCard";
 
 interface Props {
   period?: string;
 }
+
+const AXIS = { fill: "oklch(0.68 0 0)", fontSize: 11 };
+const GRID = "oklch(1 0 0 / 8%)";
+const TOOLTIP = {
+  background: "oklch(0.18 0 0)",
+  border: "1px solid oklch(1 0 0 / 14%)",
+  borderRadius: 8,
+  color: "oklch(0.985 0 0)",
+  fontSize: 12,
+};
 
 export default function UserGrowthChart({ period = "month" }: Props) {
   const [data, setData] = useState<GrowthPoint[]>([]);
@@ -36,88 +46,33 @@ export default function UserGrowthChart({ period = "month" }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [period]);
 
-  // Replace zero values with a small visual minimum so stems are always visible
-  const chartData = useMemo(() => {
-    const maxVal = Math.max(...data.map((d) => d.count), 1);
-    const minVisible = maxVal * 0.015;
-    return data.map((d) => ({
-      ...d,
-      _realCount: d.count,
-      count: d.count === 0 ? minVisible : d.count,
-    }));
-  }, [data]);
-
-  const chartHeight = isMobile ? 220 : 300;
-  const isEmpty = !loading && !error && (data.length === 0 || data.every((d) => d.count === 0));
-
-  if (loading)
-    return (
-      <Card style={{ minHeight: chartHeight + 80 }}>
-        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: chartHeight }}>
-          <Spin />
-        </div>
-      </Card>
-    );
+  const chartHeight = isMobile ? 240 : 280;
+  const isEmpty = data.length === 0 || data.every((d) => d.count === 0);
 
   return (
-    <Card
-      title={<span style={{ color: "rgba(255,255,255,0.85)" }}>User Growth</span>}
+    <ChartCard
+      title="User Growth"
+      description="New users over time."
+      loading={loading}
+      error={error}
+      empty={isEmpty}
+      onRetry={load}
+      height={chartHeight}
     >
-      {error ? (
-        <Alert
-          type="error"
-          showIcon
-          message={error}
-          action={
-            <Button size="small" onClick={load}>
-              Retry
-            </Button>
-          }
-        />
-      ) : isEmpty ? (
-        <div style={{ height: chartHeight, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No data for this period" />
-        </div>
-      ) : (
-        <Column
-          data={chartData}
-          xField="date"
-          yField="count"
-          height={chartHeight}
-          style={{
-            radiusTopLeft: 4,
-            radiusTopRight: 4,
-            fill: (d: Record<string, unknown>) =>
-              (d as { _realCount: number })._realCount === 0
-                ? "rgba(54,207,201,0.25)"
-                : "#36cfc9",
-            maxWidth: isMobile ? 16 : 32,
-          }}
-          axis={{
-            x: {
-              labelFill: "rgba(255,255,255,0.75)",
-              labelFontSize: isMobile ? 9 : 11,
-              labelAutoRotate: true,
-              labelAutoHide: true,
-              lineStroke: "rgba(255,255,255,0.12)",
-              tick: false,
-            },
-            y: {
-              labelFill: "rgba(255,255,255,0.75)",
-              labelFontSize: isMobile ? 9 : 11,
-              gridStroke: "rgba(255,255,255,0.08)",
-              gridLineDash: [3, 3],
-            },
-          }}
-          tooltip={{
-            channel: "y",
-            valueFormatter: (_v: number, datum: Record<string, unknown>) => {
-              const real = (datum as { _realCount?: number })?._realCount;
-              return `${real ?? _v}`;
-            },
-          }}
-        />
-      )}
-    </Card>
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={data} margin={{ top: 8, right: 8, left: 4, bottom: 4 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke={GRID} vertical={false} />
+          <XAxis dataKey="date" tick={AXIS} stroke={GRID} tickMargin={8} />
+          <YAxis tick={AXIS} stroke={GRID} tickMargin={8} width={40} />
+          <Tooltip contentStyle={TOOLTIP} cursor={{ fill: "oklch(1 0 0 / 4%)" }} />
+          <Bar
+            dataKey="count"
+            fill="oklch(0.7 0 0)"
+            radius={[4, 4, 0, 0]}
+            maxBarSize={isMobile ? 18 : 28}
+          />
+        </BarChart>
+      </ResponsiveContainer>
+    </ChartCard>
   );
 }

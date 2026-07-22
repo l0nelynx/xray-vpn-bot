@@ -1,10 +1,30 @@
-import { App, Button, Card, Space, Table, Tag } from "antd";
 import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
+import { Card, CardContent } from "@xray/ui/components/card";
+import { Button } from "@xray/ui/components/button";
+import { Badge } from "@xray/ui/components/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@xray/ui/components/table";
 import useIsMobile from "../../hooks/useIsMobile";
 import { fetchPushCampaigns, type PushCampaignSummary } from "./api";
 
+type BadgeVariant = "default" | "secondary" | "destructive" | "outline" | "success" | "warning";
+
+function statusVariant(s: string): BadgeVariant {
+  if (s === "completed") return "success";
+  if (s === "running") return "default";
+  if (s === "queued") return "secondary";
+  if (s === "failed") return "destructive";
+  return "outline";
+}
+
 export default function HistoryTab() {
-  const { message } = App.useApp();
   const isMobile = useIsMobile();
   const [loading, setLoading] = useState(false);
   const [campaigns, setCampaigns] = useState<PushCampaignSummary[]>([]);
@@ -14,23 +34,15 @@ export default function HistoryTab() {
     try {
       setCampaigns(await fetchPushCampaigns());
     } catch {
-      message.error("Failed to load push history");
+      toast.error("Failed to load push history");
     } finally {
       setLoading(false);
     }
-  }, [message]);
+  }, []);
 
   useEffect(() => {
     load();
   }, [load]);
-
-  const statusColor = (s: string) => {
-    if (s === "completed") return "green";
-    if (s === "running") return "processing";
-    if (s === "queued") return "blue";
-    if (s === "failed") return "red";
-    return "default";
-  };
 
   const audienceLabel = (r: PushCampaignSummary) => {
     if (r.audience === "user_ids") {
@@ -40,88 +52,85 @@ export default function HistoryTab() {
     return "all_tokens";
   };
 
-  const columns = [
-    { title: "ID", dataIndex: "id", key: "id", width: 70 },
-    { title: "Title", dataIndex: "title", key: "title", ellipsis: true },
-    {
-      title: "Audience",
-      key: "audience",
-      render: (_: unknown, r: PushCampaignSummary) => audienceLabel(r),
-    },
-    {
-      title: "Status",
-      dataIndex: "status",
-      key: "status",
-      render: (v: string) => <Tag color={statusColor(v)}>{v}</Tag>,
-    },
-    { title: "Targets", dataIndex: "total_targets", key: "total_targets", width: 80 },
-    {
-      title: "Sent",
-      key: "sent",
-      render: (_: unknown, r: PushCampaignSummary) =>
-        `${r.sent} / ${r.failed} failed`,
-    },
-    { title: "Created", dataIndex: "created_at", key: "created_at", width: 170 },
-    { title: "By", dataIndex: "created_by", key: "created_by", ellipsis: true },
-  ];
-
   const renderMobileCard = (r: PushCampaignSummary) => (
-    <Card
-      key={r.id}
-      size="small"
-      style={{ marginBottom: 8 }}
-      styles={{ body: { padding: "12px" } }}
-    >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 6,
-        }}
-      >
-        <Tag color={statusColor(r.status)} style={{ margin: 0 }}>
-          {r.status}
-        </Tag>
-        <span style={{ fontSize: 12, color: "rgba(255,255,255,0.45)" }}>#{r.id}</span>
-      </div>
-      <div style={{ fontWeight: 600, marginBottom: 4 }}>{r.title || "—"}</div>
-      <div style={{ fontSize: 12, color: "rgba(255,255,255,0.45)", marginBottom: 4 }}>
-        {audienceLabel(r)} · {r.total_targets} targets
-      </div>
-      <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)" }}>
-        Sent: {r.sent} / failed: {r.failed}
-      </div>
-      <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)" }}>
-        {r.created_at || "—"}
-      </div>
+    <Card key={r.id} className="mb-2">
+      <CardContent className="p-3">
+        <div className="mb-1.5 flex items-center justify-between">
+          <Badge variant={statusVariant(r.status)}>{r.status}</Badge>
+          <span className="text-xs text-muted-foreground">#{r.id}</span>
+        </div>
+        <div className="mb-1 font-semibold text-foreground/85">{r.title || "—"}</div>
+        <div className="mb-1 text-xs text-muted-foreground">
+          {audienceLabel(r)} · {r.total_targets} targets
+        </div>
+        <div className="text-[11px] text-muted-foreground/70">
+          Sent: {r.sent} / failed: {r.failed}
+        </div>
+        <div className="text-[11px] text-muted-foreground/70">{r.created_at || "—"}</div>
+      </CardContent>
     </Card>
   );
 
   return (
     <div>
-      <Space style={{ marginBottom: 12 }}>
-        <Button onClick={load} loading={loading}>
+      <div className="mb-3">
+        <Button variant="outline" onClick={load} disabled={loading}>
           Refresh
         </Button>
-      </Space>
+      </div>
       {isMobile ? (
         <div>
           {campaigns.length === 0 && !loading ? (
-            <Card size="small">No push campaigns yet</Card>
+            <Card>
+              <CardContent className="p-4 text-muted-foreground">No push campaigns yet</CardContent>
+            </Card>
           ) : (
             campaigns.map(renderMobileCard)
           )}
         </div>
       ) : (
-        <Table
-          rowKey="id"
-          loading={loading}
-          dataSource={campaigns}
-          columns={columns}
-          pagination={{ pageSize: 20 }}
-          size="middle"
-        />
+        <div className="overflow-auto rounded-lg border border-border">
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead>ID</TableHead>
+                <TableHead>Title</TableHead>
+                <TableHead>Audience</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Targets</TableHead>
+                <TableHead>Sent</TableHead>
+                <TableHead>Created</TableHead>
+                <TableHead>By</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {campaigns.length === 0 ? (
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
+                    {loading ? "Loading..." : "No push campaigns"}
+                  </TableCell>
+                </TableRow>
+              ) : (
+                campaigns.map((r) => (
+                  <TableRow key={r.id}>
+                    <TableCell>{r.id}</TableCell>
+                    <TableCell>{r.title}</TableCell>
+                    <TableCell>{audienceLabel(r)}</TableCell>
+                    <TableCell>
+                      <Badge variant={statusVariant(r.status)}>{r.status}</Badge>
+                    </TableCell>
+                    <TableCell>{r.total_targets}</TableCell>
+                    <TableCell>
+                      {r.sent} / {r.failed} failed
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">{r.created_at}</TableCell>
+                    <TableCell>{r.created_by}</TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
       )}
     </div>
   );

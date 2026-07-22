@@ -1,44 +1,28 @@
-import { Tabs } from "antd";
-import { HistoryOutlined, SendOutlined } from "@ant-design/icons";
 import { useState } from "react";
-import useIsMobile from "../../hooks/useIsMobile";
+import { History, Send } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@xray/ui/components/tabs";
 import ComposeTab from "./ComposeTab";
 import HistoryTab from "./HistoryTab";
 
 export default function PushPage() {
   const [activeTab, setActiveTab] = useState("compose");
-  const isMobile = useIsMobile();
-
-  const items = [
-    {
-      key: "compose",
-      label: (
-        <span>
-          <SendOutlined />
-          <span style={{ marginLeft: 6 }}>Compose</span>
-        </span>
-      ),
-      children: <ComposeTab onLaunched={() => setActiveTab("history")} />,
-    },
-    {
-      key: "history",
-      label: (
-        <span>
-          <HistoryOutlined />
-          <span style={{ marginLeft: 6 }}>History</span>
-        </span>
-      ),
-      children: <HistoryTab />,
-    },
-  ];
 
   return (
-    <Tabs
-      activeKey={activeTab}
-      onChange={setActiveTab}
-      items={items}
-      size={isMobile ? "small" : "middle"}
-      destroyOnHidden
-    />
+    <Tabs value={activeTab} onValueChange={setActiveTab}>
+      <TabsList className="mb-4 flex-wrap">
+        <TabsTrigger value="compose">
+          <Send className="h-4 w-4" /> Compose
+        </TabsTrigger>
+        <TabsTrigger value="history">
+          <History className="h-4 w-4" /> History
+        </TabsTrigger>
+      </TabsList>
+      <TabsContent value="compose">
+        <ComposeTab onLaunched={() => setActiveTab("history")} />
+      </TabsContent>
+      <TabsContent value="history">
+        <HistoryTab />
+      </TabsContent>
+    </Tabs>
   );
 }

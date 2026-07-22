@@ -1,9 +1,12 @@
-import { App, Button, Card, Input, Popconfirm, Space, Typography } from "antd";
-import { SendOutlined } from "@ant-design/icons";
 import { useEffect, useState } from "react";
-import useIsMobile from "../../hooks/useIsMobile";
+import { toast } from "sonner";
+import { Send } from "lucide-react";
+import { Card, CardContent } from "@xray/ui/components/card";
+import { Button } from "@xray/ui/components/button";
+import { Input } from "@xray/ui/components/input";
 import ActionsBuilder from "./ActionsBuilder";
 import ConditionsBuilder from "./ConditionsBuilder";
+import ConfirmButton from "../../components/ConfirmButton";
 import { defaultActions, defaultConditions, getSegmentCondition } from "./helpers";
 import { fetchSegments, launchCampaign } from "./api";
 import type { CrmAction, CrmCondition, SegmentDef } from "./types";
@@ -13,8 +16,6 @@ interface CampaignTabProps {
 }
 
 export default function CampaignTab({ onLaunched }: CampaignTabProps) {
-  const { message } = App.useApp();
-  const isMobile = useIsMobile();
   const [segments, setSegments] = useState<SegmentDef[]>([]);
   const [conditions, setConditions] = useState<CrmCondition[]>([]);
   const [actions, setActions] = useState<CrmAction[]>(defaultActions());
@@ -31,26 +32,28 @@ export default function CampaignTab({ onLaunched }: CampaignTabProps) {
           setConditions(defaultConditions(segs[0].id, segs[0]));
         }
       })
-      .catch(() => message.error("Failed to load segments"));
-  }, [message]);
+      .catch(() => toast.error("Failed to load segments"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const segmentCond = getSegmentCondition(conditions);
   const segmentId = segmentCond?.segment_id ?? null;
   const isAllUsers = segmentId === "all_users";
 
   const hasEnabledAction = actions.some((a) => a.enabled);
+  const canLaunch = !!segmentId && hasEnabledAction && (isAllUsers || selectedTgIds.length > 0);
 
   const launch = async () => {
     if (!segmentId) {
-      message.warning("Select a segment");
+      toast.warning("Select a segment");
       return;
     }
     if (!hasEnabledAction) {
-      message.warning("Enable at least one action");
+      toast.warning("Enable at least one action");
       return;
     }
     if (!isAllUsers && selectedTgIds.length === 0) {
-      message.warning("Run a scan and select recipients");
+      toast.warning("Run a scan and select recipients");
       return;
     }
     setLoading(true);
@@ -61,29 +64,29 @@ export default function CampaignTab({ onLaunched }: CampaignTabProps) {
         actions,
         target_tg_ids: isAllUsers ? undefined : selectedTgIds,
       });
-      message.success(
+      toast.success(
         isAllUsers
           ? `Campaign queued (${scanTotal ?? "all"} users)`
-          : `Campaign queued for ${selectedTgIds.length} users`
+          : `Campaign queued for ${selectedTgIds.length} users`,
       );
       setName("");
       setSelectedTgIds([]);
       setScanTotal(null);
       onLaunched();
     } catch {
-      message.error("Failed to launch campaign");
+      toast.error("Failed to launch campaign");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <Space direction="vertical" style={{ width: "100%" }} size={16}>
+    <div className="space-y-4">
       <Input
         placeholder="Campaign name (optional)"
         value={name}
         onChange={(e) => setName(e.target.value)}
-        style={{ width: "100%", maxWidth: isMobile ? undefined : 480 }}
+        className="max-w-full md:max-w-[480px]"
       />
 
       <ConditionsBuilder
@@ -97,35 +100,24 @@ export default function CampaignTab({ onLaunched }: CampaignTabProps) {
 
       <ActionsBuilder actions={actions} onChange={setActions} segmentId={segmentId} />
 
-      <Card size="small">
-        <Space direction="vertical" style={{ width: "100%" }} size={8}>
-          <Popconfirm
+      <Card>
+        <CardContent className="space-y-2 p-4">
+          <ConfirmButton
             title="Launch campaign?"
-            description={`Recipients: ${
-              isAllUsers ? scanTotal ?? "all" : selectedTgIds.length
-            }`}
+            description={`Recipients: ${isAllUsers ? scanTotal ?? "all" : selectedTgIds.length}`}
+            confirmText="Launch"
             onConfirm={launch}
-            okText="Launch"
-            cancelText="Cancel"
-            disabled={!segmentId || !hasEnabledAction || (!isAllUsers && !selectedTgIds.length)}
           >
-            <Button
-              type="primary"
-              icon={<SendOutlined />}
-              loading={loading}
-              disabled={!segmentId || !hasEnabledAction || (!isAllUsers && !selectedTgIds.length)}
-              block={isMobile}
-            >
+            <Button className="w-full md:w-auto" disabled={!canLaunch || loading}>
+              <Send className="h-4 w-4" />
               Launch campaign
             </Button>
-          </Popconfirm>
+          </ConfirmButton>
           {!hasEnabledAction && (
-            <Typography.Text type="secondary">
-              Enable at least one action
-            </Typography.Text>
+            <p className="text-sm text-muted-foreground">Enable at least one action</p>
           )}
-        </Space>
+        </CardContent>
       </Card>
-    </Space>
+    </div>
   );
 }

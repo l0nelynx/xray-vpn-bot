@@ -1,62 +1,29 @@
-import type { TableProps } from "antd";
 import type { SortOrder } from "../components/MobileSortControl";
 
-type PaginatedTableChangeOptions = {
-  page: number;
+type SortToggleOptions = {
   sort: string;
   order: SortOrder;
-  setPage: (page: number) => void;
   setSort: (sort: string) => void;
   setOrder: (order: SortOrder) => void;
-  perPage?: number;
-  setPerPage?: (size: number) => void;
-  sortKey?: (sorter: { columnKey?: unknown; field?: unknown; order?: string | null }) => string | undefined;
+  setPage: (page: number) => void;
+  /** Default order applied when switching to a new column. */
+  defaultOrder?: SortOrder;
 };
 
-function defaultSortKey(sorter: { columnKey?: unknown; field?: unknown }): string | undefined {
-  if (sorter.columnKey != null && !Array.isArray(sorter.columnKey)) {
-    return String(sorter.columnKey);
-  }
-  if (sorter.field != null && !Array.isArray(sorter.field)) {
-    return String(sorter.field);
-  }
-  return undefined;
-}
-
-/** Ant Design Table onChange that does not reset page on pagination clicks. */
-export function makePaginatedTableChange<T>(
-  options: PaginatedTableChangeOptions,
-): NonNullable<TableProps<T>["onChange"]> {
-  const resolveSortKey = options.sortKey ?? defaultSortKey;
-
-  return (pagination, _filters, sorter) => {
-    const s = Array.isArray(sorter) ? sorter[0] : sorter;
-
-    if (s?.order) {
-      const newSort = resolveSortKey(s);
-      if (newSort) {
-        const newOrder: SortOrder = s.order === "ascend" ? "asc" : "desc";
-        if (newSort !== options.sort || newOrder !== options.order) {
-          options.setSort(newSort);
-          options.setOrder(newOrder);
-          options.setPage(1);
-          return;
-        }
-      }
+/**
+ * Toggles server-side sort state for a clicked column header.
+ * Clicking the active column flips the direction; clicking a new column
+ * selects it (defaulting to descending) and resets to the first page.
+ */
+export function makeSortToggle(options: SortToggleOptions) {
+  const { sort, order, setSort, setOrder, setPage, defaultOrder = "desc" } = options;
+  return (key: string) => {
+    if (key === sort) {
+      setOrder(order === "asc" ? "desc" : "asc");
+    } else {
+      setSort(key);
+      setOrder(defaultOrder);
     }
-
-    if (pagination?.current != null && pagination.current !== options.page) {
-      options.setPage(pagination.current);
-    }
-
-    if (
-      options.setPerPage &&
-      options.perPage != null &&
-      pagination?.pageSize != null &&
-      pagination.pageSize !== options.perPage
-    ) {
-      options.setPerPage(pagination.pageSize);
-      options.setPage(1);
-    }
+    setPage(1);
   };
 }

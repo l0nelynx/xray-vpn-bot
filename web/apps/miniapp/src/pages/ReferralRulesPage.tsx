@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Typography, Spin } from "antd";
+import { Spinner } from "@xray/ui/components/spinner";
 import LegalLayout from "../components/LegalLayout";
 import { ReferralState, referral as referralApi } from "../api/client";
 import { formatPoints } from "../points";
@@ -20,7 +20,7 @@ export default function ReferralRulesPage() {
     return (
       <LegalLayout title="Правила программы">
         <div style={{ textAlign: "center", padding: "40px 0" }}>
-          <Spin size="large" />
+          <Spinner className="h-8 w-8" />
         </div>
       </LegalLayout>
     );

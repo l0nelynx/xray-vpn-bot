@@ -1,24 +1,28 @@
-import {
-  App,
-  Button,
-  Card,
-  Collapse,
-  Input,
-  InputNumber,
-  Modal,
-  Select,
-  Space,
-  Switch,
-  Table,
-  Typography,
-} from "antd";
-import { InfoCircleOutlined } from "@ant-design/icons";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
+import { Info } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@xray/ui/components/card";
+import { Button } from "@xray/ui/components/button";
+import { Input } from "@xray/ui/components/input";
+import { Textarea } from "@xray/ui/components/textarea";
+import { Switch } from "@xray/ui/components/switch";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@xray/ui/components/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@xray/ui/components/select";
+import { cn } from "@xray/ui/lib/utils";
 import { api } from "../../api/client";
-import useIsMobile from "../../hooks/useIsMobile";
+import Collapsible from "../../components/Collapsible";
 import type { ActionTypeMeta, CrmAction, CrmVariable, MessageTemplate } from "./types";
-
-const { TextArea } = Input;
 
 interface ActionsBuilderProps {
   actions: CrmAction[];
@@ -36,8 +40,6 @@ export default function ActionsBuilder({
   templates: templatesProp,
   variablesContext = null,
 }: ActionsBuilderProps) {
-  const { message } = App.useApp();
-  const isMobile = useIsMobile();
   const [actionTypes, setActionTypes] = useState<ActionTypeMeta[]>([]);
   const [templates, setTemplates] = useState<MessageTemplate[]>(templatesProp || []);
   const [variablesOpen, setVariablesOpen] = useState(false);
@@ -48,9 +50,7 @@ export default function ActionsBuilder({
       setActionTypes(r.action_types);
     });
     const varsUrl =
-      variablesContext === "webhook"
-        ? "/crm/variables?context=webhook"
-        : "/crm/variables";
+      variablesContext === "webhook" ? "/crm/variables?context=webhook" : "/crm/variables";
     api.get<{ variables: CrmVariable[] }>(varsUrl).then((r) => {
       setVariables(r.variables);
     });
@@ -67,7 +67,7 @@ export default function ActionsBuilder({
     }
     api
       .get<{ templates: MessageTemplate[] }>(
-        `/crm/templates?segment_id=${encodeURIComponent(segmentId)}`
+        `/crm/templates?segment_id=${encodeURIComponent(segmentId)}`,
       )
       .then((r) => setTemplates(r.templates))
       .catch(() => setTemplates([]));
@@ -95,16 +95,16 @@ export default function ActionsBuilder({
           return { ...a, enabled: true, gb: tpl.suggested_bonus_traffic_gb };
         }
         return a;
-      })
+      }),
     );
   };
 
   const copyVariable = async (key: string) => {
     try {
       await navigator.clipboard.writeText(`{{${key}}}`);
-      message.success(`Copied: {{${key}}}`);
+      toast.success(`Copied: {{${key}}}`);
     } catch {
-      message.error("Failed to copy");
+      toast.error("Failed to copy");
     }
   };
 
@@ -117,173 +117,133 @@ export default function ActionsBuilder({
     const disabled = meta.available === false;
 
     return (
-      <Card
-        key={meta.type}
-        size="small"
-        style={{ marginBottom: 8, opacity: disabled ? 0.5 : 1 }}
-        title={
-          <Space wrap>
-            <Switch
-              size="small"
-              checked={act.enabled && !disabled}
-              disabled={disabled}
-              onChange={(v) => updateAction(meta.type, { enabled: v })}
-            />
-            <span>{meta.label}</span>
-          </Space>
-        }
-      >
-        {meta.type === "send_message" && act.enabled && (
-          <Space direction="vertical" style={{ width: "100%" }} size={8}>
-            {isMobile ? (
-              <>
-                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                  HTML, variables {"{{username}}"}
-                </Typography.Text>
-                <Button
-                  size="small"
-                  icon={<InfoCircleOutlined />}
-                  onClick={() => setVariablesOpen(true)}
-                  block
-                >
-                  Variables
-                </Button>
-              </>
-            ) : (
-              <Space style={{ justifyContent: "space-between", width: "100%" }}>
-                <Typography.Text type="secondary">
-                  HTML, variables {"{{username}}"}
-                </Typography.Text>
-                <Button size="small" icon={<InfoCircleOutlined />} onClick={() => setVariablesOpen(true)}>
-                  Variables
-                </Button>
-              </Space>
+      <Card key={meta.type} className={cn("mb-2", disabled && "opacity-50")}>
+        <CardHeader className="flex-row items-center gap-2 space-y-0 py-2.5">
+          <Switch
+            checked={act.enabled && !disabled}
+            disabled={disabled}
+            onCheckedChange={(v: boolean) => updateAction(meta.type, { enabled: v })}
+          />
+          <span className="text-sm font-medium">{meta.label}</span>
+        </CardHeader>
+        {act.enabled && (
+          <CardContent className="pt-0">
+            {meta.type === "send_message" && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs text-muted-foreground">
+                    HTML, variables {"{{username}}"}
+                  </span>
+                  <Button size="sm" variant="outline" onClick={() => setVariablesOpen(true)}>
+                    <Info className="h-4 w-4" />
+                    Variables
+                  </Button>
+                </div>
+                <Textarea
+                  rows={4}
+                  value={act.text || ""}
+                  onChange={(e) => updateAction(meta.type, { text: e.target.value })}
+                  placeholder="Hi, {{username}}!"
+                />
+              </div>
             )}
-            <TextArea
-              rows={isMobile ? 5 : 4}
-              value={act.text || ""}
-              onChange={(e) => updateAction(meta.type, { text: e.target.value })}
-              placeholder="Hi, {{username}}!"
-            />
-          </Space>
-        )}
-        {meta.type === "attach_button" && act.enabled && (
-          <Select
-            value={act.button_type || "open_bot"}
-            options={[
-              { value: "open_bot", label: "Open bot" },
-              { value: "invite_friends", label: "Invite friends" },
-            ]}
-            onChange={(v) => updateAction(meta.type, { button_type: v })}
-            style={{ width: isMobile ? "100%" : undefined, minWidth: isMobile ? undefined : 200 }}
-          />
-        )}
-        {meta.type === "rw_bonus_days" && act.enabled && (
-          <InputNumber
-            style={{ width: isMobile ? "100%" : undefined }}
-            min={1}
-            max={365}
-            value={act.days}
-            onChange={(v) => updateAction(meta.type, { days: v ?? 1 })}
-          />
-        )}
-        {meta.type === "rw_bonus_traffic" && act.enabled && (
-          <InputNumber
-            style={{ width: isMobile ? "100%" : undefined }}
-            min={1}
-            max={1000}
-            value={act.gb}
-            onChange={(v) => updateAction(meta.type, { gb: v ?? 1 })}
-          />
-        )}
-        {meta.type === "rw_reset_traffic" && act.enabled && (
-          <Typography.Text type="secondary">
-            Resets the used traffic counter in Remnawave
-          </Typography.Text>
-        )}
-        {meta.type === "rw_set_status" && (
-          <Typography.Text type="secondary">Coming soon</Typography.Text>
+            {meta.type === "attach_button" && (
+              <Select
+                value={act.button_type || "open_bot"}
+                onValueChange={(v: string) => updateAction(meta.type, { button_type: v })}
+              >
+                <SelectTrigger className="w-full md:w-[220px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="open_bot">Open bot</SelectItem>
+                  <SelectItem value="invite_friends">Invite friends</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+            {meta.type === "rw_bonus_days" && (
+              <Input
+                type="number"
+                className="w-full md:w-[160px]"
+                min={1}
+                max={365}
+                value={act.days ?? 1}
+                onChange={(e) => updateAction(meta.type, { days: Number(e.target.value) || 1 })}
+              />
+            )}
+            {meta.type === "rw_bonus_traffic" && (
+              <Input
+                type="number"
+                className="w-full md:w-[160px]"
+                min={1}
+                max={1000}
+                value={act.gb ?? 1}
+                onChange={(e) => updateAction(meta.type, { gb: Number(e.target.value) || 1 })}
+              />
+            )}
+            {meta.type === "rw_reset_traffic" && (
+              <span className="text-sm text-muted-foreground">
+                Resets the used traffic counter in Remnawave
+              </span>
+            )}
+            {meta.type === "rw_set_status" && (
+              <span className="text-sm text-muted-foreground">Coming soon</span>
+            )}
+          </CardContent>
         )}
       </Card>
     );
   };
 
   return (
-    <Card title="2. Actions" size="small">
-      {templates.length > 0 && (
-        <Select
-          allowClear
-          placeholder="Apply template"
-          style={{ width: "100%", marginBottom: 12 }}
-          options={templates.map((t) => ({ value: t.id, label: t.title }))}
-          onChange={(v) => v && applyTemplate(v)}
-        />
-      )}
-
-      <Collapse
-        defaultActiveKey={isMobile ? [] : ["telegram", "remnawave"]}
-        items={[
-          {
-            key: "telegram",
-            label: "Telegram",
-            children: telegramActions.map(renderAction),
-          },
-          {
-            key: "remnawave",
-            label: "Remnawave",
-            children: rwActions.map(renderAction),
-          },
-        ]}
-      />
-
-      <Modal
-        title="Variables"
-        open={variablesOpen}
-        onCancel={() => setVariablesOpen(false)}
-        footer={null}
-        width={isMobile ? "100%" : 520}
-        style={isMobile ? { top: 20, maxWidth: "100vw", padding: 0 } : undefined}
-        styles={isMobile ? { body: { maxHeight: "70vh", overflowY: "auto" } } : undefined}
-      >
-        {isMobile ? (
-          <Space direction="vertical" style={{ width: "100%" }} size={8}>
-            {variables.map((row) => (
-              <Card
-                key={row.key}
-                size="small"
-                styles={{ body: { padding: "10px 12px" } }}
-                onClick={() => copyVariable(row.key)}
-                style={{ cursor: "pointer" }}
-              >
-                <Typography.Text code>{`{{${row.key}}}`}</Typography.Text>
-                <div style={{ fontSize: 12, color: "rgba(255,255,255,0.55)", marginTop: 4 }}>
-                  {row.label}
-                </div>
-              </Card>
-            ))}
-          </Space>
-        ) : (
-          <Table
-            rowKey="key"
-            size="small"
-            pagination={false}
-            dataSource={variables}
-            onRow={(row) => ({
-              onClick: () => copyVariable(row.key),
-              style: { cursor: "pointer" },
-            })}
-            columns={[
-              {
-                title: "Key",
-                render: (_: unknown, r: CrmVariable) => (
-                  <Typography.Text code>{`{{${r.key}}}`}</Typography.Text>
-                ),
-              },
-              { title: "Description", dataIndex: "label" },
-            ]}
-          />
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm">2. Actions</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {templates.length > 0 && (
+          <Select onValueChange={(v: string) => v && applyTemplate(v)}>
+            <SelectTrigger>
+              <SelectValue placeholder="Apply template" />
+            </SelectTrigger>
+            <SelectContent>
+              {templates.map((t) => (
+                <SelectItem key={t.id} value={t.id}>
+                  {t.title}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         )}
-      </Modal>
+
+        <Collapsible title="Telegram" defaultOpen>
+          {telegramActions.map(renderAction)}
+        </Collapsible>
+        <Collapsible title="Remnawave" defaultOpen>
+          {rwActions.map(renderAction)}
+        </Collapsible>
+      </CardContent>
+
+      <Dialog open={variablesOpen} onOpenChange={setVariablesOpen}>
+        <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle>Variables</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-1">
+            {variables.map((row) => (
+              <button
+                key={row.key}
+                type="button"
+                onClick={() => copyVariable(row.key)}
+                className="flex w-full flex-col items-start gap-0.5 rounded-md border border-border px-3 py-2 text-left hover:bg-white/5"
+              >
+                <code className="rounded bg-muted px-1 text-xs">{`{{${row.key}}}`}</code>
+                <span className="text-xs text-muted-foreground">{row.label}</span>
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

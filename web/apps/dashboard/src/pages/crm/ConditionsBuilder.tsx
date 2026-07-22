@@ -1,25 +1,22 @@
-import {
-  App,
-  Button,
-  Card,
-  Checkbox,
-  Collapse,
-  Descriptions,
-  Form,
-  Input,
-  InputNumber,
-  Select,
-  Space,
-  Switch,
-  Table,
-  Tag,
-  Typography,
-} from "antd";
-import type { TableRowSelection } from "antd/es/table/interface";
-import { ScanOutlined } from "@ant-design/icons";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
+import { ScanLine } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@xray/ui/components/card";
+import { Button } from "@xray/ui/components/button";
+import { Input } from "@xray/ui/components/input";
+import { Switch } from "@xray/ui/components/switch";
+import { Checkbox } from "@xray/ui/components/checkbox";
+import { Label } from "@xray/ui/components/label";
+import { Badge } from "@xray/ui/components/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@xray/ui/components/select";
 import { api } from "../../api/client";
-import useIsMobile from "../../hooks/useIsMobile";
+import Collapsible from "../../components/Collapsible";
 import { fetchInternalSquads, normalizeRwTag } from "./api";
 import { getSegmentCondition, segmentParamDefaults, upsertRwCondition } from "./helpers";
 import type {
@@ -45,31 +42,42 @@ function SegmentParamField({
   param,
   value,
   onChange,
-  fullWidth,
 }: {
   param: SegmentDef["params"][0];
   value?: number | string;
   onChange: (v: number | string) => void;
-  fullWidth?: boolean;
 }) {
   if (param.type === "select") {
     return (
       <Select
-        style={{ minWidth: fullWidth ? undefined : 160, width: fullWidth ? "100%" : undefined }}
         value={(value as string) ?? (param.default as string)}
-        options={param.options}
-        onChange={onChange}
-      />
+        onValueChange={(v: string) => onChange(v)}
+      >
+        <SelectTrigger className="w-full md:w-[180px]">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {param.options?.map((o) => (
+            <SelectItem key={o.value} value={o.value}>
+              {o.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     );
   }
   return (
-    <InputNumber
-      style={{ width: fullWidth ? "100%" : undefined }}
+    <Input
+      type="number"
+      className="w-full md:w-[180px]"
       min={param.min}
       max={param.max}
       step={param.type === "float" ? 0.05 : 1}
       value={value as number | undefined}
-      onChange={(v) => onChange(v ?? (param.default as number))}
+      onChange={(e) => {
+        const raw = e.target.value;
+        onChange(raw === "" ? (param.default as number) : Number(raw));
+      }}
     />
   );
 }
@@ -91,8 +99,6 @@ export default function ConditionsBuilder({
   onSelectedTgIdsChange,
   onScanComplete,
 }: ConditionsBuilderProps) {
-  const { message } = App.useApp();
-  const isMobile = useIsMobile();
   const [scanning, setScanning] = useState(false);
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [internalSquads, setInternalSquads] = useState<InternalSquadOption[]>([]);
@@ -111,9 +117,7 @@ export default function ConditionsBuilder({
   const segmentDef = segmentTypes.find((s) => s.id === segmentCond?.segment_id);
 
   const updateSegment = (patch: Partial<CrmCondition>) => {
-    onChange(
-      conditions.map((c) => (c.type === "segment" ? { ...c, ...patch } : c))
-    );
+    onChange(conditions.map((c) => (c.type === "segment" ? { ...c, ...patch } : c)));
   };
 
   const updateSegmentParams = (params: SegmentParams) => {
@@ -123,9 +127,7 @@ export default function ConditionsBuilder({
   const updateUserType = (value: string) => {
     const has = conditions.some((c) => c.type === "user_type");
     if (has) {
-      onChange(
-        conditions.map((c) => (c.type === "user_type" ? { ...c, value } : c))
-      );
+      onChange(conditions.map((c) => (c.type === "user_type" ? { ...c, value } : c)));
     } else {
       onChange([...conditions, { type: "user_type", value }]);
     }
@@ -138,14 +140,14 @@ export default function ConditionsBuilder({
     }
     const first = internalSquads[0]?.uuid;
     if (!first) {
-      message.warning("Internal squads not loaded");
+      toast.warning("Internal squads not loaded");
       return;
     }
     onChange(
       upsertRwCondition(conditions, "rw_internal_squad", {
         type: "rw_internal_squad",
         squad_id: rwSquadCond?.squad_id || first,
-      })
+      }),
     );
   };
 
@@ -158,7 +160,7 @@ export default function ConditionsBuilder({
       upsertRwCondition(conditions, "rw_traffic_limit", {
         type: "rw_traffic_limit",
         limit_gb: rwTrafficCond?.limit_gb ?? 5,
-      })
+      }),
     );
   };
 
@@ -171,7 +173,7 @@ export default function ConditionsBuilder({
       upsertRwCondition(conditions, "rw_tag", {
         type: "rw_tag",
         tag: rwTagCond?.tag || "",
-      })
+      }),
     );
   };
 
@@ -187,21 +189,19 @@ export default function ConditionsBuilder({
 
   const runScan = async () => {
     if (!segmentCond?.segment_id) {
-      message.warning("Select a segment");
+      toast.warning("Select a segment");
       return;
     }
     setScanning(true);
     setScanResult(null);
     try {
-      const res = await api.post<ScanResult>("/crm/conditions/evaluate", {
-        conditions,
-      });
+      const res = await api.post<ScanResult>("/crm/conditions/evaluate", { conditions });
       setScanResult(res);
       onSelectedTgIdsChange(res.users.map((u) => u.tg_id));
       onScanComplete?.(res.total);
-      if (res.warning) message.warning(res.warning);
+      if (res.warning) toast.warning(res.warning);
     } catch {
-      message.error("Scan failed");
+      toast.error("Scan failed");
     } finally {
       setScanning(false);
     }
@@ -215,270 +215,206 @@ export default function ConditionsBuilder({
     }
   };
 
-  const rowSelection: TableRowSelection<ScanUser> = {
-    selectedRowKeys: selectedTgIds,
-    onChange: (keys) => onSelectedTgIdsChange(keys as number[]),
-  };
-
-  const columns = [
-    { title: "TG ID", dataIndex: "tg_id", key: "tg_id", width: 120 },
-    {
-      title: "Username",
-      dataIndex: "username",
-      key: "username",
-      render: (v: string | null) => v ?? "—",
-    },
-    {
-      title: "Metrics",
-      key: "meta",
-      render: (_: unknown, row: ScanUser) => formatScanMeta(row),
-    },
-  ];
-
   const segmentParams = segmentDef?.params.filter((p) => p.name !== "user_type") ?? [];
 
   return (
-    <Card title="1. Conditions" size="small" style={{ marginBottom: 16 }}>
-      <Space direction="vertical" style={{ width: "100%" }} size={12}>
-        <Form layout="vertical">
-          <Form.Item label="1.1 Segment" required>
-            <Select
-              placeholder="Select a segment"
-              value={segmentCond?.segment_id}
-              onChange={onSegmentIdChange}
-              options={segmentTypes.map((s) => ({ value: s.id, label: s.title }))}
-              style={{ width: "100%", maxWidth: isMobile ? undefined : 400 }}
-            />
-          </Form.Item>
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm">1. Conditions</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="space-y-1.5">
+          <Label>1.1 Segment *</Label>
+          <Select value={segmentCond?.segment_id} onValueChange={(v: string) => onSegmentIdChange(v)}>
+            <SelectTrigger className="w-full md:max-w-[400px]">
+              <SelectValue placeholder="Select a segment" />
+            </SelectTrigger>
+            <SelectContent>
+              {segmentTypes.map((s) => (
+                <SelectItem key={s.id} value={s.id}>
+                  {s.title}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
-          {segmentParams.length > 0 && (
-            <Form.Item label="Segment parameters">
-              {isMobile ? (
-                <Space direction="vertical" style={{ width: "100%" }} size={8}>
-                  {segmentParams.map((p) => (
-                    <Form.Item key={p.name} label={p.label} style={{ marginBottom: 0 }}>
-                      <SegmentParamField
-                        param={p}
-                        fullWidth
-                        value={segmentCond?.params?.[p.name]}
-                        onChange={(v) =>
-                          updateSegmentParams({
-                            ...(segmentCond?.params || {}),
-                            [p.name]: v,
-                          })
-                        }
-                      />
-                    </Form.Item>
-                  ))}
-                </Space>
-              ) : (
-                <Space wrap>
-                  {segmentParams.map((p) => (
-                    <Form.Item key={p.name} label={p.label} style={{ marginBottom: 0 }}>
-                      <SegmentParamField
-                        param={p}
-                        value={segmentCond?.params?.[p.name]}
-                        onChange={(v) =>
-                          updateSegmentParams({
-                            ...(segmentCond?.params || {}),
-                            [p.name]: v,
-                          })
-                        }
-                      />
-                    </Form.Item>
-                  ))}
-                </Space>
+        {segmentParams.length > 0 && (
+          <div className="space-y-1.5">
+            <Label>Segment parameters</Label>
+            <div className="flex flex-col gap-3 md:flex-row md:flex-wrap">
+              {segmentParams.map((p) => (
+                <div key={p.name} className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">{p.label}</Label>
+                  <SegmentParamField
+                    param={p}
+                    value={segmentCond?.params?.[p.name]}
+                    onChange={(v) =>
+                      updateSegmentParams({ ...(segmentCond?.params || {}), [p.name]: v })
+                    }
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="space-y-1.5">
+          <Label>1.2 User type</Label>
+          <Select value={userTypeCond?.value ?? "all"} onValueChange={(v: string) => updateUserType(v)}>
+            <SelectTrigger className="w-full md:max-w-[240px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {USER_TYPE_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <Collapsible title="1.3 Remnawave (optional)">
+          <div className="space-y-4">
+            <div>
+              <div className="mb-2 flex items-center gap-2">
+                <Switch checked={!!rwSquadCond} onCheckedChange={(v: boolean) => toggleRwSquad(v)} />
+                <span className="text-sm">Internal Squad</span>
+              </div>
+              {rwSquadCond && (
+                <Select
+                  value={rwSquadCond.squad_id}
+                  onValueChange={(squad_id: string) =>
+                    onChange(
+                      upsertRwCondition(conditions, "rw_internal_squad", {
+                        type: "rw_internal_squad",
+                        squad_id,
+                      }),
+                    )
+                  }
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select a squad" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {internalSquads.map((s) => (
+                      <SelectItem key={s.uuid} value={s.uuid}>
+                        {s.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               )}
-            </Form.Item>
-          )}
+            </div>
 
-          <Form.Item label="1.2 User type">
-            <Select
-              style={{ width: "100%", maxWidth: isMobile ? undefined : 240 }}
-              value={userTypeCond?.value ?? "all"}
-              options={USER_TYPE_OPTIONS}
-              onChange={updateUserType}
-            />
-          </Form.Item>
-        </Form>
+            <div>
+              <div className="mb-2 flex items-center gap-2">
+                <Switch
+                  checked={!!rwTrafficCond}
+                  onCheckedChange={(v: boolean) => toggleRwTraffic(v)}
+                />
+                <span className="text-sm">Traffic Limit (GB)</span>
+              </div>
+              {rwTrafficCond && (
+                <>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={10000}
+                    className="w-full"
+                    value={rwTrafficCond.limit_gb}
+                    onChange={(e) =>
+                      onChange(
+                        upsertRwCondition(conditions, "rw_traffic_limit", {
+                          type: "rw_traffic_limit",
+                          limit_gb: e.target.value === "" ? 0 : Number(e.target.value),
+                        }),
+                      )
+                    }
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">0 = unlimited</p>
+                </>
+              )}
+            </div>
 
-        <Collapse
-          items={[
-            {
-              key: "remnawave",
-              label: "1.3 Remnawave (optional)",
-              children: (
-                <Space direction="vertical" style={{ width: "100%" }} size={12}>
-                  <div>
-                    <Space wrap style={{ marginBottom: 8 }}>
-                      <Switch
-                        size="small"
-                        checked={!!rwSquadCond}
-                        onChange={toggleRwSquad}
-                      />
-                      <Typography.Text>Internal Squad</Typography.Text>
-                    </Space>
-                    {rwSquadCond && (
-                      <Select
-                        showSearch
-                        optionFilterProp="label"
-                        placeholder="Select a squad"
-                        style={{ width: "100%" }}
-                        value={rwSquadCond.squad_id}
-                        options={internalSquads.map((s) => ({
-                          value: s.uuid,
-                          label: s.name,
-                        }))}
-                        onChange={(squad_id) =>
-                          onChange(
-                            upsertRwCondition(conditions, "rw_internal_squad", {
-                              type: "rw_internal_squad",
-                              squad_id,
-                            })
-                          )
-                        }
-                      />
-                    )}
-                  </div>
+            <div>
+              <div className="mb-2 flex items-center gap-2">
+                <Switch checked={!!rwTagCond} onCheckedChange={(v: boolean) => toggleRwTag(v)} />
+                <span className="text-sm">Tag</span>
+              </div>
+              {rwTagCond && (
+                <>
+                  <Input
+                    placeholder="PROMO_1"
+                    className="w-full"
+                    value={rwTagCond.tag || ""}
+                    onChange={(e) =>
+                      onChange(
+                        upsertRwCondition(conditions, "rw_tag", {
+                          type: "rw_tag",
+                          tag: normalizeRwTag(e.target.value),
+                        }),
+                      )
+                    }
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">UPPERCASE, no spaces</p>
+                </>
+              )}
+            </div>
+          </div>
+        </Collapsible>
 
-                  <div>
-                    <Space wrap style={{ marginBottom: 8 }}>
-                      <Switch
-                        size="small"
-                        checked={!!rwTrafficCond}
-                        onChange={toggleRwTraffic}
-                      />
-                      <Typography.Text>Traffic Limit (GB)</Typography.Text>
-                    </Space>
-                    {rwTrafficCond && (
-                      <>
-                        <InputNumber
-                          min={0}
-                          max={10000}
-                          style={{ width: "100%" }}
-                          value={rwTrafficCond.limit_gb}
-                          onChange={(v) =>
-                            onChange(
-                              upsertRwCondition(conditions, "rw_traffic_limit", {
-                                type: "rw_traffic_limit",
-                                limit_gb: v ?? 0,
-                              })
-                            )
-                          }
-                        />
-                        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                          0 = unlimited
-                        </Typography.Text>
-                      </>
-                    )}
-                  </div>
-
-                  <div>
-                    <Space wrap style={{ marginBottom: 8 }}>
-                      <Switch
-                        size="small"
-                        checked={!!rwTagCond}
-                        onChange={toggleRwTag}
-                      />
-                      <Typography.Text>Tag</Typography.Text>
-                    </Space>
-                    {rwTagCond && (
-                      <>
-                        <Input
-                          placeholder="PROMO_1"
-                          style={{ width: "100%" }}
-                          value={rwTagCond.tag || ""}
-                          onChange={(e) =>
-                            onChange(
-                              upsertRwCondition(conditions, "rw_tag", {
-                                type: "rw_tag",
-                                tag: normalizeRwTag(e.target.value),
-                              })
-                            )
-                          }
-                        />
-                        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                          UPPERCASE, no spaces
-                        </Typography.Text>
-                      </>
-                    )}
-                  </div>
-                </Space>
-              ),
-            },
-          ]}
-        />
-
-        <Button
-          type="primary"
-          icon={<ScanOutlined />}
-          loading={scanning}
-          onClick={runScan}
-          block={isMobile}
-        >
+        <Button className="w-full md:w-auto" onClick={runScan} disabled={scanning}>
+          <ScanLine className="h-4 w-4" />
           Preview / scan
         </Button>
 
         {scanResult && (
-          <>
-            <Descriptions size="small" column={isMobile ? 1 : 2}>
-              <Descriptions.Item label="Total in segment">
-                <Tag color="blue">{scanResult.total}</Tag>
-              </Descriptions.Item>
-              <Descriptions.Item label="In preview">
-                {scanResult.users.length}
+          <div className="space-y-2">
+            <div className="flex flex-wrap gap-4 text-sm">
+              <span>
+                Total in segment: <Badge>{scanResult.total}</Badge>
+              </span>
+              <span className="text-muted-foreground">
+                In preview: {scanResult.users.length}
                 {scanResult.total > scanResult.users.length && " (first 500)"}
-              </Descriptions.Item>
-            </Descriptions>
+              </span>
+            </div>
             {scanResult.users.length > 0 && (
               <>
-                <Typography.Text type="secondary">
+                <p className="text-sm text-muted-foreground">
                   1.3 Manual selection (optional) — {selectedTgIds.length} selected
-                </Typography.Text>
-                {isMobile ? (
-                  <Space direction="vertical" style={{ width: "100%" }} size={8}>
-                    {scanResult.users.map((user) => (
-                      <Card
-                        key={user.tg_id}
-                        size="small"
-                        styles={{ body: { padding: "10px 12px" } }}
-                      >
-                        <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-                          <Checkbox
-                            checked={selectedTgIds.includes(user.tg_id)}
-                            onChange={(e) => toggleUser(user.tg_id, e.target.checked)}
-                          />
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontWeight: 600, color: "rgba(255,255,255,0.88)" }}>
-                              {user.username || "—"}
-                            </div>
-                            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.45)" }}>
-                              TG: {user.tg_id}
-                            </div>
-                            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginTop: 4 }}>
-                              {formatScanMeta(user)}
-                            </div>
-                          </div>
+                </p>
+                <div className="max-h-64 space-y-1.5 overflow-auto rounded-lg border border-border p-2">
+                  {scanResult.users.map((user) => (
+                    <div
+                      key={user.tg_id}
+                      className="flex items-start gap-2.5 rounded-md border border-border/60 p-2"
+                    >
+                      <Checkbox
+                        checked={selectedTgIds.includes(user.tg_id)}
+                        onCheckedChange={(c: boolean | "indeterminate") =>
+                          toggleUser(user.tg_id, c === true)
+                        }
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="font-semibold text-foreground/85">
+                          {user.username || "—"}
                         </div>
-                      </Card>
-                    ))}
-                  </Space>
-                ) : (
-                  <Table
-                    rowKey="tg_id"
-                    rowSelection={rowSelection}
-                    columns={columns}
-                    dataSource={scanResult.users}
-                    size="small"
-                    pagination={{ pageSize: 10, showSizeChanger: false }}
-                    scroll={{ y: 240 }}
-                  />
-                )}
+                        <div className="text-xs text-muted-foreground">TG: {user.tg_id}</div>
+                        <div className="mt-1 text-[11px] text-muted-foreground/70">
+                          {formatScanMeta(user)}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </>
             )}
-          </>
+          </div>
         )}
-      </Space>
+      </CardContent>
     </Card>
   );
 }

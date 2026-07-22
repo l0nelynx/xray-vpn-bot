@@ -1,7 +1,7 @@
 # Dashboard
 
 The Dashboard is the operator admin panel for managing the entire VPN sales
-stack. It is a **React 18 + Ant Design v6** SPA at `/bot/dashboard/`, backed
+stack. It is a **React 19 + shadcn/ui (Tailwind 4)** SPA at `/bot/dashboard/`, backed
 by a **FastAPI JSON API** at `/bot/dashboard/api/`.
 
 **Source:**
@@ -359,4 +359,4 @@ Swagger UI: set `expose_api_docs: true` in `config.yml` → `/bot/dashboard/api/
 - **Debounced search** (400 ms) with request cancellation
 - **Mobile-responsive** — card layouts and mobile sort controls on small screens
 - **Unsaved changes warning** on tariff/menu editors
-- **Dark liquid-glass theme** — `web/apps/dashboard/src/theme/`
+- **Dark shadcn theme** — `@xray/ui` globals + `class="dark"` on `<html>`

@@ -1,5 +1,12 @@
-import { Select, Button } from "antd";
-import { ArrowUpOutlined, ArrowDownOutlined } from "@ant-design/icons";
+import { ArrowDown, ArrowUp } from "lucide-react";
+import { Button } from "@xray/ui/components/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@xray/ui/components/select";
 
 export type SortOrder = "asc" | "desc";
 
@@ -17,18 +24,27 @@ interface Props {
 
 export default function MobileSortControl({ options, sort, order, onChange }: Props) {
   return (
-    <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-      <Select
-        value={sort}
-        onChange={(v) => onChange(v, order)}
-        options={options}
-        style={{ flex: 1 }}
-      />
+    <div className="mb-3 flex gap-2">
+      <Select value={sort} onValueChange={(v: string) => onChange(v, order)}>
+        <SelectTrigger className="flex-1">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((o) => (
+            <SelectItem key={o.value} value={o.value}>
+              {o.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
       <Button
+        variant="outline"
+        size="icon"
         aria-label={order === "asc" ? "Ascending" : "Descending"}
-        icon={order === "asc" ? <ArrowUpOutlined /> : <ArrowDownOutlined />}
         onClick={() => onChange(sort, order === "asc" ? "desc" : "asc")}
-      />
+      >
+        {order === "asc" ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />}
+      </Button>
     </div>
   );
 }

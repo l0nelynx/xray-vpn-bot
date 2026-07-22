@@ -1,15 +1,29 @@
 import { useEffect, useState, useCallback } from "react";
+import { toast } from "sonner";
+import { Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { Button } from "@xray/ui/components/button";
+import { Input } from "@xray/ui/components/input";
+import { Label } from "@xray/ui/components/label";
+import { Badge } from "@xray/ui/components/badge";
+import { Spinner } from "@xray/ui/components/spinner";
 import {
-  Typography, Button, Space, Modal, Form, Input, InputNumber,
-  Select, App, Popconfirm, Tag, Spin, Empty, Collapse,
-} from "antd";
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@xray/ui/components/dialog";
 import {
-  PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined,
-  RightOutlined, DownOutlined,
-} from "@ant-design/icons";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@xray/ui/components/select";
 import { api } from "../api/client";
 import type { OrderParam } from "../api/types";
-import useIsMobile from "../hooks/useIsMobile";
+import Collapsible from "../components/Collapsible";
+import ConfirmButton from "../components/ConfirmButton";
 
 const TYPE_OPTIONS = [
   { value: "days", label: "days" },
@@ -19,12 +33,14 @@ const TYPE_OPTIONS = [
   { value: "external_sq", label: "external_sq" },
 ];
 
-const TYPE_COLORS: Record<string, string> = {
-  days: "blue",
-  hwid: "green",
-  location: "orange",
-  internal_sq: "purple",
-  external_sq: "cyan",
+type BadgeVariant = "default" | "secondary" | "destructive" | "outline" | "success" | "warning";
+
+const TYPE_VARIANT: Record<string, BadgeVariant> = {
+  days: "default",
+  hwid: "success",
+  location: "warning",
+  internal_sq: "secondary",
+  external_sq: "secondary",
 };
 
 interface TreeItemGroup {
@@ -65,43 +81,20 @@ function buildTree(params: OrderParam[]): TreeItemGroup[] {
   return tree;
 }
 
-const nodeStyle: React.CSSProperties = {
-  background: "rgba(255,255,255,0.03)",
-  borderRadius: 8,
-  border: "1px solid rgba(255,255,255,0.06)",
-  marginBottom: 8,
-};
+interface StoreForm {
+  item_id: string;
+  param_id: string;
+  user_data_id: string;
+  type: string;
+  data: string;
+}
 
-const headerStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  width: "100%",
-  padding: "8px 0",
-};
-
-const labelStyle: React.CSSProperties = {
-  color: "rgba(255,255,255,0.45)",
-  fontSize: 12,
-  marginRight: 6,
-};
-
-const valueStyle: React.CSSProperties = {
-  color: "rgba(255,255,255,0.88)",
-  fontWeight: 600,
-  fontFamily: "monospace",
-  fontSize: 14,
-};
-
-const paramRowStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  padding: "8px 12px",
-  background: "rgba(255,255,255,0.02)",
-  borderRadius: 6,
-  border: "1px solid rgba(255,255,255,0.04)",
-  marginBottom: 4,
+const emptyForm: StoreForm = {
+  item_id: "",
+  param_id: "",
+  user_data_id: "",
+  type: "",
+  data: "",
 };
 
 export default function StorePage() {
@@ -110,9 +103,9 @@ export default function StorePage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<OrderParam | null>(null);
   const [filterItemId, setFilterItemId] = useState<string>("");
-  const [form] = Form.useForm();
-  const isMobile = useIsMobile();
-  const { message } = App.useApp();
+  const [form, setForm] = useState<StoreForm>(emptyForm);
+
+  const patchForm = (patch: Partial<StoreForm>) => setForm((f) => ({ ...f, ...patch }));
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -121,243 +114,288 @@ export default function StorePage() {
       const data = await api.get<OrderParam[]>(`/store/order-params${query}`);
       setParams(data);
     } catch {
-      message.error("Failed to load order params");
+      toast.error("Failed to load order params");
     }
     setLoading(false);
   }, [filterItemId]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const openCreate = (prefill?: Partial<OrderParam>) => {
     setEditing(null);
-    form.resetFields();
-    if (prefill) form.setFieldsValue(prefill);
+    setForm({
+      ...emptyForm,
+      item_id: prefill?.item_id != null ? String(prefill.item_id) : "",
+      param_id: prefill?.param_id != null ? String(prefill.param_id) : "",
+      user_data_id: prefill?.user_data_id != null ? String(prefill.user_data_id) : "",
+    });
     setModalOpen(true);
   };
 
   const openEdit = (record: OrderParam) => {
     setEditing(record);
-    form.setFieldsValue(record);
+    setForm({
+      item_id: String(record.item_id),
+      param_id: String(record.param_id),
+      user_data_id: String(record.user_data_id),
+      type: record.type,
+      data: record.data,
+    });
     setModalOpen(true);
   };
 
   const handleSave = async () => {
+    if (!form.item_id || !form.param_id || !form.user_data_id || !form.type || !form.data) {
+      toast.error("All fields are required");
+      return;
+    }
+    const payload = {
+      item_id: Number(form.item_id),
+      param_id: Number(form.param_id),
+      user_data_id: Number(form.user_data_id),
+      type: form.type,
+      data: form.data,
+    };
     try {
-      const values = await form.validateFields();
       if (editing) {
-        await api.put(`/store/order-params/${editing.id}`, values);
-        message.success("Parameter updated");
+        await api.put(`/store/order-params/${editing.id}`, payload);
+        toast.success("Parameter updated");
       } else {
-        await api.post("/store/order-params", values);
-        message.success("Parameter created");
+        await api.post("/store/order-params", payload);
+        toast.success("Parameter created");
       }
       setModalOpen(false);
       await load();
     } catch {
-      message.error("Failed to save");
+      toast.error("Failed to save");
     }
   };
 
   const handleDelete = async (id: number) => {
     try {
       await api.delete(`/store/order-params/${id}`);
-      message.success("Parameter deleted");
+      toast.success("Parameter deleted");
       await load();
     } catch {
-      message.error("Failed to delete");
+      toast.error("Failed to delete");
     }
   };
 
   const tree = buildTree(params);
 
   const renderParamRow = (p: OrderParam) => (
-    <div key={p.id} style={paramRowStyle}>
-      <Space size="middle">
-        <Tag color={TYPE_COLORS[p.type] || "default"} style={{ margin: 0 }}>{p.type}</Tag>
-        <span style={{ color: "rgba(255,255,255,0.88)", fontFamily: "monospace" }}>{p.data}</span>
-        <span style={{ color: "rgba(255,255,255,0.25)", fontSize: 11 }}>#{p.id}</span>
-      </Space>
-      <Space size="small">
-        <Button size="small" type="text" icon={<EditOutlined />} onClick={() => openEdit(p)} />
-        <Popconfirm title="Delete this parameter?" onConfirm={() => handleDelete(p.id)}>
-          <Button size="small" type="text" danger icon={<DeleteOutlined />} />
-        </Popconfirm>
-      </Space>
+    <div
+      key={p.id}
+      className="mb-1 flex items-center justify-between rounded-md border border-white/5 bg-white/5 px-3 py-2"
+    >
+      <div className="flex items-center gap-3">
+        <Badge variant={TYPE_VARIANT[p.type] || "outline"}>{p.type}</Badge>
+        <span className="font-mono text-foreground/85">{p.data}</span>
+        <span className="text-[11px] text-muted-foreground/50">#{p.id}</span>
+      </div>
+      <div className="flex gap-1">
+        <Button size="icon" variant="ghost" onClick={() => openEdit(p)}>
+          <Pencil className="h-4 w-4" />
+        </Button>
+        <ConfirmButton title="Delete this parameter?" destructive onConfirm={() => handleDelete(p.id)}>
+          <Button size="icon" variant="ghost" className="text-destructive">
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </ConfirmButton>
+      </div>
     </div>
   );
 
-  const renderUserDataLevel = (
-    itemId: number,
-    paramId: number,
-    groups: { userDataId: number; params: OrderParam[] }[],
-  ) =>
-    groups.map((udg) => (
-      <div key={udg.userDataId} style={{ marginBottom: 6 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4, padding: "4px 0" }}>
-          <span>
-            <span style={labelStyle}>user_data_id</span>
-            <span style={valueStyle}>{udg.userDataId}</span>
-            <span style={{ color: "rgba(255,255,255,0.25)", fontSize: 11, marginLeft: 8 }}>
-              ({udg.params.length} param{udg.params.length !== 1 ? "s" : ""})
-            </span>
-          </span>
-          <Button
-            size="small"
-            type="text"
-            icon={<PlusOutlined />}
-            onClick={(e) => {
-              e.stopPropagation();
-              openCreate({ item_id: itemId, param_id: paramId, user_data_id: udg.userDataId });
-            }}
-            style={{ color: "rgba(255,255,255,0.35)" }}
-          />
-        </div>
-        <div style={{ paddingLeft: isMobile ? 8 : 16 }}>
-          {udg.params.map(renderParamRow)}
-        </div>
-      </div>
-    ));
-
-  const renderParamLevel = (itemId: number, paramGroups: TreeItemGroup["paramGroups"]) => (
-    <Collapse
-      ghost
-      expandIcon={({ isActive }) =>
-        isActive ? <DownOutlined style={{ color: "rgba(255,255,255,0.35)", fontSize: 10 }} />
-                 : <RightOutlined style={{ color: "rgba(255,255,255,0.35)", fontSize: 10 }} />
-      }
-      items={paramGroups.map((pg) => {
-        const totalParams = pg.userDataGroups.reduce((s, u) => s + u.params.length, 0);
-        return {
-          key: pg.paramId,
-          style: { ...nodeStyle, background: "rgba(255,255,255,0.02)" },
-          label: (
-            <div style={headerStyle}>
-              <span>
-                <span style={labelStyle}>param_id</span>
-                <span style={valueStyle}>{pg.paramId}</span>
-                <span style={{ color: "rgba(255,255,255,0.25)", fontSize: 11, marginLeft: 8 }}>
-                  {pg.userDataGroups.length} variant{pg.userDataGroups.length !== 1 ? "s" : ""} / {totalParams} param{totalParams !== 1 ? "s" : ""}
-                </span>
-              </span>
-              <Button
-                size="small"
-                type="text"
-                icon={<PlusOutlined />}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  openCreate({ item_id: itemId, param_id: pg.paramId });
-                }}
-                style={{ color: "rgba(255,255,255,0.35)" }}
-              />
-            </div>
-          ),
-          children: (
-            <div style={{ paddingLeft: isMobile ? 4 : 12 }}>
-              {renderUserDataLevel(itemId, pg.paramId, pg.userDataGroups)}
-            </div>
-          ),
-        };
-      })}
-    />
+  const label = (text: string, value: number | string, extra?: string) => (
+    <span className="flex items-center gap-1.5">
+      <span className="text-xs text-muted-foreground">{text}</span>
+      <span className="font-mono font-semibold text-foreground/85">{value}</span>
+      {extra && <span className="text-[11px] text-muted-foreground/50">{extra}</span>}
+    </span>
   );
 
-  const renderTree = () => {
-    if (loading) return <div style={{ textAlign: "center", padding: 48 }}><Spin size="large" /></div>;
-    if (tree.length === 0) return <Empty description="No order parameters found" style={{ padding: 48 }} />;
-
-    return (
-      <Collapse
-        ghost
-        expandIcon={({ isActive }) =>
-          isActive ? <DownOutlined style={{ color: "rgba(255,255,255,0.35)", fontSize: 11 }} />
-                   : <RightOutlined style={{ color: "rgba(255,255,255,0.35)", fontSize: 11 }} />
+  const addBtn = (onClick: () => void) => (
+    <span
+      role="button"
+      tabIndex={0}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.stopPropagation();
+          onClick();
         }
-        items={tree.map((item) => {
-          const totalParams = item.paramGroups.reduce(
-            (s, pg) => s + pg.userDataGroups.reduce((s2, u) => s2 + u.params.length, 0), 0,
-          );
-          return {
-            key: item.itemId,
-            style: nodeStyle,
-            label: (
-              <div style={headerStyle}>
-                <span>
-                  <span style={labelStyle}>item_id</span>
-                  <span style={{ ...valueStyle, fontSize: 15 }}>{item.itemId}</span>
-                  <span style={{ color: "rgba(255,255,255,0.25)", fontSize: 11, marginLeft: 8 }}>
-                    {item.paramGroups.length} option{item.paramGroups.length !== 1 ? "s" : ""} / {totalParams} param{totalParams !== 1 ? "s" : ""}
-                  </span>
-                </span>
-                <Button
-                  size="small"
-                  type="text"
-                  icon={<PlusOutlined />}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    openCreate({ item_id: item.itemId });
-                  }}
-                  style={{ color: "rgba(255,255,255,0.35)" }}
-                />
-              </div>
-            ),
-            children: (
-              <div style={{ paddingLeft: isMobile ? 4 : 12 }}>
-                {renderParamLevel(item.itemId, item.paramGroups)}
-              </div>
-            ),
-          };
-        })}
-      />
-    );
-  };
+      }}
+      className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground/60 hover:bg-white/5 hover:text-foreground"
+    >
+      <Plus className="h-4 w-4" />
+    </span>
+  );
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
-        <Typography.Title level={isMobile ? 5 : 4} style={{ margin: 0, color: "rgba(255,255,255,0.88)" }}>
-          Order Parameters
-        </Typography.Title>
-        <Space wrap>
-          <Input
-            placeholder="Filter by Item ID"
-            prefix={<SearchOutlined />}
-            value={filterItemId}
-            onChange={(e) => setFilterItemId(e.target.value)}
-            onPressEnter={load}
-            style={{ width: 180 }}
-            allowClear
-          />
-          <Button icon={<PlusOutlined />} onClick={() => openCreate()}>Add Parameter</Button>
-        </Space>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-lg font-semibold text-foreground md:text-xl">Order Parameters</h1>
+        <div className="flex flex-wrap gap-2">
+          <div className="relative w-[180px]">
+            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Filter by Item ID"
+              value={filterItemId}
+              onChange={(e) => setFilterItemId(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && load()}
+              className="pl-8"
+            />
+          </div>
+          <Button variant="outline" onClick={() => openCreate()}>
+            <Plus className="h-4 w-4" />
+            Add Parameter
+          </Button>
+        </div>
       </div>
 
-      {renderTree()}
+      {loading ? (
+        <div className="flex justify-center py-12">
+          <Spinner className="h-8 w-8" />
+        </div>
+      ) : tree.length === 0 ? (
+        <div className="py-12 text-center text-muted-foreground">No order parameters found</div>
+      ) : (
+        <div className="space-y-2">
+          {tree.map((item) => {
+            const totalParams = item.paramGroups.reduce(
+              (s, pg) => s + pg.userDataGroups.reduce((s2, u) => s2 + u.params.length, 0),
+              0,
+            );
+            return (
+              <Collapsible
+                key={item.itemId}
+                title={
+                  <span className="flex w-full items-center justify-between gap-2 pr-2">
+                    {label(
+                      "item_id",
+                      item.itemId,
+                      `${item.paramGroups.length} option${item.paramGroups.length !== 1 ? "s" : ""} / ${totalParams} param${totalParams !== 1 ? "s" : ""}`,
+                    )}
+                    {addBtn(() => openCreate({ item_id: item.itemId }))}
+                  </span>
+                }
+              >
+                <div className="space-y-2">
+                  {item.paramGroups.map((pg) => {
+                    const pgTotal = pg.userDataGroups.reduce((s, u) => s + u.params.length, 0);
+                    return (
+                      <Collapsible
+                        key={pg.paramId}
+                        title={
+                          <span className="flex w-full items-center justify-between gap-2 pr-2">
+                            {label(
+                              "param_id",
+                              pg.paramId,
+                              `${pg.userDataGroups.length} variant${pg.userDataGroups.length !== 1 ? "s" : ""} / ${pgTotal} param${pgTotal !== 1 ? "s" : ""}`,
+                            )}
+                            {addBtn(() => openCreate({ item_id: item.itemId, param_id: pg.paramId }))}
+                          </span>
+                        }
+                      >
+                        {pg.userDataGroups.map((udg) => (
+                          <div key={udg.userDataId} className="mb-2">
+                            <div className="mb-1 flex items-center justify-between">
+                              {label(
+                                "user_data_id",
+                                udg.userDataId,
+                                `(${udg.params.length} param${udg.params.length !== 1 ? "s" : ""})`,
+                              )}
+                              {addBtn(() =>
+                                openCreate({
+                                  item_id: item.itemId,
+                                  param_id: pg.paramId,
+                                  user_data_id: udg.userDataId,
+                                }),
+                              )}
+                            </div>
+                            <div className="pl-2 md:pl-4">{udg.params.map(renderParamRow)}</div>
+                          </div>
+                        ))}
+                      </Collapsible>
+                    );
+                  })}
+                </div>
+              </Collapsible>
+            );
+          })}
+        </div>
+      )}
 
-      <Modal
-        title={editing ? "Edit Order Parameter" : "New Order Parameter"}
-        open={modalOpen}
-        onOk={handleSave}
-        onCancel={() => setModalOpen(false)}
-        okText="Save"
-      >
-        <Form form={form} layout="vertical">
-          <Form.Item name="item_id" label="Item ID" rules={[{ required: true }]}>
-            <InputNumber style={{ width: "100%" }} placeholder="Product ID (e.g. 12345)" />
-          </Form.Item>
-          <Form.Item name="param_id" label="Param ID" rules={[{ required: true }]}>
-            <InputNumber style={{ width: "100%" }} placeholder="Option ID (e.g. 35060)" />
-          </Form.Item>
-          <Form.Item name="user_data_id" label="User Data ID" rules={[{ required: true }]}>
-            <InputNumber style={{ width: "100%" }} placeholder="Variant ID (e.g. 161578)" />
-          </Form.Item>
-          <Form.Item name="type" label="Type" rules={[{ required: true }]}>
-            <Select options={TYPE_OPTIONS} placeholder="Select parameter type" />
-          </Form.Item>
-          <Form.Item name="data" label="Data" rules={[{ required: true }]}>
-            <Input placeholder="Value (e.g. 30, UUID, etc.)" />
-          </Form.Item>
-        </Form>
-      </Modal>
+      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editing ? "Edit Order Parameter" : "New Order Parameter"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label>Item ID *</Label>
+              <Input
+                type="number"
+                placeholder="Product ID (e.g. 12345)"
+                value={form.item_id}
+                onChange={(e) => patchForm({ item_id: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Param ID *</Label>
+              <Input
+                type="number"
+                placeholder="Option ID (e.g. 35060)"
+                value={form.param_id}
+                onChange={(e) => patchForm({ param_id: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>User Data ID *</Label>
+              <Input
+                type="number"
+                placeholder="Variant ID (e.g. 161578)"
+                value={form.user_data_id}
+                onChange={(e) => patchForm({ user_data_id: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Type *</Label>
+              <Select value={form.type} onValueChange={(v: string) => patchForm({ type: v })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select parameter type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {TYPE_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Data *</Label>
+              <Input
+                placeholder="Value (e.g. 30, UUID, etc.)"
+                value={form.data}
+                onChange={(e) => patchForm({ data: e.target.value })}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSave}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

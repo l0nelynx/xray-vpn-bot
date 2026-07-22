@@ -1,36 +1,36 @@
 import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
+import type { ColumnDef } from "@tanstack/react-table";
+import { Gift, Plus, RefreshCw, Search, Settings, Trash2, Trophy } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@xray/ui/components/card";
+import { Button } from "@xray/ui/components/button";
+import { Input } from "@xray/ui/components/input";
+import { Label } from "@xray/ui/components/label";
+import { Badge } from "@xray/ui/components/badge";
+import { Spinner } from "@xray/ui/components/spinner";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@xray/ui/components/tabs";
 import {
-  Button,
-  Card,
-  Form,
-  Input,
-  InputNumber,
-  Modal,
-  Popconfirm,
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@xray/ui/components/dialog";
+import {
   Select,
-  Space,
-  Spin,
-  Table,
-  Tabs,
-  Tag,
-  Typography,
-  App,
-} from "antd";
-import type { TableProps } from "antd";
-import {
-  DeleteOutlined,
-  GiftOutlined,
-  PlusOutlined,
-  ReloadOutlined,
-  SearchOutlined,
-  SettingOutlined,
-  TrophyOutlined,
-} from "@ant-design/icons";
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@xray/ui/components/select";
 import { api } from "../api/client";
 import useIsMobile from "../hooks/useIsMobile";
 import useDebounce from "../hooks/useDebounce";
-import MobileSortControl, { SortOrder } from "../components/MobileSortControl";
-import { makePaginatedTableChange } from "../utils/tableChange";
+import MobileSortControl, { type SortOrder } from "../components/MobileSortControl";
+import DataTable from "../components/DataTable";
+import TablePagination from "../components/TablePagination";
+import ConfirmButton from "../components/ConfirmButton";
+import { makeSortToggle } from "../utils/tableChange";
 import { formatPoints, POINTS_ICON } from "../points";
 
 type PromoType = "referral" | "promotional";
@@ -71,7 +71,6 @@ interface PromoSettings {
 
 function PromosTab() {
   const isMobile = useIsMobile();
-  const { message } = App.useApp();
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<PromoItem[]>([]);
   const [total, setTotal] = useState(0);
@@ -81,8 +80,12 @@ function PromosTab() {
   const [sort, setSort] = useState("id");
   const [order, setOrder] = useState<SortOrder>("desc");
   const [createOpen, setCreateOpen] = useState(false);
-  const [form] = Form.useForm();
+  const [code, setCode] = useState("");
+  const [promoType, setPromoType] = useState<PromoType>("promotional");
+  const [creditGrant, setCreditGrant] = useState("");
+  const [ownerTgId, setOwnerTgId] = useState("");
   const debouncedSearch = useDebounce(search, 400);
+  const perPage = 20;
 
   const load = useCallback(() => {
     setLoading(true);
@@ -95,7 +98,7 @@ function PromosTab() {
         setItems(r.items);
         setTotal(r.total);
       })
-      .catch((e: Error) => message.error(e.message || "Failed to load promos"))
+      .catch((e: Error) => toast.error(e.message || "Failed to load promos"))
       .finally(() => setLoading(false));
   }, [page, sort, order, typeFilter, debouncedSearch]);
 
@@ -103,250 +106,213 @@ function PromosTab() {
     load();
   }, [load]);
 
-  const handleCreate = async (values: {
-    promo_code: string;
-    credit_grant?: number;
-    owner_tg_id?: number;
-    promo_type?: PromoType;
-  }) => {
+  const resetForm = () => {
+    setCode("");
+    setPromoType("promotional");
+    setCreditGrant("");
+    setOwnerTgId("");
+  };
+
+  const handleCreate = async () => {
+    const trimmed = code.trim();
+    if (!trimmed) {
+      toast.error("Code is required");
+      return;
+    }
+    if (trimmed.length > 20) {
+      toast.error("Max 20 chars");
+      return;
+    }
+    if (!/^[A-Za-z0-9_-]+$/.test(trimmed)) {
+      toast.error("Letters, digits, _ and - only");
+      return;
+    }
     try {
       await api.post("/promos", {
-        promo_code: values.promo_code.trim().toUpperCase(),
-        credit_grant: values.credit_grant ?? null,
-        owner_tg_id: values.owner_tg_id ?? null,
-        promo_type: values.promo_type ?? "promotional",
+        promo_code: trimmed.toUpperCase(),
+        credit_grant: creditGrant === "" ? null : Number(creditGrant),
+        owner_tg_id: ownerTgId === "" ? null : Number(ownerTgId),
+        promo_type: promoType,
       });
-      message.success("Promo created");
+      toast.success("Promo created");
       setCreateOpen(false);
-      form.resetFields();
+      resetForm();
       load();
     } catch (e) {
-      message.error((e as Error).message || "Failed to create promo");
+      toast.error((e as Error).message || "Failed to create promo");
     }
   };
 
   const handleDelete = async (code: string) => {
     try {
       await api.delete(`/promos/${encodeURIComponent(code)}`);
-      message.success(`Promo ${code} deleted`);
+      toast.success(`Promo ${code} deleted`);
       load();
     } catch (e) {
-      message.error((e as Error).message || "Failed to delete");
+      toast.error((e as Error).message || "Failed to delete");
     }
   };
 
-  const sortOrderFor = (key: string) =>
-    sort === key ? (order === "asc" ? "ascend" : "descend") : null;
+  const onSortChange = makeSortToggle({ sort, order, setSort, setOrder, setPage });
 
-  const columns: TableProps<PromoItem>["columns"] = [
+  const columns: ColumnDef<PromoItem, unknown>[] = [
     {
-      title: "Code",
-      dataIndex: "promo_code",
-      key: "promo_code",
-      sorter: true,
-      sortOrder: sortOrderFor("promo_code"),
-      render: (v: string) => <Typography.Text strong>{v}</Typography.Text>,
+      id: "promo_code",
+      header: "Code",
+      meta: { sortKey: "promo_code" },
+      cell: ({ row }) => <span className="font-semibold">{row.original.promo_code}</span>,
     },
     {
-      title: "Type",
-      dataIndex: "promo_type",
-      key: "promo_type",
-      width: 120,
-      sorter: true,
-      sortOrder: sortOrderFor("promo_type"),
-      render: (v: PromoType) =>
-        v === "referral" ? (
-          <Tag color="purple">Referral</Tag>
+      id: "promo_type",
+      header: "Type",
+      meta: { sortKey: "promo_type" },
+      cell: ({ row }) =>
+        row.original.promo_type === "referral" ? (
+          <Badge variant="secondary">Referral</Badge>
         ) : (
-          <Tag color="blue">Promotional</Tag>
+          <Badge>Promotional</Badge>
         ),
     },
     {
-      title: "Owner",
-      key: "owner_username",
-      sorter: true,
-      sortOrder: sortOrderFor("owner_username"),
-      render: (_: unknown, r: PromoItem) =>
-        r.owner_username ? (
+      id: "owner_username",
+      header: "Owner",
+      meta: { sortKey: "owner_username" },
+      cell: ({ row }) =>
+        row.original.owner_username ? (
           <span>
-            @{r.owner_username}{" "}
-            <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 12 }}>
-              ({r.owner_tg_id})
-            </span>
+            @{row.original.owner_username}{" "}
+            <span className="text-xs text-muted-foreground">({row.original.owner_tg_id})</span>
           </span>
         ) : (
-          <span style={{ color: "rgba(255,255,255,0.3)" }}>—</span>
+          <span className="text-muted-foreground">—</span>
         ),
     },
     {
-      title: "Points (🪙)",
-      dataIndex: "credit_grant",
-      key: "credit_grant",
-      width: 120,
-      sorter: true,
-      sortOrder: sortOrderFor("credit_grant"),
-      render: (v: number | null) =>
-        v == null ? <Tag>default</Tag> : <Tag color="green">{formatPoints(v)}</Tag>,
+      id: "credit_grant",
+      header: "Points (🪙)",
+      meta: { sortKey: "credit_grant" },
+      cell: ({ row }) =>
+        row.original.credit_grant == null ? (
+          <Badge variant="outline">default</Badge>
+        ) : (
+          <Badge variant="success">{formatPoints(row.original.credit_grant)}</Badge>
+        ),
+    },
+    { id: "usage_count", header: "Usage", meta: { sortKey: "usage_count" }, cell: ({ row }) => row.original.usage_count },
+    {
+      id: "days_purchased",
+      header: "Invitee days bought",
+      meta: { sortKey: "days_purchased" },
+      cell: ({ row }) => row.original.days_purchased,
     },
     {
-      title: "Usage",
-      dataIndex: "usage_count",
-      key: "usage_count",
-      width: 80,
-      sorter: true,
-      sortOrder: sortOrderFor("usage_count"),
+      id: "points_rewarded",
+      header: "Owner reward (🪙)",
+      meta: { sortKey: "points_rewarded" },
+      cell: ({ row }) => <Badge variant="success">{formatPoints(row.original.points_rewarded)}</Badge>,
     },
     {
-      title: "Invitee days bought",
-      dataIndex: "days_purchased",
-      key: "days_purchased",
-      width: 130,
-      sorter: true,
-      sortOrder: sortOrderFor("days_purchased"),
-    },
-    {
-      title: "Owner reward (🪙)",
-      dataIndex: "points_rewarded",
-      key: "points_rewarded",
-      width: 140,
-      sorter: true,
-      sortOrder: sortOrderFor("points_rewarded"),
-      render: (v: number) => <Tag color="green">{formatPoints(v)}</Tag>,
-    },
-    {
-      title: "",
-      key: "actions",
-      width: 60,
-      render: (_: unknown, r: PromoItem) => (
-        <Popconfirm
-          title={`Delete promo ${r.promo_code}?`}
-          onConfirm={() => handleDelete(r.promo_code)}
-          okText="Delete"
-          okButtonProps={{ danger: true }}
+      id: "actions",
+      header: "",
+      cell: ({ row }) => (
+        <ConfirmButton
+          title={`Delete promo ${row.original.promo_code}?`}
+          destructive
+          confirmText="Delete"
+          onConfirm={() => handleDelete(row.original.promo_code)}
         >
-          <Button type="text" size="small" icon={<DeleteOutlined />} danger />
-        </Popconfirm>
+          <Button variant="ghost" size="icon" className="text-destructive">
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </ConfirmButton>
       ),
     },
   ];
 
-  const handleTableChange = makePaginatedTableChange<PromoItem>({
-    page,
-    sort,
-    order,
-    setPage,
-    setSort,
-    setOrder,
-  });
-
-  const perPage = 20;
-
   const renderMobileCard = (promo: PromoItem) => (
-    <Card
-      key={promo.promo_code}
-      size="small"
-      style={{ marginBottom: 8 }}
-      styles={{ body: { padding: "12px" } }}
-    >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div
-            style={{
-              fontWeight: 600,
-              color: "rgba(255,255,255,0.88)",
-              marginBottom: 4,
-              wordBreak: "break-all",
-            }}
+    <Card key={promo.promo_code} className="mb-2">
+      <CardContent className="p-3">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="mb-1 break-all font-semibold text-foreground/85">{promo.promo_code}</div>
+            <div className="mb-1.5">
+              {promo.promo_type === "referral" ? (
+                <Badge variant="secondary">Referral</Badge>
+              ) : (
+                <Badge>Promotional</Badge>
+              )}
+            </div>
+            <div className="mb-1 text-xs text-muted-foreground">
+              {promo.owner_username ? `@${promo.owner_username} (${promo.owner_tg_id})` : "No owner"}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              {promo.credit_grant == null
+                ? "Points: default"
+                : `Points: ${formatPoints(promo.credit_grant)}`}
+              {" · "}Usage: {promo.usage_count}
+            </div>
+            <div className="mt-0.5 text-[11px] text-muted-foreground/70">
+              Invitee days: {promo.days_purchased} · Owner reward:{" "}
+              {formatPoints(promo.points_rewarded)}
+            </div>
+          </div>
+          <ConfirmButton
+            title={`Delete promo ${promo.promo_code}?`}
+            destructive
+            confirmText="Delete"
+            onConfirm={() => handleDelete(promo.promo_code)}
           >
-            {promo.promo_code}
-          </div>
-          <div style={{ marginBottom: 6 }}>
-            {promo.promo_type === "referral" ? (
-              <Tag color="purple" style={{ margin: 0 }}>Referral</Tag>
-            ) : (
-              <Tag color="blue" style={{ margin: 0 }}>Promotional</Tag>
-            )}
-          </div>
-          <div style={{ fontSize: 12, color: "rgba(255,255,255,0.45)", marginBottom: 4 }}>
-            {promo.owner_username
-              ? `@${promo.owner_username} (${promo.owner_tg_id})`
-              : "No owner"}
-          </div>
-          <div style={{ fontSize: 12, color: "rgba(255,255,255,0.55)" }}>
-            {promo.credit_grant == null ? "Points: default" : `Points: ${formatPoints(promo.credit_grant)}`}
-            {" · "}
-            Usage: {promo.usage_count}
-          </div>
-          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginTop: 2 }}>
-            Invitee days: {promo.days_purchased} · Owner reward: {formatPoints(promo.points_rewarded)}
-          </div>
+            <Button variant="destructive" size="icon">
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </ConfirmButton>
         </div>
-        <Popconfirm
-          title={`Delete promo ${promo.promo_code}?`}
-          onConfirm={() => handleDelete(promo.promo_code)}
-          okText="Delete"
-          okButtonProps={{ danger: true }}
-        >
-          <Button size="small" danger icon={<DeleteOutlined />} />
-        </Popconfirm>
-      </div>
+      </CardContent>
     </Card>
   );
 
   return (
     <div>
-      <div
-        style={{
-          marginBottom: 16,
-          display: "flex",
-          flexWrap: "wrap",
-          gap: 8,
-          justifyContent: isMobile ? "stretch" : "space-between",
-        }}
-      >
-        <Button
-          icon={<PlusOutlined />}
-          type="primary"
-          onClick={() => setCreateOpen(true)}
-          block={isMobile}
-        >
+      <div className="mb-4 flex flex-wrap justify-between gap-2">
+        <Button onClick={() => setCreateOpen(true)} className="w-full md:w-auto">
+          <Plus className="h-4 w-4" />
           Create Promo
         </Button>
-        <Button
-          icon={<ReloadOutlined />}
-          onClick={load}
-          loading={loading}
-          block={isMobile}
-        >
+        <Button variant="outline" onClick={load} disabled={loading} className="w-full md:w-auto">
+          <RefreshCw className="h-4 w-4" />
           Refresh
         </Button>
       </div>
 
-      <div style={{ marginBottom: 16, display: "flex", flexWrap: "wrap", gap: 8 }}>
-        <Input
-          placeholder="Search by code or owner"
-          prefix={<SearchOutlined />}
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setPage(1);
-          }}
-          style={{ flex: 1, minWidth: isMobile ? "100%" : 220, maxWidth: isMobile ? "100%" : 280 }}
-          allowClear
-        />
+      <div className="mb-4 flex flex-wrap gap-2">
+        <div className="relative flex-1 md:max-w-[280px]">
+          <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search by code or owner"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            className="pl-8"
+          />
+        </div>
         <Select
           value={typeFilter}
-          onChange={(v) => {
+          onValueChange={(v: string) => {
             setTypeFilter(v);
             setPage(1);
           }}
-          style={{ width: isMobile ? "100%" : 160 }}
-          options={[
-            { value: "all", label: "All types" },
-            { value: "promotional", label: "Promotional" },
-            { value: "referral", label: "Referral" },
-          ]}
-        />
+        >
+          <SelectTrigger className="w-full md:w-[160px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All types</SelectItem>
+            <SelectItem value="promotional">Promotional</SelectItem>
+            <SelectItem value="referral">Referral</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       {isMobile ? (
@@ -362,219 +328,192 @@ function PromosTab() {
             }}
           />
           {loading ? (
-            <div style={{ textAlign: "center", padding: 40, color: "rgba(255,255,255,0.4)" }}>
-              Loading...
-            </div>
+            <div className="py-10 text-center text-muted-foreground">Loading...</div>
           ) : items.length === 0 ? (
-            <div style={{ textAlign: "center", padding: 40, color: "rgba(255,255,255,0.4)" }}>
-              No promocodes
-            </div>
+            <div className="py-10 text-center text-muted-foreground">No promocodes</div>
           ) : (
             items.map(renderMobileCard)
           )}
-          <div
-            style={{
-              textAlign: "center",
-              padding: "12px 0",
-              color: "rgba(255,255,255,0.45)",
-              fontSize: 12,
-            }}
-          >
-            Page {page} · Total: {total}
-          </div>
-          <div style={{ display: "flex", justifyContent: "center", gap: 8 }}>
-            <Button size="small" disabled={page <= 1} onClick={() => setPage(page - 1)}>
-              Prev
-            </Button>
-            <Button
-              size="small"
-              disabled={page * perPage >= total}
-              onClick={() => setPage(page + 1)}
-            >
-              Next
-            </Button>
-          </div>
+          <TablePagination page={page} perPage={perPage} total={total} onPageChange={setPage} />
         </>
       ) : (
-        <Card>
-          <Table
-            rowKey="promo_code"
+        <>
+          <DataTable
             columns={columns}
-            dataSource={items}
+            data={items}
             loading={loading}
-            onChange={handleTableChange}
-            size="middle"
-            scroll={{ x: 700 }}
-            pagination={{
-              current: page,
-              pageSize: perPage,
-              total,
-              showSizeChanger: false,
-            }}
+            rowKey={(r) => r.promo_code}
+            sort={sort}
+            order={order}
+            onSortChange={onSortChange}
+            empty="No promocodes"
+            minWidth={700}
           />
-        </Card>
+          <TablePagination page={page} perPage={perPage} total={total} onPageChange={setPage} />
+        </>
       )}
 
-      <Modal
-        title="Create Promo Code"
+      <Dialog
         open={createOpen}
-        onCancel={() => {
-          setCreateOpen(false);
-          form.resetFields();
+        onOpenChange={(o: boolean) => {
+          setCreateOpen(o);
+          if (!o) resetForm();
         }}
-        onOk={() => form.submit()}
-        okText="Create"
-        width={isMobile ? "100%" : undefined}
-        style={isMobile ? { top: 16, maxWidth: "calc(100vw - 16px)", margin: "0 auto" } : undefined}
       >
-        <Form
-          form={form}
-          layout="vertical"
-          onFinish={handleCreate}
-          initialValues={{ promo_type: "promotional" }}
-        >
-          <Form.Item
-            name="promo_code"
-            label="Code"
-            rules={[
-              { required: true, message: "Required" },
-              { max: 20, message: "Max 20 chars" },
-              {
-                pattern: /^[A-Za-z0-9_-]+$/,
-                message: "Letters, digits, _ and - only",
-              },
-            ]}
-          >
-            <Input placeholder="SUMMER25" autoFocus />
-          </Form.Item>
-          <Form.Item
-            name="promo_type"
-            label="Type"
-            tooltip="Promotional: anyone, each code once per user. Referral: new users only, one referral code ever per user."
-          >
-            <Select
-              options={[
-                { value: "promotional", label: "Promotional" },
-                { value: "referral", label: "Referral" },
-              ]}
-            />
-          </Form.Item>
-          <Form.Item
-            name="credit_grant"
-            label={`Credit grant (${POINTS_ICON} points)`}
-            tooltip={`Bonus points credited to the user when they activate this code. Empty = use default from Settings.`}
-          >
-            <InputNumber min={0} max={3650} style={{ width: "100%" }} placeholder="default" addonAfter={POINTS_ICON} />
-          </Form.Item>
-          <Form.Item
-            name="owner_tg_id"
-            label="Owner tg_id"
-            tooltip="Optional. Links the promo to a specific user for referral rewards. Leave empty for stand-alone promos."
-          >
-            <InputNumber style={{ width: "100%" }} placeholder="empty for stand-alone" />
-          </Form.Item>
-        </Form>
-      </Modal>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create Promo Code</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label>Code *</Label>
+              <Input placeholder="SUMMER25" value={code} onChange={(e) => setCode(e.target.value)} autoFocus />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Type</Label>
+              <Select value={promoType} onValueChange={(v: string) => setPromoType(v as PromoType)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="promotional">Promotional</SelectItem>
+                  <SelectItem value="referral">Referral</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>{`Credit grant (${POINTS_ICON} points)`}</Label>
+              <Input
+                type="number"
+                min={0}
+                max={3650}
+                placeholder="default"
+                value={creditGrant}
+                onChange={(e) => setCreditGrant(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Owner tg_id</Label>
+              <Input
+                type="number"
+                placeholder="empty for stand-alone"
+                value={ownerTgId}
+                onChange={(e) => setOwnerTgId(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleCreate}>Create</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
 function SettingsTab() {
-  const isMobile = useIsMobile();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [form] = Form.useForm();
-  const { message } = App.useApp();
+  const [defaultCreditGrant, setDefaultCreditGrant] = useState("");
+  const [pointsRewardPer30, setPointsRewardPer30] = useState("");
+  const [rewardCapPoints, setRewardCapPoints] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const r = await api.get<PromoSettings>("/promos/settings");
-      form.setFieldsValue({
-        default_credit_grant: r.default_credit_grant,
-        points_reward_per_30: r.points_reward_per_30,
-        reward_cap_points: r.reward_cap_points,
-      });
+      setDefaultCreditGrant(String(r.default_credit_grant));
+      setPointsRewardPer30(String(r.points_reward_per_30));
+      setRewardCapPoints(String(r.reward_cap_points));
     } catch (e) {
-      message.error((e as Error).message || "Failed to load settings");
+      toast.error((e as Error).message || "Failed to load settings");
     } finally {
       setLoading(false);
     }
-  }, [form]);
+  }, []);
 
   useEffect(() => {
     load();
   }, [load]);
 
   const onSave = async () => {
+    if (defaultCreditGrant === "" || pointsRewardPer30 === "" || rewardCapPoints === "") {
+      toast.error("All fields are required");
+      return;
+    }
     try {
-      const values = await form.validateFields();
       setSaving(true);
       await api.put("/promos/settings", {
-        default_credit_grant: values.default_credit_grant,
-        points_reward_per_30: values.points_reward_per_30,
-        reward_cap_points: values.reward_cap_points,
+        default_credit_grant: Number(defaultCreditGrant),
+        points_reward_per_30: Number(pointsRewardPer30),
+        reward_cap_points: Number(rewardCapPoints),
       });
-      message.success("Settings saved");
+      toast.success("Settings saved");
     } catch (e) {
-      message.error((e as Error).message || "Failed to save");
+      toast.error((e as Error).message || "Failed to save");
     } finally {
       setSaving(false);
     }
   };
 
+  if (loading) {
+    return (
+      <div className="flex justify-center py-12">
+        <Spinner className="h-6 w-6" />
+      </div>
+    );
+  }
+
   return (
-    <Spin spinning={loading}>
-      <Card
-        title="Promo Settings"
-        extra={
-          !isMobile ? (
-            <Button type="primary" loading={saving} onClick={onSave}>
-              Save
-            </Button>
-          ) : undefined
-        }
-        style={{ maxWidth: isMobile ? "100%" : 600 }}
-      >
-        <Typography.Paragraph type="secondary">
+    <Card className="max-w-full md:max-w-[600px]">
+      <CardHeader className="flex-row items-center justify-between space-y-0">
+        <CardTitle className="text-sm">Promo Settings</CardTitle>
+        <Button onClick={onSave} disabled={saving}>
+          Save
+        </Button>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <p className="text-sm text-muted-foreground">
           Все бонусы — в баллах {POINTS_ICON}. <strong>Default credit grant</strong> — сколько
           получает пользователь при активации кода. <strong>Owner reward per 30 days</strong> —
-          сколько баллов начисляется владельцу рефкода за каждые 30 дней покупок приглашённых.
-          <strong> Reward cap</strong> — максимум баллов владельцу с одного кода за всё время.
-        </Typography.Paragraph>
-        <Form form={form} layout="vertical">
-          <Form.Item
-            name="default_credit_grant"
-            label={`Default credit grant (${POINTS_ICON})`}
-            tooltip="Points credited to user balance on promo activation."
-            rules={[{ required: true, message: "Required" }]}
-          >
-            <InputNumber min={0} max={3650} style={{ width: "100%" }} addonAfter={POINTS_ICON} />
-          </Form.Item>
-          <Form.Item
-            name="points_reward_per_30"
-            label={`Owner reward per 30 invitee-days (${POINTS_ICON})`}
-            tooltip="Bonus points credited to referral owner wallet per each 30 subscription-days purchased by invitees."
-            rules={[{ required: true, message: "Required" }]}
-          >
-            <InputNumber min={0} max={3650} style={{ width: "100%" }} addonAfter={POINTS_ICON} />
-          </Form.Item>
-          <Form.Item
-            name="reward_cap_points"
-            label={`Owner reward cap (${POINTS_ICON})`}
-            tooltip="Maximum total bonus points one referral owner can earn from invitee purchases."
-            rules={[{ required: true, message: "Required" }]}
-          >
-            <InputNumber min={0} max={365_000} style={{ width: "100%" }} addonAfter={POINTS_ICON} />
-          </Form.Item>
-          {isMobile && (
-            <Button type="primary" loading={saving} onClick={onSave} block>
-              Save
-            </Button>
-          )}
-        </Form>
-      </Card>
-    </Spin>
+          сколько баллов начисляется владельцу рефкода за каждые 30 дней покупок приглашённых.{" "}
+          <strong>Reward cap</strong> — максимум баллов владельцу с одного кода за всё время.
+        </p>
+        <div className="space-y-1.5">
+          <Label>{`Default credit grant (${POINTS_ICON}) *`}</Label>
+          <Input
+            type="number"
+            min={0}
+            max={3650}
+            value={defaultCreditGrant}
+            onChange={(e) => setDefaultCreditGrant(e.target.value)}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label>{`Owner reward per 30 invitee-days (${POINTS_ICON}) *`}</Label>
+          <Input
+            type="number"
+            min={0}
+            max={3650}
+            value={pointsRewardPer30}
+            onChange={(e) => setPointsRewardPer30(e.target.value)}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label>{`Owner reward cap (${POINTS_ICON}) *`}</Label>
+          <Input
+            type="number"
+            min={0}
+            max={365000}
+            value={rewardCapPoints}
+            onChange={(e) => setRewardCapPoints(e.target.value)}
+          />
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -600,7 +539,6 @@ const REFERRAL_SORT_OPTIONS = [
 
 function ReferralStatsTab() {
   const isMobile = useIsMobile();
-  const { message } = App.useApp();
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<ReferralStatItem[]>([]);
   const [total, setTotal] = useState(0);
@@ -610,6 +548,7 @@ function ReferralStatsTab() {
   const [sort, setSort] = useState("referral_count");
   const [order, setOrder] = useState<SortOrder>("desc");
   const debouncedSearch = useDebounce(search, 300);
+  const perPage = 20;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -622,18 +561,17 @@ function ReferralStatsTab() {
         metric,
         search: debouncedSearch,
       });
-      const data = await api.get<{
-        items: ReferralStatItem[];
-        total: number;
-      }>(`/promos/referral-stats?${params}`);
+      const data = await api.get<{ items: ReferralStatItem[]; total: number }>(
+        `/promos/referral-stats?${params}`,
+      );
       setItems(data.items);
       setTotal(data.total);
     } catch (e) {
-      message.error((e as Error).message || "Failed to load referral stats");
+      toast.error((e as Error).message || "Failed to load referral stats");
     } finally {
       setLoading(false);
     }
-  }, [page, sort, order, metric, debouncedSearch, message]);
+  }, [page, sort, order, metric, debouncedSearch]);
 
   useEffect(() => {
     load();
@@ -645,145 +583,114 @@ function ReferralStatsTab() {
     setPage(1);
   };
 
-  const columns: TableProps<ReferralStatItem>["columns"] = [
+  const onSortChange = makeSortToggle({ sort, order, setSort, setOrder, setPage });
+
+  const columns: ColumnDef<ReferralStatItem, unknown>[] = [
     {
-      title: "#",
-      key: "rank",
-      width: 56,
-      render: (_v, _r, index) => (page - 1) * 20 + index + 1,
+      id: "rank",
+      header: "#",
+      cell: ({ row }) => (page - 1) * perPage + row.index + 1,
     },
     {
-      title: "Owner",
-      key: "owner",
-      render: (_v, r) => (
+      id: "owner",
+      header: "Owner",
+      cell: ({ row }) => (
         <span>
-          {r.owner_username ? `@${r.owner_username}` : "—"}{" "}
-          <Typography.Text type="secondary">({r.owner_tg_id})</Typography.Text>
+          {row.original.owner_username ? `@${row.original.owner_username}` : "—"}{" "}
+          <span className="text-muted-foreground">({row.original.owner_tg_id})</span>
         </span>
       ),
     },
-    { title: "Code", dataIndex: "promo_code", key: "promo_code" },
+    { id: "promo_code", header: "Code", cell: ({ row }) => row.original.promo_code },
     {
-      title: metric === "paying" ? "Paying referrals" : "Total referrals",
-      key: "primary_metric",
-      render: (_v, r) =>
-        metric === "paying" ? r.paying_referral_count : r.referral_count,
-      sorter: true,
+      id: "primary_metric",
+      header: metric === "paying" ? "Paying referrals" : "Total referrals",
+      meta: { sortKey: metric === "paying" ? "paying_referral_count" : "referral_count" },
+      cell: ({ row }) =>
+        metric === "paying" ? row.original.paying_referral_count : row.original.referral_count,
     },
     {
-      title: metric === "paying" ? "Total" : "Paying",
-      key: "secondary_metric",
-      render: (_v, r) => (
-        <Typography.Text type="secondary">
-          {metric === "paying" ? r.referral_count : r.paying_referral_count}
-        </Typography.Text>
+      id: "secondary_metric",
+      header: metric === "paying" ? "Total" : "Paying",
+      cell: ({ row }) => (
+        <span className="text-muted-foreground">
+          {metric === "paying" ? row.original.referral_count : row.original.paying_referral_count}
+        </span>
       ),
     },
-    { title: "Invitee days", dataIndex: "days_purchased", key: "days_purchased", sorter: true },
     {
-      title: `Owner reward (${POINTS_ICON})`,
-      dataIndex: "points_rewarded",
-      key: "points_rewarded",
-      render: (v: number) => formatPoints(v),
-      sorter: true,
+      id: "days_purchased",
+      header: "Invitee days",
+      meta: { sortKey: "days_purchased" },
+      cell: ({ row }) => row.original.days_purchased,
+    },
+    {
+      id: "points_rewarded",
+      header: `Owner reward (${POINTS_ICON})`,
+      meta: { sortKey: "points_rewarded" },
+      cell: ({ row }) => formatPoints(row.original.points_rewarded),
     },
   ];
 
-  const handleReferralTableChange = makePaginatedTableChange<ReferralStatItem>({
-    page,
-    sort,
-    order,
-    setPage,
-    setSort,
-    setOrder,
-  });
-
-  const perPage = 20;
-
   const renderMobileCard = (item: ReferralStatItem, index: number) => {
     const rank = (page - 1) * perPage + index + 1;
-    const primary =
-      metric === "paying" ? item.paying_referral_count : item.referral_count;
-    const secondary =
-      metric === "paying" ? item.referral_count : item.paying_referral_count;
+    const primary = metric === "paying" ? item.paying_referral_count : item.referral_count;
+    const secondary = metric === "paying" ? item.referral_count : item.paying_referral_count;
     return (
-      <Card
-        key={item.owner_tg_id}
-        size="small"
-        style={{ marginBottom: 8 }}
-        styles={{ body: { padding: "12px" } }}
-      >
-        <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-          <div
-            style={{
-              minWidth: 28,
-              height: 28,
-              borderRadius: 8,
-              background: "rgba(255,255,255,0.06)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: 12,
-              color: "rgba(255,255,255,0.65)",
-              fontWeight: 600,
-            }}
-          >
+      <Card key={item.owner_tg_id} className="mb-2">
+        <CardContent className="flex items-start gap-2.5 p-3">
+          <div className="flex h-7 min-w-7 items-center justify-center rounded-lg bg-white/5 text-xs font-semibold text-muted-foreground">
             {rank}
           </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div
-              style={{
-                fontWeight: 600,
-                color: "rgba(255,255,255,0.88)",
-                marginBottom: 2,
-                wordBreak: "break-word",
-              }}
-            >
+          <div className="min-w-0 flex-1">
+            <div className="mb-0.5 break-words font-semibold text-foreground/85">
               {item.owner_username ? `@${item.owner_username}` : "—"}
             </div>
-            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.45)", marginBottom: 6 }}>
+            <div className="mb-1.5 text-xs text-muted-foreground">
               {item.owner_tg_id} · <code>{item.promo_code}</code>
             </div>
-            <div style={{ fontSize: 13, color: "rgba(255,255,255,0.75)" }}>
+            <div className="text-sm text-foreground/75">
               {metric === "paying" ? "Paying" : "Total"}: <strong>{primary}</strong>
-              <Typography.Text type="secondary" style={{ marginLeft: 8 }}>
+              <span className="ml-2 text-muted-foreground">
                 {metric === "paying" ? "Total" : "Paying"}: {secondary}
-              </Typography.Text>
+              </span>
             </div>
-            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginTop: 4 }}>
+            <div className="mt-1 text-[11px] text-muted-foreground/70">
               Invitee days: {item.days_purchased} · Owner reward:{" "}
               {formatPoints(item.points_rewarded)}
             </div>
           </div>
-        </div>
+        </CardContent>
       </Card>
     );
   };
 
   return (
     <div>
-      <div style={{ marginBottom: 16, display: "flex", flexWrap: "wrap", gap: 8 }}>
-        <Select
-          value={metric}
-          onChange={onMetricChange}
-          style={{ width: isMobile ? "100%" : 220 }}
-          options={[
-            { value: "total", label: "Top by total referrals" },
-            { value: "paying", label: "Top by paying referrals" },
-          ]}
-        />
-        <Input
-          placeholder="Search code, username, tg_id"
-          prefix={<SearchOutlined />}
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setPage(1);
-          }}
-          style={{ flex: 1, minWidth: isMobile ? "100%" : 220, maxWidth: isMobile ? "100%" : 280 }}
-          allowClear
-        />
-        <Button icon={<ReloadOutlined />} onClick={load} block={isMobile} loading={loading}>
+      <div className="mb-4 flex flex-wrap gap-2">
+        <Select value={metric} onValueChange={(v: string) => onMetricChange(v as ReferralMetric)}>
+          <SelectTrigger className="w-full md:w-[220px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="total">Top by total referrals</SelectItem>
+            <SelectItem value="paying">Top by paying referrals</SelectItem>
+          </SelectContent>
+        </Select>
+        <div className="relative flex-1 md:max-w-[280px]">
+          <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search code, username, tg_id"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            className="pl-8"
+          />
+        </div>
+        <Button variant="outline" onClick={load} disabled={loading} className="w-full md:w-auto">
+          <RefreshCw className="h-4 w-4" />
           Refresh
         </Button>
       </div>
@@ -801,107 +708,59 @@ function ReferralStatsTab() {
             }}
           />
           {loading ? (
-            <div style={{ textAlign: "center", padding: 40, color: "rgba(255,255,255,0.4)" }}>
-              Loading...
-            </div>
+            <div className="py-10 text-center text-muted-foreground">Loading...</div>
           ) : items.length === 0 ? (
-            <div style={{ textAlign: "center", padding: 40, color: "rgba(255,255,255,0.4)" }}>
-              No referral stats
-            </div>
+            <div className="py-10 text-center text-muted-foreground">No referral stats</div>
           ) : (
             items.map(renderMobileCard)
           )}
-          <div
-            style={{
-              textAlign: "center",
-              padding: "12px 0",
-              color: "rgba(255,255,255,0.45)",
-              fontSize: 12,
-            }}
-          >
-            Page {page} · Total: {total}
-          </div>
-          <div style={{ display: "flex", justifyContent: "center", gap: 8 }}>
-            <Button size="small" disabled={page <= 1} onClick={() => setPage(page - 1)}>
-              Prev
-            </Button>
-            <Button
-              size="small"
-              disabled={page * perPage >= total}
-              onClick={() => setPage(page + 1)}
-            >
-              Next
-            </Button>
-          </div>
+          <TablePagination page={page} perPage={perPage} total={total} onPageChange={setPage} />
         </>
       ) : (
-        <Table
-          rowKey="owner_tg_id"
-          loading={loading}
-          columns={columns}
-          dataSource={items}
-          pagination={{
-            current: page,
-            pageSize: perPage,
-            total,
-            showSizeChanger: false,
-          }}
-          onChange={handleReferralTableChange}
-          size="middle"
-        />
+        <>
+          <DataTable
+            columns={columns}
+            data={items}
+            loading={loading}
+            rowKey={(r) => r.owner_tg_id}
+            sort={sort}
+            order={order}
+            onSortChange={onSortChange}
+            empty="No referral stats"
+          />
+          <TablePagination page={page} perPage={perPage} total={total} onPageChange={setPage} />
+        </>
       )}
     </div>
   );
 }
 
 export default function PromocodesPage() {
-  const isMobile = useIsMobile();
   return (
     <div>
-      <Typography.Title
-        level={isMobile ? 5 : 4}
-        style={{
-          margin: 0,
-          marginBottom: isMobile ? 12 : 20,
-          color: "rgba(255,255,255,0.88)",
-        }}
-      >
-        Promocodes
-      </Typography.Title>
-      <Tabs
-        defaultActiveKey="list"
-        size={isMobile ? "small" : "middle"}
-        tabBarGutter={isMobile ? 12 : undefined}
-        items={[
-          {
-            key: "list",
-            label: (
-              <span>
-                <GiftOutlined /> Codes
-              </span>
-            ),
-            children: <PromosTab />,
-          },
-          {
-            key: "settings",
-            label: (
-              <span>
-                <SettingOutlined /> Settings
-              </span>
-            ),
-            children: <SettingsTab />,
-          },
-          {
-            key: "referral-stats",
-            label: (
-              <span>
-                <TrophyOutlined /> Referral stats
-              </span>
-            ),
-            children: <ReferralStatsTab />,
-          },
-        ]}
-      />
+      <h1 className="mb-3 text-lg font-semibold text-foreground md:mb-5 md:text-xl">Promocodes</h1>
+      <Tabs defaultValue="list">
+        <TabsList className="mb-4 flex-wrap">
+          <TabsTrigger value="list">
+            <Gift className="h-4 w-4" /> Codes
+          </TabsTrigger>
+          <TabsTrigger value="settings">
+            <Settings className="h-4 w-4" /> Settings
+          </TabsTrigger>
+          <TabsTrigger value="referral-stats">
+            <Trophy className="h-4 w-4" /> Referral stats
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="list">
+          <PromosTab />
+        </TabsContent>
+        <TabsContent value="settings">
+          <SettingsTab />
+        </TabsContent>
+        <TabsContent value="referral-stats">
+          <ReferralStatsTab />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

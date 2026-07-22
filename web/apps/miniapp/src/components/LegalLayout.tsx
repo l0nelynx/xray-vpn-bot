@@ -1,7 +1,7 @@
-import { ArrowLeftOutlined } from "@ant-design/icons";
-import { Button, Typography } from "antd";
+import { ArrowLeft } from "lucide-react";
 import { ReactNode } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
+import { Button } from "@xray/ui/components/button";
 
 interface Props {
   title: string;
@@ -12,18 +12,12 @@ export default function LegalLayout({ title, children }: Props) {
   const navigate = useNavigate();
   return (
     <div className="page legal-page">
-      <Button
-        icon={<ArrowLeftOutlined />}
-        onClick={() => navigate(-1)}
-        type="text"
-        style={{ marginBottom: 12 }}
-      >
+      <Button variant="ghost" onClick={() => navigate(-1)} style={{ marginBottom: 12 }}>
+        <ArrowLeft />
         Назад
       </Button>
 
-      <Typography.Title level={3} className="legal-title">
-        {title}
-      </Typography.Title>
+      <h1 className="legal-title">{title}</h1>
 
       <div className="legal-content">{children}</div>
     </div>

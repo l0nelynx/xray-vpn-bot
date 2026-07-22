@@ -6,7 +6,7 @@
 # container does not proxy to the backends. See README "Web tier & reverse proxy".
 
 # Stage 1: build both frontends from the workspace.
-FROM node:20-alpine AS build
+FROM node:22-alpine AS build
 WORKDIR /build
 COPY package.json package-lock.json* ./
 COPY web ./web

@@ -1,5 +1,7 @@
-import { App as AntApp, ConfigProvider, Result, Spin, Alert } from "antd";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { AlertTriangle } from "lucide-react";
+import { Spinner } from "@xray/ui/components/spinner";
+import { Alert, AlertTitle } from "@xray/ui/components/alert";
+import { Navigate, Route, Routes } from "react-router";
 import BottomTabs from "./components/BottomTabs";
 import { useMe } from "./hooks/useMe";
 import BuyMenuPage from "./pages/BuyMenuPage";
@@ -17,7 +19,6 @@ import SupportCreatePage from "./pages/SupportCreatePage";
 import SupportPage from "./pages/SupportPage";
 import SupportTicketPage from "./pages/SupportTicketPage";
 import WelcomePage from "./pages/WelcomePage";
-import { liquidGlassConfig } from "./theme/liquidGlass";
 
 function AppInner() {
   const { data, loading, error, reload, refresh } = useMe();
@@ -25,7 +26,7 @@ function AppInner() {
   if (loading) {
     return (
       <div className="spinner-wrap">
-        <Spin size="large" />
+        <Spinner className="h-8 w-8" />
       </div>
     );
   }
@@ -33,16 +34,20 @@ function AppInner() {
   if (error) {
     const isUsername = error === "username required";
     return (
-      <div className="page">
-        <Result
-          status={isUsername ? "warning" : "error"}
-          title={isUsername ? "Нужен username" : "Ошибка"}
-          subTitle={
-            isUsername
+      <div className="page page-centered">
+        <div style={{ textAlign: "center", maxWidth: 320 }}>
+          <AlertTriangle
+            style={{ width: 48, height: 48, color: isUsername ? "#FFD479" : "#FF8A8A", margin: "0 auto 16px" }}
+          />
+          <div style={{ fontSize: 18, fontWeight: 700, color: "#FFFFFF", marginBottom: 8 }}>
+            {isUsername ? "Нужен username" : "Ошибка"}
+          </div>
+          <div style={{ fontSize: 14, color: "rgba(255,255,255,0.52)", lineHeight: 1.5 }}>
+            {isUsername
               ? "Установите username в настройках Telegram, чтобы пользоваться сервисом."
-              : error
-          }
-        />
+              : error}
+          </div>
+        </div>
       </div>
     );
   }
@@ -50,7 +55,9 @@ function AppInner() {
   if (!data) {
     return (
       <div className="page">
-        <Alert type="warning" title="Нет данных" />
+        <Alert variant="warning">
+          <AlertTitle>Нет данных</AlertTitle>
+        </Alert>
       </div>
     );
   }
@@ -87,11 +94,5 @@ function AppInner() {
 }
 
 export default function App() {
-  return (
-    <ConfigProvider {...liquidGlassConfig}>
-      <AntApp>
-        <AppInner />
-      </AntApp>
-    </ConfigProvider>
-  );
+  return <AppInner />;
 }

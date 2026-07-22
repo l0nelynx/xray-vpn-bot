@@ -17,29 +17,46 @@ First-time setup: repo **Settings → Pages → Source → GitHub Actions**.
 
 ## Frontend development
 
-Dashboard and MiniApp are npm workspaces under `web/`.
+Dashboard and MiniApp are npm workspaces under `web/` (install from the **repo
+root**: `npm install`).
 
-### Dashboard
+### Mock API (no backend)
+
+For UI work without Postgres / uvicorn / Telegram, start Vite in **mock mode**.
+[MSW](https://mswjs.io/) intercepts `/bot/*/api/*` in the browser.
 
 ```bash
-cd web/apps/dashboard
-npm install
-npm run dev -- --host 0.0.0.0
+# Dashboard → http://127.0.0.1:5173/bot/dashboard/
+npm run dev:mock -w xray-vpn-dashboard
+
+# MiniApp → http://127.0.0.1:5174/bot/miniapp/  (second terminal)
+npm run dev:mock -w xray-vpn-miniapp
 ```
 
-Vite dev server runs at `http://localhost:5173/bot/dashboard/` and proxies
-`/bot/dashboard/api` to the backend.
+- **Dashboard login:** any non-empty login/password (e.g. `admin` / `admin`).
+- **MiniApp:** opens in a normal browser; Telegram initData is stubbed.
+- Handlers live in `web/apps/*/src/mocks/`. Unhandled API paths get a safe
+  empty/`{ ok: true }` fallback so pages don't crash.
+- Production builds do **not** enable mocks unless you pass
+  `VITE_MOCK_API=1` at build time (don't).
 
-### MiniApp
+### Dashboard (real API)
 
 ```bash
-cd web/apps/miniapp
-npm install
-npm run dev -- --host 0.0.0.0
+npm run dev -w xray-vpn-dashboard -- --host 0.0.0.0
+```
+
+Vite runs at `http://localhost:5173/bot/dashboard/` and proxies
+`/bot/dashboard/api` → `http://localhost:8000`.
+
+### MiniApp (real API)
+
+```bash
+npm run dev -w xray-vpn-miniapp -- --host 0.0.0.0
 ```
 
 Dev server at `http://localhost:5173/bot/miniapp/`. Telegram init-data auth
-requires opening the app inside Telegram — local browser testing is limited.
+requires opening the app inside Telegram when talking to a real backend.
 
 ### Production build
 

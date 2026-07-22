@@ -77,15 +77,17 @@ retire `support.py` when ready.
 - **`services/dashboard/backend/`** — FastAPI admin API at `/bot/dashboard/api`.
   Routers: users, transactions, stats, promos, crm, tariffs, menus, squads, telemt,
   store, support, webapp_*, tg_admin. `currency.py` converts amounts to RUB.
-- **`web/apps/dashboard/`** — React 18 + Ant Design v6 + Vite 6 admin SPA.
+- **`web/apps/dashboard/`** — React 19 + shadcn/ui + Vite 8 admin SPA.
 - **`services/miniapp/backend/`** — FastAPI at `/bot/miniapp/api`:
   - Telegram MiniApp (`tg_auth.py` init-data)
   - **Web portal API** (`web/web_router.py`) — used by external SPA
   - **Android API** (`android/`) — JWT, Google Play IAP, email verification
   - Invoice endpoints resolve price from `webapp_menu_nodes` by `node_id` only
-- **`web/apps/miniapp/`** — Telegram MiniApp React SPA (in this repo).
+- **`web/apps/miniapp/`** — Telegram MiniApp React SPA (React 19 + shadcn, in this repo).
+- **`web/packages/ui/`** — shared `@xray/ui` shadcn components + dark CSS tokens.
 - **[web-portal](https://github.com/l0nelynx/web-portal)** — browser web portal
-  SPA (separate repo, deploy e.g. Vercel). Calls the same miniapp backend API.
+  SPA (separate repo, deploy e.g. Vercel). Same stack mirrored locally; calls the
+  same miniapp backend API.
 - **`packages/`** — `common_db`, `remnawave_client`, `payments`,
   `account_linking`, `subscription_delivery`, `support_attachments`
 
@@ -106,7 +108,8 @@ in `.env` (`POSTGRES_*`, `IMAGE_TAG`, optional `REGISTRY`).
 ## Conventions / gotchas
 
 - Dashboard tables paginate server-side — sort params go to the backend.
-- antd v6: use `App.useApp()` instead of static `message`; `styles={{ body }}` not `bodyStyle`.
+- Frontend UI: shadcn/ui + Tailwind 4; toasts via `sonner`; icons via `lucide-react`.
+  Shared components live in `@xray/ui`. Dark theme is default (`class="dark"` on `<html>`).
 - Payment currency mapping: `dashboard/backend/currency.py`.
 - Frontend payment-method values must match DB names exactly.
 - Shell is PowerShell on Windows — prefix commands or use absolute paths.
@@ -116,6 +119,7 @@ in `.env` (`POSTGRES_*`, `IMAGE_TAG`, optional `REGISTRY`).
   server-side menu nodes.
 - `data-network` is **not** `internal: true` in compose (Postgres reachable on
   host loopback for ops). See `docs/deployment.md`.
+- Frontend stack sync with the separate web portal: see `docs/frontend-stack.md`.
 
 ## Docs
 

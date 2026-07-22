@@ -366,8 +366,19 @@ export interface TelmtBulkResult {
   errors: TelmtBulkError[];
 }
 
-/** Telemt config JSON (any keys except forbidden access / server.api). */
-export type TelmtConfigData = Record<string, unknown>;
+/** Sections Telemt exposes via GET/PATCH /v1/config (telemt EDITABLE_SECTIONS). */
+export const TELMT_EDITABLE_CONFIG_SECTIONS = [
+  "general",
+  "timeouts",
+  "censorship",
+  "upstreams",
+  "dc_overrides",
+] as const;
+
+export type TelmtConfigSectionName = (typeof TELMT_EDITABLE_CONFIG_SECTIONS)[number];
+
+/** Telemt managed-config JSON (subset of config.toml). */
+export type TelmtConfigData = Partial<Record<TelmtConfigSectionName, unknown>>;
 
 export interface TelmtPatchConfigResponse {
   revision: string;

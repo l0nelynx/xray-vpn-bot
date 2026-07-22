@@ -1,18 +1,14 @@
 import { useEffect, useState } from "react";
-import {
-  App,
-  Button,
-  Card,
-  Form,
-  Input,
-  InputNumber,
-  Space,
-  Spin,
-  Switch,
-  Tabs,
-  Tag,
-  Typography,
-} from "antd";
+import { toast } from "sonner";
+import { Card, CardContent, CardHeader, CardTitle } from "@xray/ui/components/card";
+import { Button } from "@xray/ui/components/button";
+import { Input } from "@xray/ui/components/input";
+import { Textarea } from "@xray/ui/components/textarea";
+import { Label } from "@xray/ui/components/label";
+import { Badge } from "@xray/ui/components/badge";
+import { Switch } from "@xray/ui/components/switch";
+import { Spinner } from "@xray/ui/components/spinner";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@xray/ui/components/tabs";
 import { api } from "../api/client";
 
 interface FeatureFlags {
@@ -60,40 +56,73 @@ const RUNTIME_LABELS: Record<string, string> = {
   free_traffic: "Free plan traffic (GB)",
 };
 
-function sourceTag(source: string) {
-  const color =
-    source === "dashboard" ? "green" : source === "yaml" ? "gold" : "default";
-  return <Tag color={color}>{source}</Tag>;
+const NUMERIC_KEYS = new Set([
+  "free_days",
+  "free_traffic",
+  "admin_logs_length",
+  "news_id",
+  "logs_id",
+  "web_id",
+]);
+
+type BadgeVariant = "default" | "secondary" | "destructive" | "outline" | "success" | "warning";
+
+function sourceBadge(source: string) {
+  const variant: BadgeVariant =
+    source === "dashboard" ? "success" : source === "yaml" ? "warning" : "outline";
+  return <Badge variant={variant}>{source}</Badge>;
+}
+
+interface ProviderForm {
+  enabled: boolean;
+  fields: Record<string, string>;
 }
 
 export default function WebAppSettingsPage() {
-  const { message } = App.useApp();
   const [flags, setFlags] = useState<FeatureFlags | null>(null);
   const [runtime, setRuntime] = useState<RuntimeResponse | null>(null);
   const [payments, setPayments] = useState<PaymentProviderState[] | null>(null);
   const [saving, setSaving] = useState(false);
-  const [runtimeForm] = Form.useForm();
+
+  const [maintenance, setMaintenance] = useState<Maintenance>({ enabled: false, title: "", text: "" });
+  const [runtimeValues, setRuntimeValues] = useState<Record<string, string>>({});
+  const [providerForms, setProviderForms] = useState<Record<string, ProviderForm>>({});
 
   useEffect(() => {
     api
       .get<FeatureFlags>("/settings/features")
       .then(setFlags)
-      .catch(() => message.error("Failed to load feature flags"));
+      .catch(() => toast.error("Failed to load feature flags"));
     api
       .get<RuntimeResponse>("/settings/runtime")
       .then((data) => {
         setRuntime(data);
-        runtimeForm.setFieldsValue({
-          ...data.maintenance,
-          ...data.values,
-        });
+        setMaintenance(data.maintenance);
+        const values: Record<string, string> = {};
+        for (const k of Object.keys(RUNTIME_LABELS)) {
+          const v = data.values[k];
+          values[k] = v == null ? "" : String(v);
+        }
+        setRuntimeValues(values);
       })
-      .catch(() => message.error("Failed to load runtime settings"));
+      .catch(() => toast.error("Failed to load runtime settings"));
     api
       .get<{ providers: PaymentProviderState[] }>("/settings/payments")
-      .then((data) => setPayments(data.providers))
-      .catch(() => message.error("Failed to load payment integrations"));
-  }, [message, runtimeForm]);
+      .then((data) => {
+        setPayments(data.providers);
+        const forms: Record<string, ProviderForm> = {};
+        for (const p of data.providers) {
+          const fields: Record<string, string> = {};
+          for (const f of p.field_meta) {
+            const v = p.fields[f.name];
+            fields[f.name] = f.secret ? "" : v == null ? "" : String(v);
+          }
+          forms[p.provider] = { enabled: p.enabled, fields };
+        }
+        setProviderForms(forms);
+      })
+      .catch(() => toast.error("Failed to load payment integrations"));
+  }, []);
 
   async function handleToggle(value: boolean) {
     if (!flags) return;
@@ -102,61 +131,74 @@ export default function WebAppSettingsPage() {
     try {
       await api.put("/settings/features", updated);
       setFlags(updated);
-      message.success(
+      toast.success(
         value
           ? "Legacy bot constructor enabled. Restart the bot to apply."
-          : "Legacy bot constructor disabled. Restart the bot to apply."
+          : "Legacy bot constructor disabled. Restart the bot to apply.",
       );
     } catch {
-      message.error("Failed to save settings");
+      toast.error("Failed to save settings");
     } finally {
       setSaving(false);
     }
   }
 
   async function saveRuntime() {
-    const all = runtimeForm.getFieldsValue();
     setSaving(true);
     try {
+      const values = Object.fromEntries(
+        Object.keys(RUNTIME_LABELS).map((k) => {
+          const raw = runtimeValues[k] ?? "";
+          if (NUMERIC_KEYS.has(k)) return [k, raw === "" ? null : Number(raw)];
+          return [k, raw];
+        }),
+      );
       const payload = {
         maintenance: {
-          enabled: !!all.enabled,
-          title: all.title || "",
-          text: all.text || "",
+          enabled: !!maintenance.enabled,
+          title: maintenance.title || "",
+          text: maintenance.text || "",
         },
-        values: Object.fromEntries(
-          Object.keys(RUNTIME_LABELS).map((k) => [k, all[k]])
-        ),
+        values,
       };
       const data = await api.put<RuntimeResponse>("/settings/runtime", payload);
       setRuntime(data);
-      runtimeForm.setFieldsValue({ ...data.maintenance, ...data.values });
-      message.success("Runtime settings saved (no restart needed)");
+      setMaintenance(data.maintenance);
+      const next: Record<string, string> = {};
+      for (const k of Object.keys(RUNTIME_LABELS)) {
+        const v = data.values[k];
+        next[k] = v == null ? "" : String(v);
+      }
+      setRuntimeValues(next);
+      toast.success("Runtime settings saved (no restart needed)");
     } catch {
-      message.error("Failed to save runtime settings");
+      toast.error("Failed to save runtime settings");
     } finally {
       setSaving(false);
     }
   }
 
-  async function saveProvider(provider: PaymentProviderState, values: Record<string, unknown>) {
+  async function saveProvider(provider: PaymentProviderState) {
+    const pf = providerForms[provider.provider];
+    if (!pf) return;
     setSaving(true);
     try {
-      const updated = await api.put<PaymentProviderState>(
-        `/settings/payments/${provider.provider}`,
-        {
-          enabled: !!values.enabled,
-          fields: Object.fromEntries(
-            provider.field_meta.map((f) => [f.name, values[f.name]])
-          ),
+      const updated = await api.put<PaymentProviderState>(`/settings/payments/${provider.provider}`, {
+        enabled: !!pf.enabled,
+        fields: Object.fromEntries(provider.field_meta.map((f) => [f.name, pf.fields[f.name]])),
+      });
+      setPayments((prev) => (prev || []).map((p) => (p.provider === updated.provider ? updated : p)));
+      setProviderForms((prev) => {
+        const fields: Record<string, string> = {};
+        for (const f of updated.field_meta) {
+          const v = updated.fields[f.name];
+          fields[f.name] = f.secret ? "" : v == null ? "" : String(v);
         }
-      );
-      setPayments((prev) =>
-        (prev || []).map((p) => (p.provider === updated.provider ? updated : p))
-      );
-      message.success(`${provider.provider}: saved (Dashboard is now source of truth)`);
+        return { ...prev, [updated.provider]: { enabled: updated.enabled, fields } };
+      });
+      toast.success(`${provider.provider}: saved (Dashboard is now source of truth)`);
     } catch {
-      message.error(`Failed to save ${provider.provider}`);
+      toast.error(`Failed to save ${provider.provider}`);
     } finally {
       setSaving(false);
     }
@@ -164,149 +206,166 @@ export default function WebAppSettingsPage() {
 
   return (
     <div>
-      <Typography.Title level={3}>Settings</Typography.Title>
-      <Typography.Paragraph type="secondary">
-        Dual-source period: values saved here override{" "}
-        <code>config.yml</code>. Until you save, YAML remains the fallback.
-      </Typography.Paragraph>
+      <h1 className="text-xl font-semibold text-foreground md:text-2xl">Settings</h1>
+      <p className="mb-4 mt-1 text-sm text-muted-foreground">
+        Dual-source period: values saved here override <code>config.yml</code>. Until you save, YAML
+        remains the fallback.
+      </p>
 
-      <Tabs
-        items={[
-          {
-            key: "runtime",
-            label: "Runtime",
-            children: !runtime ? (
-              <Spin />
-            ) : (
-              <Card
-                title="Runtime & maintenance"
-                extra={sourceTag(runtime.sources.maintenance || "db")}
-              >
-                <Form form={runtimeForm} layout="vertical" onFinish={saveRuntime}>
-                  <Form.Item
-                    name="enabled"
-                    label="Maintenance mode"
-                    valuePropName="checked"
-                    help="Blocks MiniApp/web APIs and the user bot (admin bypass)."
-                  >
-                    <Switch checkedChildren="ON" unCheckedChildren="OFF" />
-                  </Form.Item>
-                  <Form.Item name="title" label="Maintenance title">
-                    <Input />
-                  </Form.Item>
-                  <Form.Item name="text" label="Maintenance text">
-                    <Input.TextArea rows={3} />
-                  </Form.Item>
-                  {Object.entries(RUNTIME_LABELS).map(([key, label]) => (
-                    <Form.Item
-                      key={key}
-                      name={key}
-                      label={
-                        <Space>
-                          {label}
-                          {sourceTag(runtime.sources[key] || "default")}
-                        </Space>
+      <Tabs defaultValue="runtime">
+        <TabsList className="mb-4 flex-wrap">
+          <TabsTrigger value="runtime">Runtime</TabsTrigger>
+          <TabsTrigger value="payments">Payments</TabsTrigger>
+          <TabsTrigger value="flags">Feature flags</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="runtime">
+          {!runtime ? (
+            <Spinner className="h-6 w-6" />
+          ) : (
+            <Card>
+              <CardHeader className="flex-row items-center justify-between space-y-0">
+                <CardTitle className="text-sm">Runtime &amp; maintenance</CardTitle>
+                {sourceBadge(runtime.sources.maintenance || "db")}
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={maintenance.enabled}
+                      onCheckedChange={(v: boolean) => setMaintenance((m) => ({ ...m, enabled: v }))}
+                    />
+                    <Label>Maintenance mode</Label>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Blocks MiniApp/web APIs and the user bot (admin bypass).
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Maintenance title</Label>
+                  <Input
+                    value={maintenance.title}
+                    onChange={(e) => setMaintenance((m) => ({ ...m, title: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Maintenance text</Label>
+                  <Textarea
+                    rows={3}
+                    value={maintenance.text}
+                    onChange={(e) => setMaintenance((m) => ({ ...m, text: e.target.value }))}
+                  />
+                </div>
+                {Object.entries(RUNTIME_LABELS).map(([key, label]) => (
+                  <div key={key} className="space-y-1.5">
+                    <Label className="flex items-center gap-2">
+                      {label}
+                      {sourceBadge(runtime.sources[key] || "default")}
+                    </Label>
+                    <Input
+                      type={NUMERIC_KEYS.has(key) ? "number" : "text"}
+                      value={runtimeValues[key] ?? ""}
+                      onChange={(e) =>
+                        setRuntimeValues((prev) => ({ ...prev, [key]: e.target.value }))
                       }
-                    >
-                      {key === "free_days" ||
-                      key === "free_traffic" ||
-                      key === "admin_logs_length" ||
-                      key === "news_id" ||
-                      key === "logs_id" ||
-                      key === "web_id" ? (
-                        <InputNumber style={{ width: "100%" }} />
-                      ) : (
-                        <Input />
-                      )}
-                    </Form.Item>
-                  ))}
-                  <Button type="primary" htmlType="submit" loading={saving}>
-                    Save runtime
-                  </Button>
-                </Form>
-              </Card>
-            ),
-          },
-          {
-            key: "payments",
-            label: "Payments",
-            children: !payments ? (
-              <Spin />
-            ) : (
-              <Space direction="vertical" style={{ width: "100%" }} size="middle">
-                {payments.map((p) => (
-                  <Card
-                    key={p.provider}
-                    title={
-                      <Space>
+                    />
+                  </div>
+                ))}
+                <Button onClick={saveRuntime} disabled={saving}>
+                  Save runtime
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        <TabsContent value="payments">
+          {!payments ? (
+            <Spinner className="h-6 w-6" />
+          ) : (
+            <div className="space-y-4">
+              {payments.map((p) => {
+                const pf = providerForms[p.provider] ?? { enabled: p.enabled, fields: {} };
+                return (
+                  <Card key={p.provider}>
+                    <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="flex items-center gap-2 text-sm">
                         {p.provider}
-                        {sourceTag(p.source)}
-                      </Space>
-                    }
-                    size="small"
-                  >
-                    <Form
-                      layout="vertical"
-                      initialValues={{ enabled: p.enabled, ...p.fields }}
-                      key={`${p.provider}-${p.updated_at || p.source}`}
-                      onFinish={(vals) => saveProvider(p, vals)}
-                    >
-                      <Form.Item
-                        name="enabled"
-                        label="Enabled"
-                        valuePropName="checked"
-                      >
-                        <Switch />
-                      </Form.Item>
+                        {sourceBadge(p.source)}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          checked={pf.enabled}
+                          onCheckedChange={(v: boolean) =>
+                            setProviderForms((prev) => ({
+                              ...prev,
+                              [p.provider]: { ...pf, enabled: v },
+                            }))
+                          }
+                        />
+                        <Label>Enabled</Label>
+                      </div>
                       {p.field_meta.map((f) => (
-                        <Form.Item key={f.name} name={f.name} label={f.name}>
-                          {f.secret ? (
-                            <Input.Password placeholder="leave blank to keep" />
-                          ) : (
-                            <Input />
-                          )}
-                        </Form.Item>
+                        <div key={f.name} className="space-y-1.5">
+                          <Label>{f.name}</Label>
+                          <Input
+                            type={f.secret ? "password" : "text"}
+                            placeholder={f.secret ? "leave blank to keep" : undefined}
+                            value={pf.fields[f.name] ?? ""}
+                            onChange={(e) =>
+                              setProviderForms((prev) => ({
+                                ...prev,
+                                [p.provider]: {
+                                  ...pf,
+                                  fields: { ...pf.fields, [f.name]: e.target.value },
+                                },
+                              }))
+                            }
+                          />
+                        </div>
                       ))}
-                      <Button type="primary" htmlType="submit" loading={saving}>
+                      <Button onClick={() => saveProvider(p)} disabled={saving}>
                         Save {p.provider}
                       </Button>
-                    </Form>
+                    </CardContent>
                   </Card>
-                ))}
-              </Space>
-            ),
-          },
-          {
-            key: "flags",
-            label: "Feature flags",
-            children:
-              flags === null ? (
-                <Spin />
-              ) : (
-                <Card title="Bot Feature Flags">
-                  <Form layout="vertical">
-                    <Form.Item
-                      label="Legacy Bot Constructor"
-                      help={
-                        flags.legacy_bot_constructor
-                          ? "In-bot tariff menus and inline payments are active. Users can pay directly in Telegram."
-                          : "Disabled — the bot directs users to the MiniApp for all purchases. Restart the bot after changing."
-                      }
-                    >
-                      <Switch
-                        checked={flags.legacy_bot_constructor}
-                        onChange={handleToggle}
-                        loading={saving}
-                        checkedChildren="ON"
-                        unCheckedChildren="OFF"
-                      />
-                    </Form.Item>
-                  </Form>
-                </Card>
-              ),
-          },
-        ]}
-      />
+                );
+              })}
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="flags">
+          {flags === null ? (
+            <Spinner className="h-6 w-6" />
+          ) : (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">Bot Feature Flags</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={flags.legacy_bot_constructor}
+                      onCheckedChange={(v: boolean) => handleToggle(v)}
+                      disabled={saving}
+                    />
+                    <Label>Legacy Bot Constructor</Label>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {flags.legacy_bot_constructor
+                      ? "In-bot tariff menus and inline payments are active. Users can pay directly in Telegram."
+                      : "Disabled — the bot directs users to the MiniApp for all purchases. Restart the bot after changing."}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

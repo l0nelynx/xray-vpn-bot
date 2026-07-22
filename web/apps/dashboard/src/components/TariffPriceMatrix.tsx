@@ -1,4 +1,12 @@
-import { InputNumber, Switch, Select } from "antd";
+import { Input } from "@xray/ui/components/input";
+import { Switch } from "@xray/ui/components/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@xray/ui/components/select";
 import type { TariffPrice } from "../api/types";
 
 const CURRENCY_OPTIONS = [
@@ -19,18 +27,8 @@ export default function TariffPriceMatrix({ prices, onChange }: TariffPriceMatri
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "140px 120px 100px 60px",
-          gap: 8,
-          fontSize: 12,
-          color: "rgba(255,255,255,0.45)",
-          fontWeight: 600,
-          padding: "0 4px",
-        }}
-      >
+    <div className="flex flex-col gap-2">
+      <div className="grid grid-cols-[140px_120px_100px_60px] gap-2 px-1 text-xs font-semibold text-muted-foreground">
         <span>Payment Method</span>
         <span>Price</span>
         <span>Currency</span>
@@ -39,38 +37,35 @@ export default function TariffPriceMatrix({ prices, onChange }: TariffPriceMatri
       {prices.map((price, idx) => (
         <div
           key={price.payment_method}
-          style={{
-            display: "grid",
-            gridTemplateColumns: "140px 120px 100px 60px",
-            gap: 8,
-            alignItems: "center",
-            padding: "4px",
-            borderRadius: 6,
-            background: "rgba(255,255,255,0.02)",
-          }}
+          className="grid grid-cols-[140px_120px_100px_60px] items-center gap-2 rounded-md bg-white/[0.02] p-1"
         >
-          <span style={{ fontSize: 13, color: "rgba(255,255,255,0.7)" }}>
-            {price.payment_method}
-          </span>
-          <InputNumber
-            size="small"
+          <span className="text-[13px] text-foreground/70">{price.payment_method}</span>
+          <Input
+            type="number"
+            className="h-8"
             min={0}
             step={0.01}
             value={price.price}
-            onChange={(v) => update(idx, "price", v ?? 0)}
-            style={{ width: "100%" }}
+            onChange={(e) => update(idx, "price", e.target.value === "" ? 0 : Number(e.target.value))}
           />
           <Select
-            size="small"
             value={price.currency}
-            onChange={(v) => update(idx, "currency", v)}
-            options={CURRENCY_OPTIONS}
-            style={{ width: "100%" }}
-          />
+            onValueChange={(v: string) => update(idx, "currency", v)}
+          >
+            <SelectTrigger className="h-8">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {CURRENCY_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Switch
-            size="small"
             checked={price.is_active}
-            onChange={(v) => update(idx, "is_active", v)}
+            onCheckedChange={(v: boolean) => update(idx, "is_active", v)}
           />
         </div>
       ))}

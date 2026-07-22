@@ -1,7 +1,8 @@
-import { ArrowRightOutlined, LinkOutlined, ReloadOutlined, WifiOutlined } from "@ant-design/icons";
-import { Button, Space } from "antd";
+import { ArrowRight, Link as LinkIcon, RefreshCw, Wifi } from "lucide-react";
 import { useEffect, useRef } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router";
+import { Button } from "@xray/ui/components/button";
+import { Card, CardContent } from "@xray/ui/components/card";
 import { MeResponse } from "../api/client";
 import SubscriptionCard from "../components/SubscriptionCard";
 
@@ -29,100 +30,74 @@ export default function HomePage({ me, reload, refresh }: Props) {
   return (
     <div className="page">
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+      <div className="flex items-center justify-between mb-5">
         <div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: "#FFFFFF", letterSpacing: "-0.3px" }}>
+          <div className="text-[22px] font-bold text-foreground tracking-tight">
             {username ? `@${username}` : "Подписка"}
           </div>
-          <div style={{ fontSize: 13, color: "rgba(255,255,255,0.38)", marginTop: 2 }}>
+          <div className="text-[13px] text-muted-foreground mt-0.5">
             VPN аккаунт
           </div>
         </div>
         <Button
           className="refresh-fab"
-          shape="circle"
-          icon={<ReloadOutlined />}
+          size="icon"
+          variant="outline"
           onClick={reload}
           aria-label="Обновить"
-        />
+        >
+          <RefreshCw />
+        </Button>
       </div>
 
       {sub ? (
-        <Space direction="vertical" size={10} style={{ width: "100%" }}>
+        <div className="flex flex-col gap-2.5 w-full">
           <SubscriptionCard sub={sub} />
 
           {sub.status === "active" && sub.subscription_url && (
-            <Button
-              type="primary"
-              size="large"
-              block
-              icon={<LinkOutlined />}
-              onClick={() => navigate("/connect")}
-            >
+            <Button size="lg" className="w-full" onClick={() => navigate("/connect")}>
+              <LinkIcon />
               Подключиться
             </Button>
           )}
 
-          <Button
-            size="large"
-            block
-            icon={<ArrowRightOutlined />}
-            onClick={() => navigate("/buy")}
-          >
+          <Button size="lg" variant="outline" className="w-full" onClick={() => navigate("/buy")}>
+            <ArrowRight />
             {sub.status === "active" ? "Продлить подписку" : "Купить подписку"}
           </Button>
 
-          <Button
-            size="large"
-            block
-            icon={<WifiOutlined />}
-            onClick={() => navigate("/free/telemt")}
-          >
+          <Button size="lg" variant="outline" className="w-full" onClick={() => navigate("/free/telemt")}>
+            <Wifi />
             Telegram Прокси
           </Button>
-        </Space>
+        </div>
       ) : (
-        <Space direction="vertical" size={10} style={{ width: "100%" }}>
-          {/* Empty state card */}
-          <div style={{
-            background: "rgba(255,255,255,0.05)",
-            border: "1px solid rgba(255,255,255,0.10)",
-            borderRadius: 20,
-            padding: "28px 20px",
-            textAlign: "center",
-          }}>
-            <div style={{
-              width: 56,
-              height: 56,
-              borderRadius: 18,
-              background: "linear-gradient(135deg, rgba(124,156,255,0.22), rgba(180,124,255,0.22))",
-              border: "1px solid rgba(124,156,255,0.30)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              margin: "0 auto 14px",
-              fontSize: 24,
-            }}>
-              <WifiOutlined style={{ color: "#9DB8FF" }} />
-            </div>
-            <div style={{ fontSize: 17, fontWeight: 600, color: "#FFFFFF", marginBottom: 8 }}>
-              Нет активной подписки
-            </div>
-            <div style={{ fontSize: 14, color: "rgba(255,255,255,0.45)", lineHeight: 1.5 }}>
-              Выберите тариф или активируйте пробный доступ
-            </div>
-          </div>
+        <div className="flex flex-col gap-2.5 w-full">
+          <Card>
+            <CardContent className="p-7 px-5 text-center">
+              <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-3.5">
+                <Wifi className="text-foreground w-6 h-6" />
+              </div>
+              <div className="text-[17px] font-semibold text-foreground mb-2">
+                Нет активной подписки
+              </div>
+              <div className="text-sm text-muted-foreground leading-relaxed">
+                Выберите тариф или активируйте пробный доступ
+              </div>
+            </CardContent>
+          </Card>
 
-          <Button type="primary" size="large" block onClick={() => navigate("/buy")}>
+          <Button size="lg" className="w-full" onClick={() => navigate("/buy")}>
             Купить подписку
           </Button>
-          <Button size="large" block onClick={() => navigate("/free/vpn")}>
+          <Button size="lg" variant="outline" className="w-full" onClick={() => navigate("/free/vpn")}>
             Попробовать бесплатно
           </Button>
-          <Button size="large" block icon={<WifiOutlined />} onClick={() => navigate("/free/telemt")}>
+          <Button size="lg" variant="outline" className="w-full" onClick={() => navigate("/free/telemt")}>
+            <Wifi />
             Telegram Прокси
           </Button>
-        </Space>
+        </div>
       )}
     </div>
   );

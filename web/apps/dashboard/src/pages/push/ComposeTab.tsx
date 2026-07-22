@@ -1,19 +1,15 @@
-import {
-  Alert,
-  App,
-  Button,
-  Card,
-  Form,
-  Input,
-  Popconfirm,
-  Radio,
-  Space,
-  Typography,
-} from "antd";
-import { SendOutlined } from "@ant-design/icons";
 import { useCallback, useEffect, useState } from "react";
-import useIsMobile from "../../hooks/useIsMobile";
+import { toast } from "sonner";
+import { Send, TriangleAlert } from "lucide-react";
+import { Card, CardContent } from "@xray/ui/components/card";
+import { Button } from "@xray/ui/components/button";
+import { Input } from "@xray/ui/components/input";
+import { Textarea } from "@xray/ui/components/textarea";
+import { Label } from "@xray/ui/components/label";
+import { Alert, AlertDescription, AlertTitle } from "@xray/ui/components/alert";
+import { cn } from "@xray/ui/lib/utils";
 import { ApiError } from "../../api/client";
+import ConfirmButton from "../../components/ConfirmButton";
 import { fetchPushStats, launchPush, previewPushCount, type PushAudience } from "./api";
 
 interface ComposeTabProps {
@@ -45,15 +41,17 @@ function parseDataJson(raw: string): Record<string, string> | undefined {
 }
 
 export default function ComposeTab({ onLaunched }: ComposeTabProps) {
-  const { message } = App.useApp();
-  const isMobile = useIsMobile();
-  const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [tokenCount, setTokenCount] = useState<number | null>(null);
   const [fcmConfigured, setFcmConfigured] = useState(true);
   const [previewCount, setPreviewCount] = useState<number | null>(null);
-  const audience: PushAudience = Form.useWatch("audience", form) ?? "all_tokens";
+
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const [dataJson, setDataJson] = useState("");
+  const [audience, setAudience] = useState<PushAudience>("all_tokens");
+  const [userIdsRaw, setUserIdsRaw] = useState("");
 
   const loadStats = useCallback(async () => {
     try {
@@ -61,9 +59,9 @@ export default function ComposeTab({ onLaunched }: ComposeTabProps) {
       setTokenCount(stats.token_count);
       setFcmConfigured(stats.fcm_configured);
     } catch {
-      message.error("Failed to load push stats");
+      toast.error("Failed to load push stats");
     }
-  }, [message]);
+  }, []);
 
   useEffect(() => {
     loadStats();
@@ -72,21 +70,16 @@ export default function ComposeTab({ onLaunched }: ComposeTabProps) {
   const runPreview = async () => {
     setPreviewLoading(true);
     try {
-      const values = await form.validateFields(["audience", "user_ids"]);
-      const userIds =
-        values.audience === "user_ids" ? parseUserIds(values.user_ids || "") : undefined;
-      if (values.audience === "user_ids" && (!userIds || userIds.length === 0)) {
-        message.warning("Enter at least one user id");
+      const userIds = audience === "user_ids" ? parseUserIds(userIdsRaw) : undefined;
+      if (audience === "user_ids" && (!userIds || userIds.length === 0)) {
+        toast.warning("Enter at least one user id");
         return;
       }
-      const res = await previewPushCount({
-        audience: values.audience,
-        user_ids: userIds,
-      });
+      const res = await previewPushCount({ audience, user_ids: userIds });
       setPreviewCount(res.count);
     } catch (err) {
       if (err instanceof ApiError) {
-        message.error(err.message || "Preview failed");
+        toast.error(err.message || "Preview failed");
       }
     } finally {
       setPreviewLoading(false);
@@ -94,42 +87,49 @@ export default function ComposeTab({ onLaunched }: ComposeTabProps) {
   };
 
   const send = async () => {
+    if (!title.trim()) {
+      toast.warning("Title is required");
+      return;
+    }
+    if (!body.trim()) {
+      toast.warning("Body is required");
+      return;
+    }
     setLoading(true);
     try {
-      const values = await form.validateFields();
       let data: Record<string, string> | undefined;
       try {
-        data = parseDataJson(values.data_json || "");
+        data = parseDataJson(dataJson);
       } catch {
-        message.error("Data JSON is invalid — use an object like {\"screen\":\"home\"}");
+        toast.error('Data JSON is invalid — use an object like {"screen":"home"}');
         return;
       }
-      const userIds =
-        values.audience === "user_ids" ? parseUserIds(values.user_ids || "") : undefined;
-      if (values.audience === "user_ids" && (!userIds || userIds.length === 0)) {
-        message.warning("Enter at least one user id");
+      const userIds = audience === "user_ids" ? parseUserIds(userIdsRaw) : undefined;
+      if (audience === "user_ids" && (!userIds || userIds.length === 0)) {
+        toast.warning("Enter at least one user id");
         return;
       }
       await launchPush({
-        title: values.title.trim(),
-        body: values.body.trim(),
+        title: title.trim(),
+        body: body.trim(),
         data,
-        audience: values.audience,
+        audience,
         user_ids: userIds,
       });
-      message.success("Push campaign queued");
-      form.resetFields(["title", "body", "data_json", "user_ids"]);
-      form.setFieldsValue({ audience: "all_tokens" });
+      toast.success("Push campaign queued");
+      setTitle("");
+      setBody("");
+      setDataJson("");
+      setUserIdsRaw("");
+      setAudience("all_tokens");
       setPreviewCount(null);
       onLaunched();
       loadStats();
     } catch (err) {
       if (err instanceof ApiError) {
-        message.error(err.detail || err.message || "Launch failed");
-      } else if (err && typeof err === "object" && "errorFields" in err) {
-        // antd validation
+        toast.error(err.detail || err.message || "Launch failed");
       } else {
-        message.error("Launch failed");
+        toast.error("Launch failed");
       }
     } finally {
       setLoading(false);
@@ -137,97 +137,116 @@ export default function ComposeTab({ onLaunched }: ComposeTabProps) {
   };
 
   return (
-    <Card size="small" styles={{ body: { padding: isMobile ? 12 : 16 } }}>
-      {!fcmConfigured && (
-        <Alert
-          type="warning"
-          showIcon
-          style={{ marginBottom: 16 }}
-          message="FCM is not configured"
-          description="Set fcm_project_id and fcm_service_account_path in config.yml (readable by dashboard and crm-worker)."
-        />
-      )}
-      <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
-        Registered FCM tokens:{" "}
-        <Typography.Text strong>
-          {tokenCount === null ? "…" : tokenCount}
-        </Typography.Text>
-      </Typography.Paragraph>
+    <Card>
+      <CardContent className="space-y-4 p-4">
+        {!fcmConfigured && (
+          <Alert variant="warning">
+            <TriangleAlert className="h-4 w-4" />
+            <AlertTitle>FCM is not configured</AlertTitle>
+            <AlertDescription>
+              Set fcm_project_id and fcm_service_account_path in config.yml (readable by dashboard
+              and crm-worker).
+            </AlertDescription>
+          </Alert>
+        )}
+        <p className="text-sm text-muted-foreground">
+          Registered FCM tokens:{" "}
+          <span className="font-semibold text-foreground">
+            {tokenCount === null ? "…" : tokenCount}
+          </span>
+        </p>
 
-      <Form
-        form={form}
-        layout="vertical"
-        initialValues={{ audience: "all_tokens", title: "", body: "", data_json: "", user_ids: "" }}
-      >
-        <Form.Item
-          name="title"
-          label="Title"
-          rules={[{ required: true, message: "Title is required" }]}
-        >
-          <Input maxLength={200} placeholder="Notification title" />
-        </Form.Item>
-        <Form.Item
-          name="body"
-          label="Body"
-          rules={[{ required: true, message: "Body is required" }]}
-        >
-          <Input.TextArea rows={4} maxLength={4000} placeholder="Notification body" />
-        </Form.Item>
-        <Form.Item
-          name="data_json"
-          label="Data JSON (optional)"
-          tooltip='Extra key/value pairs for the app, e.g. {"screen":"support"}'
-        >
-          <Input.TextArea rows={2} placeholder='{"screen":"home"}' />
-        </Form.Item>
-        <Form.Item name="audience" label="Audience">
-          <Radio.Group>
-            <Radio.Button value="all_tokens">All with FCM</Radio.Button>
-            <Radio.Button value="user_ids">User IDs</Radio.Button>
-          </Radio.Group>
-        </Form.Item>
+        <div className="space-y-1.5">
+          <Label>Title *</Label>
+          <Input
+            maxLength={200}
+            placeholder="Notification title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label>Body *</Label>
+          <Textarea
+            rows={4}
+            maxLength={4000}
+            placeholder="Notification body"
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label>Data JSON (optional)</Label>
+          <Textarea
+            rows={2}
+            placeholder='{"screen":"home"}'
+            value={dataJson}
+            onChange={(e) => setDataJson(e.target.value)}
+          />
+          <p className="text-xs text-muted-foreground">
+            Extra key/value pairs for the app, e.g. {'{"screen":"support"}'}
+          </p>
+        </div>
+        <div className="space-y-1.5">
+          <Label>Audience</Label>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant={audience === "all_tokens" ? "default" : "outline"}
+              onClick={() => setAudience("all_tokens")}
+            >
+              All with FCM
+            </Button>
+            <Button
+              type="button"
+              variant={audience === "user_ids" ? "default" : "outline"}
+              onClick={() => setAudience("user_ids")}
+            >
+              User IDs
+            </Button>
+          </div>
+        </div>
         {audience === "user_ids" && (
-          <Form.Item
-            name="user_ids"
-            label="User IDs"
-            rules={[{ required: true, message: "Enter user ids" }]}
-            extra="Comma or newline separated internal user ids"
-          >
-            <Input.TextArea rows={3} placeholder="1, 2, 3" />
-          </Form.Item>
+          <div className="space-y-1.5">
+            <Label>User IDs *</Label>
+            <Textarea
+              rows={3}
+              placeholder="1, 2, 3"
+              value={userIdsRaw}
+              onChange={(e) => setUserIdsRaw(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Comma or newline separated internal user ids
+            </p>
+          </div>
         )}
 
-        <Space wrap style={{ marginBottom: 12 }}>
-          <Button onClick={runPreview} loading={previewLoading}>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button variant="outline" onClick={runPreview} disabled={previewLoading}>
             Preview count
           </Button>
           {previewCount !== null && (
-            <Typography.Text type="secondary">
-              Will reach <Typography.Text strong>{previewCount}</Typography.Text> device
+            <span className="text-sm text-muted-foreground">
+              Will reach <span className="font-semibold text-foreground">{previewCount}</span> device
               {previewCount === 1 ? "" : "s"}
-            </Typography.Text>
+            </span>
           )}
-        </Space>
+        </div>
 
         <div>
-          <Popconfirm
+          <ConfirmButton
             title="Send this push now?"
             description="The campaign will be queued and delivered via FCM."
+            confirmText="Send"
             onConfirm={send}
-            okText="Send"
-            disabled={!fcmConfigured}
           >
-            <Button
-              type="primary"
-              icon={<SendOutlined />}
-              loading={loading}
-              disabled={!fcmConfigured}
-            >
+            <Button className={cn(!fcmConfigured && "pointer-events-none opacity-50")} disabled={!fcmConfigured || loading}>
+              <Send className="h-4 w-4" />
               Send push
             </Button>
-          </Popconfirm>
+          </ConfirmButton>
         </div>
-      </Form>
+      </CardContent>
     </Card>
   );
 }

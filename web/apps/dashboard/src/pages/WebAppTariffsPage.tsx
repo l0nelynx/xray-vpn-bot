@@ -1,14 +1,30 @@
 import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import {
-  Typography, Card, Button, Input, InputNumber, Select, Space, Empty,
-  App, Popconfirm, Spin, Tag,
-} from "antd";
+  Plus,
+  Trash2,
+  Save,
+  ChevronRight,
+  ChevronDown,
+  ArrowUp,
+  ArrowDown,
+  Eye,
+  EyeOff,
+} from "lucide-react";
+import { Card, CardContent } from "@xray/ui/components/card";
+import { Button } from "@xray/ui/components/button";
+import { Input } from "@xray/ui/components/input";
+import { Badge } from "@xray/ui/components/badge";
+import { Spinner } from "@xray/ui/components/spinner";
 import {
-  PlusOutlined, DeleteOutlined, SaveOutlined, CaretRightOutlined,
-  CaretDownOutlined, ArrowUpOutlined, ArrowDownOutlined,
-  EyeOutlined, EyeInvisibleOutlined,
-} from "@ant-design/icons";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@xray/ui/components/select";
 import { api } from "../api/client";
+import ConfirmButton from "../components/ConfirmButton";
 
 type NodeAction = "buttons" | "invoice";
 
@@ -53,8 +69,6 @@ interface DraftNode {
   is_active: boolean;
 }
 
-// Constructor packs sid/esid into a single tariff_slug column on the server
-// using the format consumed by app.handlers.subscription_service._parse_squad_slug.
 function packSlug(sid: string, esid: string): string | null {
   const s = sid.trim();
   const e = esid.trim();
@@ -101,8 +115,19 @@ function draftEquals(a: DraftNode, b: DraftNode): boolean {
 }
 
 function NodeRow({
-  node, siblings, providers, depth, drafts, setDraft, expanded, toggleExpand,
-  onSave, onDelete, onAddChild, onMove, onToggleActive,
+  node,
+  siblings,
+  providers,
+  depth,
+  drafts,
+  setDraft,
+  expanded,
+  toggleExpand,
+  onSave,
+  onDelete,
+  onAddChild,
+  onMove,
+  onToggleActive,
 }: {
   node: MenuNode;
   siblings: MenuNode[];
@@ -152,163 +177,195 @@ function NodeRow({
   return (
     <div style={{ marginLeft: depth * 24 }}>
       <Card
-        size="small"
+        className="mb-2"
         style={{
-          marginBottom: 8,
           background: depth === 0 ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.03)",
-          borderColor: dirty ? "#FFD479" : node.is_active ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.04)",
+          borderColor: dirty
+            ? "#FFD479"
+            : node.is_active
+              ? "rgba(255,255,255,0.10)"
+              : "rgba(255,255,255,0.04)",
           opacity: node.is_active ? 1 : 0.5,
-          transition: "opacity 0.2s, border-color 0.2s",
         }}
-        styles={{ body: { padding: 12 } }}
       >
-        <Space wrap size="small" style={{ width: "100%" }} align="start">
+        <CardContent className="flex flex-wrap items-start gap-2 p-3">
           {node.action === "buttons" ? (
-            <Button
-              type="text"
-              size="small"
-              icon={isExpanded ? <CaretDownOutlined /> : <CaretRightOutlined />}
-              onClick={() => toggleExpand(node.id)}
-            />
+            <Button variant="ghost" size="icon" onClick={() => toggleExpand(node.id)}>
+              {isExpanded ? (
+                <ChevronDown className="h-4 w-4" />
+              ) : (
+                <ChevronRight className="h-4 w-4" />
+              )}
+            </Button>
           ) : (
-            <Tag color="purple" style={{ marginTop: 4 }}>invoice</Tag>
+            <Badge variant="secondary" className="mt-1">
+              invoice
+            </Badge>
           )}
           {!node.is_active && (
-            <Tag color="default" style={{ marginTop: 4 }}>hidden</Tag>
+            <Badge variant="outline" className="mt-1">
+              hidden
+            </Badge>
           )}
 
           <Input
             placeholder="Button text"
             value={draft.text}
             onChange={(e) => setDraft(node.id, { text: e.target.value })}
-            style={{ width: 220 }}
+            className="w-[220px]"
           />
 
           <Select
             value={draft.action}
-            onChange={(val: NodeAction) => setDraft(node.id, { action: val })}
-            options={[
-              { value: "buttons", label: "Buttons" },
-              { value: "invoice", label: "Invoice" },
-            ]}
-            style={{ width: 120 }}
-          />
+            onValueChange={(val: string) => setDraft(node.id, { action: val as NodeAction })}
+          >
+            <SelectTrigger className="w-[120px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="buttons">Buttons</SelectItem>
+              <SelectItem value="invoice">Invoice</SelectItem>
+            </SelectContent>
+          </Select>
 
           {draft.action === "invoice" && (
             <>
               <Select
-                placeholder="Provider"
                 value={draft.invoice_provider ?? undefined}
-                onChange={handleProviderChange}
-                options={providers.map((p) => ({ value: p.name, label: p.name }))}
-                style={{ width: 140 }}
-                allowClear
-              />
-              <InputNumber
+                onValueChange={(val: string) => handleProviderChange(val)}
+              >
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue placeholder="Provider" />
+                </SelectTrigger>
+                <SelectContent>
+                  {providers.map((p) => (
+                    <SelectItem key={p.name} value={p.name}>
+                      {p.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Input
+                type="number"
                 placeholder="Amount"
-                value={draft.invoice_amount ?? undefined}
-                onChange={(val) =>
-                  setDraft(node.id, { invoice_amount: val == null ? null : Number(val) })
+                value={draft.invoice_amount ?? ""}
+                onChange={(e) =>
+                  setDraft(node.id, {
+                    invoice_amount: e.target.value === "" ? null : Number(e.target.value),
+                  })
                 }
                 min={0}
                 step={0.01}
-                style={{ width: 120 }}
+                className="w-[120px]"
               />
               <Select
-                placeholder="Currency"
                 value={draft.invoice_currency ?? undefined}
-                onChange={(val) => setDraft(node.id, { invoice_currency: val ?? null })}
-                options={currencyOptions.map((c) => ({ value: c, label: c }))}
-                style={{ width: 110 }}
+                onValueChange={(val: string) => setDraft(node.id, { invoice_currency: val })}
                 disabled={!draft.invoice_provider}
-                allowClear
-              />
+              >
+                <SelectTrigger className="w-[110px]">
+                  <SelectValue placeholder="Currency" />
+                </SelectTrigger>
+                <SelectContent>
+                  {currencyOptions.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {c}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <Select
-                placeholder="Method"
                 value={draft.invoice_method ?? undefined}
-                onChange={(val) => setDraft(node.id, { invoice_method: val ?? null })}
-                options={methodOptions.map((m) => ({ value: m.value, label: m.label }))}
-                style={{ width: 140 }}
+                onValueChange={(val: string) => setDraft(node.id, { invoice_method: val })}
                 disabled={!draft.invoice_provider || methodLocked}
-                allowClear={!methodLocked}
-              />
-              <InputNumber
+              >
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue placeholder="Method" />
+                </SelectTrigger>
+                <SelectContent>
+                  {methodOptions.map((m) => (
+                    <SelectItem key={m.value} value={m.value}>
+                      {m.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Input
+                type="number"
                 placeholder="Days"
-                value={draft.invoice_days ?? undefined}
-                onChange={(val) =>
-                  setDraft(node.id, { invoice_days: val == null ? null : Number(val) })
+                value={draft.invoice_days ?? ""}
+                onChange={(e) =>
+                  setDraft(node.id, {
+                    invoice_days: e.target.value === "" ? null : Number(e.target.value),
+                  })
                 }
                 min={0}
-                style={{ width: 90 }}
+                className="w-[90px]"
               />
               <Input
                 placeholder="squad_id (sid)"
                 value={draft.invoice_squad_id}
-                onChange={(e) =>
-                  setDraft(node.id, { invoice_squad_id: e.target.value })
-                }
-                style={{ width: 160 }}
+                onChange={(e) => setDraft(node.id, { invoice_squad_id: e.target.value })}
+                className="w-[160px]"
               />
               <Input
                 placeholder="external_squad_id (esid)"
                 value={draft.invoice_external_squad_id}
-                onChange={(e) =>
-                  setDraft(node.id, { invoice_external_squad_id: e.target.value })
-                }
-                style={{ width: 200 }}
+                onChange={(e) => setDraft(node.id, { invoice_external_squad_id: e.target.value })}
+                className="w-[200px]"
               />
             </>
           )}
 
-          <Space size={4}>
+          <div className="flex items-center gap-1">
             <Button
-              size="small"
-              icon={<ArrowUpOutlined />}
+              variant="outline"
+              size="icon"
               disabled={!canMoveUp}
               onClick={() => onMove(node.id, "up")}
               title="Move up"
-            />
+            >
+              <ArrowUp className="h-4 w-4" />
+            </Button>
             <Button
-              size="small"
-              icon={<ArrowDownOutlined />}
+              variant="outline"
+              size="icon"
               disabled={!canMoveDown}
               onClick={() => onMove(node.id, "down")}
               title="Move down"
-            />
+            >
+              <ArrowDown className="h-4 w-4" />
+            </Button>
             <Button
-              size="small"
-              icon={node.is_active ? <EyeInvisibleOutlined /> : <EyeOutlined />}
+              variant="outline"
+              size="icon"
               onClick={() => onToggleActive(node.id)}
               title={node.is_active ? "Hide (won't appear in app/portal)" : "Show"}
-            />
-            <Button
-              size="small"
-              type="primary"
-              icon={<SaveOutlined />}
-              disabled={!dirty}
-              onClick={() => onSave(node.id)}
             >
+              {node.is_active ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </Button>
+            <Button size="sm" disabled={!dirty} onClick={() => onSave(node.id)}>
+              <Save className="h-4 w-4" />
               Save
             </Button>
             {node.action === "buttons" && (
-              <Button
-                size="small"
-                icon={<PlusOutlined />}
-                onClick={() => onAddChild(node.id)}
-              >
+              <Button variant="outline" size="sm" onClick={() => onAddChild(node.id)}>
+                <Plus className="h-4 w-4" />
                 Sub
               </Button>
             )}
-            <Popconfirm
+            <ConfirmButton
               title="Delete this node and all its children?"
+              destructive
+              confirmText="Delete"
               onConfirm={() => onDelete(node.id)}
-              okText="Delete"
-              okButtonProps={{ danger: true }}
             >
-              <Button size="small" danger icon={<DeleteOutlined />} />
-            </Popconfirm>
-          </Space>
-        </Space>
+              <Button variant="destructive" size="icon">
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </ConfirmButton>
+          </div>
+        </CardContent>
       </Card>
 
       {node.action === "buttons" && isExpanded && (
@@ -334,14 +391,7 @@ function NodeRow({
               />
             ))}
           {node.children.length === 0 && (
-            <div
-              style={{
-                marginLeft: 24,
-                marginBottom: 8,
-                color: "rgba(255,255,255,0.4)",
-                fontSize: 12,
-              }}
-            >
+            <div className="mb-2 ml-6 text-xs text-muted-foreground">
               Empty — click "Sub" above to add child buttons.
             </div>
           )}
@@ -357,7 +407,6 @@ export default function WebAppTariffsPage() {
   const [drafts, setDrafts] = useState<Record<number, DraftNode>>({});
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(true);
-  const { message } = App.useApp();
 
   const flatten = useMemo(() => {
     const out: MenuNode[] = [];
@@ -377,7 +426,7 @@ export default function WebAppTariffsPage() {
       const t = await api.get<MenuNode[]>("/webapp-menu/tree");
       setTree(t);
     } catch (e: unknown) {
-      message.error(`Failed to load menu: ${(e as Error).message}`);
+      toast.error(`Failed to load menu: ${(e as Error).message}`);
     } finally {
       setLoading(false);
     }
@@ -388,17 +437,15 @@ export default function WebAppTariffsPage() {
     api
       .get<{ providers: ProviderInfo[] }>("/webapp-menu/providers")
       .then((r) => setProviders(r.providers))
-      .catch((e) => message.error(`Failed to load providers: ${e.message}`));
+      .catch((e) => toast.error(`Failed to load providers: ${(e as Error).message}`));
   }, []);
 
-  // Reset drafts whenever tree changes (use server values).
   useEffect(() => {
     setDrafts((prev) => {
       const next: Record<number, DraftNode> = {};
       for (const n of flatten) {
-        next[n.id] = prev[n.id] && !draftEquals(prev[n.id], nodeToDraft(n))
-          ? prev[n.id]
-          : nodeToDraft(n);
+        next[n.id] =
+          prev[n.id] && !draftEquals(prev[n.id], nodeToDraft(n)) ? prev[n.id] : nodeToDraft(n);
       }
       return next;
     });
@@ -429,11 +476,11 @@ export default function WebAppTariffsPage() {
         sort_order: tree.length,
         is_active: true,
       });
-      message.success("Node created");
+      toast.success("Node created");
       setExpanded((prev) => new Set(prev).add(created.id));
       await reload();
     } catch (e: unknown) {
-      message.error(`Create failed: ${(e as Error).message}`);
+      toast.error(`Create failed: ${(e as Error).message}`);
     }
   };
 
@@ -447,7 +494,7 @@ export default function WebAppTariffsPage() {
         sort_order: parent?.children.length ?? 0,
         is_active: true,
       });
-      message.success("Child node created");
+      toast.success("Child node created");
       setExpanded((prev) => {
         const next = new Set(prev);
         next.add(parentId);
@@ -456,7 +503,7 @@ export default function WebAppTariffsPage() {
       });
       await reload();
     } catch (e: unknown) {
-      message.error(`Create failed: ${(e as Error).message}`);
+      toast.error(`Create failed: ${(e as Error).message}`);
     }
   };
 
@@ -464,24 +511,24 @@ export default function WebAppTariffsPage() {
     const draft = drafts[id];
     if (!draft) return;
     if (!draft.text.trim()) {
-      message.error("Button text cannot be empty");
+      toast.error("Button text cannot be empty");
       return;
     }
     if (draft.action === "invoice") {
       if (!draft.invoice_provider) {
-        message.error("Pick a payment provider for invoice nodes");
+        toast.error("Pick a payment provider for invoice nodes");
         return;
       }
       if (draft.invoice_amount == null || draft.invoice_amount <= 0) {
-        message.error("Invoice amount must be greater than 0");
+        toast.error("Invoice amount must be greater than 0");
         return;
       }
       if (!draft.invoice_currency) {
-        message.error("Pick a currency");
+        toast.error("Pick a currency");
         return;
       }
       if (!draft.invoice_days || draft.invoice_days <= 0) {
-        message.error("Invoice 'days' must be greater than 0");
+        toast.error("Invoice 'days' must be greater than 0");
         return;
       }
     }
@@ -495,26 +542,23 @@ export default function WebAppTariffsPage() {
         invoice_currency: draft.invoice_currency,
         invoice_method: draft.invoice_method,
         invoice_days: draft.invoice_days,
-        invoice_tariff_slug: packSlug(
-          draft.invoice_squad_id,
-          draft.invoice_external_squad_id,
-        ),
+        invoice_tariff_slug: packSlug(draft.invoice_squad_id, draft.invoice_external_squad_id),
       };
       await api.put<MenuNode>(`/webapp-menu/nodes/${id}`, payload);
-      message.success("Saved");
+      toast.success("Saved");
       await reload();
     } catch (e: unknown) {
-      message.error(`Save failed: ${(e as Error).message}`);
+      toast.error(`Save failed: ${(e as Error).message}`);
     }
   };
 
   const handleDelete = async (id: number) => {
     try {
       await api.delete(`/webapp-menu/nodes/${id}`);
-      message.success("Deleted");
+      toast.success("Deleted");
       await reload();
     } catch (e: unknown) {
-      message.error(`Delete failed: ${(e as Error).message}`);
+      toast.error(`Delete failed: ${(e as Error).message}`);
     }
   };
 
@@ -525,19 +569,18 @@ export default function WebAppTariffsPage() {
       await api.put<MenuNode>(`/webapp-menu/nodes/${id}`, { is_active: !node.is_active });
       await reload();
     } catch (e: unknown) {
-      message.error(`Toggle failed: ${(e as Error).message}`);
+      toast.error(`Toggle failed: ${(e as Error).message}`);
     }
   };
 
   const handleMove = async (id: number, direction: "up" | "down") => {
     const node = flatten.find((n) => n.id === id);
     if (!node) return;
-    const siblings = node.parent_id == null
-      ? tree
-      : flatten.find((n) => n.id === node.parent_id)?.children ?? [];
-    const ordered = [...siblings].sort(
-      (a, b) => a.sort_order - b.sort_order || a.id - b.id,
-    );
+    const siblings =
+      node.parent_id == null
+        ? tree
+        : (flatten.find((n) => n.id === node.parent_id)?.children ?? []);
+    const ordered = [...siblings].sort((a, b) => a.sort_order - b.sort_order || a.id - b.id);
     const idx = ordered.findIndex((s) => s.id === id);
     const swapIdx = direction === "up" ? idx - 1 : idx + 1;
     if (idx < 0 || swapIdx < 0 || swapIdx >= ordered.length) return;
@@ -555,58 +598,58 @@ export default function WebAppTariffsPage() {
       await api.put("/webapp-menu/reorder", { items });
       await reload();
     } catch (e: unknown) {
-      message.error(`Reorder failed: ${(e as Error).message}`);
+      toast.error(`Reorder failed: ${(e as Error).message}`);
     }
   };
 
   return (
     <div>
-      <Space
-        align="center"
-        style={{ marginBottom: 16, justifyContent: "space-between", width: "100%" }}
-      >
-        <Typography.Title level={3} style={{ margin: 0 }}>
-          Tariff Constructor
-        </Typography.Title>
-        <Button type="primary" icon={<PlusOutlined />} onClick={handleAddRoot}>
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <h1 className="text-xl font-semibold text-foreground md:text-2xl">Tariff Constructor</h1>
+        <Button onClick={handleAddRoot}>
+          <Plus className="h-4 w-4" />
           Add root menu
         </Button>
-      </Space>
+      </div>
 
-      <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
-        Build the WebApp menu tree. <b>Buttons</b> nodes can hold child buttons;{" "}
-        <b>Invoice</b> nodes are leaves that trigger a payment when tapped in the WebApp.
-      </Typography.Paragraph>
+      <p className="mb-4 text-sm text-muted-foreground">
+        Build the WebApp menu tree. <b>Buttons</b> nodes can hold child buttons; <b>Invoice</b> nodes
+        are leaves that trigger a payment when tapped in the WebApp.
+      </p>
 
       {loading ? (
         <Card>
-          <Spin />
+          <CardContent className="flex justify-center p-6">
+            <Spinner className="h-6 w-6" />
+          </CardContent>
         </Card>
       ) : tree.length === 0 ? (
         <Card>
-          <Empty description="No menu nodes yet — click 'Add root menu' to start." />
+          <CardContent className="p-6 text-center text-muted-foreground">
+            No menu nodes yet — click 'Add root menu' to start.
+          </CardContent>
         </Card>
       ) : (
         [...tree]
           .sort((a, b) => a.sort_order - b.sort_order || a.id - b.id)
           .map((n) => (
-          <NodeRow
-            key={n.id}
-            node={n}
-            siblings={tree}
-            providers={providers}
-            depth={0}
-            drafts={drafts}
-            setDraft={setDraft}
-            expanded={expanded}
-            toggleExpand={toggleExpand}
-            onSave={handleSave}
-            onDelete={handleDelete}
-            onAddChild={handleAddChild}
-            onMove={handleMove}
-            onToggleActive={handleToggleActive}
-          />
-        ))
+            <NodeRow
+              key={n.id}
+              node={n}
+              siblings={tree}
+              providers={providers}
+              depth={0}
+              drafts={drafts}
+              setDraft={setDraft}
+              expanded={expanded}
+              toggleExpand={toggleExpand}
+              onSave={handleSave}
+              onDelete={handleDelete}
+              onAddChild={handleAddChild}
+              onMove={handleMove}
+              onToggleActive={handleToggleActive}
+            />
+          ))
       )}
     </div>
   );

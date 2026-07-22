@@ -1,29 +1,46 @@
 import { useEffect, useState, useCallback, useRef } from "react";
+import { Plus, Trash2, Pencil, Save, GripVertical } from "lucide-react";
 import {
-  Typography, Card, Button, Input, Switch, Space, Row, Col, List,
-  App, Popconfirm, Select, Empty, Badge,
-} from "antd";
-import {
-  PlusOutlined, DeleteOutlined, EditOutlined, SaveOutlined,
-  HolderOutlined,
-} from "@ant-design/icons";
-import {
-  DndContext, closestCenter, PointerSensor, useSensor, useSensors,
-  DragEndEvent,
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
 } from "@dnd-kit/core";
 import {
-  SortableContext, verticalListSortingStrategy, useSortable, arrayMove,
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable,
+  arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { toast } from "sonner";
+import { Card, CardContent, CardHeader, CardTitle } from "@xray/ui/components/card";
+import { Button } from "@xray/ui/components/button";
+import { Input } from "@xray/ui/components/input";
+import { Textarea } from "@xray/ui/components/textarea";
+import { Label } from "@xray/ui/components/label";
+import { Switch } from "@xray/ui/components/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@xray/ui/components/select";
+import { cn } from "@xray/ui/lib/utils";
 import { api } from "../api/client";
 import type { MenuScreen, MenuButton as MenuButtonType } from "../api/types";
 import TelegramPreview from "../components/TelegramPreview";
 import ButtonEditor from "../components/ButtonEditor";
-import useIsMobile from "../hooks/useIsMobile";
+import ConfirmButton from "../components/ConfirmButton";
 import useUnsavedWarning from "../hooks/useUnsavedWarning";
 
 function SortableButtonItem({
-  btn, onEdit, onDelete,
+  btn,
+  onEdit,
+  onDelete,
 }: {
   btn: MenuButtonType;
   onEdit: () => void;
@@ -35,40 +52,35 @@ function SortableButtonItem({
   return (
     <div
       ref={setNodeRef}
-      style={{
-        ...style,
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
-        padding: "8px 12px",
-        background: "rgba(255,255,255,0.02)",
-        borderRadius: 6,
-        marginBottom: 4,
-        border: "1px solid rgba(255,255,255,0.06)",
-      }}
+      style={style}
+      className="mb-1 flex items-center gap-2 rounded-md border border-white/[0.06] bg-white/[0.02] px-3 py-2"
     >
-      <span {...attributes} {...listeners} style={{ cursor: "grab" }}>
-        <HolderOutlined style={{ color: "rgba(255,255,255,0.3)" }} />
+      <span {...attributes} {...listeners} className="cursor-grab text-muted-foreground/50">
+        <GripVertical className="h-4 w-4" />
       </span>
-      <Badge
-        status={btn.is_active ? "success" : "default"}
-        style={{ marginRight: 4 }}
+      <span
+        className={cn(
+          "h-2 w-2 flex-shrink-0 rounded-full",
+          btn.is_active ? "bg-emerald-500" : "bg-muted-foreground/40",
+        )}
       />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13, color: "rgba(255,255,255,0.85)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-          {btn.text_ru}
-        </div>
-        <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)" }}>
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-[13px] text-foreground/85">{btn.text_ru}</div>
+        <div className="text-[11px] text-muted-foreground">
           {btn.button_type} · {btn.callback_data || btn.url || "—"}
           {btn.visibility_condition !== "always" && ` · ${btn.visibility_condition}`}
         </div>
       </div>
-      <Space size={4}>
-        <Button size="small" type="text" icon={<EditOutlined />} onClick={onEdit} />
-        <Popconfirm title="Delete button?" onConfirm={onDelete} placement="left">
-          <Button size="small" type="text" danger icon={<DeleteOutlined />} />
-        </Popconfirm>
-      </Space>
+      <div className="flex gap-1">
+        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onEdit}>
+          <Pencil className="h-4 w-4" />
+        </Button>
+        <ConfirmButton title="Delete button?" confirmText="Delete" destructive onConfirm={onDelete}>
+          <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive">
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </ConfirmButton>
+      </div>
     </div>
   );
 }
@@ -82,9 +94,7 @@ export default function MenuEditorPage() {
   const [btnEditorOpen, setBtnEditorOpen] = useState(false);
   const [previewLang, setPreviewLang] = useState<"ru" | "en">("ru");
   const [isDirty, setIsDirty] = useState(false);
-  const isMobile = useIsMobile();
   const snapshotRef = useRef("");
-  const { message } = App.useApp();
 
   useUnsavedWarning(isDirty);
 
@@ -103,12 +113,15 @@ export default function MenuEditorPage() {
         setSelectedId(data[0].id);
       }
     } catch {
-      message.error("Failed to load screens");
+      toast.error("Failed to load screens");
     }
     setLoading(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const updateScreen = (field: string, value: unknown) => {
     if (!selected) return;
@@ -131,18 +144,15 @@ export default function MenuEditorPage() {
         is_active: selected.is_active,
       });
 
-      // Save button reorder
       const sortedButtons = [...selected.buttons].sort((a, b) => a.sort_order - b.sort_order);
       await api.put(`/menus/screens/${selected.id}/buttons/reorder`, {
-        items: sortedButtons.map((b, i) => ({
-          id: b.id, row: i, col: 0, sort_order: i,
-        })),
+        items: sortedButtons.map((b, i) => ({ id: b.id, row: i, col: 0, sort_order: i })),
       });
 
-      message.success("Screen saved!");
+      toast.success("Screen saved!");
       await load();
     } catch {
-      message.error("Failed to save");
+      toast.error("Failed to save");
     }
     setSaving(false);
   };
@@ -159,9 +169,9 @@ export default function MenuEditorPage() {
       });
       setScreens((prev) => [...prev, newScreen]);
       setSelectedId(newScreen.id);
-      message.success("Screen created");
+      toast.success("Screen created");
     } catch {
-      message.error("Failed to create screen");
+      toast.error("Failed to create screen");
     }
   };
 
@@ -172,9 +182,9 @@ export default function MenuEditorPage() {
       if (selectedId === id) {
         setSelectedId(screens.find((s) => s.id !== id)?.id || null);
       }
-      message.success("Screen deleted");
+      toast.success("Screen deleted");
     } catch (e: unknown) {
-      message.error(e instanceof Error ? e.message : "Failed to delete");
+      toast.error(e instanceof Error ? e.message : "Failed to delete");
     }
   };
 
@@ -207,22 +217,23 @@ export default function MenuEditorPage() {
           prev.map((s) =>
             s.id === selected.id
               ? { ...s, buttons: s.buttons.map((b) => (b.id === updated.id ? updated : b)) }
-              : s
-          )
+              : s,
+          ),
         );
       } else {
-        const created = await api.post<MenuButtonType>(`/menus/screens/${selected.id}/buttons`, values);
+        const created = await api.post<MenuButtonType>(
+          `/menus/screens/${selected.id}/buttons`,
+          values,
+        );
         setScreens((prev) =>
-          prev.map((s) =>
-            s.id === selected.id ? { ...s, buttons: [...s.buttons, created] } : s
-          )
+          prev.map((s) => (s.id === selected.id ? { ...s, buttons: [...s.buttons, created] } : s)),
         );
       }
       setBtnEditorOpen(false);
       setEditingBtn(null);
-      message.success("Button saved");
+      toast.success("Button saved");
     } catch {
-      message.error("Failed to save button");
+      toast.error("Failed to save button");
     }
   };
 
@@ -232,14 +243,12 @@ export default function MenuEditorPage() {
       await api.delete(`/menus/buttons/${btnId}`);
       setScreens((prev) =>
         prev.map((s) =>
-          s.id === selected.id
-            ? { ...s, buttons: s.buttons.filter((b) => b.id !== btnId) }
-            : s
-        )
+          s.id === selected.id ? { ...s, buttons: s.buttons.filter((b) => b.id !== btnId) } : s,
+        ),
       );
-      message.success("Button deleted");
+      toast.success("Button deleted");
     } catch {
-      message.error("Failed to delete button");
+      toast.error("Failed to delete button");
     }
   };
 
@@ -257,7 +266,7 @@ export default function MenuEditorPage() {
     }));
 
     setScreens((prev) =>
-      prev.map((s) => (s.id === selected.id ? { ...s, buttons: reordered } : s))
+      prev.map((s) => (s.id === selected.id ? { ...s, buttons: reordered } : s)),
     );
   };
 
@@ -265,7 +274,6 @@ export default function MenuEditorPage() {
     ? [...selected.buttons].sort((a, b) => a.sort_order - b.sort_order)
     : [];
 
-  // Preview
   const previewButtons = sortedButtons
     .filter((b) => b.is_active)
     .map((b, i) => ({
@@ -279,132 +287,142 @@ export default function MenuEditorPage() {
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
-        <Typography.Title level={isMobile ? 5 : 4} style={{ margin: 0, color: "rgba(255,255,255,0.88)" }}>
-          Bot Menu Editor
-        </Typography.Title>
-        <Space>
-          <Button icon={<PlusOutlined />} onClick={handleAddScreen}>Add Screen</Button>
-          <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={handleSave} disabled={!selected}>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-lg font-semibold text-foreground md:text-xl">Bot Menu Editor</h1>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleAddScreen}>
+            <Plus className="h-4 w-4" />
+            Add Screen
+          </Button>
+          <Button onClick={handleSave} disabled={saving || !selected}>
+            <Save className="h-4 w-4" />
             Save
           </Button>
-        </Space>
+        </div>
       </div>
 
-      <Row gutter={16}>
-        {/* Screen list */}
-        <Col xs={24} lg={5}>
-          <Card title="Screens" size="small" loading={loading}>
-            {screens.length === 0 ? (
-              <Empty description="No screens" />
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[5fr_10fr_9fr]">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Screens</CardTitle>
+          </CardHeader>
+          <CardContent className="px-2">
+            {loading ? (
+              <div className="py-4 text-center text-muted-foreground">Loading…</div>
+            ) : screens.length === 0 ? (
+              <div className="py-6 text-center text-sm text-muted-foreground">No screens</div>
             ) : (
-              <List
-                size="small"
-                dataSource={screens}
-                renderItem={(s) => (
-                  <List.Item
+              <div className="space-y-0.5">
+                {screens.map((s) => (
+                  <div
+                    key={s.id}
                     onClick={() => setSelectedId(s.id)}
-                    style={{
-                      cursor: "pointer",
-                      background: s.id === selectedId ? "rgba(100,149,237,0.1)" : "transparent",
-                      borderRadius: 6,
-                      padding: "6px 8px",
-                      marginBottom: 2,
-                      border: s.id === selectedId ? "1px solid rgba(100,149,237,0.3)" : "1px solid transparent",
-                    }}
-                    actions={
-                      !s.is_system
-                        ? [
-                            <Popconfirm
-                              key="del"
-                              title="Delete screen?"
-                              onConfirm={(e) => {
-                                e?.stopPropagation();
-                                handleDeleteScreen(s.id);
-                              }}
-                            >
-                              <Button
-                                size="small"
-                                type="text"
-                                danger
-                                icon={<DeleteOutlined />}
-                                onClick={(e) => e.stopPropagation()}
-                              />
-                            </Popconfirm>,
-                          ]
-                        : undefined
-                    }
+                    className={cn(
+                      "flex cursor-pointer items-center justify-between gap-2 rounded-md border px-2 py-1.5",
+                      s.id === selectedId
+                        ? "border-primary/30 bg-primary/10"
+                        : "border-transparent hover:bg-white/5",
+                    )}
                   >
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 13, color: "rgba(255,255,255,0.85)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {s.name}
-                      </div>
-                      <div style={{ fontSize: 10, color: "rgba(255,255,255,0.35)" }}>
+                    <div className="min-w-0">
+                      <div className="truncate text-[13px] text-foreground/85">{s.name}</div>
+                      <div className="text-[10px] text-muted-foreground">
                         {s.slug} {s.is_system && "· system"}
                       </div>
                     </div>
-                  </List.Item>
-                )}
-              />
+                    {!s.is_system && (
+                      <ConfirmButton
+                        title="Delete screen?"
+                        confirmText="Delete"
+                        destructive
+                        onConfirm={() => handleDeleteScreen(s.id)}
+                      >
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7 text-destructive"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </ConfirmButton>
+                    )}
+                  </div>
+                ))}
+              </div>
             )}
-          </Card>
-        </Col>
+          </CardContent>
+        </Card>
 
-        {/* Editor */}
-        <Col xs={24} lg={10}>
+        <div>
           {selected ? (
-            <Card size="small">
-              <Space direction="vertical" style={{ width: "100%" }} size={12}>
-                <Row gutter={8}>
-                  <Col span={8}>
-                    <label style={{ fontSize: 11, color: "rgba(255,255,255,0.45)" }}>Slug</label>
+            <Card>
+              <CardContent className="space-y-3 p-4">
+                <div className="grid grid-cols-2 gap-2 md:grid-cols-[8fr_10fr_6fr]">
+                  <div>
+                    <Label className="text-[11px] text-muted-foreground">Slug</Label>
                     <Input
-                      size="small"
+                      className="h-8"
                       value={selected.slug}
                       onChange={(e) => updateScreen("slug", e.target.value)}
                       disabled={selected.is_system}
                     />
-                  </Col>
-                  <Col span={10}>
-                    <label style={{ fontSize: 11, color: "rgba(255,255,255,0.45)" }}>Name</label>
-                    <Input size="small" value={selected.name} onChange={(e) => updateScreen("name", e.target.value)} />
-                  </Col>
-                  <Col span={6}>
-                    <label style={{ fontSize: 11, color: "rgba(255,255,255,0.45)" }}>Active</label>
-                    <div><Switch size="small" checked={selected.is_active} onChange={(v) => updateScreen("is_active", v)} /></div>
-                  </Col>
-                </Row>
+                  </div>
+                  <div>
+                    <Label className="text-[11px] text-muted-foreground">Name</Label>
+                    <Input
+                      className="h-8"
+                      value={selected.name}
+                      onChange={(e) => updateScreen("name", e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-[11px] text-muted-foreground">Active</Label>
+                    <div className="pt-1.5">
+                      <Switch
+                        checked={selected.is_active}
+                        onCheckedChange={(v: boolean) => updateScreen("is_active", v)}
+                      />
+                    </div>
+                  </div>
+                </div>
 
                 <div>
-                  <label style={{ fontSize: 11, color: "rgba(255,255,255,0.45)" }}>Message Text (RU)</label>
-                  <Input.TextArea
-                    size="small"
+                  <Label className="text-[11px] text-muted-foreground">Message Text (RU)</Label>
+                  <Textarea
                     rows={2}
                     value={selected.message_text_ru || ""}
                     onChange={(e) => updateScreen("message_text_ru", e.target.value)}
                   />
                 </div>
                 <div>
-                  <label style={{ fontSize: 11, color: "rgba(255,255,255,0.45)" }}>Message Text (EN)</label>
-                  <Input.TextArea
-                    size="small"
+                  <Label className="text-[11px] text-muted-foreground">Message Text (EN)</Label>
+                  <Textarea
                     rows={2}
                     value={selected.message_text_en || ""}
                     onChange={(e) => updateScreen("message_text_en", e.target.value)}
                   />
                 </div>
 
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <Typography.Text strong style={{ color: "rgba(255,255,255,0.7)" }}>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-semibold text-foreground/70">
                     Buttons ({sortedButtons.length})
-                  </Typography.Text>
-                  <Button size="small" icon={<PlusOutlined />} onClick={handleAddButton}>
+                  </span>
+                  <Button size="sm" variant="outline" onClick={handleAddButton}>
+                    <Plus className="h-4 w-4" />
                     Add Button
                   </Button>
                 </div>
 
-                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleButtonDragEnd}>
-                  <SortableContext items={sortedButtons.map((b) => b.id)} strategy={verticalListSortingStrategy}>
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleButtonDragEnd}
+                >
+                  <SortableContext
+                    items={sortedButtons.map((b) => b.id)}
+                    strategy={verticalListSortingStrategy}
+                  >
                     {sortedButtons.map((btn) => (
                       <SortableButtonItem
                         key={btn.id}
@@ -415,39 +433,35 @@ export default function MenuEditorPage() {
                     ))}
                   </SortableContext>
                 </DndContext>
-              </Space>
+              </CardContent>
             </Card>
           ) : (
             <Card>
-              <Empty description="Select a screen from the list" />
+              <CardContent className="py-10 text-center text-muted-foreground">
+                Select a screen from the list
+              </CardContent>
             </Card>
           )}
-        </Col>
+        </div>
 
-        {/* Preview */}
-        <Col xs={24} lg={9}>
-          <Card
-            title={<span style={{ color: "rgba(255,255,255,0.85)" }}>Live Preview</span>}
-            extra={
-              <Select
-                size="small"
-                value={previewLang}
-                onChange={(v) => setPreviewLang(v as "ru" | "en")}
-                style={{ width: 60 }}
-                options={[
-                  { value: "ru", label: "RU" },
-                  { value: "en", label: "EN" },
-                ]}
-              />
-            }
-          >
-            <TelegramPreview
-              messageText={previewMessage}
-              buttons={previewButtons}
-            />
-          </Card>
-        </Col>
-      </Row>
+        <Card>
+          <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm text-foreground/85">Live Preview</CardTitle>
+            <Select value={previewLang} onValueChange={(v: string) => setPreviewLang(v as "ru" | "en")}>
+              <SelectTrigger className="h-8 w-[64px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ru">RU</SelectItem>
+                <SelectItem value="en">EN</SelectItem>
+              </SelectContent>
+            </Select>
+          </CardHeader>
+          <CardContent>
+            <TelegramPreview messageText={previewMessage} buttons={previewButtons} />
+          </CardContent>
+        </Card>
+      </div>
 
       <ButtonEditor
         open={btnEditorOpen}

@@ -1,31 +1,44 @@
 import { useState, useEffect, useMemo } from "react";
-import { Outlet, useNavigate, useLocation } from "react-router-dom";
-import { Layout as AntLayout, Menu, Button, Drawer, Popconfirm } from "antd";
-import type { MenuProps } from "antd";
+import { Outlet, useNavigate, useLocation } from "react-router";
 import {
-  DashboardOutlined,
-  UserOutlined,
-  TransactionOutlined,
-  BarChartOutlined,
-  LogoutOutlined,
-  MenuFoldOutlined,
-  MenuUnfoldOutlined,
-  MenuOutlined,
-  CloseOutlined,
-  ShoppingOutlined,
-  AppstoreOutlined,
-  TeamOutlined,
-  CloudServerOutlined,
-  ShopOutlined,
-  MessageOutlined,
-  MobileOutlined,
-  GiftOutlined,
-  CustomerServiceOutlined,
-  RobotOutlined,
-  NotificationOutlined,
-  DownloadOutlined,
-  TrophyOutlined,
-} from "@ant-design/icons";
+  LayoutDashboard,
+  Users,
+  ArrowRightLeft,
+  BarChart3,
+  LogOut,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Menu as MenuIcon,
+  ShoppingCart,
+  LayoutGrid,
+  Users2,
+  Server,
+  Store,
+  MessageSquare,
+  Smartphone,
+  Gift,
+  Headphones,
+  Bot,
+  Bell,
+  Download,
+  Trophy,
+  ChevronDown,
+  type LucideIcon,
+} from "lucide-react";
+import { Button } from "@xray/ui/components/button";
+import { Sheet, SheetContent } from "@xray/ui/components/sheet";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@xray/ui/components/alert-dialog";
+import { cn } from "@xray/ui/lib/utils";
 import { api, clearToken } from "../api/client";
 import useIsMobile from "../hooks/useIsMobile";
 
@@ -33,10 +46,6 @@ interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 }
-
-const { Sider, Content } = AntLayout;
-
-type ItemType = NonNullable<MenuProps["items"]>[number];
 
 const PAGE_TITLES: Record<string, string> = {
   "/": "Dashboard",
@@ -58,67 +67,66 @@ const PAGE_TITLES: Record<string, string> = {
   "/push": "Push",
 };
 
-function buildMenuItems(legacyEnabled: boolean): ItemType[] {
-  const legacyGroup: ItemType[] = legacyEnabled
-    ? [
-        {
-          type: "group",
-          label: "Bot Constructor",
-          key: "g-bot",
-          children: [
-            { key: "/tariffs", icon: <ShoppingOutlined />, label: "Tariffs" },
-            { key: "/menus", icon: <AppstoreOutlined />, label: "Bot Menus" },
-            { key: "/squads", icon: <TeamOutlined />, label: "Squads" },
-          ],
-        } as ItemType,
-      ]
-    : [];
+interface NavLeaf {
+  key: string;
+  label: string;
+  icon?: LucideIcon;
+}
+interface NavGroup {
+  label: string;
+  children: NavLeaf[];
+  /** collapsible submenu key (single expandable parent) */
+  submenu?: { key: string; label: string; icon: LucideIcon };
+}
 
-  return [
+function buildMenuGroups(legacyEnabled: boolean): NavGroup[] {
+  const groups: NavGroup[] = [
     {
-      type: "group",
       label: "Overview",
-      key: "g-overview",
       children: [
-        { key: "/", icon: <DashboardOutlined />, label: "Dashboard" },
-        { key: "/users", icon: <UserOutlined />, label: "Users" },
-        { key: "/transactions", icon: <TransactionOutlined />, label: "Transactions" },
-        { key: "/stats", icon: <BarChartOutlined />, label: "Statistics" },
+        { key: "/", icon: LayoutDashboard, label: "Dashboard" },
+        { key: "/users", icon: Users, label: "Users" },
+        { key: "/transactions", icon: ArrowRightLeft, label: "Transactions" },
+        { key: "/stats", icon: BarChart3, label: "Statistics" },
       ],
-    } as ItemType,
-    ...legacyGroup,
-    {
-      type: "group",
-      label: "Services",
-      key: "g-services",
-      children: [
-        { key: "/telemt", icon: <CloudServerOutlined />, label: "Telemt" },
-        { key: "/store", icon: <ShopOutlined />, label: "Store" },
-        { key: "/support", icon: <MessageOutlined />, label: "Support" },
-        { key: "/promocodes", icon: <GiftOutlined />, label: "Promocodes" },
-        { key: "/giveaways", icon: <TrophyOutlined />, label: "Giveaways" },
-        { key: "/crm", icon: <CustomerServiceOutlined />, label: "CRM" },
-        { key: "/push", icon: <NotificationOutlined />, label: "Push" },
-        { key: "/tg-admin", icon: <RobotOutlined />, label: "TG Admin" },
-      ],
-    } as ItemType,
-    {
-      type: "group",
-      label: "WebApp",
-      key: "g-webapp",
-      children: [
-        {
-          key: "webapp",
-          icon: <MobileOutlined />,
-          label: "WebApp",
-          children: [
-            { key: "/webapp/tariffs", label: "Tariff Constructor" },
-            { key: "/webapp/settings", label: "Settings" },
-          ],
-        },
-      ],
-    } as ItemType,
+    },
   ];
+
+  if (legacyEnabled) {
+    groups.push({
+      label: "Bot Constructor",
+      children: [
+        { key: "/tariffs", icon: ShoppingCart, label: "Tariffs" },
+        { key: "/menus", icon: LayoutGrid, label: "Bot Menus" },
+        { key: "/squads", icon: Users2, label: "Squads" },
+      ],
+    });
+  }
+
+  groups.push({
+    label: "Services",
+    children: [
+      { key: "/telemt", icon: Server, label: "Telemt" },
+      { key: "/store", icon: Store, label: "Store" },
+      { key: "/support", icon: MessageSquare, label: "Support" },
+      { key: "/promocodes", icon: Gift, label: "Promocodes" },
+      { key: "/giveaways", icon: Trophy, label: "Giveaways" },
+      { key: "/crm", icon: Headphones, label: "CRM" },
+      { key: "/push", icon: Bell, label: "Push" },
+      { key: "/tg-admin", icon: Bot, label: "TG Admin" },
+    ],
+  });
+
+  groups.push({
+    label: "WebApp",
+    submenu: { key: "webapp", label: "WebApp", icon: Smartphone },
+    children: [
+      { key: "/webapp/tariffs", label: "Tariff Constructor" },
+      { key: "/webapp/settings", label: "Settings" },
+    ],
+  });
+
+  return groups;
 }
 
 export default function Layout() {
@@ -158,16 +166,14 @@ export default function Layout() {
     setInstallPrompt(null);
   };
 
-  const menuItems = useMemo(() => buildMenuItems(legacyEnabled), [legacyEnabled]);
+  const groups = useMemo(() => buildMenuGroups(legacyEnabled), [legacyEnabled]);
 
-  const [openKeys, setOpenKeys] = useState<string[]>(() =>
-    location.pathname.startsWith("/webapp") ? ["webapp"] : [],
+  const [webappOpen, setWebappOpen] = useState<boolean>(() =>
+    location.pathname.startsWith("/webapp"),
   );
 
   useEffect(() => {
-    if (location.pathname.startsWith("/webapp")) {
-      setOpenKeys((keys) => (keys.includes("webapp") ? keys : [...keys, "webapp"]));
-    }
+    if (location.pathname.startsWith("/webapp")) setWebappOpen(true);
   }, [location.pathname]);
 
   const handleLogout = () => {
@@ -175,251 +181,182 @@ export default function Layout() {
     navigate("/login");
   };
 
-  const handleMenuClick = ({ key }: { key: string }) => {
-    if (!key.startsWith("/")) return;
+  const go = (key: string) => {
     navigate(key);
     if (isMobile) setMobileMenuOpen(false);
   };
 
   const pageTitle = PAGE_TITLES[location.pathname] ?? "Dashboard";
+  const showLabels = !collapsed || isMobile;
 
-  /* ── Sidebar content ──────────────────────────────── */
+  const navBtnClass = (active: boolean) =>
+    cn(
+      "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+      active
+        ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
+        : "text-sidebar-foreground/75 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground",
+      !showLabels && "justify-center px-0",
+    );
+
   const sidebarContent = (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      {/* Logo */}
-      <div
-        style={{
-          height: 56,
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          padding: "0 16px",
-          borderBottom: "1px solid #1A2038",
-          flexShrink: 0,
-        }}
-      >
-        <div
-          style={{
-            width: 30,
-            height: 30,
-            borderRadius: 8,
-            background: "linear-gradient(135deg, #6C8EFF, #A78BFF)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 13,
-            fontWeight: 700,
-            color: "#fff",
-            flexShrink: 0,
-          }}
-        >
+    <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
+      <div className="flex h-16 flex-shrink-0 items-center gap-3 border-b border-sidebar-border px-4">
+        <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-primary text-xs font-semibold text-primary-foreground">
           VP
         </div>
-        {(!collapsed || isMobile) && (
-          <span
-            style={{
-              fontSize: 14,
-              fontWeight: 600,
-              color: "#E2E8F8",
-              letterSpacing: 0.3,
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-            }}
-          >
-            VPN Admin
-          </span>
+        {showLabels && (
+          <span className="truncate text-sm font-semibold tracking-tight">VPN Admin</span>
         )}
       </div>
 
-      {/* Nav */}
-      <div style={{ flex: 1, overflow: "auto", paddingTop: 6 }}>
-        <Menu
-          mode="inline"
-          theme="dark"
-          selectedKeys={[location.pathname]}
-          openKeys={openKeys}
-          onOpenChange={setOpenKeys}
-          items={menuItems}
-          onClick={handleMenuClick}
-          style={{ background: "transparent", border: 0 }}
-        />
-      </div>
+      <nav className="flex-1 space-y-6 overflow-auto px-3 py-4">
+        {groups.map((group) => (
+          <div key={group.label} className="space-y-1.5">
+            {showLabels && (
+              <div className="px-3 pb-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                {group.label}
+              </div>
+            )}
+            <div className="space-y-1">
+              {group.submenu ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setWebappOpen((v) => !v)}
+                    className={navBtnClass(location.pathname.startsWith("/webapp"))}
+                  >
+                    <group.submenu.icon className="h-4 w-4 flex-shrink-0" />
+                    {showLabels && (
+                      <>
+                        <span className="flex-1 text-left">{group.submenu.label}</span>
+                        <ChevronDown
+                          className={cn("h-4 w-4 transition-transform", webappOpen && "rotate-180")}
+                        />
+                      </>
+                    )}
+                  </button>
+                  {webappOpen &&
+                    showLabels &&
+                    group.children.map((item) => (
+                      <button
+                        key={item.key}
+                        type="button"
+                        onClick={() => go(item.key)}
+                        className={cn(navBtnClass(location.pathname === item.key), "pl-10")}
+                      >
+                        <span className="text-left">{item.label}</span>
+                      </button>
+                    ))}
+                </>
+              ) : (
+                group.children.map((item) => (
+                  <button
+                    key={item.key}
+                    type="button"
+                    onClick={() => go(item.key)}
+                    className={navBtnClass(location.pathname === item.key)}
+                    title={!showLabels ? item.label : undefined}
+                  >
+                    {item.icon && <item.icon className="h-4 w-4 flex-shrink-0" />}
+                    {showLabels && <span className="text-left">{item.label}</span>}
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        ))}
+      </nav>
 
-      {/* Footer: install + logout */}
-      <div
-        style={{
-          padding: "12px 10px",
-          borderTop: "1px solid #1A2038",
-          flexShrink: 0,
-          display: "flex",
-          flexDirection: "column",
-          gap: 4,
-        }}
-      >
+      <div className="flex flex-shrink-0 flex-col gap-2 border-t border-sidebar-border p-3">
         {installPrompt && (
           <Button
-            type="text"
-            icon={<DownloadOutlined />}
-            aria-label="Install app"
+            variant="outline"
             onClick={handleInstall}
-            style={{
-              width: "100%",
-              textAlign: "left",
-              color: "rgba(108,142,255,0.85)",
-              fontSize: 13,
-              height: 34,
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-            }}
+            aria-label="Install app"
+            className={cn("w-full justify-start", !showLabels && "justify-center px-0")}
           >
-            {(!collapsed || isMobile) && "Install app"}
+            <Download className="h-4 w-4" />
+            {showLabels && "Install app"}
           </Button>
         )}
-        <Popconfirm
-          title="Log out?"
-          description="You will need to sign in again."
-          onConfirm={handleLogout}
-          okText="Logout"
-          cancelText="Cancel"
-          placement="top"
-        >
-          <Button
-            type="text"
-            icon={<LogoutOutlined />}
-            aria-label="Logout"
-            style={{
-              width: "100%",
-              textAlign: "left",
-              color: "rgba(255,255,255,0.35)",
-              fontSize: 13,
-              height: 34,
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-            }}
-          >
-            {(!collapsed || isMobile) && "Logout"}
-          </Button>
-        </Popconfirm>
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button
+              variant="outline"
+              aria-label="Logout"
+              className={cn(
+                "w-full justify-start text-muted-foreground",
+                !showLabels && "justify-center px-0",
+              )}
+            >
+              <LogOut className="h-4 w-4" />
+              {showLabels && "Logout"}
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Log out?</AlertDialogTitle>
+              <AlertDialogDescription>You will need to sign in again.</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleLogout}>Logout</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   );
 
   return (
-    <AntLayout style={{ minHeight: "100vh", background: "#0C0F1A" }}>
-      {/* Desktop sidebar */}
+    <div className="flex min-h-screen bg-background">
       {!isMobile && (
-        <Sider
-          collapsible
-          collapsed={collapsed}
-          onCollapse={setCollapsed}
-          trigger={null}
-          width={220}
-          collapsedWidth={60}
-          style={{
-            background: "#0F1220",
-            borderRight: "1px solid #1A2038",
-            overflow: "hidden",
-            height: "100vh",
-            position: "sticky",
-            top: 0,
-            left: 0,
-          }}
+        <aside
+          className="sticky top-0 h-screen flex-shrink-0 overflow-hidden border-r border-sidebar-border transition-all"
+          style={{ width: collapsed ? 68 : 260 }}
         >
           {sidebarContent}
-        </Sider>
+        </aside>
       )}
 
-      {/* Mobile drawer */}
       {isMobile && (
-        <Drawer
-          placement="left"
-          open={mobileMenuOpen}
-          onClose={() => setMobileMenuOpen(false)}
-          width={240}
-          closeIcon={<CloseOutlined style={{ color: "rgba(255,255,255,0.5)" }} />}
-          styles={{
-            header: { display: "none" },
-            body: { padding: 0, background: "#0F1220", display: "flex", flexDirection: "column" },
-          }}
-          rootStyle={{ zIndex: 1001 }}
-        >
-          {sidebarContent}
-        </Drawer>
+        <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+          <SheetContent side="left" className="w-72 border-sidebar-border bg-sidebar p-0">
+            {sidebarContent}
+          </SheetContent>
+        </Sheet>
       )}
 
-      <AntLayout style={{ background: "#0C0F1A", overflow: "hidden" }}>
-        {/* Top bar */}
-        <div
-          style={{
-            height: 52,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: isMobile ? "0 14px" : "0 20px",
-            background: "#0F1220",
-            borderBottom: "1px solid #1A2038",
-            position: "sticky",
-            top: 0,
-            zIndex: 10,
-            flexShrink: 0,
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            {/* Toggle / burger */}
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <header className="sticky top-0 z-10 flex h-16 flex-shrink-0 items-center border-b border-border bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/60 md:px-8">
+          <div className="flex items-center gap-3">
             <Button
-              type="text"
-              aria-label={isMobile ? "Open navigation menu" : collapsed ? "Expand sidebar" : "Collapse sidebar"}
-              icon={
-                isMobile ? (
-                  <MenuOutlined />
-                ) : collapsed ? (
-                  <MenuUnfoldOutlined />
-                ) : (
-                  <MenuFoldOutlined />
-                )
+              variant="outline"
+              size="icon"
+              className="h-9 w-9"
+              aria-label={
+                isMobile ? "Open navigation menu" : collapsed ? "Expand sidebar" : "Collapse sidebar"
               }
               onClick={isMobile ? () => setMobileMenuOpen(true) : () => setCollapsed(!collapsed)}
-              style={{ color: "rgba(255,255,255,0.40)", padding: 0, width: 32, height: 32 }}
-            />
-            {/* Page title */}
-            <span
-              style={{
-                fontSize: 14,
-                fontWeight: 600,
-                color: "#E2E8F8",
-                letterSpacing: -0.1,
-              }}
             >
-              {pageTitle}
-            </span>
+              {isMobile ? (
+                <MenuIcon className="h-4 w-4" />
+              ) : collapsed ? (
+                <PanelLeftOpen className="h-4 w-4" />
+              ) : (
+                <PanelLeftClose className="h-4 w-4" />
+              )}
+            </Button>
+            <h1 className="text-base font-semibold tracking-tight">{pageTitle}</h1>
           </div>
+        </header>
 
-          {/* Breadcrumb path — subtle */}
-          <span
-            style={{
-              fontSize: 11.5,
-              color: "rgba(255,255,255,0.22)",
-              letterSpacing: 0.2,
-              display: isMobile ? "none" : "block",
-            }}
-          >
-            {location.pathname === "/" ? "/ dashboard" : location.pathname}
-          </span>
-        </div>
-
-        {/* Page content */}
-        <Content
-          style={{
-            padding: isMobile ? 12 : 20,
-            minHeight: "calc(100vh - 52px)",
-            overflow: "auto",
-          }}
-        >
-          <Outlet />
-        </Content>
-      </AntLayout>
-    </AntLayout>
+        <main className="min-h-[calc(100vh-4rem)] overflow-auto p-4 md:p-8">
+          <div className="mx-auto w-full max-w-[1600px]">
+            <Outlet />
+          </div>
+        </main>
+      </div>
+    </div>
   );
 }

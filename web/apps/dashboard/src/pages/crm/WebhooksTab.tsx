@@ -1,22 +1,37 @@
-import {
-  Alert,
-  App,
-  Button,
-  Card,
-  Drawer,
-  Form,
-  Input,
-  InputNumber,
-  Popconfirm,
-  Select,
-  Space,
-  Switch,
-  Table,
-  Typography,
-} from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
+import { Info } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@xray/ui/components/card";
+import { Button } from "@xray/ui/components/button";
+import { Input } from "@xray/ui/components/input";
+import { Label } from "@xray/ui/components/label";
+import { Switch } from "@xray/ui/components/switch";
+import { Alert, AlertDescription } from "@xray/ui/components/alert";
+import { cn } from "@xray/ui/lib/utils";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@xray/ui/components/sheet";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@xray/ui/components/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@xray/ui/components/table";
 import useIsMobile from "../../hooks/useIsMobile";
 import ActionsBuilder from "./ActionsBuilder";
+import ConfirmButton from "../../components/ConfirmButton";
 import {
   createWebhookRule,
   deleteWebhookRule,
@@ -27,8 +42,23 @@ import {
 import { actionSummary, defaultActions, mergeActions } from "./helpers";
 import type { CrmAction, CrmWebhookRuleRow, WebhookScopeGroup } from "./types";
 
+interface RuleForm {
+  name: string;
+  enabled: boolean;
+  scope: string | undefined;
+  event: string | undefined;
+  cooldown_hours: number | null;
+}
+
+const emptyForm: RuleForm = {
+  name: "",
+  enabled: true,
+  scope: undefined,
+  event: undefined,
+  cooldown_hours: null,
+};
+
 export default function WebhooksTab() {
-  const { message } = App.useApp();
   const isMobile = useIsMobile();
   const [loading, setLoading] = useState(false);
   const [rules, setRules] = useState<CrmWebhookRuleRow[]>([]);
@@ -36,19 +66,20 @@ export default function WebhooksTab() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editing, setEditing] = useState<CrmWebhookRuleRow | null>(null);
   const [actions, setActions] = useState<CrmAction[]>(defaultActions());
-  const [scope, setScope] = useState<string | undefined>();
-  const [form] = Form.useForm();
+  const [form, setForm] = useState<RuleForm>(emptyForm);
+
+  const patchForm = (patch: Partial<RuleForm>) => setForm((f) => ({ ...f, ...patch }));
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       setRules(await fetchWebhookRules());
     } catch {
-      message.error("Failed to load webhook rules");
+      toast.error("Failed to load webhook rules");
     } finally {
       setLoading(false);
     }
-  }, [message]);
+  }, []);
 
   useEffect(() => {
     load();
@@ -58,19 +89,17 @@ export default function WebhooksTab() {
   }, [load]);
 
   const eventOptions = useMemo(() => {
-    const group = catalog.find((g) => g.scope === scope);
-    return (group?.events || []).map((e) => ({ value: e.value, label: e.label }));
-  }, [catalog, scope]);
+    const group = catalog.find((g) => g.scope === form.scope);
+    return group?.events || [];
+  }, [catalog, form.scope]);
 
   const openCreate = () => {
     setEditing(null);
-    form.resetFields();
     const first = catalog[0];
-    setScope(first?.scope);
     setActions(defaultActions());
-    form.setFieldsValue({
-      enabled: true,
+    setForm({
       name: "",
+      enabled: true,
       cooldown_hours: null,
       scope: first?.scope,
       event: first?.events[0]?.value,
@@ -80,9 +109,8 @@ export default function WebhooksTab() {
 
   const openEdit = (row: CrmWebhookRuleRow) => {
     setEditing(row);
-    setScope(row.scope);
     setActions(mergeActions(row.actions));
-    form.setFieldsValue({
+    setForm({
       name: row.name,
       enabled: row.enabled,
       scope: row.scope,
@@ -93,32 +121,39 @@ export default function WebhooksTab() {
   };
 
   const saveRule = async () => {
-    const values = await form.validateFields();
+    if (!form.name) {
+      toast.warning("Name is required");
+      return;
+    }
+    if (!form.scope || !form.event) {
+      toast.warning("Scope and event are required");
+      return;
+    }
     if (!actions.some((a) => a.enabled)) {
-      message.warning("Enable at least one action");
+      toast.warning("Enable at least one action");
       return;
     }
     const payload = {
-      name: values.name,
-      enabled: values.enabled,
-      scope: values.scope,
-      event: values.event,
+      name: form.name,
+      enabled: form.enabled,
+      scope: form.scope,
+      event: form.event,
       actions,
-      cooldown_hours: values.cooldown_hours ?? null,
+      cooldown_hours: form.cooldown_hours ?? null,
     };
     try {
       if (editing) {
         await updateWebhookRule(editing.id, payload);
-        message.success("Rule updated");
+        toast.success("Rule updated");
       } else {
         await createWebhookRule(payload);
-        message.success("Rule created");
+        toast.success("Rule created");
       }
       setDrawerOpen(false);
       setEditing(null);
       load();
     } catch {
-      message.error("Failed to save");
+      toast.error("Failed to save");
     }
   };
 
@@ -127,257 +162,278 @@ export default function WebhooksTab() {
       await updateWebhookRule(row.id, { enabled });
       load();
     } catch {
-      message.error("Failed to change status");
+      toast.error("Failed to change status");
     }
   };
 
-  const columns = [
-    {
-      title: "Name",
-      dataIndex: "name",
-      ellipsis: true,
-      render: (name: string, row: CrmWebhookRuleRow) => (
-        <Button type="link" onClick={() => openEdit(row)} style={{ padding: 0 }}>
-          {name || `#${row.id}`}
-        </Button>
-      ),
-    },
-    {
-      title: "Scope / Event",
-      responsive: ["md" as const],
-      render: (_: unknown, row: CrmWebhookRuleRow) => (
-        <Typography.Text code style={{ fontSize: 12 }}>
-          {row.scope} / {row.event}
-        </Typography.Text>
-      ),
-    },
-    {
-      title: "Actions",
-      responsive: ["lg" as const],
-      render: (_: unknown, row: CrmWebhookRuleRow) => actionSummary(row.actions),
-    },
-    {
-      title: "Received",
-      width: 90,
-      render: (_: unknown, row: CrmWebhookRuleRow) => row.webhooks_received ?? 0,
-    },
-    {
-      title: "Sent",
-      width: 70,
-      render: (_: unknown, row: CrmWebhookRuleRow) => row.messages_sent ?? 0,
-    },
-    {
-      title: "Failed",
-      width: 80,
-      render: (_: unknown, row: CrmWebhookRuleRow) => (
-        <Typography.Text type={(row.messages_failed ?? 0) > 0 ? "danger" : undefined}>
-          {row.messages_failed ?? 0}
-        </Typography.Text>
-      ),
-    },
-    {
-      title: "Cooldown",
-      width: 90,
-      responsive: ["md" as const],
-      render: (_: unknown, row: CrmWebhookRuleRow) =>
-        row.cooldown_hours != null ? `${row.cooldown_hours}h` : "—",
-    },
-    {
-      title: "On",
-      width: 70,
-      render: (_: unknown, row: CrmWebhookRuleRow) => (
-        <Switch
-          size="small"
-          checked={row.enabled}
-          onChange={(v) => toggleEnabled(row, v)}
-        />
-      ),
-    },
-    {
-      title: "",
-      width: isMobile ? 100 : 140,
-      render: (_: unknown, row: CrmWebhookRuleRow) => (
-        <Space size={4}>
-          <Button size="small" onClick={() => openEdit(row)}>
-            Edit
-          </Button>
-          <Popconfirm
-            title="Delete this rule?"
-            onConfirm={async () => {
-              try {
-                await deleteWebhookRule(row.id);
-                message.success("Deleted");
-                load();
-              } catch {
-                message.error("Failed to delete");
-              }
-            }}
-          >
-            <Button danger size="small" type="link">
-              Delete
-            </Button>
-          </Popconfirm>
-        </Space>
-      ),
-    },
-  ];
+  const handleDelete = async (row: CrmWebhookRuleRow) => {
+    try {
+      await deleteWebhookRule(row.id);
+      toast.success("Deleted");
+      load();
+    } catch {
+      toast.error("Failed to delete");
+    }
+  };
+
+  const onScopeChange = (v: string) => {
+    const firstEvent = catalog.find((g) => g.scope === v)?.events[0]?.value;
+    patchForm({ scope: v, event: firstEvent });
+  };
 
   return (
     <div>
-      <Space
-        style={{
-          width: "100%",
-          justifyContent: "space-between",
-          marginBottom: 12,
-          flexWrap: "wrap",
-        }}
-      >
-        <Typography.Text type="secondary">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm text-muted-foreground">
           Remnawave webhook → CRM actions (scope + event)
-        </Typography.Text>
-        <Button type="primary" onClick={openCreate}>
-          New rule
-        </Button>
-      </Space>
+        </p>
+        <Button onClick={openCreate}>New rule</Button>
+      </div>
 
       {isMobile ? (
-        <Space direction="vertical" style={{ width: "100%" }} size={8}>
+        <div className="space-y-2">
           {rules.map((row) => (
-            <Card
-              key={row.id}
-              size="small"
-              title={
-                <Space>
-                  <Switch
-                    size="small"
-                    checked={row.enabled}
-                    onChange={(v) => toggleEnabled(row, v)}
-                  />
-                  <Button type="link" onClick={() => openEdit(row)} style={{ padding: 0 }}>
-                    {row.name || `#${row.id}`}
-                  </Button>
-                </Space>
-              }
-              extra={
-                <Space size={0}>
-                  <Button size="small" type="link" onClick={() => openEdit(row)}>
-                    Edit
-                  </Button>
-                  <Popconfirm
-                    title="Delete?"
-                    onConfirm={async () => {
-                      try {
-                        await deleteWebhookRule(row.id);
-                        load();
-                      } catch {
-                        message.error("Failed to delete");
-                      }
-                    }}
-                  >
-                    <Button danger size="small" type="link">
-                      Del
+            <Card key={row.id}>
+              <CardContent className="p-3">
+                <div className="mb-1.5 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={row.enabled}
+                      onCheckedChange={(v: boolean) => toggleEnabled(row, v)}
+                    />
+                    <button
+                      type="button"
+                      className="font-medium text-primary"
+                      onClick={() => openEdit(row)}
+                    >
+                      {row.name || `#${row.id}`}
+                    </button>
+                  </div>
+                  <div className="flex items-center">
+                    <Button size="sm" variant="ghost" onClick={() => openEdit(row)}>
+                      Edit
                     </Button>
-                  </Popconfirm>
-                </Space>
-              }
-            >
-              <Typography.Text code style={{ fontSize: 11 }}>
-                {row.scope}/{row.event}
-              </Typography.Text>
-              <div style={{ marginTop: 6, fontSize: 12, opacity: 0.7 }}>
-                {actionSummary(row.actions)}
-                {row.cooldown_hours != null ? ` · cooldown ${row.cooldown_hours}h` : ""}
-              </div>
-              <div style={{ marginTop: 4, fontSize: 12 }}>
-                recv {row.webhooks_received ?? 0} · sent {row.messages_sent ?? 0}
-                {(row.messages_failed ?? 0) > 0 ? (
-                  <Typography.Text type="danger">
-                    {` · fail ${row.messages_failed}`}
-                  </Typography.Text>
-                ) : (
-                  ` · fail ${row.messages_failed ?? 0}`
-                )}
-              </div>
+                    <ConfirmButton title="Delete?" destructive onConfirm={() => handleDelete(row)}>
+                      <Button size="sm" variant="ghost" className="text-destructive">
+                        Del
+                      </Button>
+                    </ConfirmButton>
+                  </div>
+                </div>
+                <code className="rounded bg-muted px-1 text-[11px]">
+                  {row.scope}/{row.event}
+                </code>
+                <div className="mt-1.5 text-xs text-muted-foreground">
+                  {actionSummary(row.actions)}
+                  {row.cooldown_hours != null ? ` · cooldown ${row.cooldown_hours}h` : ""}
+                </div>
+                <div className="mt-1 text-xs">
+                  recv {row.webhooks_received ?? 0} · sent {row.messages_sent ?? 0} ·{" "}
+                  <span className={cn((row.messages_failed ?? 0) > 0 && "text-destructive")}>
+                    fail {row.messages_failed ?? 0}
+                  </span>
+                </div>
+              </CardContent>
             </Card>
           ))}
           {!loading && rules.length === 0 && (
-            <Alert type="info" showIcon message="No webhook rules yet" />
+            <Alert>
+              <Info className="h-4 w-4" />
+              <AlertDescription>No webhook rules yet</AlertDescription>
+            </Alert>
           )}
-        </Space>
+        </div>
       ) : (
-        <Table
-          rowKey="id"
-          loading={loading}
-          dataSource={rules}
-          columns={columns}
-          pagination={false}
-          size="middle"
-        />
+        <div className="overflow-auto rounded-lg border border-border">
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead>Name</TableHead>
+                <TableHead>Scope / Event</TableHead>
+                <TableHead>Actions</TableHead>
+                <TableHead>Received</TableHead>
+                <TableHead>Sent</TableHead>
+                <TableHead>Failed</TableHead>
+                <TableHead>Cooldown</TableHead>
+                <TableHead>On</TableHead>
+                <TableHead />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rules.length === 0 ? (
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
+                    {loading ? "Loading..." : "No webhook rules"}
+                  </TableCell>
+                </TableRow>
+              ) : (
+                rules.map((row) => (
+                  <TableRow key={row.id}>
+                    <TableCell>
+                      <button
+                        type="button"
+                        className="text-primary hover:underline"
+                        onClick={() => openEdit(row)}
+                      >
+                        {row.name || `#${row.id}`}
+                      </button>
+                    </TableCell>
+                    <TableCell>
+                      <code className="text-xs">
+                        {row.scope} / {row.event}
+                      </code>
+                    </TableCell>
+                    <TableCell>{actionSummary(row.actions)}</TableCell>
+                    <TableCell>{row.webhooks_received ?? 0}</TableCell>
+                    <TableCell>{row.messages_sent ?? 0}</TableCell>
+                    <TableCell className={cn((row.messages_failed ?? 0) > 0 && "text-destructive")}>
+                      {row.messages_failed ?? 0}
+                    </TableCell>
+                    <TableCell>{row.cooldown_hours != null ? `${row.cooldown_hours}h` : "—"}</TableCell>
+                    <TableCell>
+                      <Switch
+                        checked={row.enabled}
+                        onCheckedChange={(v: boolean) => toggleEnabled(row, v)}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex gap-1">
+                        <Button size="sm" variant="outline" onClick={() => openEdit(row)}>
+                          Edit
+                        </Button>
+                        <ConfirmButton
+                          title="Delete this rule?"
+                          destructive
+                          onConfirm={() => handleDelete(row)}
+                        >
+                          <Button size="sm" variant="ghost" className="text-destructive">
+                            Delete
+                          </Button>
+                        </ConfirmButton>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
       )}
 
-      <Drawer
-        title={editing ? `Edit: ${editing.name || `#${editing.id}`}` : "New webhook rule"}
+      <Sheet
         open={drawerOpen}
-        onClose={() => {
-          setDrawerOpen(false);
-          setEditing(null);
+        onOpenChange={(o: boolean) => {
+          setDrawerOpen(o);
+          if (!o) setEditing(null);
         }}
-        width={isMobile ? "100%" : 560}
-        destroyOnHidden
-        extra={
-          <Button type="primary" onClick={saveRule}>
-            {editing ? "Save changes" : "Create"}
-          </Button>
-        }
       >
-        {editing && (
-          <Alert
-            type="info"
-            showIcon
-            style={{ marginBottom: 12 }}
-            message={`Stats: received ${editing.webhooks_received ?? 0}, sent ${editing.messages_sent ?? 0}, failed ${editing.messages_failed ?? 0}`}
-          />
-        )}
-        <Form form={form} layout="vertical">
-          <Form.Item name="name" label="Name" rules={[{ required: true }]}>
-            <Input placeholder="Torrent warning" />
-          </Form.Item>
-          <Form.Item name="enabled" label="Enabled" valuePropName="checked">
-            <Switch />
-          </Form.Item>
+        <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-[560px]">
+          <SheetHeader className="flex-row items-center justify-between space-y-0">
+            <SheetTitle>
+              {editing ? `Edit: ${editing.name || `#${editing.id}`}` : "New webhook rule"}
+            </SheetTitle>
+            <Button size="sm" onClick={saveRule}>
+              {editing ? "Save changes" : "Create"}
+            </Button>
+          </SheetHeader>
 
-          <Card title="1. Conditions" size="small" style={{ marginBottom: 12 }}>
-            <Form.Item name="scope" label="Scope" rules={[{ required: true }]}>
-              <Select
-                options={catalog.map((g) => ({ value: g.scope, label: g.label }))}
-                onChange={(v) => {
-                  setScope(v);
-                  const firstEvent = catalog.find((g) => g.scope === v)?.events[0]?.value;
-                  form.setFieldsValue({ event: firstEvent });
-                }}
+          <div className="space-y-4 py-4">
+            {editing && (
+              <Alert>
+                <Info className="h-4 w-4" />
+                <AlertDescription>
+                  Stats: received {editing.webhooks_received ?? 0}, sent {editing.messages_sent ?? 0},
+                  failed {editing.messages_failed ?? 0}
+                </AlertDescription>
+              </Alert>
+            )}
+
+            <div className="space-y-1.5">
+              <Label>Name *</Label>
+              <Input
+                placeholder="Torrent warning"
+                value={form.name}
+                onChange={(e) => patchForm({ name: e.target.value })}
               />
-            </Form.Item>
-            <Form.Item name="event" label="Event" rules={[{ required: true }]}>
-              <Select options={eventOptions} disabled={!scope} />
-            </Form.Item>
-            <Form.Item
-              name="cooldown_hours"
-              label="Cooldown (hours)"
-              tooltip="Skip re-running for the same user within this window. Empty = no limit."
-            >
-              <InputNumber min={1} max={720} style={{ width: "100%" }} placeholder="Optional" />
-            </Form.Item>
-          </Card>
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch
+                checked={form.enabled}
+                onCheckedChange={(v: boolean) => patchForm({ enabled: v })}
+              />
+              <Label>Enabled</Label>
+            </div>
 
-          <ActionsBuilder
-            actions={actions}
-            onChange={setActions}
-            segmentId={null}
-            templates={[]}
-            variablesContext="webhook"
-          />
-        </Form>
-      </Drawer>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">1. Conditions</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label>Scope *</Label>
+                  <Select value={form.scope} onValueChange={(v: string) => onScopeChange(v)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select scope" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {catalog.map((g) => (
+                        <SelectItem key={g.scope} value={g.scope}>
+                          {g.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Event *</Label>
+                  <Select
+                    value={form.event}
+                    onValueChange={(v: string) => patchForm({ event: v })}
+                    disabled={!form.scope}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select event" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {eventOptions.map((e) => (
+                        <SelectItem key={e.value} value={e.value}>
+                          {e.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Cooldown (hours)</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={720}
+                    placeholder="Optional"
+                    value={form.cooldown_hours ?? ""}
+                    onChange={(e) =>
+                      patchForm({
+                        cooldown_hours: e.target.value === "" ? null : Number(e.target.value),
+                      })
+                    }
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Skip re-running for the same user within this window. Empty = no limit.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <ActionsBuilder
+              actions={actions}
+              onChange={setActions}
+              segmentId={null}
+              templates={[]}
+              variablesContext="webhook"
+            />
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

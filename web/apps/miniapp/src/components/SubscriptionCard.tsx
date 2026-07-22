@@ -1,5 +1,6 @@
-import { Progress, Tag } from "antd";
-import { LaptopOutlined, WifiOutlined } from "@ant-design/icons";
+import { Laptop, Wifi } from "lucide-react";
+import { Progress } from "@xray/ui/components/progress";
+import { Badge } from "@xray/ui/components/badge";
 import { SubscriptionInfo } from "../api/client";
 
 interface Props {
@@ -13,10 +14,10 @@ const STATUS_LABELS: Record<string, string> = {
   limited:  "Ограничена",
 };
 
-const STATUS_TAG_COLOR: Record<string, string> = {
+const STATUS_BADGE_VARIANT: Record<string, "success" | "destructive" | "secondary" | "warning"> = {
   active:   "success",
-  expired:  "error",
-  disabled: "default",
+  expired:  "destructive",
+  disabled: "secondary",
   limited:  "warning",
 };
 
@@ -36,7 +37,7 @@ function formatExpiry(iso: string | null): string {
 export default function SubscriptionCard({ sub }: Props) {
   const statusKey = sub.status || "";
   const statusLabel = STATUS_LABELS[statusKey] || statusKey || "—";
-  const statusTagColor = STATUS_TAG_COLOR[statusKey] || "default";
+  const statusVariant = STATUS_BADGE_VARIANT[statusKey] || "secondary";
 
   const usagePct =
     sub.data_limit_gb && sub.data_limit_gb > 0
@@ -52,9 +53,7 @@ export default function SubscriptionCard({ sub }: Props) {
       {/* Header: tariff name + status badge */}
       <div className="sub-card__header">
         <span className="sub-card__tariff">{sub.tariff}</span>
-        <Tag color={statusTagColor} style={{ margin: 0, fontWeight: 600 }}>
-          {statusLabel}
-        </Tag>
+        <Badge variant={statusVariant}>{statusLabel}</Badge>
       </div>
 
       {/* Days remaining (large) */}
@@ -66,12 +65,7 @@ export default function SubscriptionCard({ sub }: Props) {
       {/* Traffic progress (only if limited) */}
       {sub.data_limit_gb ? (
         <div className="sub-card__progress">
-          <Progress
-            percent={usagePct}
-            status={usagePct >= 95 ? "exception" : "active"}
-            showInfo={false}
-            strokeWidth={5}
-          />
+          <Progress value={usagePct} className={usagePct >= 95 ? "progress-danger" : undefined} />
         </div>
       ) : (
         <div style={{ height: 12 }} />
@@ -81,7 +75,7 @@ export default function SubscriptionCard({ sub }: Props) {
       <div className="sub-card__stats">
         <div className="sub-card__stat">
           <div className="sub-card__stat-val">
-            <LaptopOutlined style={{ marginRight: 5, fontSize: 14, opacity: 0.7 }} />
+            <Laptop style={{ marginRight: 5, width: 14, height: 14, opacity: 0.7 }} />
             {sub.devices_count}
           </div>
           <div className="sub-card__stat-label">Устройства</div>
@@ -89,7 +83,7 @@ export default function SubscriptionCard({ sub }: Props) {
 
         <div className="sub-card__stat">
           <div className="sub-card__stat-val">
-            <WifiOutlined style={{ marginRight: 5, fontSize: 14, opacity: 0.7 }} />
+            <Wifi style={{ marginRight: 5, width: 14, height: 14, opacity: 0.7 }} />
             {trafficLabel}
           </div>
           <div className="sub-card__stat-label">Трафик</div>

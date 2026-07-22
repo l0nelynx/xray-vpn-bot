@@ -1,26 +1,41 @@
-import { Alert, Button, Form, Input, Space, Typography } from "antd";
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
+import { Alert, AlertTitle } from "@xray/ui/components/alert";
+import { Button } from "@xray/ui/components/button";
+import { Input } from "@xray/ui/components/input";
+import { Label } from "@xray/ui/components/label";
+import { Textarea } from "@xray/ui/components/textarea";
 import { api, TicketDetail } from "../api/client";
 
-interface FormValues {
-  subject: string;
-  message: string;
-}
+const SUBJECT_MAX = 200;
+const MESSAGE_MAX = 4000;
 
 export default function SupportCreatePage() {
   const navigate = useNavigate();
-  const [form] = Form.useForm<FormValues>();
+  const [subject, setSubject] = useState("");
+  const [message, setMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
 
-  const submit = async (values: FormValues) => {
+  const submit = async () => {
+    const trimmedSubject = subject.trim();
+    const trimmedMessage = message.trim();
+    if (!trimmedSubject) {
+      setFormError("Введите тему");
+      return;
+    }
+    if (!trimmedMessage) {
+      setFormError("Опишите проблему");
+      return;
+    }
+    setFormError(null);
     setError(null);
     setSubmitting(true);
     try {
       const t = await api.post<TicketDetail>("/support/tickets", {
-        subject: values.subject.trim(),
-        message: values.message.trim(),
+        subject: trimmedSubject,
+        message: trimmedMessage,
       });
       navigate(`/support/${t.id}`, { replace: true });
     } catch (e: any) {
@@ -32,49 +47,60 @@ export default function SupportCreatePage() {
 
   return (
     <div className="page">
-      <Typography.Title level={3} style={{ marginBottom: 20 }}>
+      <div className="text-xl font-bold text-foreground mb-5">
         Новое обращение
-      </Typography.Title>
+      </div>
 
-      {error && <Alert type="error" title={error} style={{ marginBottom: 16 }} />}
+      {error && (
+        <Alert variant="destructive" className="mb-4">
+          <AlertTitle>{error}</AlertTitle>
+        </Alert>
+      )}
 
-      <Form form={form} layout="vertical" onFinish={submit}>
-        <Form.Item
-          label="Тема"
-          name="subject"
-          rules={[
-            { required: true, message: "Введите тему" },
-            { max: 200, message: "Не более 200 символов" },
-          ]}
-        >
-          <Input placeholder="Тема обращения" maxLength={200} />
-        </Form.Item>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          submit();
+        }}
+        className="flex flex-col gap-4"
+      >
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="subject">Тема</Label>
+          <Input
+            id="subject"
+            placeholder="Тема обращения"
+            value={subject}
+            onChange={(e) => setSubject(e.target.value.slice(0, SUBJECT_MAX))}
+            maxLength={SUBJECT_MAX}
+          />
+        </div>
 
-        <Form.Item
-          label="Сообщение"
-          name="message"
-          rules={[
-            { required: true, message: "Опишите проблему" },
-            { max: 4000, message: "Не более 4000 символов" },
-          ]}
-        >
-          <Input.TextArea
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="message">Сообщение</Label>
+          <Textarea
+            id="message"
             placeholder="Опишите проблему"
             rows={6}
-            maxLength={4000}
-            showCount
+            value={message}
+            onChange={(e) => setMessage(e.target.value.slice(0, MESSAGE_MAX))}
+            maxLength={MESSAGE_MAX}
           />
-        </Form.Item>
+          <span className="text-xs text-muted-foreground text-right">
+            {message.length}/{MESSAGE_MAX}
+          </span>
+        </div>
 
-        <Space direction="vertical" size={12} style={{ width: "100%" }}>
-          <Button type="primary" size="large" block htmlType="submit" loading={submitting}>
-            Отправить
+        {formError && <span className="text-destructive text-[13px]">{formError}</span>}
+
+        <div className="flex flex-col gap-3 w-full">
+          <Button size="lg" className="w-full" type="submit" disabled={submitting}>
+            {submitting ? "Отправляем…" : "Отправить"}
           </Button>
-          <Button size="large" block onClick={() => navigate(-1)}>
+          <Button size="lg" variant="outline" className="w-full" type="button" onClick={() => navigate(-1)}>
             Отмена
           </Button>
-        </Space>
-      </Form>
+        </div>
+      </form>
     </div>
   );
 }

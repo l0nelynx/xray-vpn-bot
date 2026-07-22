@@ -1,12 +1,16 @@
-import { Typography } from "antd";
 import TransactionsTable from "../components/TransactionsTable";
 
 export default function TransactionsPage() {
   return (
-    <div>
-      <Typography.Title level={4} style={{ marginBottom: 20, color: "rgba(255,255,255,0.88)" }}>
-        Transactions
-      </Typography.Title>
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-2xl font-semibold tracking-tight">Transactions</h2>
+          <p className="text-sm text-muted-foreground">
+            Track payments, order status and clean up stale records.
+          </p>
+        </div>
+      </div>
       <TransactionsTable />
     </div>
   );

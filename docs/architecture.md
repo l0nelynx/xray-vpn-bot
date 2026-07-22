@@ -18,7 +18,7 @@ services/                     # deployable backends (one image each)
 web/
   apps/dashboard/             # React + Vite SPA (admin)
   apps/miniapp/               # React + Vite SPA (Telegram MiniApp only)
-  packages/ui/                # shared antd "liquid glass" theme builder (@xray/ui)
+  packages/ui/                # shared shadcn/ui components + dark theme (@xray/ui)
   packages/api/               # shared fetch client (@xray/api)
 # Browser web portal SPA: https://github.com/l0nelynx/web-portal (separate repo)
 packages/                     # shared python packages
