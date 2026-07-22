@@ -13,7 +13,6 @@ import {
   Radio,
   Select,
   Space,
-  Spin,
   Table,
   Tag,
   Typography,
@@ -76,6 +75,8 @@ const STATUS_COLORS: Record<GiveawayStatus, string> = {
   drawn: "blue",
 };
 
+const PER_PAGE = 20;
+
 function statusTag(status: GiveawayStatus) {
   return <Tag color={STATUS_COLORS[status]}>{status}</Tag>;
 }
@@ -101,7 +102,7 @@ export default function GiveawaysPage() {
     try {
       const params = new URLSearchParams({
         page: String(page),
-        per_page: "20",
+        per_page: String(PER_PAGE),
       });
       if (statusFilter) params.set("status", statusFilter);
       const data = await api.get<{ items: GiveawayItem[]; total: number }>(
@@ -286,6 +287,53 @@ export default function GiveawaysPage() {
   ];
 
   const chanceMode = Form.useWatch("chance_mode", form);
+  const radioStyle = isMobile
+    ? { display: "flex", flexDirection: "column" as const, gap: 8 }
+    : undefined;
+
+  const renderMobileCard = (item: GiveawayItem) => (
+    <Card
+      key={item.id}
+      size="small"
+      style={{ marginBottom: 8 }}
+      styles={{ body: { padding: "12px" } }}
+      onClick={() => openDetail(item)}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start" }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div
+            style={{
+              fontWeight: 600,
+              color: "rgba(255,255,255,0.88)",
+              marginBottom: 6,
+              wordBreak: "break-word",
+            }}
+          >
+            {item.title || `Giveaway #${item.id}`}
+          </div>
+          <div style={{ marginBottom: 6 }}>{statusTag(item.status)}</div>
+          <div style={{ fontSize: 12, color: "rgba(255,255,255,0.55)" }}>
+            #{item.id} · {item.participants} participants · {item.tickets} tickets
+          </div>
+          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginTop: 2 }}>
+            Winners: {item.winner_count}
+            {item.ends_at ? ` · Ends ${dayjs(item.ends_at).format("DD.MM HH:mm")}` : ""}
+          </div>
+        </div>
+        {item.status === "draft" && (
+          <Button
+            size="small"
+            onClick={(e) => {
+              e.stopPropagation();
+              openEdit(item);
+            }}
+          >
+            Edit
+          </Button>
+        )}
+      </div>
+    </Card>
+  );
 
   return (
     <div>
@@ -296,11 +344,25 @@ export default function GiveawaysPage() {
         <TrophyOutlined /> Giveaways
       </Typography.Title>
 
-      <Space wrap style={{ marginBottom: 16 }}>
+      <div
+        style={{
+          marginBottom: 16,
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 8,
+          justifyContent: isMobile ? "stretch" : "flex-start",
+        }}
+      >
+        <Button type="primary" icon={<PlusOutlined />} onClick={openCreate} block={isMobile}>
+          New giveaway
+        </Button>
+        <Button icon={<ReloadOutlined />} onClick={load} loading={loading} block={isMobile}>
+          Refresh
+        </Button>
         <Select
           allowClear
           placeholder="Filter by status"
-          style={{ width: 160 }}
+          style={{ width: isMobile ? "100%" : 160 }}
           value={statusFilter || undefined}
           onChange={(v) => {
             setStatusFilter(v || "");
@@ -313,38 +375,80 @@ export default function GiveawaysPage() {
             { value: "drawn", label: "drawn" },
           ]}
         />
-        <Button icon={<ReloadOutlined />} onClick={load}>
-          Refresh
-        </Button>
-        <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-          New giveaway
-        </Button>
-      </Space>
+      </div>
 
-      <Table
-        rowKey="id"
-        loading={loading}
-        columns={columns}
-        dataSource={items}
-        pagination={{
-          current: page,
-          pageSize: 20,
-          total,
-          onChange: setPage,
-        }}
-        scroll={{ x: isMobile ? 640 : undefined }}
-        size={isMobile ? "small" : "middle"}
-      />
+      {isMobile ? (
+        <>
+          {loading ? (
+            <div style={{ textAlign: "center", padding: 40, color: "rgba(255,255,255,0.4)" }}>
+              Loading...
+            </div>
+          ) : items.length === 0 ? (
+            <div style={{ textAlign: "center", padding: 40, color: "rgba(255,255,255,0.4)" }}>
+              No giveaways
+            </div>
+          ) : (
+            items.map(renderMobileCard)
+          )}
+          <div
+            style={{
+              textAlign: "center",
+              padding: "12px 0",
+              color: "rgba(255,255,255,0.45)",
+              fontSize: 12,
+            }}
+          >
+            Page {page} · Total: {total}
+          </div>
+          <div style={{ display: "flex", justifyContent: "center", gap: 8 }}>
+            <Button size="small" disabled={page <= 1} onClick={() => setPage(page - 1)}>
+              Prev
+            </Button>
+            <Button
+              size="small"
+              disabled={page * PER_PAGE >= total}
+              onClick={() => setPage(page + 1)}
+            >
+              Next
+            </Button>
+          </div>
+        </>
+      ) : (
+        <Table
+          rowKey="id"
+          loading={loading}
+          columns={columns}
+          dataSource={items}
+          pagination={{
+            current: page,
+            pageSize: PER_PAGE,
+            total,
+            onChange: setPage,
+            showSizeChanger: false,
+          }}
+          size="middle"
+        />
+      )}
 
       <Drawer
         title={editing ? `Edit #${editing.id}` : "New giveaway"}
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         width={isMobile ? "100%" : 520}
+        styles={isMobile ? { body: { paddingBottom: 80 } } : undefined}
         extra={
-          <Button type="primary" onClick={onSave}>
-            Save
-          </Button>
+          !isMobile ? (
+            <Button type="primary" onClick={onSave}>
+              Save
+            </Button>
+          ) : undefined
+        }
+        footer={
+          isMobile ? (
+            <Button type="primary" onClick={onSave} block>
+              Save
+            </Button>
+          ) : undefined
         }
       >
         <Form form={form} layout="vertical">
@@ -352,7 +456,7 @@ export default function GiveawaysPage() {
             <Input />
           </Form.Item>
           <Form.Item name="channel_text" label="Post / broadcast text (HTML)">
-            <TextArea rows={5} />
+            <TextArea rows={isMobile ? 4 : 5} />
           </Form.Item>
           <Form.Item name="winner_count" label="Number of winners" rules={[{ required: true }]}>
             <InputNumber min={1} max={100} style={{ width: "100%" }} />
@@ -364,38 +468,41 @@ export default function GiveawaysPage() {
             <DatePicker showTime style={{ width: "100%" }} />
           </Form.Item>
           <Form.Item label="Distribution">
-            <Form.Item name="distribution_bot" valuePropName="checked" noStyle>
-              <Checkbox>Bot broadcast</Checkbox>
-            </Form.Item>
-            <Form.Item name="distribution_channel" valuePropName="checked" noStyle>
-              <Checkbox style={{ marginLeft: 16 }}>Channel post</Checkbox>
-            </Form.Item>
+            <Space direction={isMobile ? "vertical" : "horizontal"} size={isMobile ? 8 : 16}>
+              <Form.Item name="distribution_bot" valuePropName="checked" noStyle>
+                <Checkbox>Bot broadcast</Checkbox>
+              </Form.Item>
+              <Form.Item name="distribution_channel" valuePropName="checked" noStyle>
+                <Checkbox>Channel post</Checkbox>
+              </Form.Item>
+            </Space>
           </Form.Item>
           <Form.Item name="entry_condition" label="Entry requirement">
-            <Radio.Group>
+            <Radio.Group style={radioStyle}>
               <Radio value="click_only">Click participate</Radio>
               <Radio value="channel_sub">Channel subscription</Radio>
             </Radio.Group>
           </Form.Item>
           <Form.Item name="chance_mode" label="Ticket mode">
-            <Radio.Group>
+            <Radio.Group style={radioStyle}>
               <Radio value="static">Static (1 ticket per participant)</Radio>
               <Radio value="dynamic">Dynamic (extra tickets for invitees)</Radio>
             </Radio.Group>
           </Form.Item>
           {chanceMode === "dynamic" && (
             <Form.Item label="Extra ticket sources">
-              <Form.Item name="ticket_ref" valuePropName="checked" noStyle>
-                <Checkbox>Invitee activated referral code</Checkbox>
-              </Form.Item>
-              <br />
-              <Form.Item name="ticket_purchase" valuePropName="checked" noStyle>
-                <Checkbox>Invitee purchased subscription</Checkbox>
-              </Form.Item>
+              <Space direction="vertical" size={8}>
+                <Form.Item name="ticket_ref" valuePropName="checked" noStyle>
+                  <Checkbox>Invitee activated referral code</Checkbox>
+                </Form.Item>
+                <Form.Item name="ticket_purchase" valuePropName="checked" noStyle>
+                  <Checkbox>Invitee purchased subscription</Checkbox>
+                </Form.Item>
+              </Space>
             </Form.Item>
           )}
           <Form.Item name="winner_selection" label="Winner selection">
-            <Radio.Group>
+            <Radio.Group style={radioStyle}>
               <Radio value="random">Random (weighted by tickets)</Radio>
               <Radio value="most_tickets">Most tickets</Radio>
             </Radio.Group>
@@ -408,45 +515,85 @@ export default function GiveawaysPage() {
         open={!!detail}
         onClose={() => setDetail(null)}
         width={isMobile ? "100%" : 640}
+        styles={isMobile ? { body: { paddingBottom: 24 } } : undefined}
       >
         {detail && (
-          <Spin spinning={false}>
-            <Space direction="vertical" style={{ width: "100%" }} size="middle">
-              <div>
-                {statusTag(detail.status)}{" "}
-                <Typography.Text type="secondary">
-                  {detail.participants} participants · {detail.tickets} tickets
-                </Typography.Text>
-              </div>
-              <Space wrap>
-                {detail.status === "draft" && (
-                  <Button type="primary" onClick={() => runAction(detail.id, "activate", "Activated")}>
-                    Activate
+          <Space direction="vertical" style={{ width: "100%" }} size="middle">
+            <div>
+              {statusTag(detail.status)}{" "}
+              <Typography.Text type="secondary">
+                {detail.participants} participants · {detail.tickets} tickets
+              </Typography.Text>
+            </div>
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 8,
+              }}
+            >
+              {detail.status === "draft" && (
+                <Button
+                  type="primary"
+                  block={isMobile}
+                  onClick={() => runAction(detail.id, "activate", "Activated")}
+                >
+                  Activate
+                </Button>
+              )}
+              {detail.status === "active" && (
+                <>
+                  <Button
+                    block={isMobile}
+                    onClick={() => runAction(detail.id, "broadcast", "Broadcast queued")}
+                  >
+                    Bot broadcast
                   </Button>
-                )}
-                {detail.status === "active" && (
-                  <>
-                    <Button onClick={() => runAction(detail.id, "broadcast", "Broadcast queued")}>
-                      Bot broadcast
-                    </Button>
-                    <Button onClick={() => runAction(detail.id, "channel-post", "Posted to channel")}>
-                      Channel post
-                    </Button>
-                    <Button onClick={() => runAction(detail.id, "close", "Closed")}>
-                      Close
-                    </Button>
-                  </>
-                )}
-                {(detail.status === "active" || detail.status === "closed") && (
-                  <Button type="primary" danger onClick={onDraw}>
-                    Draw winners
+                  <Button
+                    block={isMobile}
+                    onClick={() => runAction(detail.id, "channel-post", "Posted to channel")}
+                  >
+                    Channel post
                   </Button>
-                )}
-                {detail.status === "drawn" && winners.length > 0 && (
-                  <Button onClick={() => setWinnersOpen(true)}>Show winners</Button>
-                )}
-              </Space>
-              <Card title="Participants" size="small">
+                  <Button block={isMobile} onClick={() => runAction(detail.id, "close", "Closed")}>
+                    Close
+                  </Button>
+                </>
+              )}
+              {(detail.status === "active" || detail.status === "closed") && (
+                <Button type="primary" danger block={isMobile} onClick={onDraw}>
+                  Draw winners
+                </Button>
+              )}
+              {detail.status === "drawn" && winners.length > 0 && (
+                <Button block={isMobile} onClick={() => setWinnersOpen(true)}>
+                  Show winners
+                </Button>
+              )}
+            </div>
+            <Card title="Participants" size="small">
+              {isMobile ? (
+                participants.length === 0 ? (
+                  <Typography.Text type="secondary">No participants yet</Typography.Text>
+                ) : (
+                  participants.map((p) => (
+                    <div
+                      key={p.tg_id}
+                      style={{
+                        padding: "8px 0",
+                        borderBottom: "1px solid rgba(255,255,255,0.06)",
+                      }}
+                    >
+                      <div style={{ fontWeight: 500, color: "rgba(255,255,255,0.85)" }}>
+                        {p.username ? `@${p.username}` : p.tg_id}
+                      </div>
+                      <div style={{ fontSize: 12, color: "rgba(255,255,255,0.45)" }}>
+                        {p.tg_id} · {p.ticket_count} tickets
+                      </div>
+                    </div>
+                  ))
+                )
+              ) : (
                 <Table
                   rowKey="tg_id"
                   size="small"
@@ -462,9 +609,9 @@ export default function GiveawaysPage() {
                     { title: "Tickets", dataIndex: "ticket_count" },
                   ]}
                 />
-              </Card>
-            </Space>
-          </Spin>
+              )}
+            </Card>
+          </Space>
         )}
       </Drawer>
 
@@ -472,16 +619,23 @@ export default function GiveawaysPage() {
         title="Winners"
         open={winnersOpen}
         onCancel={() => setWinnersOpen(false)}
+        width={isMobile ? "calc(100vw - 16px)" : undefined}
+        style={isMobile ? { top: 16, maxWidth: "calc(100vw - 16px)", margin: "0 auto" } : undefined}
         footer={[
-          <Button key="copy" onClick={copyWinners}>
+          <Button key="copy" onClick={copyWinners} block={isMobile}>
             Copy list
           </Button>,
-          <Button key="close" type="primary" onClick={() => setWinnersOpen(false)}>
+          <Button
+            key="close"
+            type="primary"
+            onClick={() => setWinnersOpen(false)}
+            block={isMobile}
+          >
             Close
           </Button>,
         ]}
       >
-        <pre style={{ whiteSpace: "pre-wrap", margin: 0 }}>
+        <pre style={{ whiteSpace: "pre-wrap", margin: 0, fontSize: isMobile ? 13 : undefined }}>
           {winners
             .map(
               (w) =>

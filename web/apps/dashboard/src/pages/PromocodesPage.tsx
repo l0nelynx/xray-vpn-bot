@@ -698,13 +698,75 @@ function ReferralStatsTab() {
     setOrder,
   });
 
+  const perPage = 20;
+
+  const renderMobileCard = (item: ReferralStatItem, index: number) => {
+    const rank = (page - 1) * perPage + index + 1;
+    const primary =
+      metric === "paying" ? item.paying_referral_count : item.referral_count;
+    const secondary =
+      metric === "paying" ? item.referral_count : item.paying_referral_count;
+    return (
+      <Card
+        key={item.owner_tg_id}
+        size="small"
+        style={{ marginBottom: 8 }}
+        styles={{ body: { padding: "12px" } }}
+      >
+        <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+          <div
+            style={{
+              minWidth: 28,
+              height: 28,
+              borderRadius: 8,
+              background: "rgba(255,255,255,0.06)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 12,
+              color: "rgba(255,255,255,0.65)",
+              fontWeight: 600,
+            }}
+          >
+            {rank}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div
+              style={{
+                fontWeight: 600,
+                color: "rgba(255,255,255,0.88)",
+                marginBottom: 2,
+                wordBreak: "break-word",
+              }}
+            >
+              {item.owner_username ? `@${item.owner_username}` : "—"}
+            </div>
+            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.45)", marginBottom: 6 }}>
+              {item.owner_tg_id} · <code>{item.promo_code}</code>
+            </div>
+            <div style={{ fontSize: 13, color: "rgba(255,255,255,0.75)" }}>
+              {metric === "paying" ? "Paying" : "Total"}: <strong>{primary}</strong>
+              <Typography.Text type="secondary" style={{ marginLeft: 8 }}>
+                {metric === "paying" ? "Total" : "Paying"}: {secondary}
+              </Typography.Text>
+            </div>
+            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginTop: 4 }}>
+              Invitee days: {item.days_purchased} · Owner reward:{" "}
+              {formatPoints(item.points_rewarded)}
+            </div>
+          </div>
+        </div>
+      </Card>
+    );
+  };
+
   return (
     <div>
-      <Space wrap style={{ marginBottom: 16 }} size="middle">
+      <div style={{ marginBottom: 16, display: "flex", flexWrap: "wrap", gap: 8 }}>
         <Select
           value={metric}
           onChange={onMetricChange}
-          style={{ width: isMobile ? "100%" : 200 }}
+          style={{ width: isMobile ? "100%" : 220 }}
           options={[
             { value: "total", label: "Top by total referrals" },
             { value: "paying", label: "Top by paying referrals" },
@@ -718,13 +780,16 @@ function ReferralStatsTab() {
             setSearch(e.target.value);
             setPage(1);
           }}
-          style={{ width: isMobile ? "100%" : 260 }}
+          style={{ flex: 1, minWidth: isMobile ? "100%" : 220, maxWidth: isMobile ? "100%" : 280 }}
           allowClear
         />
-        <Button icon={<ReloadOutlined />} onClick={load}>
+        <Button icon={<ReloadOutlined />} onClick={load} block={isMobile} loading={loading}>
           Refresh
         </Button>
-        {isMobile && (
+      </div>
+
+      {isMobile ? (
+        <>
           <MobileSortControl
             options={REFERRAL_SORT_OPTIONS}
             sort={sort}
@@ -735,23 +800,56 @@ function ReferralStatsTab() {
               setPage(1);
             }}
           />
-        )}
-      </Space>
-      <Table
-        rowKey="owner_tg_id"
-        loading={loading}
-        columns={columns}
-        dataSource={items}
-        pagination={{
-          current: page,
-          pageSize: 20,
-          total,
-          showSizeChanger: false,
-        }}
-        onChange={handleReferralTableChange}
-        scroll={{ x: isMobile ? 700 : undefined }}
-        size={isMobile ? "small" : "middle"}
-      />
+          {loading ? (
+            <div style={{ textAlign: "center", padding: 40, color: "rgba(255,255,255,0.4)" }}>
+              Loading...
+            </div>
+          ) : items.length === 0 ? (
+            <div style={{ textAlign: "center", padding: 40, color: "rgba(255,255,255,0.4)" }}>
+              No referral stats
+            </div>
+          ) : (
+            items.map(renderMobileCard)
+          )}
+          <div
+            style={{
+              textAlign: "center",
+              padding: "12px 0",
+              color: "rgba(255,255,255,0.45)",
+              fontSize: 12,
+            }}
+          >
+            Page {page} · Total: {total}
+          </div>
+          <div style={{ display: "flex", justifyContent: "center", gap: 8 }}>
+            <Button size="small" disabled={page <= 1} onClick={() => setPage(page - 1)}>
+              Prev
+            </Button>
+            <Button
+              size="small"
+              disabled={page * perPage >= total}
+              onClick={() => setPage(page + 1)}
+            >
+              Next
+            </Button>
+          </div>
+        </>
+      ) : (
+        <Table
+          rowKey="owner_tg_id"
+          loading={loading}
+          columns={columns}
+          dataSource={items}
+          pagination={{
+            current: page,
+            pageSize: perPage,
+            total,
+            showSizeChanger: false,
+          }}
+          onChange={handleReferralTableChange}
+          size="middle"
+        />
+      )}
     </div>
   );
 }
@@ -772,6 +870,8 @@ export default function PromocodesPage() {
       </Typography.Title>
       <Tabs
         defaultActiveKey="list"
+        size={isMobile ? "small" : "middle"}
+        tabBarGutter={isMobile ? 12 : undefined}
         items={[
           {
             key: "list",
