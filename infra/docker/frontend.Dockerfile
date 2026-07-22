@@ -6,7 +6,9 @@
 # container does not proxy to the backends. See README "Web tier & reverse proxy".
 
 # Stage 1: build both frontends from the workspace.
-FROM node:22-alpine AS build
+# bookworm (glibc) avoids Alpine/musl optional-native gaps when the lockfile
+# was generated on Windows/macOS (npm/cli#4828 — rollup/lightningcss/oxide).
+FROM node:22-bookworm-slim AS build
 WORKDIR /build
 COPY package.json package-lock.json* ./
 COPY web ./web
