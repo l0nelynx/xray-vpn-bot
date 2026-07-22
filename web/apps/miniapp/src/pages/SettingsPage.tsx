@@ -1,7 +1,9 @@
 import {
+  Check,
   ChevronRight,
   FileText,
   Gift,
+  Languages,
   Shield,
   Users,
   UserPlus,
@@ -19,6 +21,8 @@ import {
   DialogTitle,
 } from "@xray/ui/components/dialog";
 import { PromoState, promo as promoApi } from "../api/client";
+import { useLocale } from "../i18n/LocaleContext";
+import { translate, type Locale } from "../i18n";
 import { POINTS_ICON, formatPoints } from "../points";
 import { showAlert } from "../tg/webapp";
 
@@ -34,12 +38,16 @@ interface SettingsItemDef {
   onClick: () => void;
 }
 
+const LANG_OPTIONS: Locale[] = ["ru", "en"];
+
 export default function SettingsPage({ username }: Props) {
   const navigate = useNavigate();
+  const { t, locale, setLocale } = useLocale();
   const [promoState, setPromoState] = useState<PromoState | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [inputCode, setInputCode] = useState("");
   const [activating, setActivating] = useState(false);
+  const [savingLang, setSavingLang] = useState(false);
 
   useEffect(() => {
     promoApi.getState().then(setPromoState).catch(() => {});
@@ -58,11 +66,29 @@ export default function SettingsPage({ username }: Props) {
       );
       setModalOpen(false);
       setInputCode("");
-      toast.success(`+${formatPoints(res.credit_grant)} на баланс (всего ${formatPoints(res.balance)})`);
+      toast.success(
+        t("settings.promo.toastSuccess", {
+          grant: formatPoints(res.credit_grant),
+          balance: formatPoints(res.balance),
+        })
+      );
     } catch (e: unknown) {
-      showAlert(e instanceof Error ? e.message : "Ошибка");
+      showAlert(e instanceof Error ? e.message : t("settings.promo.errorFallback"));
     } finally {
       setActivating(false);
+    }
+  };
+
+  const handleLanguage = async (next: Locale) => {
+    if (next === locale || savingLang) return;
+    setSavingLang(true);
+    try {
+      await setLocale(next);
+      toast.success(translate(next, "settings.language.toastSaved"));
+    } catch {
+      toast.error(translate(locale, "settings.language.toastFailed"));
+    } finally {
+      setSavingLang(false);
     }
   };
 
@@ -70,13 +96,13 @@ export default function SettingsPage({ username }: Props) {
     {
       key: "invite",
       icon: <UserPlus />,
-      label: "Пригласить друзей",
+      label: t("settings.inviteFriends"),
       onClick: () => navigate("/invite"),
     },
     {
       key: "rules",
       icon: <Users />,
-      label: "Правила реферальной программы",
+      label: t("settings.referralRules"),
       onClick: () => navigate("/referral-rules"),
     },
   ];
@@ -85,13 +111,13 @@ export default function SettingsPage({ username }: Props) {
     {
       key: "policy",
       icon: <Shield />,
-      label: "Политика конфиденциальности",
+      label: t("settings.privacy"),
       onClick: () => navigate("/policy"),
     },
     {
       key: "agreement",
       icon: <FileText />,
-      label: "Пользовательское соглашение",
+      label: t("settings.agreement"),
       onClick: () => navigate("/agreement"),
     },
   ];
@@ -112,25 +138,55 @@ export default function SettingsPage({ username }: Props) {
   return (
     <div className="page">
       <div className="text-[22px] font-bold text-foreground tracking-tight mb-5">
-        Аккаунт
+        {t("settings.title")}
       </div>
 
-      {/* User chip */}
       {username && (
         <div className="flex items-center justify-between bg-card border border-border rounded-2xl px-4 py-3.5 mb-3">
-          <span className="text-muted-foreground text-sm">Telegram</span>
+          <span className="text-muted-foreground text-sm">{t("settings.telegram")}</span>
           <Badge>@{username}</Badge>
         </div>
       )}
 
       {(promoState?.balance ?? 0) > 0 && (
         <div className="flex items-center justify-between gap-3 bg-card border border-border rounded-2xl px-4 py-3.5 mb-3">
-          <span className="text-muted-foreground text-sm">Бонусный баланс</span>
+          <span className="text-muted-foreground text-sm">{t("settings.bonusBalance")}</span>
           <Badge variant="success">
             {formatPoints(promoState!.balance)}
           </Badge>
         </div>
       )}
+
+      <div className="settings-section mb-3">
+        <div className="settings-item" style={{ cursor: "default" }}>
+          <div className="settings-item__icon">
+            <Languages />
+          </div>
+          <span className="settings-item__text">{t("settings.language")}</span>
+          <div className="flex gap-1.5 ml-auto">
+            {LANG_OPTIONS.map((code) => {
+              const active = locale === code;
+              return (
+                <button
+                  key={code}
+                  type="button"
+                  disabled={savingLang}
+                  onClick={() => handleLanguage(code)}
+                  className={
+                    "inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium border transition-colors " +
+                    (active
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-transparent text-muted-foreground border-border")
+                  }
+                >
+                  {active && <Check className="size-3" />}
+                  {t(`settings.language.${code}`)}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
 
       <div className="settings-section mb-3">
         <button
@@ -140,7 +196,7 @@ export default function SettingsPage({ username }: Props) {
           <div className="settings-item__icon">
             <Gift />
           </div>
-          <span className="settings-item__text">Активировать промокод</span>
+          <span className="settings-item__text">{t("settings.activatePromo")}</span>
           {(promoState?.balance ?? 0) > 0 && (
             <Badge className="text-[11px]">
               {formatPoints(promoState!.balance)}
@@ -153,18 +209,17 @@ export default function SettingsPage({ username }: Props) {
       {renderSection(referralItems)}
       {renderSection(legalItems)}
 
-      {/* Promo modal */}
       <Dialog open={modalOpen} onOpenChange={(open: boolean) => { setModalOpen(open); if (!open) setInputCode(""); }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Активировать промокод</DialogTitle>
+            <DialogTitle>{t("settings.promo.modalTitle")}</DialogTitle>
           </DialogHeader>
           <div className="flex flex-col gap-3 pt-1">
             <p className="text-muted-foreground m-0 text-sm">
-              Введите промокод — баллы {POINTS_ICON} начислятся на баланс сразу
+              {t("settings.promo.modalBody", { icon: POINTS_ICON })}
             </p>
             <Input
-              placeholder="EXAMPLE123"
+              placeholder={t("settings.promo.placeholder")}
               value={inputCode}
               onChange={(e) => setInputCode(e.target.value.toUpperCase())}
               onKeyDown={(e) => e.key === "Enter" && handleActivate()}
@@ -177,7 +232,7 @@ export default function SettingsPage({ username }: Props) {
               disabled={activating || !inputCode.trim()}
               onClick={handleActivate}
             >
-              {activating ? "Применяем…" : "Применить"}
+              {activating ? t("settings.promo.applying") : t("settings.promo.apply")}
             </Button>
           </div>
         </DialogContent>

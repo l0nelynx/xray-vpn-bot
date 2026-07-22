@@ -1,7 +1,6 @@
 import time
 
-from fastapi import APIRouter, Depends
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException
 
 from ..config import (
     get_agreement_url,
@@ -13,12 +12,11 @@ from ..config import (
     get_rw_pro_id,
     get_support_bot_link,
 )
-from ..database.models import User
 from ..database.session import async_session
 
 from common_db.repo import users as _repo_users
 from remnawave_client.api import get_user_devices_count, resolve_remnawave_user
-from ..schemas.me import LinksInfo, MeResponse, SubscriptionInfo, UserInfo
+from ..schemas.me import LanguageUpdate, LinksInfo, MeResponse, SubscriptionInfo, UserInfo
 from ..tg_auth import TgUser, get_tg_user
 
 router = APIRouter(prefix="/api", tags=["me"])
@@ -114,3 +112,22 @@ async def get_me(tg: TgUser = Depends(get_tg_user)) -> MeResponse:
         subscription=subscription,
         links=links,
     )
+
+
+@router.patch("/me/language", response_model=UserInfo)
+async def patch_language(
+    body: LanguageUpdate,
+    tg: TgUser = Depends(get_tg_user),
+) -> UserInfo:
+    async with async_session() as session:
+        user = await _repo_users.get_user_by_tg_id(session, tg.tg_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        user.language = body.language
+        await session.commit()
+        await session.refresh(user)
+        return UserInfo(
+            tg_id=user.tg_id,
+            username=user.username,
+            language=user.language,
+        )

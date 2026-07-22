@@ -5,6 +5,7 @@ import { Button } from "@xray/ui/components/button";
 import { Card, CardContent } from "@xray/ui/components/card";
 import { MeResponse } from "../api/client";
 import SubscriptionCard from "../components/SubscriptionCard";
+import { useT } from "../i18n/LocaleContext";
 
 interface Props {
   me: MeResponse;
@@ -15,6 +16,7 @@ interface Props {
 export default function HomePage({ me, reload, refresh }: Props) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { t } = useT();
   const sub = me.subscription;
   const username = me.user?.username;
 
@@ -33,10 +35,10 @@ export default function HomePage({ me, reload, refresh }: Props) {
       <div className="flex items-center justify-between mb-5">
         <div>
           <div className="text-[22px] font-bold text-foreground tracking-tight">
-            {username ? `@${username}` : "Подписка"}
+            {username ? `@${username}` : t("home.titleFallback")}
           </div>
           <div className="text-[13px] text-muted-foreground mt-0.5">
-            VPN аккаунт
+            {t("home.subtitle")}
           </div>
         </div>
         <Button
@@ -44,7 +46,7 @@ export default function HomePage({ me, reload, refresh }: Props) {
           size="icon"
           variant="outline"
           onClick={reload}
-          aria-label="Обновить"
+          aria-label={t("home.refreshAria")}
         >
           <RefreshCw />
         </Button>
@@ -57,18 +59,18 @@ export default function HomePage({ me, reload, refresh }: Props) {
           {sub.status === "active" && sub.subscription_url && (
             <Button size="lg" className="w-full" onClick={() => navigate("/connect")}>
               <LinkIcon />
-              Подключиться
+              {t("home.connect")}
             </Button>
           )}
 
           <Button size="lg" variant="outline" className="w-full" onClick={() => navigate("/buy")}>
             <ArrowRight />
-            {sub.status === "active" ? "Продлить подписку" : "Купить подписку"}
+            {sub.status === "active" ? t("home.extend") : t("home.buy")}
           </Button>
 
           <Button size="lg" variant="outline" className="w-full" onClick={() => navigate("/free/telemt")}>
             <Wifi />
-            Telegram Прокси
+            {t("home.telegramProxy")}
           </Button>
         </div>
       ) : (
@@ -79,23 +81,23 @@ export default function HomePage({ me, reload, refresh }: Props) {
                 <Wifi className="text-foreground w-6 h-6" />
               </div>
               <div className="text-[17px] font-semibold text-foreground mb-2">
-                Нет активной подписки
+                {t("home.emptyTitle")}
               </div>
               <div className="text-sm text-muted-foreground leading-relaxed">
-                Выберите тариф или активируйте пробный доступ
+                {t("home.emptyBody")}
               </div>
             </CardContent>
           </Card>
 
           <Button size="lg" className="w-full" onClick={() => navigate("/buy")}>
-            Купить подписку
+            {t("home.buy")}
           </Button>
           <Button size="lg" variant="outline" className="w-full" onClick={() => navigate("/free/vpn")}>
-            Попробовать бесплатно
+            {t("home.tryFree")}
           </Button>
           <Button size="lg" variant="outline" className="w-full" onClick={() => navigate("/free/telemt")}>
             <Wifi />
-            Telegram Прокси
+            {t("home.telegramProxy")}
           </Button>
         </div>
       )}

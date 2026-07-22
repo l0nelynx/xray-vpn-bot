@@ -14,6 +14,7 @@ import {
   payments,
   promo as promoApi,
 } from "../api/client";
+import { useT } from "../i18n/LocaleContext";
 import { hapticImpact, openLink, showAlert } from "../tg/webapp";
 
 interface ViewResult {
@@ -47,6 +48,7 @@ function buildView(
 
 export default function BuyMenuPage() {
   const navigate = useNavigate();
+  const { t } = useT();
   const [tree, setTree] = useState<MenuNode[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selections, setSelections] = useState<(number | null)[]>([]);
@@ -97,7 +99,7 @@ export default function BuyMenuPage() {
     const inv = selectedInvoice.invoice;
 
     if (!inv.days || inv.days <= 0) {
-      showAlert("Тариф не настроен: отсутствует количество дней");
+      showAlert(t("buy.alert.missingDays"));
       return;
     }
 
@@ -110,7 +112,7 @@ export default function BuyMenuPage() {
       openLink(res.url);
       navigate("/buy/success", { state: { paymentUrl: res.url } });
     } catch (e) {
-      showAlert(`Ошибка создания счёта: ${(e as Error).message}`);
+      showAlert(t("buy.alert.invoiceError", { message: (e as Error).message }));
     } finally {
       setBusyId(null);
     }
@@ -128,7 +130,7 @@ export default function BuyMenuPage() {
         navigate("/buy/success", { state: { paidWithCredits: true } });
       }
     } catch (e) {
-      showAlert(`Ошибка оплаты баллами: ${(e as Error).message}`);
+      showAlert(t("buy.alert.creditsError", { message: (e as Error).message }));
     } finally {
       setBusyId(null);
     }
@@ -138,7 +140,7 @@ export default function BuyMenuPage() {
     return (
       <div className="page">
         <Alert variant="destructive">
-          <AlertTitle>Не удалось загрузить меню</AlertTitle>
+          <AlertTitle>{t("buy.loadError")}</AlertTitle>
           <p>{error}</p>
         </Alert>
       </div>
@@ -156,6 +158,14 @@ export default function BuyMenuPage() {
   const payInvoice = selectedInvoice?.invoice;
   const payPrice = payInvoice?.amount ?? 0;
   const payCurrency = payInvoice?.currency ?? "";
+
+  const levelLabel =
+    (depth: number) =>
+      depth === 0
+        ? t("buy.level.tariff")
+        : depth === 1
+          ? t("buy.level.period")
+          : t("buy.level.subcategory");
 
   return (
     <>
@@ -181,13 +191,13 @@ export default function BuyMenuPage() {
             <ChevronLeft style={{ width: 16, height: 16 }} />
           </button>
           <span style={{ fontSize: 20, fontWeight: 700, color: "#FFFFFF", letterSpacing: "-0.3px" }}>
-            Тарифы
+            {t("buy.title")}
           </span>
         </div>
 
         {balance > 0 && (
           <Alert style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
-            <span>Бонусный баланс:</span>
+            <span>{t("buy.bonusBalance")}</span>
             <Badge>{formatPoints(balance)}</Badge>
           </Alert>
         )}
@@ -202,7 +212,7 @@ export default function BuyMenuPage() {
               letterSpacing: "0.5px",
               marginBottom: 8,
             }}>
-              {depth === 0 ? "Тариф" : depth === 1 ? "Период" : "Подкатегория"}
+              {levelLabel(depth)}
             </div>
             <div className="chip-row-wrap">
               <div className="chip-row">
@@ -221,7 +231,7 @@ export default function BuyMenuPage() {
         ))}
 
         {chipLevels.length > 0 && invoices.length === 0 && (
-          <div className="tariff-hint">Выберите категорию выше</div>
+          <div className="tariff-hint">{t("buy.hint.selectCategory")}</div>
         )}
 
         {invoices.length > 0 && (
@@ -234,7 +244,7 @@ export default function BuyMenuPage() {
               letterSpacing: "0.5px",
               marginBottom: 8,
             }}>
-              Метод оплаты
+              {t("buy.paymentMethod")}
             </div>
             <div className="tariff-scroll-wrap">
               <div className="tariff-scroll">
@@ -255,7 +265,7 @@ export default function BuyMenuPage() {
                       </div>
                       {(inv.days ?? 0) > 0 && (
                         <div style={{ fontSize: 11, opacity: 0.5, marginTop: 4 }}>
-                          {inv.days} дн.
+                          {t("buy.daysShort", { count: inv.days! })}
                         </div>
                       )}
                       {isSelected && (
@@ -272,7 +282,7 @@ export default function BuyMenuPage() {
         )}
 
         {chipLevels.length === 0 && invoices.length === 0 && (
-          <div className="tariff-hint">Тарифы не найдены</div>
+          <div className="tariff-hint">{t("buy.hint.none")}</div>
         )}
 
         {selectedInvoice && <div style={{ height: 88 }} />}
@@ -282,7 +292,9 @@ export default function BuyMenuPage() {
         <div className="pay-bar" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {canPayCredits && (
             <Button className="pay-bar-btn" onClick={handlePayCredits} disabled={!!busyId}>
-              {busyId ? <Spinner /> : `Оплатить баллами · ${pointsCost} ${POINTS_ICON}`}
+              {busyId
+                ? <Spinner />
+                : t("buy.payCredits", { cost: `${pointsCost} ${POINTS_ICON}` })}
             </Button>
           )}
           <Button className="pay-bar-btn" variant="outline" onClick={handlePayFiat} disabled={!!busyId}>
@@ -290,7 +302,7 @@ export default function BuyMenuPage() {
               <Spinner />
             ) : (
               <>
-                <span>Оплатить</span>
+                <span>{t("buy.pay")}</span>
                 <span style={{ opacity: 0.85 }}>·</span>
                 <span style={{ fontWeight: 800 }}>
                   {payPrice} {payCurrency}

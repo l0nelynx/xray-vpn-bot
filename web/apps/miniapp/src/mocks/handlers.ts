@@ -57,6 +57,7 @@ const menuTree = {
 };
 
 let ticketSeq = 2;
+let mockLanguage = "ru";
 const tickets = [
   {
     id: 1,
@@ -88,7 +89,7 @@ export const handlers: HttpHandler[] = [
   http.get(`${API}/me`, () =>
     HttpResponse.json({
       registered: true,
-      user: { tg_id: 424242, username: "mock_user", language: "ru" },
+      user: { tg_id: 424242, username: "mock_user", language: mockLanguage },
       subscription: {
         tariff: "1 месяц",
         status: "active",
@@ -102,6 +103,16 @@ export const handlers: HttpHandler[] = [
       links,
     }),
   ),
+
+  http.patch(`${API}/me/language`, async ({ request }) => {
+    const body = (await request.json()) as { language: string };
+    mockLanguage = body.language === "en" ? "en" : "ru";
+    return HttpResponse.json({
+      tg_id: 424242,
+      username: "mock_user",
+      language: mockLanguage,
+    });
+  }),
 
   http.get(`${API}/menu/tree`, () => HttpResponse.json(menuTree)),
 

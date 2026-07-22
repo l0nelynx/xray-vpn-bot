@@ -1,11 +1,12 @@
 import { Card, CardContent } from "@xray/ui/components/card";
 import { Badge } from "@xray/ui/components/badge";
 import { TicketSummary } from "../api/client";
+import { useT } from "../i18n/LocaleContext";
 
-const STATUS_LABELS: Record<string, string> = {
-  open: "Открыт",
-  in_progress: "В работе",
-  closed: "Закрыт",
+const STATUS_KEYS: Record<string, string> = {
+  open: "tickets.status.open",
+  in_progress: "tickets.status.inProgress",
+  closed: "tickets.status.closed",
 };
 
 const STATUS_VARIANT: Record<string, "default" | "warning" | "secondary"> = {
@@ -14,27 +15,29 @@ const STATUS_VARIANT: Record<string, "default" | "warning" | "secondary"> = {
   closed: "secondary",
 };
 
-function formatDateTime(iso: string): string {
-  try {
-    const d = new Date(iso);
-    return d.toLocaleString("ru-RU", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return iso;
-  }
-}
-
 interface Props {
   ticket: TicketSummary;
   onClick: () => void;
 }
 
 export default function TicketListItem({ ticket, onClick }: Props) {
+  const { t, dateLocale } = useT();
+
+  const formatDateTime = (iso: string): string => {
+    try {
+      const d = new Date(iso);
+      return d.toLocaleString(dateLocale, {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch {
+      return iso;
+    }
+  };
+
   return (
     <Card className="mb-3 cursor-pointer" onClick={onClick}>
       <CardContent className="p-4">
@@ -51,7 +54,9 @@ export default function TicketListItem({ ticket, onClick }: Props) {
         </p>
         <div className="flex justify-between items-center">
           <Badge variant={STATUS_VARIANT[ticket.status] || "secondary"}>
-            {STATUS_LABELS[ticket.status] || ticket.status}
+            {STATUS_KEYS[ticket.status]
+              ? t(STATUS_KEYS[ticket.status])
+              : ticket.status}
           </Badge>
           <span className="text-muted-foreground text-xs">
             {formatDateTime(ticket.updated_at)}

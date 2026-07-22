@@ -5,6 +5,7 @@ import { Alert, AlertTitle, AlertDescription } from "@xray/ui/components/alert";
 import { Button } from "@xray/ui/components/button";
 import { Card, CardContent } from "@xray/ui/components/card";
 import { api, MeResponse } from "../api/client";
+import { useT } from "../i18n/LocaleContext";
 import { hapticImpact, openLink } from "../tg/webapp";
 
 const POLL_INTERVAL_MS = 3000;
@@ -19,6 +20,7 @@ interface LocationState {
 export default function BuySuccessPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { t } = useT();
   const state = (location.state ?? {}) as LocationState;
 
   const [me, setMe] = useState<MeResponse | null>(null);
@@ -71,17 +73,17 @@ export default function BuySuccessPage() {
           <CardContent className="p-6">
             <CheckCircle2 className="w-14 h-14 text-emerald-500 mx-auto" />
             <div className="text-xl font-bold text-foreground mt-4">
-              Оплата получена
+              {t("buySuccess.paidTitle")}
             </div>
             <p className="text-muted-foreground mt-2 mb-5">
-              Подписка активирована. Откройте ссылку, чтобы подключиться:
+              {t("buySuccess.paidBody")}
             </p>
             <div className="flex flex-col gap-3 w-full">
               <Button size="lg" className="w-full" onClick={() => openLink(subUrl)}>
-                Открыть подписку
+                {t("buySuccess.openSub")}
               </Button>
               <Button size="lg" variant="outline" className="w-full" onClick={() => navigate("/", { replace: true })}>
-                На главную
+                {t("buySuccess.toHome")}
               </Button>
             </div>
           </CardContent>
@@ -94,14 +96,14 @@ export default function BuySuccessPage() {
     return (
       <div className="page">
         <Alert variant="warning">
-          <AlertTitle>Подтверждение оплаты заняло больше времени, чем ожидалось</AlertTitle>
+          <AlertTitle>{t("buySuccess.timeoutTitle")}</AlertTitle>
           <AlertDescription>
-            Если деньги уже списаны — подписка появится в течение нескольких минут. Откройте главную и нажмите «Обновить».
+            {t("buySuccess.timeoutBody")}
           </AlertDescription>
         </Alert>
         <div className="mt-4">
           <Button className="w-full" size="lg" onClick={() => navigate("/", { replace: true })}>
-            На главную
+            {t("buySuccess.toHome")}
           </Button>
         </div>
       </div>
@@ -114,14 +116,14 @@ export default function BuySuccessPage() {
         <CardContent className="p-6">
           <Loader2 className="animate-spin w-12 h-12 mx-auto" />
           <div className="text-lg font-bold text-foreground mt-4">
-            Ждём подтверждение оплаты…
+            {t("buySuccess.waitingTitle")}
           </div>
           <p className={`text-muted-foreground mt-2 ${state.paymentUrl ? "mb-4" : "mb-0"}`}>
-            Это занимает обычно несколько секунд. Не закрывайте окно.
+            {t("buySuccess.waitingBody")}
           </p>
           {state.paymentUrl && (
             <Button variant="outline" className="w-full" onClick={() => openLink(state.paymentUrl!)}>
-              Открыть страницу оплаты ещё раз
+              {t("buySuccess.reopenPayment")}
             </Button>
           )}
         </CardContent>

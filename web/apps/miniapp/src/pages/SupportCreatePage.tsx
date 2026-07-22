@@ -6,12 +6,14 @@ import { Input } from "@xray/ui/components/input";
 import { Label } from "@xray/ui/components/label";
 import { Textarea } from "@xray/ui/components/textarea";
 import { api, TicketDetail } from "../api/client";
+import { useT } from "../i18n/LocaleContext";
 
 const SUBJECT_MAX = 200;
 const MESSAGE_MAX = 4000;
 
 export default function SupportCreatePage() {
   const navigate = useNavigate();
+  const { t } = useT();
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -22,22 +24,22 @@ export default function SupportCreatePage() {
     const trimmedSubject = subject.trim();
     const trimmedMessage = message.trim();
     if (!trimmedSubject) {
-      setFormError("Введите тему");
+      setFormError(t("supportCreate.error.subject"));
       return;
     }
     if (!trimmedMessage) {
-      setFormError("Опишите проблему");
+      setFormError(t("supportCreate.error.message"));
       return;
     }
     setFormError(null);
     setError(null);
     setSubmitting(true);
     try {
-      const t = await api.post<TicketDetail>("/support/tickets", {
+      const ticket = await api.post<TicketDetail>("/support/tickets", {
         subject: trimmedSubject,
         message: trimmedMessage,
       });
-      navigate(`/support/${t.id}`, { replace: true });
+      navigate(`/support/${ticket.id}`, { replace: true });
     } catch (e: any) {
       setError(e?.detail || String(e));
     } finally {
@@ -48,7 +50,7 @@ export default function SupportCreatePage() {
   return (
     <div className="page">
       <div className="text-xl font-bold text-foreground mb-5">
-        Новое обращение
+        {t("supportCreate.title")}
       </div>
 
       {error && (
@@ -65,10 +67,10 @@ export default function SupportCreatePage() {
         className="flex flex-col gap-4"
       >
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="subject">Тема</Label>
+          <Label htmlFor="subject">{t("supportCreate.subjectLabel")}</Label>
           <Input
             id="subject"
-            placeholder="Тема обращения"
+            placeholder={t("supportCreate.subjectPlaceholder")}
             value={subject}
             onChange={(e) => setSubject(e.target.value.slice(0, SUBJECT_MAX))}
             maxLength={SUBJECT_MAX}
@@ -76,10 +78,10 @@ export default function SupportCreatePage() {
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="message">Сообщение</Label>
+          <Label htmlFor="message">{t("supportCreate.messageLabel")}</Label>
           <Textarea
             id="message"
-            placeholder="Опишите проблему"
+            placeholder={t("supportCreate.messagePlaceholder")}
             rows={6}
             value={message}
             onChange={(e) => setMessage(e.target.value.slice(0, MESSAGE_MAX))}
@@ -94,10 +96,10 @@ export default function SupportCreatePage() {
 
         <div className="flex flex-col gap-3 w-full">
           <Button size="lg" className="w-full" type="submit" disabled={submitting}>
-            {submitting ? "Отправляем…" : "Отправить"}
+            {submitting ? t("supportCreate.submitting") : t("supportCreate.submit")}
           </Button>
           <Button size="lg" variant="outline" className="w-full" type="button" onClick={() => navigate(-1)}>
-            Отмена
+            {t("supportCreate.cancel")}
           </Button>
         </div>
       </form>

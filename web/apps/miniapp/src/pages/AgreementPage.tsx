@@ -1,87 +1,71 @@
 import LegalLayout from "../components/LegalLayout";
 import { LinksInfo } from "../api/client";
+import { useT } from "../i18n/LocaleContext";
 
 interface Props {
   links: LinksInfo;
 }
 
 export default function AgreementPage({ links }: Props) {
-  const brand = links.branding_name || "VPN";
+  const { t } = useT();
+  const brand = links.branding_name || t("legal.brandFallback");
   const supportLink = links.support_bot_link;
   const supportLabel = supportLink
     ? supportLink.split("/").pop() || supportLink
-    : "поддержка";
+    : t("legal.supportFallback");
 
   return (
-    <LegalLayout title="Пользовательское соглашение">
+    <LegalLayout title={t("legal.agreement.title")}>
       <section className="legal-section">
-        <h2>1. Предмет соглашения</h2>
-        <p>
-          1.1. Сервис {brand} предоставляет доступ к VPN-серверам через
-          Telegram-бота для шифрования интернет-трафика.
-        </p>
-        <p>
-          1.2. Услуги доступны только совершеннолетним пользователям.
-          Использование бота означает акцепт оферты.
-        </p>
+        <h2>{t("legal.agreement.s1.title")}</h2>
+        <p>{t("legal.agreement.s1.p1", { brand })}</p>
+        <p>{t("legal.agreement.s1.p2")}</p>
       </section>
 
       <section className="legal-section">
-        <h2>2. Условия использования</h2>
-        <p>2.1. Пользователь обязуется:</p>
+        <h2>{t("legal.agreement.s2.title")}</h2>
+        <p>{t("legal.agreement.s2.p1")}</p>
         <ul>
-          <li>
-            Не нарушать законы РФ (включая обход блокировок запрещённых
-            ресурсов: экстремистские материалы, наркотики и т. д.);
-          </li>
-          <li>Не распространять вредоносное ПО;</li>
-          <li>Не использовать сервис для DDoS-атак, спама или взлома.</li>
+          <li>{t("legal.agreement.s2.i1")}</li>
+          <li>{t("legal.agreement.s2.i2")}</li>
+          <li>{t("legal.agreement.s2.i3")}</li>
         </ul>
         <p>
-          <strong>2.2. Запрещено:</strong>
+          <strong>{t("legal.agreement.s2.p2")}</strong>
         </p>
         <ul>
-          <li>Передавать аккаунт третьим лицам;</li>
-          <li>Мешать работе сервиса.</li>
+          <li>{t("legal.agreement.s2.i4")}</li>
+          <li>{t("legal.agreement.s2.i5")}</li>
         </ul>
       </section>
 
       <section className="legal-section">
-        <h2>3. Оплата и возврат</h2>
-        <p>
-          3.1. Оплата тарифов осуществляется через Telegram-бота (карты, Qiwi,
-          криптовалюты).
-        </p>
-        <p>
-          3.2. Возврат средств возможен только при технической невозможности
-          предоставить услугу.
-        </p>
+        <h2>{t("legal.agreement.s3.title")}</h2>
+        <p>{t("legal.agreement.s3.p1")}</p>
+        <p>{t("legal.agreement.s3.p2")}</p>
       </section>
 
       <section className="legal-section">
-        <h2>4. Ответственность</h2>
-        <p>4.1. Сервис не гарантирует 100% доступность VPN.</p>
-        <p>4.2. Администрация не несёт ответственности за:</p>
+        <h2>{t("legal.agreement.s4.title")}</h2>
+        <p>{t("legal.agreement.s4.p1")}</p>
+        <p>{t("legal.agreement.s4.p2")}</p>
         <ul>
-          <li>Нелегальные действия пользователей;</li>
-          <li>Ущерб из-за сбоев VPN;</li>
-          <li>Блокировку доступа к ресурсам.</li>
+          <li>{t("legal.agreement.s4.i1")}</li>
+          <li>{t("legal.agreement.s4.i2")}</li>
+          <li>{t("legal.agreement.s4.i3")}</li>
         </ul>
       </section>
 
       <section className="legal-section">
-        <h2>5. Расторжение</h2>
-        <p>
-          5.1. Администрация вправе заблокировать аккаунт при нарушении п. 2 без
-          возврата средств.
-        </p>
-        <p>5.2. Пользователь может отказаться от услуг, прекратив оплату.</p>
+        <h2>{t("legal.agreement.s5.title")}</h2>
+        <p>{t("legal.agreement.s5.p1")}</p>
+        <p>{t("legal.agreement.s5.p2")}</p>
       </section>
 
       <section className="legal-section">
-        <h2>6. Контакты</h2>
+        <h2>{t("legal.agreement.s6.title")}</h2>
         <p>
-          Поддержка:{" "}
+          {t("legal.agreement.s6.p1")}{" "}
           {supportLink ? (
             <a href={supportLink} target="_blank" rel="noreferrer">
               {supportLabel}
@@ -93,8 +77,7 @@ export default function AgreementPage({ links }: Props) {
       </section>
 
       <div className="legal-callout">
-        Используя сервис {brand}, вы подтверждаете, что ознакомились и согласны
-        с условиями данного соглашения.
+        {t("legal.agreement.callout", { brand })}
       </div>
     </LegalLayout>
   );

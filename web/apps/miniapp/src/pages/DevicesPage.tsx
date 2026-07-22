@@ -16,19 +16,7 @@ import {
   AlertDialogTitle,
 } from "@xray/ui/components/alert-dialog";
 import { api, DeviceItem, DevicesResponse } from "../api/client";
-
-function formatDate(value: string | null): string {
-  if (!value) return "—";
-  try {
-    return new Date(value).toLocaleString("ru-RU", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
-  } catch {
-    return value;
-  }
-}
+import { useT } from "../i18n/LocaleContext";
 
 function platformIcon(platform: string | null) {
   if (!platform) return <Laptop />;
@@ -40,10 +28,24 @@ function platformIcon(platform: string | null) {
 }
 
 export default function DevicesPage() {
+  const { t, dateLocale } = useT();
   const [devices, setDevices] = useState<DeviceItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
   const [confirmHwid, setConfirmHwid] = useState<string | null>(null);
+
+  const formatDate = (value: string | null): string => {
+    if (!value) return t("common.emDash");
+    try {
+      return new Date(value).toLocaleString(dateLocale, {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      });
+    } catch {
+      return value;
+    }
+  };
 
   const load = () => {
     setDevices(null);
@@ -61,9 +63,9 @@ export default function DevicesPage() {
     try {
       await api.delete<void>(`/devices/${encodeURIComponent(hwid)}`);
       setDevices((prev) => (prev ? prev.filter((d) => d.hwid !== hwid) : prev));
-      toast.success("Устройство удалено");
+      toast.success(t("devices.toast.deleted"));
     } catch (e: any) {
-      toast.error("Не удалось удалить устройство", { description: e?.detail || String(e) });
+      toast.error(t("devices.toast.deleteFailed"), { description: e?.detail || String(e) });
     } finally {
       setRemoving(null);
       setConfirmHwid(null);
@@ -74,14 +76,14 @@ export default function DevicesPage() {
     <div className="page">
       <div className="page-header">
         <span style={{ fontSize: 22, fontWeight: 700, color: "#FFFFFF", letterSpacing: "-0.3px" }}>
-          Мои устройства
+          {t("devices.title")}
         </span>
         <Button
           className="refresh-fab"
           size="icon"
           variant="outline"
           onClick={load}
-          aria-label="Обновить"
+          aria-label={t("devices.refreshAria")}
         >
           <RefreshCw />
         </Button>
@@ -101,7 +103,7 @@ export default function DevicesPage() {
 
       {devices && devices.length === 0 && (
         <div style={{ textAlign: "center", padding: "40px 0", color: "rgba(255,255,255,0.38)" }}>
-          Нет привязанных устройств
+          {t("devices.empty")}
         </div>
       )}
 
@@ -113,7 +115,7 @@ export default function DevicesPage() {
 
           <div className="device-card__body">
             <div className="device-card__name">
-              {d.device_model || d.platform || "Устройство"}
+              {d.device_model || d.platform || t("devices.fallbackName")}
               {d.platform && (
                 <Badge style={{ marginLeft: 8, fontSize: 11, verticalAlign: "middle" }}>
                   {d.platform}
@@ -121,10 +123,10 @@ export default function DevicesPage() {
               )}
             </div>
             {d.os_version && (
-              <div className="device-card__meta">ОС: {d.os_version}</div>
+              <div className="device-card__meta">{t("devices.os", { version: d.os_version })}</div>
             )}
             <div className="device-card__meta" style={{ marginTop: 4 }}>
-              Добавлено: {formatDate(d.created_at)}
+              {t("devices.added", { date: formatDate(d.created_at) })}
             </div>
             <div className="device-card__meta" style={{ opacity: 0.6, marginTop: 2, fontSize: 11 }}>
               {d.hwid}
@@ -148,18 +150,18 @@ export default function DevicesPage() {
       <AlertDialog open={!!confirmHwid} onOpenChange={(open: boolean) => !open && setConfirmHwid(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Удалить устройство?</AlertDialogTitle>
+            <AlertDialogTitle>{t("devices.confirm.title")}</AlertDialogTitle>
             <AlertDialogDescription>
-              После удаления потребуется новая авторизация.
+              {t("devices.confirm.body")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogCancel>{t("devices.confirm.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() => confirmHwid && handleDelete(confirmHwid)}
             >
-              Удалить
+              {t("devices.confirm.delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

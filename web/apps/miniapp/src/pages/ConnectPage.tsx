@@ -14,24 +14,23 @@ import {
   LocalizedText,
   MeResponse,
 } from "../api/client";
+import { useT } from "../i18n/LocaleContext";
 import { copyToClipboard, hapticImpact, openLink, tg } from "../tg/webapp";
 import { AppIcon, LibIcon, resolveColor } from "../connect/icons";
 
-// MiniApp UI is Russian-first; fall back to English then any available locale.
-const LANG = "ru";
-function tr(obj?: LocalizedText): string {
+function tr(obj: LocalizedText | undefined, locale: string): string {
   if (!obj) return "";
-  return obj[LANG] ?? obj.en ?? Object.values(obj)[0] ?? "";
+  return obj[locale] ?? obj.en ?? Object.values(obj)[0] ?? "";
 }
 
-const PLATFORM_LABELS: Record<string, string> = {
-  ios: "iOS",
-  android: "Android",
-  windows: "Windows",
-  macos: "macOS",
-  linux: "Linux",
-  appleTV: "Apple TV",
-  androidTV: "Android TV",
+const PLATFORM_KEYS: Record<string, string> = {
+  ios: "connect.platform.ios",
+  android: "connect.platform.android",
+  windows: "connect.platform.windows",
+  macos: "connect.platform.macos",
+  linux: "connect.platform.linux",
+  appleTV: "connect.platform.appleTV",
+  androidTV: "connect.platform.androidTV",
 };
 const PLATFORM_ORDER = ["ios", "android", "windows", "macos", "linux", "appleTV", "androidTV"];
 
@@ -81,6 +80,7 @@ function fillLink(link: string, subUrl: string, username: string): string {
 
 export default function ConnectPage() {
   const navigate = useNavigate();
+  const { t, locale } = useT();
 
   const [cfg, setCfg] = useState<AppConfig | null>(null);
   const [subUrl, setSubUrl] = useState<string>("");
@@ -139,7 +139,9 @@ export default function ConnectPage() {
     const url = fillLink(btn.link, subUrl, username);
     if (btn.type === "copyButton") {
       const ok = await copyToClipboard(url);
-      toast[ok ? "success" : "error"](ok ? "Скопировано" : "Не удалось скопировать");
+      toast[ok ? "success" : "error"](
+        ok ? t("connect.toast.copied") : t("connect.toast.copyFailed")
+      );
       return;
     }
     // Plain https without query/fragment (App Store / GitHub) — open directly.
@@ -160,7 +162,9 @@ export default function ConnectPage() {
     if (!subUrl) return;
     hapticImpact("light");
     const ok = await copyToClipboard(subUrl);
-    toast[ok ? "success" : "error"](ok ? "Ссылка скопирована" : "Не удалось скопировать");
+    toast[ok ? "success" : "error"](
+      ok ? t("connect.toast.linkCopied") : t("connect.toast.copyFailed")
+    );
   }
 
   if (loading) {
@@ -180,11 +184,11 @@ export default function ConnectPage() {
           variant="outline"
           className="rounded-full"
           onClick={() => navigate(-1)}
-          aria-label="Назад"
+          aria-label={t("connect.backAria")}
         >
           <ArrowLeft />
         </Button>
-        <div style={{ fontSize: 20, fontWeight: 700, color: "#FFFFFF" }}>Подключение</div>
+        <div style={{ fontSize: 20, fontWeight: 700, color: "#FFFFFF" }}>{t("connect.title")}</div>
       </div>
 
       {error && (
@@ -203,7 +207,7 @@ export default function ConnectPage() {
           }}
         >
           <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)", marginBottom: 8 }}>
-            Ссылка-подписка
+            {t("connect.subLinkLabel")}
           </div>
           <div
             style={{
@@ -219,7 +223,7 @@ export default function ConnectPage() {
           </div>
           <Button variant="outline" className="w-full" onClick={copySub}>
             <Copy />
-            Скопировать ссылку
+            {t("connect.copyLink")}
           </Button>
         </div>
       )}
@@ -234,7 +238,7 @@ export default function ConnectPage() {
                 className={`plan-chip${platform === p ? " active" : ""}`}
                 onClick={() => setPlatform(p)}
               >
-                {PLATFORM_LABELS[p] ?? p}
+                {PLATFORM_KEYS[p] ? t(PLATFORM_KEYS[p]) : p}
               </button>
             ))}
           </div>
@@ -283,7 +287,7 @@ export default function ConnectPage() {
                     style={{ marginInlineStart: "auto", marginInlineEnd: 0, display: "flex", alignItems: "center", gap: 4 }}
                   >
                     <Star style={{ width: 11, height: 11 }} />
-                    Рекомендуем
+                    {t("connect.featured")}
                   </Badge>
                 )}
                 <ChevronDown
@@ -326,7 +330,7 @@ export default function ConnectPage() {
                             />
                           </span>
                           <span style={{ fontSize: 14, fontWeight: 600, color: "#FFFFFF" }}>
-                            {tr(block.title)}
+                            {tr(block.title, locale)}
                           </span>
                         </div>
                         {block.description && (
@@ -339,7 +343,7 @@ export default function ConnectPage() {
                               paddingInlineStart: 34,
                             }}
                           >
-                            {tr(block.description)}
+                            {tr(block.description, locale)}
                           </div>
                         )}
                         {block.buttons.length > 0 && (
@@ -362,7 +366,7 @@ export default function ConnectPage() {
                                   name={btn.svgIconKey}
                                   size={15}
                                 />
-                                {tr(btn.text)}
+                                {tr(btn.text, locale)}
                               </Button>
                             ))}
                           </div>

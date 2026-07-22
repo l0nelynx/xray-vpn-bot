@@ -9,11 +9,12 @@ import { Dialog, DialogContent } from "@xray/ui/components/dialog";
 import { Textarea } from "@xray/ui/components/textarea";
 import { AttachmentOut, MessageItem, TicketDetail, api, support } from "../api/client";
 import { useAuthedImage } from "../hooks/useAuthedImage";
+import { useT } from "../i18n/LocaleContext";
 
-const STATUS_LABELS: Record<string, string> = {
-  open: "Открыт",
-  in_progress: "В работе",
-  closed: "Закрыт",
+const STATUS_KEYS: Record<string, string> = {
+  open: "tickets.status.open",
+  in_progress: "tickets.status.inProgress",
+  closed: "tickets.status.closed",
 };
 
 const STATUS_VARIANT: Record<string, "default" | "warning" | "secondary"> = {
@@ -24,20 +25,6 @@ const STATUS_VARIANT: Record<string, "default" | "warning" | "secondary"> = {
 
 const MAX_IMAGES = 3;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-
-function formatDateTime(iso: string): string {
-  try {
-    return new Date(iso).toLocaleString("ru-RU", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return iso;
-  }
-}
 
 function AttachmentThumb({ attachment, onOpen }: { attachment: AttachmentOut; onOpen: (url: string) => void }) {
   const objectUrl = useAuthedImage(attachment.url);
@@ -58,6 +45,7 @@ function AttachmentThumb({ attachment, onOpen }: { attachment: AttachmentOut; on
 export default function SupportTicketPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { t, dateLocale } = useT();
   const [ticket, setTicket] = useState<TicketDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reply, setReply] = useState("");
@@ -66,6 +54,20 @@ export default function SupportTicketPage() {
   const [sendError, setSendError] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const formatDateTime = (iso: string): string => {
+    try {
+      return new Date(iso).toLocaleString(dateLocale, {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch {
+      return iso;
+    }
+  };
 
   useEffect(() => {
     if (!id) return;
@@ -89,12 +91,12 @@ export default function SupportTicketPage() {
     const incoming = Array.from(files);
     const combined = [...pendingImages, ...incoming];
     if (combined.length > MAX_IMAGES) {
-      setSendError(`Можно прикрепить не более ${MAX_IMAGES} изображений`);
+      setSendError(t("supportTicket.error.maxImages", { max: MAX_IMAGES }));
       return;
     }
     for (const f of incoming) {
       if (f.size > MAX_IMAGE_BYTES) {
-        setSendError(`Файл слишком большой (макс. 5MB): ${f.name}`);
+        setSendError(t("supportTicket.error.fileTooLarge", { name: f.name }));
         return;
       }
     }
@@ -133,7 +135,7 @@ export default function SupportTicketPage() {
     <div className="page">
       <Button variant="outline" onClick={() => navigate("/support")} className="mb-3">
         <ArrowLeft />
-        Назад
+        {t("supportTicket.back")}
       </Button>
 
       {error && (
@@ -151,13 +153,15 @@ export default function SupportTicketPage() {
           <Card className="mb-4">
             <CardContent className="p-3.5 flex flex-col gap-2">
               <div className="flex justify-between items-center">
-                <span className="text-muted-foreground text-[13px]">Статус</span>
+                <span className="text-muted-foreground text-[13px]">{t("supportTicket.statusLabel")}</span>
                 <Badge variant={STATUS_VARIANT[ticket.status] || "secondary"}>
-                  {STATUS_LABELS[ticket.status] || ticket.status}
+                  {STATUS_KEYS[ticket.status]
+                    ? t(STATUS_KEYS[ticket.status])
+                    : ticket.status}
                 </Badge>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-muted-foreground text-[13px]">Создан</span>
+                <span className="text-muted-foreground text-[13px]">{t("supportTicket.createdLabel")}</span>
                 <span className="text-[13px] text-foreground">{formatDateTime(ticket.created_at)}</span>
               </div>
             </CardContent>
@@ -178,8 +182,10 @@ export default function SupportTicketPage() {
                     </div>
                   )}
                   <span className="message-bubble__meta text-xs opacity-60">
-                    {m.sender === "admin" ? "Поддержка" : "Вы"} ·{" "}
-                    {formatDateTime(m.created_at)}
+                    {m.sender === "admin"
+                      ? t("supportTicket.sender.admin")
+                      : t("supportTicket.sender.you")}{" "}
+                    · {formatDateTime(m.created_at)}
                   </span>
                 </CardContent>
               </Card>
@@ -188,7 +194,7 @@ export default function SupportTicketPage() {
 
           {isClosed ? (
             <Alert className="mt-4">
-              <AlertTitle>Обращение закрыто. Создайте новое, если нужна помощь.</AlertTitle>
+              <AlertTitle>{t("supportTicket.closed")}</AlertTitle>
             </Alert>
           ) : (
             <Card className="mt-4">
@@ -202,7 +208,7 @@ export default function SupportTicketPage() {
                   <Textarea
                     value={reply}
                     onChange={(e) => setReply(e.target.value.slice(0, 4000))}
-                    placeholder="Ваше сообщение"
+                    placeholder={t("supportTicket.replyPlaceholder")}
                     rows={4}
                     maxLength={4000}
                   />
@@ -248,7 +254,7 @@ export default function SupportTicketPage() {
                     disabled={pendingImages.length >= MAX_IMAGES}
                   >
                     <Paperclip />
-                    Фото
+                    {t("supportTicket.photo")}
                   </Button>
                   <Button
                     className="flex-1"
@@ -257,7 +263,7 @@ export default function SupportTicketPage() {
                     onClick={sendReply}
                   >
                     <Send />
-                    Отправить
+                    {t("supportTicket.send")}
                   </Button>
                 </div>
               </CardContent>

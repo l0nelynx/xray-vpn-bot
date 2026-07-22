@@ -6,6 +6,7 @@ import { Button } from "@xray/ui/components/button";
 import { Card, CardContent } from "@xray/ui/components/card";
 import { Spinner } from "@xray/ui/components/spinner";
 import { free } from "../api/client";
+import { useT } from "../i18n/LocaleContext";
 import { hapticImpact, openLink, openTelegramLink } from "../tg/webapp";
 
 const POLL_INTERVAL_MS = 3000;
@@ -36,14 +37,13 @@ function openProxyLink(url: string) {
 
 export default function FreeTrialPage() {
   const navigate = useNavigate();
+  const { t } = useT();
   const params = useParams<{ mode: Mode }>();
   const mode: Mode = params.mode === "telemt" ? "telemt" : "vpn";
 
-  const title = mode === "telemt" ? "Telegram Прокси" : "Попробовать бесплатно";
+  const title = mode === "telemt" ? t("freeTrial.title.telemt") : t("freeTrial.title.vpn");
   const description =
-    mode === "telemt"
-      ? "Подпишитесь на наш канал, чтобы получить бесплатный Telegram-прокси."
-      : "Подпишитесь на наш канал, чтобы получить бесплатную подписку VPN.";
+    mode === "telemt" ? t("freeTrial.desc.telemt") : t("freeTrial.desc.vpn");
 
   const [bootstrapping, setBootstrapping] = useState(true);
   const [newsUrl, setNewsUrl] = useState<string>("");
@@ -56,6 +56,21 @@ export default function FreeTrialPage() {
   const startedAtRef = useRef<number>(0);
   const cancelledRef = useRef<boolean>(false);
   const timerRef = useRef<number | undefined>(undefined);
+
+  const humanizeDetail = (detail: string): string => {
+    switch (detail) {
+      case "create_failed":
+        return t("freeTrial.error.createFailed");
+      case "update_failed":
+        return t("freeTrial.error.updateFailed");
+      case "user is banned":
+        return t("freeTrial.error.banned");
+      case "username required":
+        return t("freeTrial.error.usernameRequired");
+      default:
+        return detail;
+    }
+  };
 
   const stopPolling = () => {
     cancelledRef.current = true;
@@ -115,7 +130,7 @@ export default function FreeTrialPage() {
         return false;
       }
     } catch {
-      setClaimError("Сетевая ошибка, повторите попытку.");
+      setClaimError(t("freeTrial.error.network"));
       return false;
     }
   };
@@ -164,7 +179,7 @@ export default function FreeTrialPage() {
     const ok = await tryClaim();
     setChecking(false);
     if (!ok && !claimError) {
-      setClaimError("Подписка на канал не найдена. Подпишитесь и попробуйте снова.");
+      setClaimError(t("freeTrial.error.notSubscribed"));
     }
   };
 
@@ -192,19 +207,19 @@ export default function FreeTrialPage() {
           <CardContent className="p-6">
             <CheckCircle2 className="w-14 h-14 text-emerald-500 mx-auto" />
             <div className="text-xl font-bold text-foreground mt-4">
-              {mode === "telemt" ? "Прокси готов" : "Подписка активна"}
+              {mode === "telemt" ? t("freeTrial.success.proxyReady") : t("freeTrial.success.subActive")}
             </div>
             <p className="text-muted-foreground mt-2 mb-5">
               {claimed.alreadyActive
-                ? "У вас уже есть активный доступ. Используйте кнопку ниже."
-                : "Спасибо за подписку! Нажмите кнопку, чтобы подключиться."}
+                ? t("freeTrial.success.alreadyActive")
+                : t("freeTrial.success.thanks")}
             </p>
             <div className="flex flex-col gap-3 w-full">
               <Button size="lg" className="w-full" onClick={openConnect}>
-                Подключить
+                {t("freeTrial.connect")}
               </Button>
               <Button size="lg" variant="outline" className="w-full" onClick={() => navigate("/", { replace: true })}>
-                На главную
+                {t("freeTrial.toHome")}
               </Button>
             </div>
           </CardContent>
@@ -229,9 +244,9 @@ export default function FreeTrialPage() {
 
           {timedOut && !waiting && (
             <Alert variant="warning">
-              <AlertTitle>Не удалось подтвердить подписку</AlertTitle>
+              <AlertTitle>{t("freeTrial.timeoutTitle")}</AlertTitle>
               <AlertDescription>
-                Убедитесь, что вы подписались на канал, и нажмите «Проверить».
+                {t("freeTrial.timeoutBody")}
               </AlertDescription>
             </Alert>
           )}
@@ -241,7 +256,7 @@ export default function FreeTrialPage() {
               <CardContent className="p-5">
                 <Loader2 className="animate-spin w-9 h-9 mx-auto" />
                 <p className="text-muted-foreground mt-3 mb-0">
-                  Проверяем подписку…
+                  {t("freeTrial.checking")}
                 </p>
               </CardContent>
             </Card>
@@ -254,33 +269,18 @@ export default function FreeTrialPage() {
               onClick={onSubscribeClick}
               disabled={!newsUrl || waiting}
             >
-              Подписаться
+              {t("freeTrial.subscribe")}
             </Button>
             <Button size="lg" variant="outline" className="w-full" onClick={onManualCheck} disabled={waiting || checking}>
               {checking ? <Spinner /> : null}
-              Проверить
+              {t("freeTrial.check")}
             </Button>
             <Button size="lg" variant="outline" className="w-full" onClick={() => navigate("/", { replace: true })}>
-              Назад
+              {t("freeTrial.back")}
             </Button>
           </div>
         </CardContent>
       </Card>
     </div>
   );
-}
-
-function humanizeDetail(detail: string): string {
-  switch (detail) {
-    case "create_failed":
-      return "Не удалось создать подписку. Попробуйте позже.";
-    case "update_failed":
-      return "Не удалось обновить подписку. Попробуйте позже.";
-    case "user is banned":
-      return "Аккаунт заблокирован.";
-    case "username required":
-      return "Установите username в Telegram.";
-    default:
-      return detail;
-  }
 }

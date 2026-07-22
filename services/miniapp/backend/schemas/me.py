@@ -1,10 +1,16 @@
-from pydantic import BaseModel
+from typing import Literal
+
+from pydantic import BaseModel, Field
 
 
 class UserInfo(BaseModel):
     tg_id: int
     username: str | None
     language: str | None
+
+
+class LanguageUpdate(BaseModel):
+    language: Literal["ru", "en"] = Field(..., description="UI language code")
 
 
 class SubscriptionInfo(BaseModel):

@@ -1,99 +1,95 @@
 import LegalLayout from "../components/LegalLayout";
 import { LinksInfo } from "../api/client";
+import { useT } from "../i18n/LocaleContext";
 
 interface Props {
   links: LinksInfo;
 }
 
 export default function PolicyPage({ links }: Props) {
-  const brand = links.branding_name || "VPN";
+  const { t } = useT();
+  const brand = links.branding_name || t("legal.brandFallback");
   const supportLink = links.support_bot_link;
   const supportLabel = supportLink
     ? supportLink.split("/").pop() || supportLink
-    : "поддержка";
+    : t("legal.supportFallback");
 
   return (
-    <LegalLayout title="Политика конфиденциальности">
+    <LegalLayout title={t("legal.policy.title")}>
       <section className="legal-section">
-        <h2>1. Собираемые данные</h2>
+        <h2>{t("legal.policy.s1.title")}</h2>
         <p>
-          <strong>1.1. Обязательные данные:</strong>
+          <strong>{t("legal.policy.s1.p1")}</strong>
         </p>
         <ul>
-          <li>Telegram User ID</li>
-          <li>Имя пользователя Telegram</li>
-          <li>Данные оплаты (через платёжные агрегаторы)</li>
+          <li>{t("legal.policy.s1.i1")}</li>
+          <li>{t("legal.policy.s1.i2")}</li>
+          <li>{t("legal.policy.s1.i3")}</li>
         </ul>
         <p>
-          <strong>1.2. Технические данные:</strong>
+          <strong>{t("legal.policy.s1.p2")}</strong>
         </p>
         <ul>
-          <li>Время подключения</li>
-          <li>Тип устройства (без IMEI / серийных номеров)</li>
-          <li>Объём трафика (без анализа содержимого)</li>
+          <li>{t("legal.policy.s1.i4")}</li>
+          <li>{t("legal.policy.s1.i5")}</li>
+          <li>{t("legal.policy.s1.i6")}</li>
         </ul>
       </section>
 
       <section className="legal-section">
-        <h2>2. Запрет на сбор</h2>
-        <p>2.1. Мы никогда не сохраняем:</p>
+        <h2>{t("legal.policy.s2.title")}</h2>
+        <p>{t("legal.policy.s2.p1")}</p>
         <ul>
-          <li>Историю посещённых сайтов</li>
-          <li>IP-адреса пользователей</li>
-          <li>Передаваемый контент (файлы, сообщения)</li>
+          <li>{t("legal.policy.s2.i1")}</li>
+          <li>{t("legal.policy.s2.i2")}</li>
+          <li>{t("legal.policy.s2.i3")}</li>
         </ul>
       </section>
 
       <section className="legal-section">
-        <h2>3. Использование данных</h2>
-        <p>3.1. Данные используются исключительно для:</p>
+        <h2>{t("legal.policy.s3.title")}</h2>
+        <p>{t("legal.policy.s3.p1")}</p>
         <ul>
-          <li>Активации доступа к VPN</li>
-          <li>Оказания технической поддержки</li>
-          <li>Оповещений о новых тарифах и изменениях в сервисе</li>
+          <li>{t("legal.policy.s3.i1")}</li>
+          <li>{t("legal.policy.s3.i2")}</li>
+          <li>{t("legal.policy.s3.i3")}</li>
         </ul>
       </section>
 
       <section className="legal-section">
-        <h2>4. Защита данных</h2>
-        <p>
-          4.1. Все данные хранятся на зашифрованных серверах в юрисдикциях, не
-          требующих хранения логов (Швейцария, Румыния).
-        </p>
-        <p>
-          4.2. Ключи доступа к VPN генерируются автоматически и удаляются при
-          отмене подписки.
-        </p>
+        <h2>{t("legal.policy.s4.title")}</h2>
+        <p>{t("legal.policy.s4.p1")}</p>
+        <p>{t("legal.policy.s4.p2")}</p>
       </section>
 
       <section className="legal-section">
-        <h2>5. Передача третьим лицам</h2>
-        <p>5.1. Данные передаются только в следующих случаях:</p>
+        <h2>{t("legal.policy.s5.title")}</h2>
+        <p>{t("legal.policy.s5.p1")}</p>
         <ul>
-          <li>Платёжным системам для обработки транзакций</li>
-          <li>По официальному запросу уполномоченных органов РФ</li>
+          <li>{t("legal.policy.s5.i1")}</li>
+          <li>{t("legal.policy.s5.i2")}</li>
         </ul>
       </section>
 
       <section className="legal-section">
-        <h2>6. Срок хранения</h2>
-        <p>6.1. Ваши данные удаляются:</p>
+        <h2>{t("legal.policy.s6.title")}</h2>
+        <p>{t("legal.policy.s6.p1")}</p>
         <ul>
-          <li>Через 30 дней после прекращения подписки</li>
-          <li>По вашему запросу через службу поддержки</li>
+          <li>{t("legal.policy.s6.i1")}</li>
+          <li>{t("legal.policy.s6.i2")}</li>
         </ul>
       </section>
 
       <section className="legal-section">
-        <h2>7. Права пользователя</h2>
-        <p>Вы имеете право запросить:</p>
+        <h2>{t("legal.policy.s7.title")}</h2>
+        <p>{t("legal.policy.s7.p1")}</p>
         <ul>
-          <li>Доступ к вашим данным</li>
-          <li>Исправление неточной информации</li>
-          <li>Удаление аккаунта и всех связанных данных</li>
+          <li>{t("legal.policy.s7.i1")}</li>
+          <li>{t("legal.policy.s7.i2")}</li>
+          <li>{t("legal.policy.s7.i3")}</li>
         </ul>
         <p>
-          Для реализации этих прав обратитесь в поддержку:{" "}
+          {t("legal.policy.s7.p2")}{" "}
           {supportLink ? (
             <a href={supportLink} target="_blank" rel="noreferrer">
               {supportLabel}
@@ -105,7 +101,7 @@ export default function PolicyPage({ links }: Props) {
       </section>
 
       <p className="legal-footer-note">
-        Используя сервис {brand}, вы подтверждаете согласие с настоящей политикой.
+        {t("legal.policy.footer", { brand })}
       </p>
     </LegalLayout>
   );

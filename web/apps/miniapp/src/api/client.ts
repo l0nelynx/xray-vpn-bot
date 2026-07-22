@@ -44,6 +44,13 @@ export interface MeResponse {
   links: LinksInfo;
 }
 
+export type UiLanguage = "ru" | "en";
+
+export const me = {
+  setLanguage: (language: UiLanguage) =>
+    api.patch<UserInfo>("/me/language", { language }),
+};
+
 export interface TicketSummary {
   id: number;
   subject: string;

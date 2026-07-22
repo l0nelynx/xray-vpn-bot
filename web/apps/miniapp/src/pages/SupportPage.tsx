@@ -6,9 +6,11 @@ import { Button } from "@xray/ui/components/button";
 import { Spinner } from "@xray/ui/components/spinner";
 import { api, TicketSummary } from "../api/client";
 import TicketListItem from "../components/TicketListItem";
+import { useT } from "../i18n/LocaleContext";
 
 export default function SupportPage() {
   const navigate = useNavigate();
+  const { t } = useT();
   const [tickets, setTickets] = useState<TicketSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -22,7 +24,7 @@ export default function SupportPage() {
   return (
     <div className="page">
       <div className="text-xl font-bold text-foreground mb-5">
-        Поддержка
+        {t("support.title")}
       </div>
 
       {error && (
@@ -40,20 +42,18 @@ export default function SupportPage() {
       {tickets && tickets.length === 0 && (
         <div className="text-center py-10 text-muted-foreground">
           <Inbox className="w-8 h-8 mx-auto mb-3 opacity-60" />
-          <div>
-            У вас пока нет обращений.
-            <br />
-            Нажмите «+», чтобы создать.
+          <div style={{ whiteSpace: "pre-line" }}>
+            {t("support.empty")}
           </div>
         </div>
       )}
 
       {tickets &&
-        tickets.map((t) => (
+        tickets.map((ticket) => (
           <TicketListItem
-            key={t.id}
-            ticket={t}
-            onClick={() => navigate(`/support/${t.id}`)}
+            key={ticket.id}
+            ticket={ticket}
+            onClick={() => navigate(`/support/${ticket.id}`)}
           />
         ))}
 
@@ -62,7 +62,7 @@ export default function SupportPage() {
         className="rounded-full fixed right-6 shadow-lg"
         style={{ bottom: 88, width: 52, height: 52 }}
         onClick={() => navigate("/support/new")}
-        aria-label="Новое обращение"
+        aria-label={t("support.newAria")}
       >
         <Plus className="w-[22px] h-[22px]" />
       </Button>

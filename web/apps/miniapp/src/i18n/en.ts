@@ -1,0 +1,338 @@
+import type { Messages } from "./types";
+
+export const en: Messages = {
+  // tabs
+  "tabs.home": "Home",
+  "tabs.devices": "Devices",
+  "tabs.support": "Support",
+  "tabs.account": "Account",
+
+  // app
+  "app.error.usernameTitle": "Username required",
+  "app.error.genericTitle": "Error",
+  "app.error.usernameBody":
+    "Set a username in Telegram settings to use the service.",
+  "app.error.noData": "No data",
+
+  // common
+  "common.back": "Back",
+  "common.cancel": "Cancel",
+  "common.delete": "Delete",
+  "common.refresh": "Refresh",
+  "common.toHome": "Home",
+  "common.emDash": "—",
+  "common.daysShort": "{count} d",
+  "common.gb": "GB",
+  "common.gbUsedOfLimit": "{used} / {limit} GB",
+  "common.gbUsed": "{used} GB",
+  "common.error": "Error",
+
+  // subscription
+  "subscription.status.active": "Active",
+  "subscription.status.expired": "Expired",
+  "subscription.status.disabled": "Disabled",
+  "subscription.status.limited": "Limited",
+  "subscription.daysLeft": "days left",
+  "subscription.devices": "Devices",
+  "subscription.traffic": "Traffic",
+  "subscription.expires": "Expires",
+
+  // tickets status
+  "tickets.status.open": "Open",
+  "tickets.status.inProgress": "In progress",
+  "tickets.status.closed": "Closed",
+
+  // home
+  "home.titleFallback": "Subscription",
+  "home.subtitle": "VPN account",
+  "home.refreshAria": "Refresh",
+  "home.connect": "Connect",
+  "home.extend": "Extend subscription",
+  "home.buy": "Buy subscription",
+  "home.telegramProxy": "Telegram Proxy",
+  "home.emptyTitle": "No active subscription",
+  "home.emptyBody": "Choose a plan or activate a free trial",
+  "home.tryFree": "Try for free",
+
+  // devices
+  "devices.title": "My devices",
+  "devices.refreshAria": "Refresh",
+  "devices.empty": "No linked devices",
+  "devices.fallbackName": "Device",
+  "devices.os": "OS: {version}",
+  "devices.added": "Added: {date}",
+  "devices.toast.deleted": "Device deleted",
+  "devices.toast.deleteFailed": "Failed to delete device",
+  "devices.confirm.title": "Delete device?",
+  "devices.confirm.body": "You will need to authorize again after deletion.",
+  "devices.confirm.cancel": "Cancel",
+  "devices.confirm.delete": "Delete",
+
+  // free trial
+  "freeTrial.title.telemt": "Telegram Proxy",
+  "freeTrial.title.vpn": "Try for free",
+  "freeTrial.desc.telemt":
+    "Subscribe to our channel to get a free Telegram proxy.",
+  "freeTrial.desc.vpn":
+    "Subscribe to our channel to get a free VPN subscription.",
+  "freeTrial.success.proxyReady": "Proxy ready",
+  "freeTrial.success.subActive": "Subscription active",
+  "freeTrial.success.alreadyActive":
+    "You already have active access. Use the button below.",
+  "freeTrial.success.thanks":
+    "Thanks for subscribing! Tap the button to connect.",
+  "freeTrial.connect": "Connect",
+  "freeTrial.toHome": "Home",
+  "freeTrial.subscribe": "Subscribe",
+  "freeTrial.check": "Check",
+  "freeTrial.back": "Back",
+  "freeTrial.checking": "Checking subscription…",
+  "freeTrial.timeoutTitle": "Could not confirm subscription",
+  "freeTrial.timeoutBody":
+    "Make sure you subscribed to the channel, then tap “Check”.",
+  "freeTrial.error.network": "Network error, please try again.",
+  "freeTrial.error.notSubscribed":
+    "Channel subscription not found. Subscribe and try again.",
+  "freeTrial.error.createFailed":
+    "Failed to create subscription. Try again later.",
+  "freeTrial.error.updateFailed":
+    "Failed to update subscription. Try again later.",
+  "freeTrial.error.banned": "Account is banned.",
+  "freeTrial.error.usernameRequired": "Set a username in Telegram.",
+
+  // buy
+  "buy.title": "Plans",
+  "buy.bonusBalance": "Bonus balance:",
+  "buy.level.tariff": "Plan",
+  "buy.level.period": "Period",
+  "buy.level.subcategory": "Subcategory",
+  "buy.paymentMethod": "Payment method",
+  "buy.hint.selectCategory": "Select a category above",
+  "buy.hint.none": "No plans found",
+  "buy.daysShort": "{count} d",
+  "buy.payCredits": "Pay with points · {cost}",
+  "buy.pay": "Pay",
+  "buy.loadError": "Failed to load menu",
+  "buy.alert.missingDays": "Plan is misconfigured: days missing",
+  "buy.alert.invoiceError": "Failed to create invoice: {message}",
+  "buy.alert.creditsError": "Points payment failed: {message}",
+
+  // buy success
+  "buySuccess.paidTitle": "Payment received",
+  "buySuccess.paidBody":
+    "Subscription activated. Open the link to connect:",
+  "buySuccess.openSub": "Open subscription",
+  "buySuccess.toHome": "Home",
+  "buySuccess.timeoutTitle":
+    "Payment confirmation is taking longer than expected",
+  "buySuccess.timeoutBody":
+    "If you were charged, the subscription will appear within a few minutes. Open Home and tap Refresh.",
+  "buySuccess.waitingTitle": "Waiting for payment confirmation…",
+  "buySuccess.waitingBody":
+    "This usually takes a few seconds. Please keep this window open.",
+  "buySuccess.reopenPayment": "Open payment page again",
+
+  // connect
+  "connect.title": "Connect",
+  "connect.backAria": "Back",
+  "connect.subLinkLabel": "Subscription link",
+  "connect.copyLink": "Copy link",
+  "connect.featured": "Recommended",
+  "connect.toast.copied": "Copied",
+  "connect.toast.copyFailed": "Failed to copy",
+  "connect.toast.linkCopied": "Link copied",
+  "connect.platform.ios": "iOS",
+  "connect.platform.android": "Android",
+  "connect.platform.windows": "Windows",
+  "connect.platform.macos": "macOS",
+  "connect.platform.linux": "Linux",
+  "connect.platform.appleTV": "Apple TV",
+  "connect.platform.androidTV": "Android TV",
+
+  // support
+  "support.title": "Support",
+  "support.empty": "You have no tickets yet.\nTap “+” to create one.",
+  "support.newAria": "New ticket",
+
+  // support create
+  "supportCreate.title": "New ticket",
+  "supportCreate.subjectLabel": "Subject",
+  "supportCreate.subjectPlaceholder": "Ticket subject",
+  "supportCreate.messageLabel": "Message",
+  "supportCreate.messagePlaceholder": "Describe the issue",
+  "supportCreate.error.subject": "Enter a subject",
+  "supportCreate.error.message": "Describe the issue",
+  "supportCreate.submit": "Send",
+  "supportCreate.submitting": "Sending…",
+  "supportCreate.cancel": "Cancel",
+
+  // support ticket
+  "supportTicket.back": "Back",
+  "supportTicket.statusLabel": "Status",
+  "supportTicket.createdLabel": "Created",
+  "supportTicket.sender.admin": "Support",
+  "supportTicket.sender.you": "You",
+  "supportTicket.closed":
+    "This ticket is closed. Create a new one if you need help.",
+  "supportTicket.replyPlaceholder": "Your message",
+  "supportTicket.photo": "Photo",
+  "supportTicket.send": "Send",
+  "supportTicket.error.maxImages":
+    "You can attach at most {max} images",
+  "supportTicket.error.fileTooLarge":
+    "File too large (max 5MB): {name}",
+
+  // settings
+  "settings.title": "Account",
+  "settings.telegram": "Telegram",
+  "settings.bonusBalance": "Bonus balance",
+  "settings.activatePromo": "Activate promo code",
+  "settings.inviteFriends": "Invite friends",
+  "settings.referralRules": "Referral program rules",
+  "settings.privacy": "Privacy policy",
+  "settings.agreement": "Terms of service",
+  "settings.language": "Language",
+  "settings.language.ru": "Русский",
+  "settings.language.en": "English",
+  "settings.promo.modalTitle": "Activate promo code",
+  "settings.promo.modalBody":
+    "Enter a promo code — points {icon} will be added to your balance immediately",
+  "settings.promo.placeholder": "EXAMPLE123",
+  "settings.promo.apply": "Apply",
+  "settings.promo.applying": "Applying…",
+  "settings.promo.toastSuccess": "+{grant} to balance (total {balance})",
+  "settings.promo.errorFallback": "Error",
+  "settings.language.toastSaved": "Language saved",
+  "settings.language.toastFailed": "Failed to save language",
+
+  // invite
+  "invite.title": "Invite friends",
+  "invite.backAria": "Back",
+  "invite.yourCode": "Your promo code",
+  "invite.copyCode": "Copy code",
+  "invite.share": "Share",
+  "invite.stat.purchased": "Purchased with code",
+  "invite.stat.rewarded": "Earned by you",
+  "invite.howTitle": "How it works",
+  "invite.howBody":
+    "A friend gets {creditGrant} when activating your code. For every 30 days of purchases with your code you get {per30} — up to {cap} total.",
+  "invite.shareText":
+    "Join the VPN and get {creditGrant} with my code!",
+  "invite.toast.copied": "Promo code copied",
+  "invite.toast.copyFailed": "Failed to copy",
+  "invite.daysShort": "{count} d",
+
+  // referral rules
+  "referralRules.title": "Referral program rules",
+  "referralRules.titleLoading": "Program rules",
+  "referralRules.s1.title": "Referral promo codes",
+  "referralRules.s1.i1":
+    "Every user has a personal promo code — share it with friends.",
+  "referralRules.s1.i2": "A friend gets {creditGrant} when activating the code.",
+  "referralRules.s1.i3":
+    "Referral codes are only for new users who have never purchased before.",
+  "referralRules.s1.i4": "A referral promo code can be activated only once.",
+  "referralRules.s2.title": "Invite bonuses",
+  "referralRules.s2.i1":
+    "For every 30 days of purchases with your code you get {per30}.",
+  "referralRules.s2.i2": "You can earn up to {cap} total.",
+  "referralRules.s3.title": "Regular promo codes",
+  "referralRules.s3.i1": "Available to all users.",
+  "referralRules.s3.i2": "Each specific promo code can be used only once.",
+  "referralRules.s3.i3":
+    "Only one promo code can be active at a time — use it at checkout before activating the next one.",
+
+  // welcome
+  "welcome.title": "Welcome!",
+  "welcome.body":
+    "To use the app, start the Telegram bot and register first.",
+  "welcome.cta": "Open bot",
+
+  // legal layout
+  "legal.back": "Back",
+  "legal.supportFallback": "support",
+  "legal.brandFallback": "VPN",
+
+  // policy
+  "legal.policy.title": "Privacy policy",
+  "legal.policy.s1.title": "1. Data we collect",
+  "legal.policy.s1.p1": "1.1. Required data:",
+  "legal.policy.s1.i1": "Telegram User ID",
+  "legal.policy.s1.i2": "Telegram username",
+  "legal.policy.s1.i3": "Payment data (via payment processors)",
+  "legal.policy.s1.p2": "1.2. Technical data:",
+  "legal.policy.s1.i4": "Connection time",
+  "legal.policy.s1.i5": "Device type (no IMEI / serial numbers)",
+  "legal.policy.s1.i6": "Traffic volume (no content inspection)",
+  "legal.policy.s2.title": "2. What we never collect",
+  "legal.policy.s2.p1": "2.1. We never store:",
+  "legal.policy.s2.i1": "Browsing history",
+  "legal.policy.s2.i2": "User IP addresses",
+  "legal.policy.s2.i3": "Transferred content (files, messages)",
+  "legal.policy.s3.title": "3. How we use data",
+  "legal.policy.s3.p1": "3.1. Data is used solely to:",
+  "legal.policy.s3.i1": "Activate VPN access",
+  "legal.policy.s3.i2": "Provide technical support",
+  "legal.policy.s3.i3": "Notify about new plans and service changes",
+  "legal.policy.s4.title": "4. Data protection",
+  "legal.policy.s4.p1":
+    "4.1. All data is stored on encrypted servers in jurisdictions that do not require logging (Switzerland, Romania).",
+  "legal.policy.s4.p2":
+    "4.2. VPN access keys are generated automatically and deleted when the subscription ends.",
+  "legal.policy.s5.title": "5. Sharing with third parties",
+  "legal.policy.s5.p1": "5.1. Data is shared only in these cases:",
+  "legal.policy.s5.i1": "Payment systems for transaction processing",
+  "legal.policy.s5.i2":
+    "Upon an official request from authorized Russian authorities",
+  "legal.policy.s6.title": "6. Retention period",
+  "legal.policy.s6.p1": "6.1. Your data is deleted:",
+  "legal.policy.s6.i1": "30 days after the subscription ends",
+  "legal.policy.s6.i2": "Upon your request via support",
+  "legal.policy.s7.title": "7. Your rights",
+  "legal.policy.s7.p1": "You have the right to request:",
+  "legal.policy.s7.i1": "Access to your data",
+  "legal.policy.s7.i2": "Correction of inaccurate information",
+  "legal.policy.s7.i3": "Deletion of your account and all related data",
+  "legal.policy.s7.p2": "To exercise these rights, contact support:",
+  "legal.policy.footer":
+    "By using {brand}, you confirm that you agree to this policy.",
+
+  // agreement
+  "legal.agreement.title": "Terms of service",
+  "legal.agreement.s1.title": "1. Subject of the agreement",
+  "legal.agreement.s1.p1":
+    "1.1. The {brand} service provides access to VPN servers via a Telegram bot for encrypting internet traffic.",
+  "legal.agreement.s1.p2":
+    "1.2. Services are available only to adult users. Using the bot means acceptance of this offer.",
+  "legal.agreement.s2.title": "2. Terms of use",
+  "legal.agreement.s2.p1": "2.1. The user agrees to:",
+  "legal.agreement.s2.i1":
+    "Not violate Russian law (including bypassing blocks on prohibited resources: extremist materials, drugs, etc.);",
+  "legal.agreement.s2.i2": "Not distribute malware;",
+  "legal.agreement.s2.i3":
+    "Not use the service for DDoS attacks, spam, or hacking.",
+  "legal.agreement.s2.p2": "2.2. Prohibited:",
+  "legal.agreement.s2.i4": "Sharing the account with third parties;",
+  "legal.agreement.s2.i5": "Interfering with the service.",
+  "legal.agreement.s3.title": "3. Payment and refunds",
+  "legal.agreement.s3.p1":
+    "3.1. Plans are paid via the Telegram bot (cards, Qiwi, cryptocurrency).",
+  "legal.agreement.s3.p2":
+    "3.2. Refunds are only possible if the service cannot be provided for technical reasons.",
+  "legal.agreement.s4.title": "4. Liability",
+  "legal.agreement.s4.p1":
+    "4.1. The service does not guarantee 100% VPN availability.",
+  "legal.agreement.s4.p2": "4.2. The administration is not liable for:",
+  "legal.agreement.s4.i1": "Illegal actions by users;",
+  "legal.agreement.s4.i2": "Damage caused by VPN outages;",
+  "legal.agreement.s4.i3": "Blocked access to resources.",
+  "legal.agreement.s5.title": "5. Termination",
+  "legal.agreement.s5.p1":
+    "5.1. The administration may block an account for violating section 2 without a refund.",
+  "legal.agreement.s5.p2":
+    "5.2. The user may stop using the service by discontinuing payment.",
+  "legal.agreement.s6.title": "6. Contacts",
+  "legal.agreement.s6.p1": "Support:",
+  "legal.agreement.callout":
+    "By using {brand}, you confirm that you have read and agree to these terms.",
+};
