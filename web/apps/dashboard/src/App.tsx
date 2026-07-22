@@ -17,6 +17,7 @@ import WebAppSettingsPage from "./pages/WebAppSettingsPage";
 import TgAdminPage from "./pages/TgAdminPage";
 import CrmPage from "./pages/crm/CrmPage";
 import PromocodesPage from "./pages/PromocodesPage";
+import GiveawaysPage from "./pages/GiveawaysPage";
 import PushPage from "./pages/push/PushPage";
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -49,6 +50,7 @@ export default function App() {
         <Route path="store" element={<StorePage />} />
         <Route path="support" element={<SupportPage />} />
         <Route path="promocodes" element={<PromocodesPage />} />
+        <Route path="giveaways" element={<GiveawaysPage />} />
         <Route path="webapp/tariffs" element={<WebAppTariffsPage />} />
         <Route path="webapp/settings" element={<WebAppSettingsPage />} />
         <Route path="tg-admin" element={<TgAdminPage />} />

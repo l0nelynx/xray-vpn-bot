@@ -24,6 +24,7 @@ import {
   ReloadOutlined,
   SearchOutlined,
   SettingOutlined,
+  TrophyOutlined,
 } from "@ant-design/icons";
 import { api } from "../api/client";
 import useIsMobile from "../hooks/useIsMobile";
@@ -577,6 +578,184 @@ function SettingsTab() {
   );
 }
 
+type ReferralMetric = "total" | "paying";
+
+interface ReferralStatItem {
+  owner_tg_id: number;
+  owner_username: string | null;
+  promo_code: string;
+  referral_count: number;
+  paying_referral_count: number;
+  days_purchased: number;
+  points_rewarded: number;
+}
+
+const REFERRAL_SORT_OPTIONS = [
+  { value: "referral_count", label: "Total referrals" },
+  { value: "paying_referral_count", label: "Paying referrals" },
+  { value: "owner_username", label: "Owner" },
+  { value: "days_purchased", label: "Invitee days bought" },
+  { value: "points_rewarded", label: "Owner reward" },
+];
+
+function ReferralStatsTab() {
+  const isMobile = useIsMobile();
+  const { message } = App.useApp();
+  const [loading, setLoading] = useState(true);
+  const [items, setItems] = useState<ReferralStatItem[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState("");
+  const [metric, setMetric] = useState<ReferralMetric>("total");
+  const [sort, setSort] = useState("referral_count");
+  const [order, setOrder] = useState<SortOrder>("desc");
+  const debouncedSearch = useDebounce(search, 300);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({
+        page: String(page),
+        per_page: "20",
+        sort,
+        order,
+        metric,
+        search: debouncedSearch,
+      });
+      const data = await api.get<{
+        items: ReferralStatItem[];
+        total: number;
+      }>(`/promos/referral-stats?${params}`);
+      setItems(data.items);
+      setTotal(data.total);
+    } catch (e) {
+      message.error((e as Error).message || "Failed to load referral stats");
+    } finally {
+      setLoading(false);
+    }
+  }, [page, sort, order, metric, debouncedSearch, message]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const onMetricChange = (m: ReferralMetric) => {
+    setMetric(m);
+    setSort(m === "paying" ? "paying_referral_count" : "referral_count");
+    setPage(1);
+  };
+
+  const columns: TableProps<ReferralStatItem>["columns"] = [
+    {
+      title: "#",
+      key: "rank",
+      width: 56,
+      render: (_v, _r, index) => (page - 1) * 20 + index + 1,
+    },
+    {
+      title: "Owner",
+      key: "owner",
+      render: (_v, r) => (
+        <span>
+          {r.owner_username ? `@${r.owner_username}` : "—"}{" "}
+          <Typography.Text type="secondary">({r.owner_tg_id})</Typography.Text>
+        </span>
+      ),
+    },
+    { title: "Code", dataIndex: "promo_code", key: "promo_code" },
+    {
+      title: metric === "paying" ? "Paying referrals" : "Total referrals",
+      key: "primary_metric",
+      render: (_v, r) =>
+        metric === "paying" ? r.paying_referral_count : r.referral_count,
+      sorter: true,
+    },
+    {
+      title: metric === "paying" ? "Total" : "Paying",
+      key: "secondary_metric",
+      render: (_v, r) => (
+        <Typography.Text type="secondary">
+          {metric === "paying" ? r.referral_count : r.paying_referral_count}
+        </Typography.Text>
+      ),
+    },
+    { title: "Invitee days", dataIndex: "days_purchased", key: "days_purchased", sorter: true },
+    {
+      title: `Owner reward (${POINTS_ICON})`,
+      dataIndex: "points_rewarded",
+      key: "points_rewarded",
+      render: (v: number) => formatPoints(v),
+      sorter: true,
+    },
+  ];
+
+  const handleReferralTableChange = makePaginatedTableChange<ReferralStatItem>({
+    page,
+    sort,
+    order,
+    setPage,
+    setSort,
+    setOrder,
+  });
+
+  return (
+    <div>
+      <Space wrap style={{ marginBottom: 16 }} size="middle">
+        <Select
+          value={metric}
+          onChange={onMetricChange}
+          style={{ width: isMobile ? "100%" : 200 }}
+          options={[
+            { value: "total", label: "Top by total referrals" },
+            { value: "paying", label: "Top by paying referrals" },
+          ]}
+        />
+        <Input
+          placeholder="Search code, username, tg_id"
+          prefix={<SearchOutlined />}
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setPage(1);
+          }}
+          style={{ width: isMobile ? "100%" : 260 }}
+          allowClear
+        />
+        <Button icon={<ReloadOutlined />} onClick={load}>
+          Refresh
+        </Button>
+        {isMobile && (
+          <MobileSortControl
+            options={REFERRAL_SORT_OPTIONS}
+            sort={sort}
+            order={order}
+            onChange={(s, o) => {
+              setSort(s);
+              setOrder(o);
+              setPage(1);
+            }}
+          />
+        )}
+      </Space>
+      <Table
+        rowKey="owner_tg_id"
+        loading={loading}
+        columns={columns}
+        dataSource={items}
+        pagination={{
+          current: page,
+          pageSize: 20,
+          total,
+          showSizeChanger: false,
+        }}
+        onChange={handleReferralTableChange}
+        scroll={{ x: isMobile ? 700 : undefined }}
+        size={isMobile ? "small" : "middle"}
+      />
+    </div>
+  );
+}
+
 export default function PromocodesPage() {
   const isMobile = useIsMobile();
   return (
@@ -611,6 +790,15 @@ export default function PromocodesPage() {
               </span>
             ),
             children: <SettingsTab />,
+          },
+          {
+            key: "referral-stats",
+            label: (
+              <span>
+                <TrophyOutlined /> Referral stats
+              </span>
+            ),
+            children: <ReferralStatsTab />,
           },
         ]}
       />

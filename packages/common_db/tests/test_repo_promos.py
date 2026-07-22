@@ -162,3 +162,60 @@ def test_redeem_seeds_settings_on_fresh_db() -> None:
             await engine.dispose()
 
     _run(go())
+
+
+def test_referral_stats_total_and_paying() -> None:
+    async def go() -> None:
+        engine = _make_engine()
+        try:
+            await _setup(engine)
+            Session = async_sessionmaker(engine, expire_on_commit=False)
+            async with Session() as session:
+                session.add(Promo(id=1, tg_id=2001, promo_code="ALICE",
+                                  promo_type=PROMO_TYPE_REFERRAL))
+                session.add(Promo(id=2, tg_id=2002, promo_code="BOB",
+                                  promo_type=PROMO_TYPE_REFERRAL))
+                session.add(User(id=1, tg_id=2001, username="alice"))
+                session.add(User(id=2, tg_id=2002, username="bob"))
+                session.add(User(id=10, tg_id=1001, username="inv1"))
+                session.add(User(id=11, tg_id=1002, username="inv2"))
+                session.add(User(id=12, tg_id=1003, username="inv3"))
+                from common_db.models.promo_redemptions import PromoRedemption
+                session.add(PromoRedemption(
+                    id=1, tg_id=1001, promo_code="ALICE",
+                    promo_type=PROMO_TYPE_REFERRAL, created_at="2025-01-01",
+                ))
+                session.add(PromoRedemption(
+                    id=2, tg_id=1002, promo_code="ALICE",
+                    promo_type=PROMO_TYPE_REFERRAL, created_at="2025-01-02",
+                ))
+                session.add(PromoRedemption(
+                    id=3, tg_id=1003, promo_code="BOB",
+                    promo_type=PROMO_TYPE_REFERRAL, created_at="2025-01-03",
+                ))
+                session.add(Transaction(
+                    transaction_id="t1", vless_uuid="u1", order_status="delivered",
+                    delivery_status=1, days_ordered=30, user_id=10,
+                ))
+                await session.commit()
+
+                items, total = await repo_promos.list_referral_stats_paginated(
+                    session, metric="total", sort="referral_count", order="desc",
+                )
+                assert total == 2
+                assert items[0]["promo_code"] == "ALICE"
+                assert items[0]["referral_count"] == 2
+                assert items[0]["paying_referral_count"] == 1
+                assert items[1]["promo_code"] == "BOB"
+                assert items[1]["referral_count"] == 1
+                assert items[1]["paying_referral_count"] == 0
+
+                paying_items, _ = await repo_promos.list_referral_stats_paginated(
+                    session, metric="paying", sort="paying_referral_count", order="desc",
+                )
+                assert paying_items[0]["promo_code"] == "ALICE"
+                assert paying_items[0]["paying_referral_count"] == 1
+        finally:
+            await engine.dispose()
+
+    _run(go())

@@ -18,15 +18,20 @@ import string
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models import Promo, PromoRedemption, User
+from ..models import Promo, PromoRedemption, Transaction, User
 from ..models.credit_ledger import SOURCE_PROMO
 from ..models.promos import PROMO_TYPE_REFERRAL
 from .balance import credit as balance_credit, get_balance
 from .system import get_default_credit_grant
-from .users import get_user_by_id, get_user_by_tg_id, user_has_any_transaction
+from .users import (
+    PAID_ORDER_STATUSES,
+    get_user_by_id,
+    get_user_by_tg_id,
+    user_has_any_transaction,
+)
 
 _CODE_ALPHABET = string.ascii_uppercase + string.digits
 _CODE_LENGTH = 8
@@ -208,6 +213,20 @@ async def redeem_promo(
     else:
         new_balance = await get_balance(session, user.id)
     await session.flush()
+
+    if check.promo_type == PROMO_TYPE_REFERRAL:
+        promo = await get_promo_by_code(session, check.promo_code)
+        if promo is not None:
+            from . import giveaways as _giveaways
+            from ..models.giveaways import TICKET_SOURCE_INVITEE_REF
+
+            await _giveaways.try_grant_invitee_ticket(
+                session,
+                referrer_tg_id=promo.tg_id,
+                invitee_tg_id=tg_id,
+                source=TICKET_SOURCE_INVITEE_REF,
+            )
+
     return RedeemResult(
         True,
         REASON_OK,
@@ -271,6 +290,94 @@ async def get_promo_redeemers(
     return [{"tg_id": row[0], "username": row[1]} for row in result.all()]
 
 
+async def list_referral_stats_paginated(
+    session: AsyncSession,
+    *,
+    page: int = 1,
+    per_page: int = 20,
+    sort: str = "referral_count",
+    order: str = "desc",
+    search: str = "",
+    metric: str = "total",
+) -> tuple[list[dict], int]:
+    """Leaderboard of referral-code owners by total or paying invitees."""
+    page = max(1, page)
+    per_page = max(1, min(per_page, 100))
+
+    referral_count_sq = (
+        select(func.count())
+        .select_from(PromoRedemption)
+        .where(PromoRedemption.promo_code == Promo.promo_code)
+        .correlate(Promo)
+        .scalar_subquery()
+        .label("referral_count")
+    )
+    paying_referral_count_sq = (
+        select(func.count(func.distinct(PromoRedemption.tg_id)))
+        .select_from(PromoRedemption)
+        .join(User, User.tg_id == PromoRedemption.tg_id)
+        .join(Transaction, Transaction.user_id == User.id)
+        .where(
+            PromoRedemption.promo_code == Promo.promo_code,
+            Transaction.order_status.in_(PAID_ORDER_STATUSES),
+        )
+        .correlate(Promo)
+        .scalar_subquery()
+        .label("paying_referral_count")
+    )
+
+    base = (
+        select(
+            Promo,
+            User.username,
+            referral_count_sq,
+            paying_referral_count_sq,
+        )
+        .outerjoin(User, Promo.tg_id == User.tg_id)
+        .where(Promo.promo_type == PROMO_TYPE_REFERRAL)
+    )
+
+    if search.strip():
+        like = f"%{search.strip()}%"
+        conds = [Promo.promo_code.ilike(like), User.username.ilike(like)]
+        if search.strip().lstrip("-").isdigit():
+            conds.append(Promo.tg_id == int(search.strip()))
+        base = base.where(or_(*conds))
+
+    total = await session.scalar(select(func.count()).select_from(base.subquery())) or 0
+
+    sort_columns = {
+        "owner_tg_id": Promo.tg_id,
+        "owner_username": User.username,
+        "promo_code": Promo.promo_code,
+        "referral_count": referral_count_sq,
+        "paying_referral_count": paying_referral_count_sq,
+        "days_purchased": Promo.days_purchased,
+        "points_rewarded": Promo.points_rewarded,
+    }
+    default_sort = (
+        "paying_referral_count" if metric == "paying" else "referral_count"
+    )
+    sort_col = sort_columns.get(sort, sort_columns[default_sort])
+    base = base.order_by(sort_col.asc() if order == "asc" else sort_col.desc())
+
+    offset = (page - 1) * per_page
+    rows = (await session.execute(base.offset(offset).limit(per_page))).all()
+    items = [
+        {
+            "owner_tg_id": promo.tg_id,
+            "owner_username": owner_username,
+            "promo_code": promo.promo_code,
+            "referral_count": referral_count or 0,
+            "paying_referral_count": paying_referral_count or 0,
+            "days_purchased": promo.days_purchased,
+            "points_rewarded": promo.points_rewarded,
+        }
+        for promo, owner_username, referral_count, paying_referral_count in rows
+    ]
+    return items, total
+
+
 __all__ = [
     "RedeemResult",
     "REASON_ALREADY_USED",
@@ -289,5 +396,6 @@ __all__ = [
     "get_redemption_for_code",
     "has_referral_redemption",
     "list_promos_paginated",
+    "list_referral_stats_paginated",
     "redeem_promo",
 ]

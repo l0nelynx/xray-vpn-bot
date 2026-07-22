@@ -194,6 +194,31 @@ async def update_promo_settings(
     }
 
 
+@router.get("/referral-stats")
+async def referral_stats(
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=100),
+    sort: str = Query(""),
+    order: str = Query("desc"),
+    search: str = Query(""),
+    metric: str = Query("total"),
+    _: str = Depends(get_current_user),
+):
+    if metric not in ("total", "paying"):
+        metric = "total"
+    async with async_session() as session:
+        items, total = await _repo_promos.list_referral_stats_paginated(
+            session,
+            page=page,
+            per_page=per_page,
+            sort=sort,
+            order=order,
+            search=search,
+            metric=metric,
+        )
+    return {"items": items, "total": total, "page": page, "per_page": per_page}
+
+
 @router.get("/{code}/users")
 async def promo_users(code: str, _: str = Depends(get_current_user)):
     async with async_session() as session:

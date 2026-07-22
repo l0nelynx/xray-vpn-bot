@@ -109,6 +109,17 @@ async def cmd_start(message: Message, command: CommandObject = None):
         )
         return
 
+    # Giveaway deeplink: t.me/<bot>?start=gw_<id>
+    if raw_payload.lower().startswith("gw_"):
+        try:
+            giveaway_id = int(raw_payload[3:])
+        except ValueError:
+            giveaway_id = 0
+        if giveaway_id > 0:
+            from app.handlers.giveaways import handle_giveaway_join
+            await handle_giveaway_join(message, giveaway_id)
+            return
+
     payload = raw_payload.lower()
     if payload in ("buy", "extend", "trial"):
         lang = await get_user_lang(message.from_user.id)

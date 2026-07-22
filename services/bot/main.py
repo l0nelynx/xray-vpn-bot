@@ -18,6 +18,7 @@ from app.api.paritypay import payment_webhook_handler as paritypay_webhook_handl
 from app.api.remnawave_webhook import remnawave_webhook_handler
 from app.admin import router as router_admin
 from app.handlers.base import router as router_base
+from app.handlers.giveaways import giveaway_router
 from app.handlers.devices import router as router_devices
 from app.handlers.events import start_bot, stop_bot
 from app.settings import bot, admin_bot, cp, run_webserver, app_uvi, limiter, secrets
@@ -44,6 +45,7 @@ class UsernameRequiredMiddleware(BaseMiddleware):
 dp = Dispatcher()
 dp.callback_query.middleware(UsernameRequiredMiddleware())
 dp.include_router(router_base)
+dp.include_router(giveaway_router)
 dp.include_router(router_devices)
 dp.startup.register(start_bot)
 dp.shutdown.register(stop_bot)

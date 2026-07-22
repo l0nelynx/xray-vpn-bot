@@ -24,6 +24,7 @@ import {
   RobotOutlined,
   NotificationOutlined,
   DownloadOutlined,
+  TrophyOutlined,
 } from "@ant-design/icons";
 import { api, clearToken } from "../api/client";
 import useIsMobile from "../hooks/useIsMobile";
@@ -49,6 +50,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/store": "Store",
   "/support": "Support",
   "/promocodes": "Promocodes",
+  "/giveaways": "Giveaways",
   "/webapp/tariffs": "Tariff Constructor",
   "/webapp/settings": "Settings",
   "/tg-admin": "TG Admin",
@@ -94,6 +96,7 @@ function buildMenuItems(legacyEnabled: boolean): ItemType[] {
         { key: "/store", icon: <ShopOutlined />, label: "Store" },
         { key: "/support", icon: <MessageOutlined />, label: "Support" },
         { key: "/promocodes", icon: <GiftOutlined />, label: "Promocodes" },
+        { key: "/giveaways", icon: <TrophyOutlined />, label: "Giveaways" },
         { key: "/crm", icon: <CustomerServiceOutlined />, label: "CRM" },
         { key: "/push", icon: <NotificationOutlined />, label: "Push" },
         { key: "/tg-admin", icon: <RobotOutlined />, label: "TG Admin" },

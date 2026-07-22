@@ -154,6 +154,11 @@ Same shared promo repo via miniapp Android routers (`android/promo_router.py`).
 - `points_reward_per_30`
 - `reward_cap_points`
 
+**Referral stats tab:**
+
+- Top referrers by total activations or paying invitees
+- API: `GET /bot/dashboard/api/promos/referral-stats`
+
 API: `/bot/dashboard/api/promos`, `/promos/settings`, `/promos/{code}/users`.
 
 ---
@@ -253,6 +258,7 @@ sequenceDiagram
 ## Related
 
 - [CRM](crm.md) — can also credit the same wallet via `credit_balance`
+- [Giveaways](giveaways.md) — raffles with referral-based ticket hooks
 - [Dashboard](dashboard.md) — Promocodes UI
 - [MiniApp](miniapp.md) — Invite / settings pages
 - [Database](database.md) — table overview

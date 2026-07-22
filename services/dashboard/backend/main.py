@@ -16,7 +16,7 @@ from .auth import (
     verify_credentials,
 )
 from .config import get_expose_api_docs, get_redis_url
-from .routers import users, transactions, stats, promos, tariffs, menus, squads, telemt, store, support, webapp_menu, webapp_payments, settings, tg_admin, crm, push
+from .routers import users, transactions, stats, promos, tariffs, menus, squads, telemt, store, support, webapp_menu, webapp_payments, settings, tg_admin, crm, push, giveaways
 
 BASE_PATH = "/bot/dashboard"
 logger = logging.getLogger(__name__)
@@ -89,6 +89,7 @@ app.include_router(settings.router, prefix=BASE_PATH)
 app.include_router(tg_admin.router, prefix=BASE_PATH)
 app.include_router(crm.router, prefix=BASE_PATH)
 app.include_router(push.router, prefix=BASE_PATH)
+app.include_router(giveaways.router, prefix=BASE_PATH)
 
 
 @app.get("/health")

@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import Promo
+from ..models.giveaways import TICKET_SOURCE_INVITEE_PURCHASE
 from ..models.credit_ledger import SOURCE_PROMO
 from .balance import credit
 from .promos import get_latest_redemption
@@ -65,6 +66,16 @@ async def record_purchase_and_compute_reward(
         )
 
     await session.flush()
+
+    from . import giveaways as _giveaways
+
+    await _giveaways.try_grant_invitee_ticket(
+        session,
+        referrer_tg_id=promo.tg_id,
+        invitee_tg_id=buyer_tg_id,
+        source=TICKET_SOURCE_INVITEE_PURCHASE,
+    )
+
     if reward_points <= 0:
         return None
 

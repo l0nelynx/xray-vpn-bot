@@ -19,6 +19,12 @@ from .crm import (
 from .fcm import AndroidFcmToken
 from .google_play import GooglePlayPurchase, GooglePlaySku
 from .push import PushCampaign, PushCampaignDelivery
+from .giveaways import (
+    Giveaway,
+    GiveawayParticipant,
+    GiveawayTicket,
+    GiveawayWinner,
+)
 from .menus import MenuButton, MenuScreen, WebAppMenuNode
 from .promo_redemptions import PromoRedemption
 from .promos import Promo, PromoSettings
@@ -53,6 +59,11 @@ __all__ = [
     "SquadProfile",
     "TariffPlan",
     "TariffPrice",
+    # giveaways
+    "Giveaway",
+    "GiveawayParticipant",
+    "GiveawayTicket",
+    "GiveawayWinner",
     # menus
     "MenuScreen",
     "MenuButton",
