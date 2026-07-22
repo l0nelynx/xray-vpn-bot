@@ -1,35 +1,51 @@
-import { DeleteOutlined, LaptopOutlined, MobileOutlined, ReloadOutlined } from "@ant-design/icons";
-import { Alert, Button, Empty, Modal, Popconfirm, Spin, Tag, App } from "antd";
+import { Laptop, Smartphone, RefreshCw, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
+import { Alert, AlertTitle } from "@xray/ui/components/alert";
+import { Badge } from "@xray/ui/components/badge";
+import { Button } from "@xray/ui/components/button";
+import { Spinner } from "@xray/ui/components/spinner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@xray/ui/components/alert-dialog";
 import { api, DeviceItem, DevicesResponse } from "../api/client";
+import { useT } from "../i18n/LocaleContext";
 
-function formatDate(value: string | null): string {
-  if (!value) return "—";
-  try {
-    return new Date(value).toLocaleString("ru-RU", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
-  } catch {
-    return value;
-  }
-}
-
-function platformIcon(platform: string | null): React.ReactNode {
-  if (!platform) return <LaptopOutlined />;
+function platformIcon(platform: string | null) {
+  if (!platform) return <Laptop />;
   const p = platform.toLowerCase();
   if (p.includes("android") || p.includes("ios") || p.includes("iphone") || p.includes("mobile")) {
-    return <MobileOutlined />;
+    return <Smartphone />;
   }
-  return <LaptopOutlined />;
+  return <Laptop />;
 }
 
 export default function DevicesPage() {
+  const { t, dateLocale } = useT();
   const [devices, setDevices] = useState<DeviceItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
-  const { message } = App.useApp();
+  const [confirmHwid, setConfirmHwid] = useState<string | null>(null);
+
+  const formatDate = (value: string | null): string => {
+    if (!value) return t("common.emDash");
+    try {
+      return new Date(value).toLocaleString(dateLocale, {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      });
+    } catch {
+      return value;
+    }
+  };
 
   const load = () => {
     setDevices(null);
@@ -47,14 +63,12 @@ export default function DevicesPage() {
     try {
       await api.delete<void>(`/devices/${encodeURIComponent(hwid)}`);
       setDevices((prev) => (prev ? prev.filter((d) => d.hwid !== hwid) : prev));
-      message.success("Устройство удалено");
+      toast.success(t("devices.toast.deleted"));
     } catch (e: any) {
-      Modal.error({
-        title: "Не удалось удалить устройство",
-        content: e?.detail || String(e),
-      });
+      toast.error(t("devices.toast.deleteFailed"), { description: e?.detail || String(e) });
     } finally {
       setRemoving(null);
+      setConfirmHwid(null);
     }
   };
 
@@ -62,29 +76,35 @@ export default function DevicesPage() {
     <div className="page">
       <div className="page-header">
         <span style={{ fontSize: 22, fontWeight: 700, color: "#FFFFFF", letterSpacing: "-0.3px" }}>
-          Мои устройства
+          {t("devices.title")}
         </span>
         <Button
           className="refresh-fab"
-          shape="circle"
-          icon={<ReloadOutlined />}
+          size="icon"
+          variant="outline"
           onClick={load}
-          aria-label="Обновить"
-        />
+          aria-label={t("devices.refreshAria")}
+        >
+          <RefreshCw />
+        </Button>
       </div>
 
       {error && (
-        <Alert type="error" title={error} style={{ marginBottom: 16 }} />
+        <Alert variant="destructive" style={{ marginBottom: 16 }}>
+          <AlertTitle>{error}</AlertTitle>
+        </Alert>
       )}
 
       {devices === null && !error && (
         <div className="spinner-wrap">
-          <Spin />
+          <Spinner />
         </div>
       )}
 
       {devices && devices.length === 0 && (
-        <Empty description="Нет привязанных устройств" />
+        <div style={{ textAlign: "center", padding: "40px 0", color: "rgba(255,255,255,0.38)" }}>
+          {t("devices.empty")}
+        </div>
       )}
 
       {devices && devices.map((d) => (
@@ -95,18 +115,18 @@ export default function DevicesPage() {
 
           <div className="device-card__body">
             <div className="device-card__name">
-              {d.device_model || d.platform || "Устройство"}
+              {d.device_model || d.platform || t("devices.fallbackName")}
               {d.platform && (
-                <Tag color="processing" style={{ marginLeft: 8, fontSize: 11, verticalAlign: "middle" }}>
+                <Badge style={{ marginLeft: 8, fontSize: 11, verticalAlign: "middle" }}>
                   {d.platform}
-                </Tag>
+                </Badge>
               )}
             </div>
             {d.os_version && (
-              <div className="device-card__meta">ОС: {d.os_version}</div>
+              <div className="device-card__meta">{t("devices.os", { version: d.os_version })}</div>
             )}
             <div className="device-card__meta" style={{ marginTop: 4 }}>
-              Добавлено: {formatDate(d.created_at)}
+              {t("devices.added", { date: formatDate(d.created_at) })}
             </div>
             <div className="device-card__meta" style={{ opacity: 0.6, marginTop: 2, fontSize: 11 }}>
               {d.hwid}
@@ -114,25 +134,38 @@ export default function DevicesPage() {
           </div>
 
           <div className="device-card__actions">
-            <Popconfirm
-              title="Удалить устройство?"
-              description="После удаления потребуется новая авторизация."
-              okText="Удалить"
-              cancelText="Отмена"
-              okButtonProps={{ danger: true, loading: removing === d.hwid }}
-              onConfirm={() => handleDelete(d.hwid)}
+            <Button
+              variant="destructive"
+              size="icon"
+              className="rounded-full"
+              onClick={() => setConfirmHwid(d.hwid)}
+              disabled={removing === d.hwid}
             >
-              <Button
-                danger
-                size="small"
-                shape="circle"
-                icon={<DeleteOutlined />}
-                loading={removing === d.hwid}
-              />
-            </Popconfirm>
+              {removing === d.hwid ? <Spinner /> : <Trash2 />}
+            </Button>
           </div>
         </div>
       ))}
+
+      <AlertDialog open={!!confirmHwid} onOpenChange={(open: boolean) => !open && setConfirmHwid(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("devices.confirm.title")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("devices.confirm.body")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("devices.confirm.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => confirmHwid && handleDelete(confirmHwid)}
+            >
+              {t("devices.confirm.delete")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

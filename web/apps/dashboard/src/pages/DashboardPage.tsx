@@ -1,19 +1,27 @@
 import { useEffect, useState, useCallback } from "react";
-import { Row, Col, Card, Table, Tag, Select, App } from "antd";
+import type { ColumnDef } from "@tanstack/react-table";
+import { UserPlus, Wallet, ShoppingCart, TrendingUp } from "lucide-react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@xray/ui/components/card";
+import { Alert, AlertDescription } from "@xray/ui/components/alert";
+import { Badge } from "@xray/ui/components/badge";
+import { Button } from "@xray/ui/components/button";
 import {
-  UserAddOutlined,
-  WalletOutlined,
-  ShoppingOutlined,
-  RiseOutlined,
-} from "@ant-design/icons";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@xray/ui/components/select";
+import { toast } from "sonner";
 import MetricCard from "../components/MetricCard";
 import RevenueChart from "../components/RevenueChart";
 import UserGrowthChart from "../components/UserGrowthChart";
 import PaymentMethodPieChart from "../components/PaymentMethodPieChart";
+import DataTable from "../components/DataTable";
 import { api } from "../api/client";
 import type { SummaryStats, TransactionItem } from "../api/types";
 import useIsMobile from "../hooks/useIsMobile";
-import { STATUS_COLORS, PERIOD_OPTIONS } from "../utils/constants";
+import { PERIOD_OPTIONS, statusBadgeVariant } from "../utils/constants";
 
 const rub = (v: number) => Math.round(v).toLocaleString("en-US");
 
@@ -21,87 +29,102 @@ export default function DashboardPage() {
   const [summary, setSummary] = useState<SummaryStats | null>(null);
   const [recent, setRecent] = useState<TransactionItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [recentLoading, setRecentLoading] = useState(true);
+  const [recentError, setRecentError] = useState<string | null>(null);
   const [period, setPeriod] = useState("month");
   const isMobile = useIsMobile();
-  const { message } = App.useApp();
 
-  const loadSummary = useCallback(
-    (p: string) => {
-      setLoading(true);
-      api
-        .get<SummaryStats>(`/stats/summary?period=${p}`)
-        .then(setSummary)
-        .catch(() => message.error("Failed to load dashboard data"))
-        .finally(() => setLoading(false));
-    },
-    [message]
-  );
+  const loadSummary = useCallback((p: string) => {
+    setLoading(true);
+    setError(null);
+    api
+      .get<SummaryStats>(`/stats/summary?period=${p}`)
+      .then((data) => {
+        setSummary(data);
+        setError(null);
+      })
+      .catch(() => {
+        setSummary(null);
+        setError("Failed to load dashboard data");
+        toast.error("Failed to load dashboard data");
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  const loadRecent = useCallback(() => {
+    setRecentLoading(true);
+    setRecentError(null);
+    api
+      .get<TransactionItem[]>("/transactions/recent?limit=10")
+      .then((data) => {
+        setRecent(data);
+        setRecentError(null);
+      })
+      .catch(() => {
+        setRecent([]);
+        setRecentError("Failed to load recent transactions");
+      })
+      .finally(() => setRecentLoading(false));
+  }, []);
 
   useEffect(() => {
     loadSummary(period);
   }, [period, loadSummary]);
 
   useEffect(() => {
-    api
-      .get<TransactionItem[]>("/transactions/recent?limit=10")
-      .then(setRecent)
-      .catch(() => {});
-  }, []);
+    loadRecent();
+  }, [loadRecent]);
 
-  const recentColumns = [
+  const recentColumns: ColumnDef<TransactionItem, unknown>[] = [
     {
-      title: "ID",
-      dataIndex: "transaction_id",
-      key: "id",
-      width: 140,
-      ellipsis: true,
-      render: (v: string) => (
-        <span style={{ fontFamily: "monospace", fontSize: 12, color: "rgba(255,255,255,0.45)" }}>
-          {v}
+      id: "transaction_id",
+      header: "ID",
+      meta: { width: 140 },
+      cell: ({ row }) => (
+        <span className="block max-w-[140px] truncate font-mono text-xs text-muted-foreground">
+          {row.original.transaction_id}
         </span>
       ),
     },
     {
-      title: "User",
-      dataIndex: "username",
-      key: "user",
-      width: 110,
-      render: (v: string) => (
-        <span style={{ color: "rgba(255,255,255,0.75)" }}>{v || "—"}</span>
+      id: "username",
+      header: "User",
+      meta: { width: 110 },
+      cell: ({ row }) => <span className="text-foreground/75">{row.original.username || "—"}</span>,
+    },
+    {
+      id: "payment_method",
+      header: "Method",
+      meta: { width: 110 },
+      cell: ({ row }) => (
+        <span className="text-xs text-muted-foreground">{row.original.payment_method || "—"}</span>
       ),
     },
     {
-      title: "Method",
-      dataIndex: "payment_method",
-      key: "method",
-      width: 110,
-      render: (v: string) => (
-        <span style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>{v || "—"}</span>
+      id: "amount",
+      header: "Amount",
+      meta: { width: 90 },
+      cell: ({ row }) => (
+        <span className="font-semibold">{row.original.amount ?? "—"}</span>
       ),
     },
     {
-      title: "Amount",
-      dataIndex: "amount",
-      key: "amount",
-      width: 90,
-      render: (v: number | null) => (
-        <span style={{ fontWeight: 600, color: "#E2E8F8" }}>{v ?? "—"}</span>
+      id: "order_status",
+      header: "Status",
+      meta: { width: 110 },
+      cell: ({ row }) => (
+        <Badge variant={statusBadgeVariant(row.original.order_status)}>
+          {row.original.order_status}
+        </Badge>
       ),
     },
     {
-      title: "Status",
-      dataIndex: "order_status",
-      key: "status",
-      width: 110,
-      render: (s: string) => <Tag color={STATUS_COLORS[s] || "default"}>{s}</Tag>,
-    },
-    {
-      title: "Date",
-      dataIndex: "created_at",
-      key: "date",
-      width: 155,
-      render: (v: string) => (
-        <span style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>{v || "—"}</span>
+      id: "created_at",
+      header: "Date",
+      meta: { width: 155 },
+      cell: ({ row }) => (
+        <span className="text-xs text-muted-foreground">{row.original.created_at || "—"}</span>
       ),
     },
   ];
@@ -109,184 +132,161 @@ export default function DashboardPage() {
   const renderRecentMobile = (tx: TransactionItem) => (
     <div
       key={tx.transaction_id}
-      style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        padding: "10px 0",
-        borderBottom: "1px solid #14192C",
-      }}
+      className="flex items-center justify-between border-b border-border py-2.5 last:border-0"
     >
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div
-          style={{
-            fontSize: 13,
-            color: "rgba(255,255,255,0.75)",
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-          }}
-        >
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-sm text-foreground/75">
           {tx.username || "—"} · {tx.payment_method || "—"}
         </div>
-        <div style={{ fontSize: 11, color: "rgba(255,255,255,0.30)", marginTop: 2 }}>
-          {tx.created_at || "—"}
-        </div>
+        <div className="mt-0.5 text-xs text-muted-foreground">{tx.created_at || "—"}</div>
       </div>
-      <div style={{ textAlign: "right", marginLeft: 8 }}>
-        <Tag color={STATUS_COLORS[tx.order_status] || "default"} style={{ margin: 0 }}>
+      <div className="ml-2 text-right">
+        <Badge variant={statusBadgeVariant(tx.order_status)}>
           {tx.amount != null ? tx.amount : "—"}
-        </Tag>
+        </Badge>
       </div>
     </div>
   );
 
-  const gap = isMobile ? 10 : 14;
+  const totals = summary
+    ? [
+        { label: "Total users", value: summary.totals.total_users.toLocaleString("en-US") },
+        { label: "Active subs", value: summary.totals.active_subs.toLocaleString("en-US") },
+        { label: "Conversion", value: `${summary.totals.conversion.toFixed(1)}%` },
+        { label: "Lifetime revenue", value: `${rub(summary.totals.revenue_all_time)} ₽` },
+      ]
+    : [];
 
   return (
-    <div>
-      {/* Period selector row */}
-      <div
-        style={{
-          marginBottom: gap + 4,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 8,
-        }}
-      >
-        <div style={{ fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.25)", letterSpacing: "0.6px", textTransform: "uppercase" }}>
-          Overview
+    <div className="space-y-8">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="space-y-1.5">
+          <h2 className="text-2xl font-semibold tracking-tight">Dashboard</h2>
+          <p className="text-sm text-muted-foreground">
+            Overview of revenue, users and orders for the selected period.
+          </p>
         </div>
-        <Select
-          value={period}
-          onChange={setPeriod}
-          style={{ width: 120 }}
-          options={PERIOD_OPTIONS}
-          size="small"
-        />
+        <Select value={period} onValueChange={setPeriod}>
+          <SelectTrigger className="w-[160px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {PERIOD_OPTIONS.map((o) => (
+              <SelectItem key={o.value} value={o.value}>
+                {o.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
-      {/* Period KPIs with deltas */}
-      <Row gutter={[gap, gap]}>
-        <Col xs={12} sm={12} lg={6}>
+      {error && (
+        <Alert variant="destructive" className="flex items-center justify-between gap-3">
+          <AlertDescription>{error}</AlertDescription>
+          <Button size="sm" variant="outline" onClick={() => loadSummary(period)}>
+            Retry
+          </Button>
+        </Alert>
+      )}
+
+      {!error && (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <MetricCard
             label="Revenue"
             value={summary?.revenue.value ?? 0}
             prev={summary?.revenue.prev}
-            icon={<WalletOutlined />}
-            color="#A78BFF"
+            icon={<Wallet />}
             format={rub}
             suffix="₽"
             loading={loading}
           />
-        </Col>
-        <Col xs={12} sm={12} lg={6}>
           <MetricCard
             label="New Users"
             value={summary?.new_users.value ?? 0}
             prev={summary?.new_users.prev}
-            icon={<UserAddOutlined />}
-            color="#34D399"
+            icon={<UserPlus />}
             loading={loading}
           />
-        </Col>
-        <Col xs={12} sm={12} lg={6}>
           <MetricCard
             label="Orders"
             value={summary?.orders.value ?? 0}
             prev={summary?.orders.prev}
-            icon={<ShoppingOutlined />}
-            color="#6C8EFF"
+            icon={<ShoppingCart />}
             loading={loading}
           />
-        </Col>
-        <Col xs={12} sm={12} lg={6}>
           <MetricCard
             label="Avg Order"
             value={summary?.avg_order.value ?? 0}
             prev={summary?.avg_order.prev}
-            icon={<RiseOutlined />}
-            color="#FBBF24"
+            icon={<TrendingUp />}
             format={rub}
             suffix="₽"
             loading={loading}
           />
-        </Col>
-      </Row>
-
-      {/* All-time context strip */}
-      {summary && (
-        <div
-          style={{
-            marginTop: gap,
-            display: "flex",
-            flexWrap: "wrap",
-            gap: isMobile ? 10 : 24,
-            padding: isMobile ? "10px 14px" : "12px 18px",
-            background: "#111827",
-            border: "1px solid #1E2540",
-            borderRadius: 12,
-          }}
-        >
-          {[
-            { label: "Total users", value: summary.totals.total_users.toLocaleString("en-US") },
-            { label: "Active subs", value: summary.totals.active_subs.toLocaleString("en-US") },
-            { label: "Conversion", value: `${summary.totals.conversion.toFixed(1)}%` },
-            { label: "Lifetime revenue", value: `${rub(summary.totals.revenue_all_time)} ₽` },
-          ].map((it) => (
-            <div key={it.label} style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-              <span style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                {it.label}
-              </span>
-              <span style={{ fontSize: 14, fontWeight: 700, color: "#E2E8F8" }}>{it.value}</span>
-            </div>
-          ))}
         </div>
       )}
 
-      {/* Charts row */}
-      <Row gutter={[gap, gap]} style={{ marginTop: gap }}>
-        <Col xs={24} lg={16}>
-          <RevenueChart period={period} />
-        </Col>
-        <Col xs={24} lg={8}>
-          <PaymentMethodPieChart />
-        </Col>
-      </Row>
+      {summary && !error && (
+        <Card>
+          <CardContent className="grid grid-cols-2 gap-6 pt-6 sm:grid-cols-4">
+            {totals.map((it) => (
+              <div key={it.label} className="space-y-1.5">
+                <p className="text-sm text-muted-foreground">{it.label}</p>
+                <p className="text-lg font-semibold tracking-tight">{it.value}</p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
-      {/* Growth + Recent transactions */}
-      <Row gutter={[gap, gap]} style={{ marginTop: gap }}>
-        <Col xs={24} lg={12}>
-          <UserGrowthChart period={period} />
-        </Col>
-        <Col xs={24} lg={12}>
-          <Card
-            title={
-              <span style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.75)" }}>
-                Recent Transactions
-              </span>
-            }
-            styles={{ body: { padding: isMobile ? "12px 14px" : "0" } }}
-          >
-            {isMobile ? (
-              <div style={{ padding: "2px 0" }}>{recent.map(renderRecentMobile)}</div>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <RevenueChart period={period} />
+        </div>
+        <div>
+          <PaymentMethodPieChart />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <UserGrowthChart period={period} />
+        <Card>
+          <CardHeader>
+            <CardTitle>Recent Transactions</CardTitle>
+            <CardDescription>Latest 10 orders across all payment methods.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {recentError ? (
+              <Alert variant="destructive" className="flex items-center justify-between gap-3">
+                <AlertDescription>{recentError}</AlertDescription>
+                <Button size="sm" variant="outline" onClick={loadRecent}>
+                  Retry
+                </Button>
+              </Alert>
+            ) : isMobile ? (
+              recentLoading ? (
+                <div className="py-8 text-center text-muted-foreground">Loading…</div>
+              ) : recent.length === 0 ? (
+                <div className="py-8 text-center text-sm text-muted-foreground">
+                  No recent transactions
+                </div>
+              ) : (
+                <div>{recent.map(renderRecentMobile)}</div>
+              )
             ) : (
-              <Table
-                rowKey="transaction_id"
+              <DataTable
                 columns={recentColumns}
-                dataSource={recent}
-                loading={loading}
-                pagination={false}
-                size="small"
-                scroll={{ x: 620 }}
-                style={{ borderRadius: 0 }}
+                data={recent}
+                loading={recentLoading}
+                rowKey={(r) => r.transaction_id}
+                empty="No recent transactions"
+                minWidth={620}
+                embedded
               />
             )}
-          </Card>
-        </Col>
-      </Row>
-
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

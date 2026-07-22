@@ -1,21 +1,47 @@
-import { Table, Tag, Button, Space, Popconfirm, Input, Select, Card, App, Typography } from "antd";
-import type { TableProps } from "antd";
-import { SearchOutlined, StopOutlined, CheckOutlined, DeleteOutlined, EyeOutlined, CrownOutlined } from "@ant-design/icons";
 import { useState, useEffect, useCallback, useRef } from "react";
+import type { ColumnDef } from "@tanstack/react-table";
+import { Search, Ban, Check, Trash2, Eye, Crown, Copy } from "lucide-react";
+import { Button } from "@xray/ui/components/button";
+import { Input } from "@xray/ui/components/input";
+import { Badge } from "@xray/ui/components/badge";
+import { Card, CardContent } from "@xray/ui/components/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@xray/ui/components/select";
+import { toast } from "sonner";
 import { api } from "../api/client";
 import type { UserItem, PaginatedResponse } from "../api/types";
 import useIsMobile from "../hooks/useIsMobile";
 import useDebounce from "../hooks/useDebounce";
-import MobileSortControl, { SortOrder } from "./MobileSortControl";
+import MobileSortControl, { type SortOrder } from "./MobileSortControl";
 import UserDrawer from "./UserDrawer";
+import DataTable from "./DataTable";
+import TablePagination from "./TablePagination";
+import ConfirmButton from "./ConfirmButton";
+import { makeSortToggle } from "../utils/tableChange";
 
 const SORT_OPTIONS = [
   { value: "id", label: "ID" },
   { value: "tg_id", label: "TG ID" },
+  { value: "rw_id", label: "RW ID" },
   { value: "username", label: "Username" },
   { value: "api_provider", label: "Provider" },
   { value: "is_paid", label: "Paid status" },
 ];
+
+function StatusBadges({ user }: { user: UserItem }) {
+  return (
+    <div className="flex flex-wrap gap-1">
+      {user.vip && <Badge variant="warning">VIP</Badge>}
+      {user.is_banned && <Badge variant="destructive">Banned</Badge>}
+      {user.is_paid ? <Badge variant="success">Paid</Badge> : <Badge variant="secondary">Free</Badge>}
+    </div>
+  );
+}
 
 export default function UsersTable() {
   const [data, setData] = useState<UserItem[]>([]);
@@ -27,12 +53,11 @@ export default function UsersTable() {
   const [sort, setSort] = useState("id");
   const [order, setOrder] = useState<SortOrder>("desc");
   const [loading, setLoading] = useState(false);
-  const [drawerTgId, setDrawerTgId] = useState<number | null>(null);
+  const [drawerUserId, setDrawerUserId] = useState<number | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const isMobile = useIsMobile();
   const debouncedSearch = useDebounce(search, 400);
   const abortRef = useRef<AbortController | null>(null);
-  const { message } = App.useApp();
 
   const fetchUsers = useCallback(async () => {
     abortRef.current?.abort();
@@ -43,7 +68,7 @@ export default function UsersTable() {
     try {
       const res = await api.get<PaginatedResponse<UserItem>>(
         `/users?page=${page}&per_page=${perPage}&search=${encodeURIComponent(debouncedSearch)}&filter=${filter}&sort=${sort}&order=${order}`,
-        controller.signal
+        controller.signal,
       );
       setData(res.items);
       setTotal(res.total);
@@ -60,196 +85,254 @@ export default function UsersTable() {
     return () => abortRef.current?.abort();
   }, [fetchUsers]);
 
-  const handleBan = async (tg_id: number) => {
+  const handleBan = async (user_id: number) => {
     try {
-      await api.post(`/users/${tg_id}/ban`);
+      await api.post(`/users/${user_id}/ban`);
       fetchUsers();
     } catch {
-      message.error("Failed to ban user");
+      toast.error("Failed to ban user");
     }
   };
 
-  const handleUnban = async (tg_id: number) => {
+  const handleUnban = async (user_id: number) => {
     try {
-      await api.post(`/users/${tg_id}/unban`);
+      await api.post(`/users/${user_id}/unban`);
       fetchUsers();
     } catch {
-      message.error("Failed to unban user");
+      toast.error("Failed to unban user");
     }
   };
 
-  const handleDelete = async (tg_id: number) => {
+  const handleDelete = async (user_id: number) => {
     try {
-      await api.delete(`/users/${tg_id}`);
+      await api.delete(`/users/${user_id}`);
       fetchUsers();
     } catch {
-      message.error("Failed to delete user");
+      toast.error("Failed to delete user");
     }
   };
 
-  const handleToggleVip = async (tg_id: number, currentVip: boolean) => {
+  const handleToggleVip = async (user_id: number, currentVip: boolean) => {
     try {
-      await api.post(`/users/${tg_id}/${currentVip ? "unvip" : "vip"}`);
+      await api.post(`/users/${user_id}/${currentVip ? "unvip" : "vip"}`);
       fetchUsers();
     } catch {
-      message.error("Failed to toggle VIP status");
+      toast.error("Failed to toggle VIP status");
     }
   };
 
-  const openDrawer = (tg_id: number) => {
-    setDrawerTgId(tg_id);
+  const openDrawer = (user_id: number) => {
+    setDrawerUserId(user_id);
     setDrawerOpen(true);
   };
 
-  const sortOrderFor = (key: string) =>
-    sort === key ? (order === "asc" ? "ascend" : "descend") : null;
+  const onSortChange = makeSortToggle({ sort, order, setSort, setOrder, setPage });
 
-  const columns: TableProps<UserItem>["columns"] = [
-    { title: "ID", dataIndex: "id", key: "id", width: 60, sorter: true, sortOrder: sortOrderFor("id") },
-    { title: "TG ID", dataIndex: "tg_id", key: "tg_id", width: 130, sorter: true, sortOrder: sortOrderFor("tg_id") },
-    { title: "Username", dataIndex: "username", key: "username", width: 140, sorter: true, sortOrder: sortOrderFor("username") },
+  const columns: ColumnDef<UserItem, unknown>[] = [
+    { id: "id", header: "ID", accessorKey: "id", meta: { sortKey: "id", width: 60 } },
     {
-      title: "Email",
-      dataIndex: "email",
-      key: "email",
-      width: 180,
-      render: (v: string | null) => v || "—",
+      id: "tg_id",
+      header: "TG ID",
+      meta: { sortKey: "tg_id", width: 130 },
+      cell: ({ row }) => row.original.tg_id ?? "—",
     },
     {
-      title: "vless_uuid",
-      dataIndex: "vless_uuid",
-      key: "vless_uuid",
-      width: 150,
-      render: (v: string | null) =>
-        v ? (
-          <Typography.Text copyable={{ text: v }} style={{ fontSize: 11 }} ellipsis={{ tooltip: v }}>
-            {v}
-          </Typography.Text>
+      id: "rw_id",
+      header: "rw_id",
+      meta: { sortKey: "rw_id", width: 90 },
+      cell: ({ row }) => row.original.rw_id ?? "—",
+    },
+    { id: "username", header: "Username", accessorKey: "username", meta: { sortKey: "username", width: 140 } },
+    {
+      id: "email",
+      header: "Email",
+      meta: { width: 180 },
+      cell: ({ row }) => row.original.email || "—",
+    },
+    {
+      id: "vless_uuid",
+      header: "vless_uuid",
+      meta: { width: 150 },
+      cell: ({ row }) => {
+        const v = row.original.vless_uuid;
+        return v ? (
+          <span className="flex items-center gap-1">
+            <span className="max-w-[120px] truncate font-mono text-[11px]" title={v}>
+              {v}
+            </span>
+            <button
+              type="button"
+              onClick={() => navigator.clipboard?.writeText(v).then(() => toast.success("Copied"))}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <Copy className="h-3 w-3" />
+            </button>
+          </span>
         ) : (
           "—"
-        ),
-    },
-    { title: "Provider", dataIndex: "api_provider", key: "api_provider", width: 90, sorter: true, sortOrder: sortOrderFor("api_provider") },
-    {
-      title: "Status",
-      key: "is_paid",
-      width: 120,
-      sorter: true,
-      sortOrder: sortOrderFor("is_paid"),
-      render: (_: unknown, r: UserItem) => (
-        <Space>
-          {r.vip && <Tag color="gold">VIP</Tag>}
-          {r.is_banned && <Tag color="red">Banned</Tag>}
-          {r.is_paid ? <Tag color="green">Paid</Tag> : <Tag>Free</Tag>}
-        </Space>
-      ),
+        );
+      },
     },
     {
-      title: "Actions",
-      key: "actions",
-      width: 200,
-      fixed: "right",
-      render: (_: unknown, r: UserItem) => (
-        <Space size="small">
-          <Button size="small" icon={<EyeOutlined />} onClick={() => openDrawer(r.tg_id)} />
-          <Button
-            size="small"
-            icon={<CrownOutlined />}
-            onClick={() => handleToggleVip(r.tg_id, r.vip)}
-            title={r.vip ? "Remove VIP" : "Set VIP"}
-            style={r.vip ? { color: "#faad14", borderColor: "#faad14" } : undefined}
-          />
-          {r.is_banned ? (
-            <Button size="small" icon={<CheckOutlined />} onClick={() => handleUnban(r.tg_id)} title="Unban" />
-          ) : (
-            <Popconfirm title="Ban this user?" onConfirm={() => handleBan(r.tg_id)}>
-              <Button size="small" danger icon={<StopOutlined />} title="Ban" />
-            </Popconfirm>
-          )}
-          <Popconfirm title="Delete this user and all transactions?" onConfirm={() => handleDelete(r.tg_id)}>
-            <Button size="small" danger icon={<DeleteOutlined />} />
-          </Popconfirm>
-        </Space>
-      ),
+      id: "api_provider",
+      header: "Provider",
+      accessorKey: "api_provider",
+      meta: { sortKey: "api_provider", width: 90 },
+    },
+    {
+      id: "is_paid",
+      header: "Status",
+      meta: { sortKey: "is_paid", width: 120 },
+      cell: ({ row }) => <StatusBadges user={row.original} />,
+    },
+    {
+      id: "actions",
+      header: "Actions",
+      meta: { width: 200 },
+      cell: ({ row }) => {
+        const r = row.original;
+        return (
+          <div className="flex gap-1">
+            <Button size="icon" variant="outline" className="h-8 w-8" onClick={() => openDrawer(r.id)}>
+              <Eye className="h-4 w-4" />
+            </Button>
+            <Button
+              size="icon"
+              variant="outline"
+              className="h-8 w-8"
+              onClick={() => handleToggleVip(r.id, r.vip)}
+              title={r.vip ? "Remove VIP" : "Set VIP"}
+              style={r.vip ? { color: "#faad14", borderColor: "#faad14" } : undefined}
+            >
+              <Crown className="h-4 w-4" />
+            </Button>
+            {r.is_banned ? (
+              <Button
+                size="icon"
+                variant="outline"
+                className="h-8 w-8"
+                onClick={() => handleUnban(r.id)}
+                title="Unban"
+              >
+                <Check className="h-4 w-4" />
+              </Button>
+            ) : (
+              <ConfirmButton
+                title="Ban this user?"
+                confirmText="Ban"
+                destructive
+                onConfirm={() => handleBan(r.id)}
+              >
+                <Button size="icon" variant="destructive" className="h-8 w-8" title="Ban">
+                  <Ban className="h-4 w-4" />
+                </Button>
+              </ConfirmButton>
+            )}
+            <ConfirmButton
+              title="Delete this user and all transactions?"
+              confirmText="Delete"
+              destructive
+              onConfirm={() => handleDelete(r.id)}
+            >
+              <Button size="icon" variant="destructive" className="h-8 w-8">
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </ConfirmButton>
+          </div>
+        );
+      },
     },
   ];
 
-  const handleTableChange: TableProps<UserItem>["onChange"] = (_p, _f, sorter) => {
-    const s = Array.isArray(sorter) ? sorter[0] : sorter;
-    if (s && s.order) {
-      setSort(String(s.columnKey));
-      setOrder(s.order === "ascend" ? "asc" : "desc");
-    }
-    setPage(1);
-  };
-
   const renderMobileCard = (user: UserItem) => (
-    <Card key={user.id} size="small" style={{ marginBottom: 8 }} styles={{ body: { padding: "12px" } }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 600, color: "rgba(255,255,255,0.88)", marginBottom: 4 }}>
-            {user.username || "—"}
-          </div>
-          <div style={{ fontSize: 12, color: "rgba(255,255,255,0.45)", marginBottom: 4 }}>
-            TG: {user.tg_id} · {user.api_provider}
-          </div>
-          {user.email && (
-            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 6, wordBreak: "break-all" }}>
-              {user.email}
+    <Card key={user.id} className="mb-2">
+      <CardContent className="p-3">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="mb-1 font-semibold text-foreground">{user.username || "—"}</div>
+            <div className="mb-1 text-xs text-muted-foreground">
+              TG: {user.tg_id ?? "—"}
+              {user.rw_id != null ? ` · RW: ${user.rw_id}` : ""} · {user.api_provider}
             </div>
-          )}
-          <Space size={4}>
-            {user.vip && <Tag color="gold" style={{ margin: 0 }}>VIP</Tag>}
-            {user.is_banned && <Tag color="red" style={{ margin: 0 }}>Banned</Tag>}
-            {user.is_paid ? <Tag color="green" style={{ margin: 0 }}>Paid</Tag> : <Tag style={{ margin: 0 }}>Free</Tag>}
-          </Space>
+            {user.email && (
+              <div className="mb-1.5 break-all text-[11px] text-muted-foreground">{user.email}</div>
+            )}
+            <StatusBadges user={user} />
+          </div>
+          <div className="flex gap-1">
+            <Button size="icon" variant="outline" className="h-8 w-8" onClick={() => openDrawer(user.id)}>
+              <Eye className="h-4 w-4" />
+            </Button>
+            {user.is_banned ? (
+              <Button
+                size="icon"
+                variant="outline"
+                className="h-8 w-8"
+                onClick={() => handleUnban(user.id)}
+              >
+                <Check className="h-4 w-4" />
+              </Button>
+            ) : (
+              <ConfirmButton
+                title="Ban this user?"
+                confirmText="Ban"
+                destructive
+                onConfirm={() => handleBan(user.id)}
+              >
+                <Button size="icon" variant="destructive" className="h-8 w-8">
+                  <Ban className="h-4 w-4" />
+                </Button>
+              </ConfirmButton>
+            )}
+            <ConfirmButton
+              title="Delete user?"
+              confirmText="Delete"
+              destructive
+              onConfirm={() => handleDelete(user.id)}
+            >
+              <Button size="icon" variant="destructive" className="h-8 w-8">
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </ConfirmButton>
+          </div>
         </div>
-        <Space size="small">
-          <Button size="small" icon={<EyeOutlined />} onClick={() => openDrawer(user.tg_id)} />
-          {user.is_banned ? (
-            <Button size="small" icon={<CheckOutlined />} onClick={() => handleUnban(user.tg_id)} />
-          ) : (
-            <Popconfirm title="Ban this user?" onConfirm={() => handleBan(user.tg_id)}>
-              <Button size="small" danger icon={<StopOutlined />} />
-            </Popconfirm>
-          )}
-          <Popconfirm title="Delete user?" onConfirm={() => handleDelete(user.tg_id)}>
-            <Button size="small" danger icon={<DeleteOutlined />} />
-          </Popconfirm>
-        </Space>
-      </div>
+      </CardContent>
     </Card>
   );
 
   return (
     <>
-      <div style={{ marginBottom: 16, display: "flex", flexWrap: "wrap", gap: 8 }}>
-        <Input
-          placeholder="Search by username, email, UUID or TG ID"
-          prefix={<SearchOutlined />}
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setPage(1);
-          }}
-          style={{ flex: 1, minWidth: isMobile ? "100%" : 220, maxWidth: isMobile ? "100%" : 320 }}
-          allowClear
-        />
+      <div className="mb-4 flex flex-wrap gap-2">
+        <div className="relative min-w-[220px] flex-1 md:max-w-[320px]">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            className="pl-9"
+            placeholder="Search by username, email, UUID, rw_id or TG ID"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+          />
+        </div>
         <Select
           value={filter}
-          onChange={(v) => {
+          onValueChange={(v: string) => {
             setFilter(v);
             setPage(1);
           }}
-          style={{ width: isMobile ? "100%" : 120 }}
-          options={[
-            { value: "all", label: "All" },
-            { value: "paid", label: "Paid" },
-            { value: "free", label: "Free" },
-            { value: "vip", label: "VIP" },
-            { value: "banned", label: "Banned" },
-          ]}
-        />
+        >
+          <SelectTrigger className="w-full md:w-[120px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All</SelectItem>
+            <SelectItem value="paid">Paid</SelectItem>
+            <SelectItem value="free">Free</SelectItem>
+            <SelectItem value="vip">VIP</SelectItem>
+            <SelectItem value="banned">Banned</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       {isMobile ? (
@@ -265,44 +348,30 @@ export default function UsersTable() {
             }}
           />
           {loading ? (
-            <div style={{ textAlign: "center", padding: 40, color: "rgba(255,255,255,0.4)" }}>Loading...</div>
+            <div className="py-10 text-center text-muted-foreground">Loading...</div>
           ) : (
             data.map(renderMobileCard)
           )}
-          <div style={{ textAlign: "center", padding: "12px 0", color: "rgba(255,255,255,0.45)", fontSize: 12 }}>
-            Page {page} · Total: {total}
-          </div>
-          <div style={{ display: "flex", justifyContent: "center", gap: 8 }}>
-            <Button size="small" disabled={page <= 1} onClick={() => setPage(page - 1)}>
-              Prev
-            </Button>
-            <Button size="small" disabled={page * perPage >= total} onClick={() => setPage(page + 1)}>
-              Next
-            </Button>
-          </div>
+          <TablePagination page={page} perPage={perPage} total={total} onPageChange={setPage} />
         </>
       ) : (
-        <Table
-          rowKey="id"
-          columns={columns}
-          dataSource={data}
-          loading={loading}
-          onChange={handleTableChange}
-          pagination={{
-            current: page,
-            pageSize: perPage,
-            total,
-            onChange: setPage,
-            showSizeChanger: false,
-            showTotal: (t) => `Total: ${t}`,
-          }}
-          size="small"
-          scroll={{ x: 960 }}
-        />
+        <>
+          <DataTable
+            columns={columns}
+            data={data}
+            loading={loading}
+            rowKey={(r) => r.id}
+            sort={sort}
+            order={order}
+            onSortChange={onSortChange}
+            minWidth={1050}
+          />
+          <TablePagination page={page} perPage={perPage} total={total} onPageChange={setPage} />
+        </>
       )}
 
       <UserDrawer
-        tgId={drawerTgId}
+        userId={drawerUserId}
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         onChanged={fetchUsers}

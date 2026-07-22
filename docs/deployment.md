@@ -217,6 +217,39 @@ launch returns HTTP 503.
 
 Set `REDIS_URL` in `.env` (default in compose: `redis://redis:6379/0`).
 
+Full CRM feature guide (conditions, actions, segments, UI): **[crm.md](crm.md)**.
+
+### CRM scheduled events (UTC)
+
+Automated CRM events (`crm_events` table) are polled by the `crm-worker` ARQ
+cron job `tick_crm_events` every **15 minutes** (UTC). Event schedules use
+**UTC** time (`run_at_time`, e.g. `01:00`).
+
+- Postgres holds `next_run_at` — survives Redis restarts.
+- At fire time the worker performs a **fresh segment scan** (not frozen tg_ids).
+- Repeat policy (`always` / `once` / `cooldown`) filters recipients before
+  creating a campaign linked via `event_id`.
+- Manual run: `POST /bot/dashboard/api/crm/events/{id}/run-now` from the
+  dashboard **События** tab.
+
+Ensure `crm-worker` is running for both manual campaigns and scheduled events.
+
+### CRM conditions → actions model
+
+Since migration `0018_crm_conditions_actions`, campaigns and scheduled events store
+audience rules in `conditions_json` and side effects in `actions_json`. The
+dashboard **Кампании** / **События** tabs edit these lists; flat columns
+(`segment_type`, `message_text`, `bonus_days`, …) are kept as a mirror for
+history and legacy API clients.
+
+- **Conditions (AND):** one `segment`, optional `user_type`, optional
+  `tg_allowlist` after preview scan.
+- **Actions (ordered):** Remnawave perks (`rw_bonus_days`, `rw_bonus_traffic`,
+  `rw_reset_traffic`) run before Telegram (`send_message`, `attach_button`).
+  At least one enabled action is required; message is optional.
+- Deploy **dashboard frontend and backend together** when changing CRM shape.
+  The API still accepts legacy flat bodies via an adapter for one–two releases.
+
 Postgres binds `127.0.0.1:5432` on the host for backups and local tools. The
 network is not `internal: true` by default. For stricter isolation, uncomment
 `internal: true` under `data-network` in `docker-compose.yml` and remove the
@@ -388,13 +421,16 @@ Migrations run automatically via the `migrate` container on each `up`.
 
 ## Documentation site
 
-MkDocs Material builds `docs/` into a static site.
+GitHub Pages serves a shadcn-style **landing** at the site root and **MkDocs Material**
+under `/docs/`.
 
 | Item | Value |
 |------|-------|
-| URL | https://l0nelynx.github.io/xray-vpn-bot/ |
+| Landing | https://l0nelynx.github.io/xray-vpn-bot/ |
+| Docs | https://l0nelynx.github.io/xray-vpn-bot/docs/ |
+| Sources | `landing/` + `docs/` + `mkdocs.yml` |
 | Workflow | `.github/workflows/docs.yml` |
-| Local preview | `pip install -r requirements-docs.txt && mkdocs serve` |
+| Local preview | see `docs/README.md` |
 
 First-time: repo **Settings → Pages → Source → GitHub Actions**.
 

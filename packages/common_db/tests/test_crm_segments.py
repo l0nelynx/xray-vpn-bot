@@ -37,8 +37,8 @@ def test_users_with_unpaid_invoices() -> None:
             Session = async_sessionmaker(engine, expire_on_commit=False)
             now = datetime.now()
             async with Session() as session:
-                u1 = User(id=1, tg_id=100, username="paid_user", api_provider="remnawave")
-                u2 = User(id=2, tg_id=200, username="unpaid_user", api_provider="remnawave")
+                u1 = User(id=1, tg_id=100, username="paid_user", api_provider="remnawave", vless_uuid="uuid-1")
+                u2 = User(id=2, tg_id=200, username="unpaid_user", api_provider="remnawave", vless_uuid="uuid-2")
                 u3 = User(id=3, tg_id=None, username="android", api_provider="remnawave")
                 session.add_all([u1, u2, u3])
 

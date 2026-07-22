@@ -116,3 +116,60 @@ def test_is_torrent_block_report_wrong_scope():
     data = {**_SAMPLE_PAYLOAD, "scope": "user", "event": "user.created"}
     payload = parse_webhook(json.dumps(data).encode())
     assert is_torrent_block_report(payload) is False
+
+
+def test_webhook_catalog_contains_three_scopes():
+    from remnawave_client.webhooks import is_known_webhook_pair, webhook_event_catalog
+
+    scopes = {g["scope"] for g in webhook_event_catalog()}
+    assert scopes == {"user", "torrent_blocker", "user_hwid_devices"}
+    assert is_known_webhook_pair("user", "user.not_connected")
+    assert is_known_webhook_pair("torrent_blocker", "torrent_blocker.report")
+    assert not is_known_webhook_pair("user", "user.unknown")
+
+
+def test_extract_not_connected_after_hours():
+    from remnawave_client.webhooks import extract_not_connected_after_hours
+
+    data = {
+        "scope": "user",
+        "event": "user.not_connected",
+        "timestamp": "2026-03-07T16:02:50.564Z",
+        "data": {
+            "uuid": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+            "telegramId": 12345,
+            "meta": {"notConnectedAfterHours": 48},
+        },
+    }
+    payload = parse_webhook(json.dumps(data).encode())
+    assert extract_vless_uuid(payload) == "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+    assert extract_not_connected_after_hours(payload) == 48
+
+
+def test_extract_device_model():
+    from remnawave_client.webhooks import (
+        extract_device_model,
+        extract_device_os_version,
+        extract_device_platform,
+        extract_telegram_id,
+    )
+
+    data = {
+        "scope": "user_hwid_devices",
+        "event": "user_hwid_devices.added",
+        "timestamp": "2026-03-07T16:02:50.564Z",
+        "data": {
+            "user": {"uuid": "u-1", "telegramId": 99},
+            "hwidUserDevice": {
+                "deviceModel": "Pixel 8",
+                "platform": "android",
+                "osVersion": "14",
+                "hwid": "abc",
+            },
+        },
+    }
+    payload = parse_webhook(json.dumps(data).encode())
+    assert extract_device_model(payload) == "Pixel 8"
+    assert extract_device_platform(payload) == "android"
+    assert extract_device_os_version(payload) == "14"
+    assert extract_telegram_id(payload) == 99

@@ -48,9 +48,11 @@ def test_normalize_user_for_crm_from_dict() -> None:
         "hwidDevices": [{"hwid": "a"}],
         "telegramId": 42,
         "username": "bob",
+        "id": 9001,
     }
     out = normalize_user_for_crm(raw)
     assert out["uuid"] == raw["uuid"]
+    assert out["rw_id"] == 9001
     assert out["status"] == "active"
     assert out["days_left"] == 5
     assert out["traffic_ratio"] == 0.8

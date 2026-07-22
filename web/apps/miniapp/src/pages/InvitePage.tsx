@@ -1,29 +1,21 @@
-import {
-  ArrowLeftOutlined,
-  CopyOutlined,
-  GiftOutlined,
-  ShareAltOutlined,
-} from "@ant-design/icons";
-import {
-  Alert,
-  Button,
-  Card,
-  Space,
-  Spin,
-  Statistic,
-  Typography,
-  message,
-} from "antd";
+import { ArrowLeft, Copy, Gift, Share2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
+import { toast } from "sonner";
+import { Alert, AlertTitle } from "@xray/ui/components/alert";
+import { Button } from "@xray/ui/components/button";
+import { Card, CardContent } from "@xray/ui/components/card";
+import { Spinner } from "@xray/ui/components/spinner";
 import { ReferralState, referral as referralApi } from "../api/client";
+import { useT } from "../i18n/LocaleContext";
+import { formatPoints, POINTS_ICON } from "../points";
 import { copyToClipboard, hapticImpact, shareToTelegram } from "../tg/webapp";
 
 export default function InvitePage() {
   const navigate = useNavigate();
+  const { t } = useT();
   const [state, setState] = useState<ReferralState | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [messageApi, contextHolder] = message.useMessage();
 
   useEffect(() => {
     referralApi
@@ -33,15 +25,15 @@ export default function InvitePage() {
   }, []);
 
   const inviteText = state
-    ? `Подключайся к VPN и получи скидку ${state.discount_percent}% на первую покупку!`
+    ? t("invite.shareText", { creditGrant: formatPoints(state.credit_grant) })
     : "";
 
   const handleCopy = async () => {
     if (!state) return;
     hapticImpact("light");
     const ok = await copyToClipboard(state.code);
-    if (ok) messageApi.success("Промокод скопирован");
-    else messageApi.error("Не удалось скопировать");
+    if (ok) toast.success(t("invite.toast.copied"));
+    else toast.error(t("invite.toast.copyFailed"));
   };
 
   const handleShare = () => {
@@ -52,95 +44,81 @@ export default function InvitePage() {
 
   return (
     <div className="page">
-      {contextHolder}
       <div className="page-header">
-        <Button
-          type="text"
-          icon={<ArrowLeftOutlined />}
-          onClick={() => navigate("/settings")}
-          aria-label="Назад"
-        />
-        <Typography.Title level={3} style={{ margin: 0 }}>
-          Пригласить друзей
-        </Typography.Title>
+        <Button variant="ghost" size="icon" onClick={() => navigate("/settings")} aria-label={t("invite.backAria")}>
+          <ArrowLeft />
+        </Button>
+        <div className="text-xl font-bold text-foreground">{t("invite.title")}</div>
       </div>
 
-      {error && <Alert type="error" title={error} style={{ marginBottom: 16 }} />}
+      {error && (
+        <Alert variant="destructive" className="mb-4">
+          <AlertTitle>{error}</AlertTitle>
+        </Alert>
+      )}
 
       {!state && !error && (
         <div className="spinner-wrap">
-          <Spin />
+          <Spinner />
         </div>
       )}
 
       {state && (
-        <Space direction="vertical" size={16} style={{ width: "100%" }}>
-          <Card size="small" className="glass-success">
-            <Space direction="vertical" size={8} style={{ width: "100%" }}>
-              <Typography.Text type="secondary">
-                <GiftOutlined /> Ваш промокод
-              </Typography.Text>
-              <Typography.Title
-                level={2}
-                copyable={false}
-                style={{ margin: 0, letterSpacing: 2, textAlign: "center" }}
-              >
+        <div className="flex flex-col gap-4 w-full">
+          <Card className="border-primary/40">
+            <CardContent className="p-4 flex flex-col gap-2">
+              <span className="text-muted-foreground flex items-center gap-1.5">
+                <Gift className="w-3.5 h-3.5" /> {t("invite.yourCode")}
+              </span>
+              <div className="m-0 text-center text-2xl font-bold text-foreground tracking-widest">
                 {state.code}
-              </Typography.Title>
-            </Space>
+              </div>
+            </CardContent>
           </Card>
 
-          <Space direction="vertical" size={10} style={{ width: "100%" }}>
-            <Button
-              block
-              size="large"
-              icon={<CopyOutlined />}
-              onClick={handleCopy}
-            >
-              Скопировать код
+          <div className="flex flex-col gap-2.5 w-full">
+            <Button variant="outline" size="lg" className="w-full" onClick={handleCopy}>
+              <Copy />
+              {t("invite.copyCode")}
             </Button>
-            <Button
-              block
-              size="large"
-              type="primary"
-              icon={<ShareAltOutlined />}
-              onClick={handleShare}
-              disabled={!state.deeplink}
-            >
-              Поделиться
+            <Button size="lg" className="w-full" onClick={handleShare} disabled={!state.deeplink}>
+              <Share2 />
+              {t("invite.share")}
             </Button>
-          </Space>
+          </div>
 
-          <Card size="small">
-            <Space
-              size="large"
-              style={{ width: "100%", justifyContent: "space-around" }}
-            >
-              <Statistic
-                title="Куплено по коду"
-                value={state.days_purchased}
-                suffix="дн."
-              />
-              <Statistic
-                title="Начислено вам"
-                value={state.days_rewarded}
-                suffix="дн."
-              />
-            </Space>
+          <Card>
+            <CardContent className="p-4 flex justify-around gap-4">
+              <div className="text-center">
+                <div className="text-xs text-muted-foreground mb-1">{t("invite.stat.purchased")}</div>
+                <div className="text-xl font-bold text-foreground">
+                  {t("invite.daysShort", { count: state.days_purchased })}
+                </div>
+              </div>
+              <div className="text-center">
+                <div className="text-xs text-muted-foreground mb-1">{t("invite.stat.rewarded")}</div>
+                <div className="text-xl font-bold text-foreground">
+                  {state.points_rewarded} {POINTS_ICON}
+                </div>
+              </div>
+            </CardContent>
           </Card>
 
-          <Card size="small">
-            <Typography.Paragraph style={{ marginBottom: 8 }}>
-              <b>Как это работает</b>
-            </Typography.Paragraph>
-            <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-              Друг получает скидку <b>{state.discount_percent}%</b> на первую
-              покупку. За каждые 30 дней, купленных по вашему коду, вы получаете{" "}
-              <b>{state.days_reward_per_30}</b> бонусных дней — всего до{" "}
-              <b>{state.reward_cap_days}</b> дней.
-            </Typography.Paragraph>
+          <Card>
+            <CardContent className="p-4">
+              <p className="mb-2 mt-0 text-foreground">
+                <b>{t("invite.howTitle")}</b>
+              </p>
+              <p className="text-muted-foreground mb-0">
+                {t("invite.howBody", {
+                  creditGrant: formatPoints(state.credit_grant),
+                  per30: formatPoints(state.points_reward_per_30),
+                  cap: formatPoints(state.reward_cap_points),
+                })}
+              </p>
+            </CardContent>
           </Card>
-        </Space>
+        </div>
       )}
     </div>
   );

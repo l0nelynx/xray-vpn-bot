@@ -12,6 +12,7 @@ from app.database.models import async_session
 # their existing "open a session, maybe commit" shape but delegate the
 # actual SELECT to the canonical helper so the predicate (e.g. "paid
 # user") is defined in exactly one place.
+from common_db.repo import balance as _repo_balance
 from common_db.repo import users as _repo_users
 from common_db.repo import promos as _repo_promos
 from common_db.repo import system as _repo_system
@@ -98,7 +99,13 @@ async def create_user_with_info(tg_id: int, username: str, vless_uuid: str = Non
         return new_user
 
 
-async def update_user_api_info(tg_id: int = 0, username: str = 0, vless_uuid: str = None, api_provider: str = None):
+async def update_user_api_info(
+    tg_id: int = 0,
+    username: str = 0,
+    vless_uuid: str = None,
+    api_provider: str = None,
+    rw_id: int | None = None,
+):
     """
     Обновляет информацию пользователя об API провайдере
 
@@ -107,6 +114,7 @@ async def update_user_api_info(tg_id: int = 0, username: str = 0, vless_uuid: st
         username (str): Telegram username
         vless_uuid (str): UUID для VLESS конфигурации
         api_provider (str): Провайдер API (marzban или remnawave)
+        rw_id: Remnawave panel numeric user id
 
     Returns:
         bool: True если успешно, False если пользователь не найден
@@ -122,6 +130,8 @@ async def update_user_api_info(tg_id: int = 0, username: str = 0, vless_uuid: st
             user.vless_uuid = f"{vless_uuid}"
         if api_provider is not None:
             user.api_provider = api_provider
+        if rw_id is not None:
+            user.rw_id = rw_id
 
         await session.commit()
         return True
@@ -233,7 +243,7 @@ async def get_user_full_context(tg_id: int) -> dict | None:
                 "promo_code": promo.promo_code,
                 "used_promo": promo.used_promo,
                 "days_purchased": promo.days_purchased,
-                "days_rewarded": promo.days_rewarded,
+                "points_rewarded": promo.points_rewarded,
             } if promo else None,
         }
 
@@ -430,16 +440,12 @@ async def update_delivery_status(transaction_id: str, new_delivery_status: int) 
 
 async def cleanup_stale_transactions(hours: int = 24) -> int:
     """Удаляет транзакции со статусом 'created', у которых created_at старше hours часов или отсутствует."""
-    cutoff = (datetime.now() - timedelta(hours=hours)).isoformat(timespec='seconds')
+    from common_db.repo import transactions as _repo_transactions
+
     async with async_session() as session:
-        result = await session.execute(
-            delete(Transaction).where(
-                Transaction.order_status == 'created',
-                (Transaction.created_at == None) | (Transaction.created_at < cutoff),  # noqa: E711
-            )
-        )
+        deleted = await _repo_transactions.cleanup_stale_transactions(session, hours=hours)
         await session.commit()
-        return result.rowcount
+        return deleted
 
 
 async def get_user_transactions_detailed(tg_id: int) -> list[dict]:
@@ -702,8 +708,9 @@ def _promo_to_dict(promo: Promo) -> dict:
         "promo_code": promo.promo_code,
         "used_promo": promo.used_promo,
         "days_purchased": promo.days_purchased,
-        "days_rewarded": promo.days_rewarded,
+        "points_rewarded": promo.points_rewarded,
         "discount_percent": promo.discount_percent,
+        "credit_grant": promo.credit_grant,
         "used_promo_consumed": bool(promo.used_promo_consumed),
     }
 
@@ -752,15 +759,11 @@ async def get_default_promo_discount() -> int:
 
 
 async def get_promo_reward_settings() -> tuple[int, int]:
-    """Return (days_reward_per_30, reward_cap_days) from promo_settings.
-
-    Single source of truth for referral reward tunables — replaces the
-    config.yml ``promo_days_reward`` constant. Auto-seeds the singleton.
-    """
+    """Return (points_reward_per_30, reward_cap_points) from promo_settings."""
     async with async_session() as session:
-        per_30 = await _repo_system.get_days_reward_per_30(session)
-        cap = await _repo_system.get_reward_cap_days(session)
-        await session.commit()  # persist auto-seeded PromoSettings
+        per_30 = await _repo_system.get_points_reward_per_30(session)
+        cap = await _repo_system.get_reward_cap_points(session)
+        await session.commit()
         return per_30, cap
 
 
@@ -773,67 +776,55 @@ async def add_referral_days(promo_code: str, days: int) -> dict | None:
         # Capture values before commit (commit expires all attributes)
         tg_id = promo.tg_id
         new_days_purchased = promo.days_purchased
-        days_rewarded = promo.days_rewarded
+        points_rewarded = promo.points_rewarded
         await session.commit()
         return {
             "tg_id": tg_id,
             "days_purchased": new_days_purchased,
-            "days_rewarded": days_rewarded,
+            "points_rewarded": points_rewarded,
         }
 
 
-async def update_promo_days_rewarded(tg_id: int, days_rewarded: int) -> bool:
+async def update_promo_points_rewarded(tg_id: int, points_rewarded: int) -> bool:
     async with async_session() as session:
         promo = await session.scalar(select(Promo).where(Promo.tg_id == tg_id))
         if not promo:
             return False
-        promo.days_rewarded = days_rewarded
+        promo.points_rewarded = points_rewarded
         await session.commit()
         return True
 
 
+async def get_user_bonus_credits(tg_id: int) -> int:
+    async with async_session() as session:
+        user = await _repo_users.get_user_by_tg_id(session, tg_id)
+        if not user:
+            return 0
+        return await _repo_balance.get_balance(session, user.id)
+
+
 async def can_use_promo(tg_id: int) -> bool:
-    """True if the user may activate a (new) promo code right now.
+    """Users can always try to redeem promo codes (credits stack)."""
+    return True
 
-    An active (unconsumed) redemption blocks activating another. After the
-    discount is consumed on a paid delivery the user can redeem again
-    (subject to per-code and referral-once rules enforced at redeem time).
-    """
+
+async def get_default_promo_credit_grant() -> int:
     async with async_session() as session:
-        active = await _repo_promos.get_active_redemption(session, tg_id)
-        return active is None
-
-
-async def consume_promo_redemption(tg_id: int):
-    """Mark the user's active redemption consumed (after first paid delivery).
-
-    Returns the consumed redemption (so the caller can read its promo_code
-    for referral-reward routing) or None.
-    """
-    async with async_session() as session:
-        redemption = await _repo_promos.consume_active_redemption(session, tg_id)
+        grant = await _repo_system.get_default_credit_grant(session)
         await session.commit()
-        if redemption is None:
-            return None
-        # Detach-safe snapshot — session closes on return.
-        return {
-            "promo_code": redemption.promo_code,
-            "promo_type": redemption.promo_type,
-            "discount_percent": redemption.discount_percent,
-        }
+        return grant
 
 
-async def get_active_redemption(tg_id: int) -> dict | None:
-    """The user's current unconsumed redemption as a dict, or None."""
+async def process_referral_reward_for_purchase(tg_id: int, days: int):
+    """Compute referral owner reward after a paid purchase. Returns ReferralRewardInfo or None."""
+    from common_db.repo import referral_rewards as _repo_referral
+
     async with async_session() as session:
-        r = await _repo_promos.get_active_redemption(session, tg_id)
-        if r is None:
-            return None
-        return {
-            "promo_code": r.promo_code,
-            "promo_type": r.promo_type,
-            "discount_percent": r.discount_percent,
-        }
+        info = await _repo_referral.record_purchase_and_compute_reward(
+            session, tg_id, days
+        )
+        await session.commit()
+        return info
 
 
 async def get_promos_paginated(page: int, per_page: int = 10):
@@ -860,12 +851,11 @@ async def delete_promo(promo_code: str) -> bool:
 
 
 async def get_used_promo_with_discount(tg_id: int) -> dict | None:
-    """If the user has an active redemption, return code + discount snapshot."""
-    async with async_session() as session:
-        ed = await _repo_promos.get_effective_discount(session, tg_id)
-        if ed is None:
-            return None
-        return {"promo_code": ed.promo_code, "discount_percent": ed.discount_percent}
+    """Legacy shim — returns balance instead of discount."""
+    balance = await get_user_bonus_credits(tg_id)
+    if balance <= 0:
+        return None
+    return {"balance": balance}
 
 
 async def get_promo_usage_users(promo_code: str) -> list[dict]:
@@ -992,6 +982,8 @@ async def get_telemt_free_params() -> dict:
             "max_unique_ips": row.max_unique_ips,
             "data_quota_bytes": row.data_quota_bytes,
             "expire_days": row.expire_days,
+            "rate_limit_up_bps": row.rate_limit_up_bps,
+            "rate_limit_down_bps": row.rate_limit_down_bps,
         }
 
 
@@ -1000,6 +992,8 @@ async def update_telemt_free_params(
     max_unique_ips: int = None,
     data_quota_bytes: int = None,
     expire_days: int = 30,
+    rate_limit_up_bps: int = None,
+    rate_limit_down_bps: int = None,
 ) -> bool:
     """Обновляет параметры для создания бесплатного пользователя Telemt."""
     async with async_session() as session:
@@ -1008,5 +1002,7 @@ async def update_telemt_free_params(
         row.max_unique_ips = max_unique_ips
         row.data_quota_bytes = data_quota_bytes
         row.expire_days = expire_days
+        row.rate_limit_up_bps = rate_limit_up_bps
+        row.rate_limit_down_bps = rate_limit_down_bps
         await session.commit()
         return True

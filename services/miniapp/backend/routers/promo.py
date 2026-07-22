@@ -1,9 +1,4 @@
-"""Promo / referral endpoints for the Telegram MiniApp.
-
-All rules live in common_db.repo.promos so the bot and miniapp behave
-identically (referral codes for new users only, one active promo at a time,
-each code once, etc.). This router only adapts repo results to HTTP.
-"""
+"""Promo / referral endpoints for the Telegram MiniApp."""
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
@@ -11,23 +6,24 @@ from ..config import get_bot_url
 from ..database.session import async_session
 from ..tg_auth import TgUser, get_tg_user
 
+from common_db.repo import balance as _repo_balance
 from common_db.repo import promos as _repo_promos
 from common_db.repo import system as _repo_system
+from common_db.repo import users as _repo_users
 
 router = APIRouter(prefix="/api/promo", tags=["promo"])
 
 
-# Map repo can_redeem reason codes → (HTTP status, user-facing message).
 _REASON_HTTP = {
     _repo_promos.REASON_INVALID: (404, "invalid promo code"),
     _repo_promos.REASON_OWN_CODE: (400, "cannot use your own promo code"),
     _repo_promos.REASON_ALREADY_USED: (409, "you have already used this promo code"),
-    _repo_promos.REASON_ACTIVE_EXISTS: (409, "a promo is already active — use it first"),
     _repo_promos.REASON_REFERRAL_ONLY_ONE: (409, "you have already used a referral code"),
     _repo_promos.REASON_REFERRAL_NOT_NEW: (
         403,
         "referral codes are for new users only",
     ),
+    _repo_promos.REASON_NO_USER: (404, "user not registered"),
 }
 
 
@@ -37,16 +33,18 @@ class ActivateRequest(BaseModel):
 
 @router.get("")
 async def get_promo_state(tg: TgUser = Depends(get_tg_user)):
-    """The user's current promo state (active redemption + defaults)."""
     async with async_session() as session:
-        active = await _repo_promos.get_active_redemption(session, tg.tg_id)
-        default_discount = await _repo_system.get_default_discount_percent(session)
-        await session.commit()  # persist auto-seeded PromoSettings
+        user = await _repo_users.get_user_by_tg_id(session, tg.tg_id)
+        if not user:
+            raise HTTPException(404, "user not registered")
+        balance = await _repo_balance.get_balance(session, user.id)
+        latest = await _repo_promos.get_latest_redemption(session, tg.tg_id)
+        default_grant = await _repo_system.get_default_credit_grant(session)
+        await session.commit()
         return {
-            "can_activate": active is None,
-            "active_promo": active.promo_code if active else None,
-            "discount_percent": active.discount_percent if active else 0,
-            "default_discount_percent": default_discount,
+            "balance": balance,
+            "last_promo_code": latest.promo_code if latest else None,
+            "default_credit_grant": default_grant,
         }
 
 
@@ -69,28 +67,24 @@ async def activate_promo(
 
     return {
         "ok": True,
-        "active_promo": code,
-        "discount_percent": result.discount_percent,
+        "promo_code": code,
+        "credit_grant": result.credit_grant,
+        "balance": result.new_balance,
     }
 
 
 @router.get("/referral")
 async def get_referral_state(tg: TgUser = Depends(get_tg_user)):
-    """Referral code + deeplink + stats + program rules (for the Invite UI).
-
-    Numbers (discount, reward-per-30, cap) come from promo_settings so the UI
-    and the rules text always reflect the configured values.
-    """
     async with async_session() as session:
         code = await _repo_promos.get_or_create_referral_code(session, tg.tg_id)
         promo = await _repo_promos.get_promo_by_tg_id(session, tg.tg_id)
-        default_discount = await _repo_system.get_default_discount_percent(session)
-        days_reward_per_30 = await _repo_system.get_days_reward_per_30(session)
-        reward_cap_days = await _repo_system.get_reward_cap_days(session)
+        default_grant = await _repo_system.get_default_credit_grant(session)
+        points_reward_per_30 = await _repo_system.get_points_reward_per_30(session)
+        reward_cap_points = await _repo_system.get_reward_cap_points(session)
         await session.commit()
 
         days_purchased = promo.days_purchased if promo else 0
-        days_rewarded = promo.days_rewarded if promo else 0
+        points_rewarded = promo.points_rewarded if promo else 0
 
     bot_url = (get_bot_url() or "").rstrip("/")
     deeplink = f"{bot_url}?start={code}" if bot_url else ""
@@ -98,9 +92,9 @@ async def get_referral_state(tg: TgUser = Depends(get_tg_user)):
     return {
         "code": code,
         "deeplink": deeplink,
-        "discount_percent": default_discount,
-        "days_reward_per_30": days_reward_per_30,
-        "reward_cap_days": reward_cap_days,
+        "credit_grant": default_grant,
+        "points_reward_per_30": points_reward_per_30,
+        "reward_cap_points": reward_cap_points,
         "days_purchased": days_purchased,
-        "days_rewarded": days_rewarded,
+        "points_rewarded": points_rewarded,
     }

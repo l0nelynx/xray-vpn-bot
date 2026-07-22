@@ -1,7 +1,13 @@
-import { App as AntApp, ConfigProvider, Result, Spin, Alert } from "antd";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { AlertTriangle } from "lucide-react";
+import { Spinner } from "@xray/ui/components/spinner";
+import { Alert, AlertTitle } from "@xray/ui/components/alert";
+import { useCallback } from "react";
+import { Navigate, Route, Routes } from "react-router";
+import { me as meApi, type MeResponse } from "./api/client";
 import BottomTabs from "./components/BottomTabs";
 import { useMe } from "./hooks/useMe";
+import { LocaleProvider, useT } from "./i18n/LocaleContext";
+import { normalizeLocale, type Locale } from "./i18n";
 import BuyMenuPage from "./pages/BuyMenuPage";
 import BuySuccessPage from "./pages/BuySuccessPage";
 import ConnectPage from "./pages/ConnectPage";
@@ -17,15 +23,26 @@ import SupportCreatePage from "./pages/SupportCreatePage";
 import SupportPage from "./pages/SupportPage";
 import SupportTicketPage from "./pages/SupportTicketPage";
 import WelcomePage from "./pages/WelcomePage";
-import { liquidGlassConfig } from "./theme/liquidGlass";
 
-function AppInner() {
-  const { data, loading, error, reload, refresh } = useMe();
+function AppRoutes({
+  data,
+  loading,
+  error,
+  reload,
+  refresh,
+}: {
+  data: MeResponse | null;
+  loading: boolean;
+  error: string | null;
+  reload: () => void;
+  refresh: () => void;
+}) {
+  const { t } = useT();
 
   if (loading) {
     return (
       <div className="spinner-wrap">
-        <Spin size="large" />
+        <Spinner className="h-8 w-8" />
       </div>
     );
   }
@@ -33,16 +50,18 @@ function AppInner() {
   if (error) {
     const isUsername = error === "username required";
     return (
-      <div className="page">
-        <Result
-          status={isUsername ? "warning" : "error"}
-          title={isUsername ? "Нужен username" : "Ошибка"}
-          subTitle={
-            isUsername
-              ? "Установите username в настройках Telegram, чтобы пользоваться сервисом."
-              : error
-          }
-        />
+      <div className="page page-centered">
+        <div style={{ textAlign: "center", maxWidth: 320 }}>
+          <AlertTriangle
+            style={{ width: 48, height: 48, color: isUsername ? "#FFD479" : "#FF8A8A", margin: "0 auto 16px" }}
+          />
+          <div style={{ fontSize: 18, fontWeight: 700, color: "#FFFFFF", marginBottom: 8 }}>
+            {isUsername ? t("app.error.usernameTitle") : t("app.error.genericTitle")}
+          </div>
+          <div style={{ fontSize: 14, color: "rgba(255,255,255,0.52)", lineHeight: 1.5 }}>
+            {isUsername ? t("app.error.usernameBody") : error}
+          </div>
+        </div>
       </div>
     );
   }
@@ -50,7 +69,9 @@ function AppInner() {
   if (!data) {
     return (
       <div className="page">
-        <Alert type="warning" title="Нет данных" />
+        <Alert variant="warning">
+          <AlertTitle>{t("app.error.noData")}</AlertTitle>
+        </Alert>
       </div>
     );
   }
@@ -86,12 +107,29 @@ function AppInner() {
   );
 }
 
-export default function App() {
+function AppInner() {
+  const { data, loading, error, reload, refresh, setUserLanguage } = useMe();
+
+  const onLocaleChange = useCallback(async (locale: Locale) => {
+    const updated = await meApi.setLanguage(locale);
+    setUserLanguage(normalizeLocale(updated.language));
+  }, [setUserLanguage]);
+
+  const locale = normalizeLocale(data?.user?.language);
+
   return (
-    <ConfigProvider {...liquidGlassConfig}>
-      <AntApp>
-        <AppInner />
-      </AntApp>
-    </ConfigProvider>
+    <LocaleProvider locale={locale} onLocaleChange={onLocaleChange}>
+      <AppRoutes
+        data={data}
+        loading={loading}
+        error={error}
+        reload={reload}
+        refresh={refresh}
+      />
+    </LocaleProvider>
   );
+}
+
+export default function App() {
+  return <AppInner />;
 }

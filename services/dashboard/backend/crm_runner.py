@@ -7,14 +7,14 @@ import json
 import logging
 
 from common_db.repo import crm as crm_repo
-from common_db.repo import crm_segments as seg_repo
 from common_db.repo.users import get_users_by_tg_ids
-from remnawave_client.segmentation import SEGMENT_ALL_USERS
 
 from .config import get_remnawave_token, get_remnawave_url
-from .crm_service import apply_campaign_perks
+from .crm_actions import execute_user_actions
+from .crm_conditions import evaluate_conditions_full
+from .crm_model_adapter import get_actions, get_conditions
 from .database.session import async_session
-from .telegram import tg_bot_username, tg_bot_open_url, tg_send
+from .telegram import tg_bot_username
 
 logger = logging.getLogger(__name__)
 
@@ -36,21 +36,23 @@ async def resolve_targets(
 ) -> list[int]:
     if override_tg_ids:
         return override_tg_ids
-    if campaign.segment_type == SEGMENT_ALL_USERS:
-        users = await seg_repo.get_broadcast_eligible_users(session)
-        return [u.tg_id for u in users if u.tg_id is not None]
     params = json.loads(campaign.segment_params or "{}")
     stored = params.get("target_tg_ids")
     if stored:
         return list(stored)
-    return []
+    conditions = get_conditions(campaign)
+    if not conditions:
+        return []
+    rw = _rw_client()
+    tg_ids, _ = await evaluate_conditions_full(session, rw, conditions)
+    return tg_ids
 
 
 async def execute_crm_campaign(
     campaign_id: int,
     override_tg_ids: list[int] | None = None,
 ) -> None:
-    """Run perks + Telegram broadcast for a queued campaign."""
+    """Run action pipeline for a queued campaign."""
     rw = _rw_client()
     crm_by_uuid: dict[str, dict] = {}
 
@@ -82,10 +84,8 @@ async def execute_crm_campaign(
             )
             await session.commit()
 
-            message_text = campaign.message_text
-            attach_button = campaign.attach_button
-            bonus_days = campaign.bonus_days
-            bonus_traffic_gb = campaign.bonus_traffic_gb
+            actions = get_actions(campaign)
+            event_id = getattr(campaign, "event_id", None)
 
         try:
             for u in await rw.get_all_users_for_crm():
@@ -94,15 +94,7 @@ async def execute_crm_campaign(
         except Exception as exc:
             logger.error("CRM campaign %s: bulk RW fetch failed: %s", campaign_id, exc)
 
-        reply_markup = None
-        if attach_button:
-            bot_username = await tg_bot_username()
-            if bot_username:
-                reply_markup = {
-                    "inline_keyboard": [[
-                        {"text": "Открыть бота", "url": tg_bot_open_url(bot_username)}
-                    ]]
-                }
+        bot_username = await tg_bot_username()
 
         async with async_session() as session:
             users = await get_users_by_tg_ids(session, tg_ids)
@@ -113,11 +105,12 @@ async def execute_crm_campaign(
         for i, tg_id in enumerate(tg_ids):
             db_user = user_by_tg.get(tg_id)
             perk_status = "skipped"
-            message_status = "failed"
+            message_status = "skipped"
             error_parts: list[str] = []
 
             if not db_user:
                 failed += 1
+                message_status = "failed"
                 async with async_session() as session:
                     await crm_repo.add_delivery(
                         session,
@@ -129,49 +122,61 @@ async def execute_crm_campaign(
                         error="user not found",
                     )
                     await session.commit()
-            else:
-                crm_user = crm_by_uuid.get(db_user.vless_uuid or "")
-                has_perks = bool(bonus_days or bonus_traffic_gb)
+                continue
 
-                if has_perks and db_user.vless_uuid:
-                    ok, perk_err = await apply_campaign_perks(
-                        rw,
-                        db_user,
-                        crm_user,
-                        bonus_days=bonus_days,
-                        bonus_traffic_gb=bonus_traffic_gb,
-                    )
-                    if ok:
-                        perks_ok += 1
-                        perk_status = "applied"
-                    else:
-                        perks_fail += 1
-                        perk_status = "failed"
-                        if perk_err:
-                            error_parts.append(perk_err)
-                elif has_perks:
-                    perks_fail += 1
-                    perk_status = "failed"
-                    error_parts.append("no vless_uuid for perks")
+            crm_user = crm_by_uuid.get(db_user.vless_uuid or "")
 
-                if await tg_send(tg_id, message_text, reply_markup):
-                    sent += 1
-                    message_status = "sent"
-                else:
-                    failed += 1
-                    error_parts.append("telegram send failed")
-
+            async def _on_sent(eid=event_id, uid=tg_id):
+                if not eid:
+                    return
                 async with async_session() as session:
-                    await crm_repo.add_delivery(
-                        session,
-                        campaign_id=campaign_id,
-                        tg_id=tg_id,
-                        vless_uuid=db_user.vless_uuid,
-                        perk_status=perk_status,
-                        message_status=message_status,
-                        error="; ".join(error_parts) if error_parts else None,
+                    from common_db.repo import crm_events as events_repo
+
+                    await events_repo.record_event_delivery(
+                        session, event_id=eid, tg_id=uid
                     )
                     await session.commit()
+
+            async with async_session() as session:
+                result = await execute_user_actions(
+                    rw,
+                    db_user,
+                    crm_user,
+                    actions,
+                    bot_username=bot_username,
+                    event_id=event_id,
+                    on_message_sent=_on_sent if event_id else None,
+                    session=session,
+                )
+
+                if result.perks_applied:
+                    perks_ok += 1
+                    perk_status = "applied"
+                elif result.perks_failed:
+                    perks_fail += 1
+                    perk_status = "failed"
+                error_parts.extend(result.errors)
+
+                if result.message_sent:
+                    sent += 1
+                    message_status = "sent"
+                elif result.message_failed:
+                    failed += 1
+                    message_status = "failed"
+                elif not result.message_skipped:
+                    message_status = "failed"
+                    failed += 1
+
+                await crm_repo.add_delivery(
+                    session,
+                    campaign_id=campaign_id,
+                    tg_id=tg_id,
+                    vless_uuid=db_user.vless_uuid,
+                    perk_status=perk_status,
+                    message_status=message_status,
+                    error="; ".join(error_parts) if error_parts else None,
+                )
+                await session.commit()
 
             if (i + 1) % 25 == 0:
                 async with async_session() as session:

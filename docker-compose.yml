@@ -99,10 +99,13 @@ services:
 #      - "5000:5000"
     environment:
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-xray}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-xray_vpn_bot}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
     restart: unless-stopped
     depends_on:
       migrate:
         condition: service_completed_successfully
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
       interval: 60s
@@ -148,6 +151,9 @@ services:
         REGISTRY: ${REGISTRY:-ghcr.io/l0nelynx/}
     volumes:
       - ./config.yml:/app/config.yml:ro
+      # FCM service-account JSON (repo root fcm-sa.json). Required to send
+      # pushes from Dashboard; token registration works without it.
+      - ./fcm-sa.json:/app/fcm-sa.json:ro
       # Support-ticket image attachments — shared read-write with `miniapp`:
       # admin (this container) reads images the user uploaded via miniapp;
       # miniapp reads images the admin uploads here. See docs/deployment.md.
@@ -189,6 +195,7 @@ services:
     command: ["arq", "backend.worker.WorkerSettings"]
     volumes:
       - ./config.yml:/app/config.yml:ro
+      - ./fcm-sa.json:/app/fcm-sa.json:ro
     networks:
       - data-network
     environment:

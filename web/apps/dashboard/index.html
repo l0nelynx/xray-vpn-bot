@@ -1,16 +1,19 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0C0F1A" />
+    <link rel="icon" type="image/svg+xml" href="/bot/dashboard/favicon.svg" />
+    <link rel="apple-touch-icon" href="/bot/dashboard/pwa-192x192.png" />
     <title>Dashboard</title>
     <style>
-      * { margin: 0; padding: 0; box-sizing: border-box; }
-      html, body { background: #0a0a0f; }
+      /* Do NOT reset padding/margin on * — unlayered rules beat Tailwind @layer utilities. */
+      html, body { background: #0a0a0a; }
       ::-webkit-scrollbar { width: 6px; height: 6px; }
       ::-webkit-scrollbar-track { background: transparent; }
-      ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
-      ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+      ::-webkit-scrollbar-thumb { background: oklch(1 0 0 / 12%); border-radius: 3px; }
+      ::-webkit-scrollbar-thumb:hover { background: oklch(1 0 0 / 20%); }
     </style>
   </head>
   <body>

@@ -1,22 +1,21 @@
-import { Alert, Spin, Tag } from "antd";
-import { CheckOutlined, LeftOutlined } from "@ant-design/icons";
+import { Check, ChevronLeft } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
+import { Alert, AlertTitle } from "@xray/ui/components/alert";
+import { Badge } from "@xray/ui/components/badge";
+import { Button } from "@xray/ui/components/button";
+import { Spinner } from "@xray/ui/components/spinner";
+import { formatPoints, POINTS_ICON } from "../points";
 import {
   ApiError,
-  MeResponse,
   MenuNode,
   PromoState,
-  api,
   menu,
   payments,
   promo as promoApi,
 } from "../api/client";
+import { useT } from "../i18n/LocaleContext";
 import { hapticImpact, openLink, showAlert } from "../tg/webapp";
-
-function discountedAmount(amount: number, pct: number): number {
-  return Math.round(amount * (1 - pct / 100) * 100) / 100;
-}
 
 interface ViewResult {
   chipLevels: MenuNode[][];
@@ -49,6 +48,7 @@ function buildView(
 
 export default function BuyMenuPage() {
   const navigate = useNavigate();
+  const { t } = useT();
   const [tree, setTree] = useState<MenuNode[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selections, setSelections] = useState<(number | null)[]>([]);
@@ -74,10 +74,9 @@ export default function BuyMenuPage() {
     [invoices, selectedInvoiceId]
   );
 
-  const activeDiscount =
-    promoState?.active_promo && promoState.discount_percent > 0
-      ? promoState.discount_percent
-      : 0;
+  const balance = promoState?.balance ?? 0;
+  const pointsCost = selectedInvoice?.invoice?.points_cost ?? 0;
+  const canPayCredits = pointsCost > 0 && balance >= pointsCost;
 
   const selectChip = (depth: number, id: number) => {
     hapticImpact("light");
@@ -95,40 +94,43 @@ export default function BuyMenuPage() {
     setSelectedInvoiceId((prev) => (prev === id ? null : id));
   };
 
-  const handlePay = async () => {
+  const handlePayFiat = async () => {
     if (!selectedInvoice?.invoice) return;
     const inv = selectedInvoice.invoice;
 
     if (!inv.days || inv.days <= 0) {
-      showAlert("Тариф не настроен: отсутствует количество дней");
+      showAlert(t("buy.alert.missingDays"));
       return;
     }
 
     setBusyId(selectedInvoice.id);
     try {
-      let baselineExpireIso: string | null = null;
-      let baselineDaysLeft = 0;
-      try {
-        const snapshot = await api.get<MeResponse>("/me");
-        baselineExpireIso = snapshot.subscription?.expire_iso ?? null;
-        baselineDaysLeft = snapshot.subscription?.days_left ?? 0;
-      } catch {
-        /* polling works without baseline */
-      }
-
       const res = await payments.createInvoice({
         node_id: selectedInvoice.id,
         description: selectedInvoice.text,
       });
       openLink(res.url);
-      setPromoState((prev) =>
-        prev ? { ...prev, can_activate: true, active_promo: null, discount_percent: 0 } : prev
-      );
-      navigate("/buy/success", {
-        state: { paymentUrl: res.url, baselineExpireIso, baselineDaysLeft },
-      });
+      navigate("/buy/success", { state: { paymentUrl: res.url } });
     } catch (e) {
-      showAlert(`Ошибка создания счёта: ${(e as Error).message}`);
+      showAlert(t("buy.alert.invoiceError", { message: (e as Error).message }));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handlePayCredits = async () => {
+    if (!selectedInvoice?.invoice || !canPayCredits) return;
+    setBusyId(selectedInvoice.id);
+    try {
+      const res = await payments.payWithCredits({ node_id: selectedInvoice.id });
+      if (res.ok) {
+        setPromoState((prev) =>
+          prev ? { ...prev, balance: res.balance_after ?? prev.balance } : prev
+        );
+        navigate("/buy/success", { state: { paidWithCredits: true } });
+      }
+    } catch (e) {
+      showAlert(t("buy.alert.creditsError", { message: (e as Error).message }));
     } finally {
       setBusyId(null);
     }
@@ -137,7 +139,10 @@ export default function BuyMenuPage() {
   if (error) {
     return (
       <div className="page">
-        <Alert type="error" title="Не удалось загрузить меню" description={error} />
+        <Alert variant="destructive">
+          <AlertTitle>{t("buy.loadError")}</AlertTitle>
+          <p>{error}</p>
+        </Alert>
       </div>
     );
   }
@@ -145,23 +150,26 @@ export default function BuyMenuPage() {
   if (!tree) {
     return (
       <div className="spinner-wrap">
-        <Spin size="large" />
+        <Spinner className="h-8 w-8" />
       </div>
     );
   }
 
   const payInvoice = selectedInvoice?.invoice;
-  const payOrig = payInvoice?.amount ?? 0;
-  const payDisc = activeDiscount > 0 && payInvoice
-    ? discountedAmount(payOrig, activeDiscount)
-    : null;
-  const payPrice = payDisc ?? payOrig;
+  const payPrice = payInvoice?.amount ?? 0;
   const payCurrency = payInvoice?.currency ?? "";
+
+  const levelLabel =
+    (depth: number) =>
+      depth === 0
+        ? t("buy.level.tariff")
+        : depth === 1
+          ? t("buy.level.period")
+          : t("buy.level.subcategory");
 
   return (
     <>
       <div className="page">
-        {/* Back + title */}
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
           <button
             onClick={() => navigate("/")}
@@ -180,29 +188,20 @@ export default function BuyMenuPage() {
               flexShrink: 0,
             }}
           >
-            <LeftOutlined style={{ fontSize: 14 }} />
+            <ChevronLeft style={{ width: 16, height: 16 }} />
           </button>
           <span style={{ fontSize: 20, fontWeight: 700, color: "#FFFFFF", letterSpacing: "-0.3px" }}>
-            Тарифы
+            {t("buy.title")}
           </span>
         </div>
 
-        {/* Promo banner */}
-        {activeDiscount > 0 && (
-          <Alert
-            type="success"
-            showIcon
-            style={{ marginBottom: 16 }}
-            title={
-              <span>
-                Промокод <strong>{promoState!.active_promo}</strong> активен —{" "}
-                скидка <Tag color="success">−{activeDiscount}%</Tag> применится при оплате
-              </span>
-            }
-          />
+        {balance > 0 && (
+          <Alert style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
+            <span>{t("buy.bonusBalance")}</span>
+            <Badge>{formatPoints(balance)}</Badge>
+          </Alert>
         )}
 
-        {/* Chip levels */}
         {chipLevels.map((chips, depth) => (
           <div key={depth} style={{ marginBottom: 12 }}>
             <div style={{
@@ -213,7 +212,7 @@ export default function BuyMenuPage() {
               letterSpacing: "0.5px",
               marginBottom: 8,
             }}>
-              {depth === 0 ? "Тариф" : depth === 1 ? "Период" : "Подкатегория"}
+              {levelLabel(depth)}
             </div>
             <div className="chip-row-wrap">
               <div className="chip-row">
@@ -231,9 +230,8 @@ export default function BuyMenuPage() {
           </div>
         ))}
 
-        {/* Tariff cards */}
         {chipLevels.length > 0 && invoices.length === 0 && (
-          <div className="tariff-hint">Выберите категорию выше</div>
+          <div className="tariff-hint">{t("buy.hint.selectCategory")}</div>
         )}
 
         {invoices.length > 0 && (
@@ -246,16 +244,12 @@ export default function BuyMenuPage() {
               letterSpacing: "0.5px",
               marginBottom: 8,
             }}>
-              Метод оплаты
+              {t("buy.paymentMethod")}
             </div>
             <div className="tariff-scroll-wrap">
               <div className="tariff-scroll">
                 {invoices.map((n) => {
                   const inv = n.invoice!;
-                  const origAmt = inv.amount;
-                  const discAmt = activeDiscount > 0
-                    ? discountedAmount(origAmt, activeDiscount)
-                    : null;
                   const isSelected = selectedInvoiceId === n.id;
 
                   return (
@@ -266,19 +260,17 @@ export default function BuyMenuPage() {
                     >
                       <div className="tariff-card__name">{n.text}</div>
                       <div className="tariff-card__price-row">
-                        {discAmt !== null && (
-                          <div className="tariff-card__price-orig">
-                            {origAmt} {inv.currency}
-                          </div>
-                        )}
-                        <div className="tariff-card__price">
-                          {discAmt ?? origAmt}
-                        </div>
+                        <div className="tariff-card__price">{inv.amount}</div>
                         <div className="tariff-card__currency">{inv.currency}</div>
                       </div>
+                      {(inv.days ?? 0) > 0 && (
+                        <div style={{ fontSize: 11, opacity: 0.5, marginTop: 4 }}>
+                          {t("buy.daysShort", { count: inv.days! })}
+                        </div>
+                      )}
                       {isSelected && (
                         <div className="tariff-card__check">
-                          <CheckOutlined />
+                          <Check style={{ width: 12, height: 12 }} />
                         </div>
                       )}
                     </div>
@@ -289,51 +281,35 @@ export default function BuyMenuPage() {
           </>
         )}
 
-        {/* If tree has only invoices at root (no button categories) */}
         {chipLevels.length === 0 && invoices.length === 0 && (
-          <div className="tariff-hint">Тарифы не найдены</div>
+          <div className="tariff-hint">{t("buy.hint.none")}</div>
         )}
 
-        {/* Spacer so content isn't hidden behind the pay bar */}
-        {selectedInvoice && <div style={{ height: 68 }} />}
+        {selectedInvoice && <div style={{ height: 88 }} />}
       </div>
 
-      {/* Floating pay button */}
       {selectedInvoice && (
-        <div className="pay-bar">
-          <button
-            className="ant-btn ant-btn-primary pay-bar-btn"
-            onClick={handlePay}
-            disabled={!!busyId}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 8,
-            }}
-          >
+        <div className="pay-bar" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {canPayCredits && (
+            <Button className="pay-bar-btn" onClick={handlePayCredits} disabled={!!busyId}>
+              {busyId
+                ? <Spinner />
+                : t("buy.payCredits", { cost: `${pointsCost} ${POINTS_ICON}` })}
+            </Button>
+          )}
+          <Button className="pay-bar-btn" variant="outline" onClick={handlePayFiat} disabled={!!busyId}>
             {busyId ? (
-              <Spin size="small" />
+              <Spinner />
             ) : (
               <>
-                <span>Оплатить</span>
+                <span>{t("buy.pay")}</span>
                 <span style={{ opacity: 0.85 }}>·</span>
                 <span style={{ fontWeight: 800 }}>
                   {payPrice} {payCurrency}
                 </span>
-                {payDisc !== null && (
-                  <span style={{
-                    fontSize: 12,
-                    opacity: 0.6,
-                    textDecoration: "line-through",
-                    fontWeight: 400,
-                  }}>
-                    {payOrig}
-                  </span>
-                )}
               </>
             )}
-          </button>
+          </Button>
         </div>
       )}
     </>

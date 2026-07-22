@@ -72,7 +72,9 @@ async def ensure_free_subscription(user_id: int, email: str) -> str | None:
     existing_uuid = await repo.get_user_vless_uuid(user_id)
     user_info = await client.get_user_by_username(username)
     if user_info and user_info.get("uuid") and not existing_uuid:
-        await repo.set_user_vless_uuid(user_id, str(user_info["uuid"]))
+        await repo.set_user_vless_uuid(
+            user_id, str(user_info["uuid"]), user_info.get("rw_id"),
+        )
         existing_uuid = str(user_info["uuid"])
 
     scenario = resolve_scenario(user_info, SubscriptionType.FREE)
@@ -94,7 +96,7 @@ async def ensure_free_subscription(user_id: int, email: str) -> str | None:
         if not created or not created.get("uuid"):
             logger.error("Remnawave create_user failed for %s", username)
             return None
-        await repo.set_user_vless_uuid(user_id, created["uuid"])
+        await repo.set_user_vless_uuid(user_id, created["uuid"], created.get("rw_id"))
         return created["uuid"]
 
     # UPDATE / LIMITED / EXTEND-on-FREE: refresh the existing record.

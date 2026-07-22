@@ -26,12 +26,18 @@ def _run(coro):
     return asyncio.run(coro)
 
 
-def _campaign(*, segment_type: str, segment_params: dict | None = None) -> CrmCampaign:
+def _campaign(
+    *,
+    segment_type: str,
+    segment_params: dict | None = None,
+    conditions_json: str | None = None,
+) -> CrmCampaign:
     return CrmCampaign(
         id=1,
         name="test",
         segment_type=segment_type,
         segment_params=json.dumps(segment_params or {}),
+        conditions_json=conditions_json,
         message_text="hi",
         created_at=datetime.now().isoformat(timespec="seconds"),
         created_by="tester",
@@ -85,6 +91,35 @@ def test_resolve_targets_explicit_tg_ids() -> None:
 
                 override = await resolve_targets(session, campaign, [99])
                 assert override == [99]
+        finally:
+            await engine.dispose()
+
+    _run(go())
+
+
+def test_resolve_targets_conditions_json_with_allowlist_mirror() -> None:
+    import pytest
+
+    resolve_targets = pytest.importorskip("dashboard.backend.crm_runner").resolve_targets
+
+    conditions = [
+        {"type": "segment", "segment_id": "limited", "params": {}},
+        {"type": "tg_allowlist", "tg_ids": [10, 20]},
+    ]
+
+    async def go() -> None:
+        engine = _make_engine()
+        try:
+            await _setup(engine)
+            Session = async_sessionmaker(engine, expire_on_commit=False)
+            async with Session() as session:
+                campaign = _campaign(
+                    segment_type="limited",
+                    segment_params={"target_tg_ids": [10, 20]},
+                    conditions_json=json.dumps(conditions),
+                )
+                tg_ids = await resolve_targets(session, campaign)
+                assert tg_ids == [10, 20]
         finally:
             await engine.dispose()
 

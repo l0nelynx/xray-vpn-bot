@@ -1,60 +1,88 @@
 import { useEffect, useState } from "react";
-import { Card, Spin } from "antd";
-import { Pie } from "@ant-design/charts";
+import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { api } from "../api/client";
 import type { PaymentMethodStat } from "../api/types";
 import useIsMobile from "../hooks/useIsMobile";
+import ChartCard from "./ChartCard";
 
-const COLORS = ["#7C9CFF", "#36cfc9", "#ff7a45", "#ffc53d", "#b37feb", "#ff85c0"];
+const COLORS = [
+  "oklch(0.92 0 0)",
+  "oklch(0.7 0 0)",
+  "oklch(0.55 0 0)",
+  "oklch(0.42 0 0)",
+  "oklch(0.696 0.12 160)",
+  "oklch(0.75 0.12 75)",
+];
+
+const TOOLTIP = {
+  background: "oklch(0.18 0 0)",
+  border: "1px solid oklch(1 0 0 / 14%)",
+  borderRadius: 8,
+  color: "oklch(0.985 0 0)",
+  fontSize: 12,
+};
 
 export default function PaymentMethodPieChart() {
   const [data, setData] = useState<PaymentMethodStat[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const isMobile = useIsMobile();
 
-  useEffect(() => {
+  const load = () => {
+    setLoading(true);
+    setError(null);
     api
       .get<PaymentMethodStat[]>("/stats/payment-methods")
-      .then(setData)
+      .then((d) => {
+        setData(d);
+        setError(null);
+      })
+      .catch(() => {
+        setData([]);
+        setError("Failed to load payment methods");
+      })
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    load();
   }, []);
 
-  const chartHeight = isMobile ? 220 : 300;
-
-  if (loading)
-    return (
-      <Card style={{ minHeight: chartHeight + 80 }}>
-        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: chartHeight }}>
-          <Spin />
-        </div>
-      </Card>
-    );
+  const chartHeight = isMobile ? 240 : 280;
+  const isEmpty = data.length === 0 || data.every((d) => d.count === 0);
 
   return (
-    <Card
-      title={<span style={{ color: "rgba(255,255,255,0.85)" }}>Payment Methods</span>}
+    <ChartCard
+      title="Payment Methods"
+      description="Share of orders by gateway."
+      loading={loading}
+      error={error}
+      empty={isEmpty}
+      onRetry={load}
+      height={chartHeight}
     >
-      <Pie
-        data={data}
-        angleField="count"
-        colorField="method"
-        height={chartHeight}
-        innerRadius={0.6}
-        color={COLORS}
-        label={{
-          text: "method",
-          position: "outside",
-          fill: "rgba(255,255,255,0.8)",
-          fontSize: isMobile ? 10 : 12,
-        }}
-        legend={{
-          color: {
-            itemLabelFill: "rgba(255,255,255,0.8)",
-            itemLabelFontSize: isMobile ? 11 : 12,
-          },
-        }}
-        tooltip={{ title: "method", items: [{ channel: "y" }] }}
-      />
-    </Card>
+      <ResponsiveContainer width="100%" height="100%">
+        <PieChart margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
+          <Pie
+            data={data}
+            dataKey="count"
+            nameKey="method"
+            innerRadius="52%"
+            outerRadius="72%"
+            paddingAngle={3}
+          >
+            {data.map((_, i) => (
+              <Cell key={i} fill={COLORS[i % COLORS.length]} stroke="transparent" />
+            ))}
+          </Pie>
+          <Tooltip contentStyle={TOOLTIP} />
+          <Legend
+            verticalAlign="bottom"
+            height={36}
+            wrapperStyle={{ fontSize: 12, color: "oklch(0.68 0 0)" }}
+          />
+        </PieChart>
+      </ResponsiveContainer>
+    </ChartCard>
   );
 }

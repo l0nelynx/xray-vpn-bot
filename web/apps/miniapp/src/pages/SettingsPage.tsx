@@ -1,15 +1,29 @@
 import {
-  FileTextOutlined,
-  GiftOutlined,
-  RightOutlined,
-  SafetyOutlined,
-  TeamOutlined,
-  UsergroupAddOutlined,
-} from "@ant-design/icons";
-import { Button, Input, Modal, Space, Tag, App } from "antd";
+  Check,
+  ChevronRight,
+  FileText,
+  Gift,
+  Languages,
+  Shield,
+  Users,
+  UserPlus,
+} from "lucide-react";
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
+import { toast } from "sonner";
+import { Badge } from "@xray/ui/components/badge";
+import { Button } from "@xray/ui/components/button";
+import { Input } from "@xray/ui/components/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@xray/ui/components/dialog";
 import { PromoState, promo as promoApi } from "../api/client";
+import { useLocale } from "../i18n/LocaleContext";
+import { translate, type Locale } from "../i18n";
+import { POINTS_ICON, formatPoints } from "../points";
 import { showAlert } from "../tg/webapp";
 
 interface Props {
@@ -19,19 +33,21 @@ interface Props {
 interface SettingsItemDef {
   key: string;
   icon: React.ReactNode;
-  iconBg: string;
   label: string;
   badge?: React.ReactNode;
   onClick: () => void;
 }
 
+const LANG_OPTIONS: Locale[] = ["ru", "en"];
+
 export default function SettingsPage({ username }: Props) {
   const navigate = useNavigate();
-  const { message } = App.useApp();
+  const { t, locale, setLocale } = useLocale();
   const [promoState, setPromoState] = useState<PromoState | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [inputCode, setInputCode] = useState("");
   const [activating, setActivating] = useState(false);
+  const [savingLang, setSavingLang] = useState(false);
 
   useEffect(() => {
     promoApi.getState().then(setPromoState).catch(() => {});
@@ -45,32 +61,48 @@ export default function SettingsPage({ username }: Props) {
       const res = await promoApi.activate(code);
       setPromoState((prev) =>
         prev
-          ? { ...prev, can_activate: false, active_promo: res.active_promo, discount_percent: res.discount_percent }
-          : prev
+          ? { ...prev, balance: res.balance, last_promo_code: res.promo_code }
+          : { balance: res.balance, last_promo_code: res.promo_code, default_credit_grant: 10 }
       );
       setModalOpen(false);
       setInputCode("");
-      message.success(`Промокод ${res.active_promo} активирован — скидка ${res.discount_percent}%`);
+      toast.success(
+        t("settings.promo.toastSuccess", {
+          grant: formatPoints(res.credit_grant),
+          balance: formatPoints(res.balance),
+        })
+      );
     } catch (e: unknown) {
-      showAlert(e instanceof Error ? e.message : "Ошибка");
+      showAlert(e instanceof Error ? e.message : t("settings.promo.errorFallback"));
     } finally {
       setActivating(false);
+    }
+  };
+
+  const handleLanguage = async (next: Locale) => {
+    if (next === locale || savingLang) return;
+    setSavingLang(true);
+    try {
+      await setLocale(next);
+      toast.success(translate(next, "settings.language.toastSaved"));
+    } catch {
+      toast.error(translate(locale, "settings.language.toastFailed"));
+    } finally {
+      setSavingLang(false);
     }
   };
 
   const referralItems: SettingsItemDef[] = [
     {
       key: "invite",
-      icon: <UsergroupAddOutlined />,
-      iconBg: "rgba(124,156,255,0.15)",
-      label: "Пригласить друзей",
+      icon: <UserPlus />,
+      label: t("settings.inviteFriends"),
       onClick: () => navigate("/invite"),
     },
     {
       key: "rules",
-      icon: <TeamOutlined />,
-      iconBg: "rgba(124,156,255,0.15)",
-      label: "Правила реферальной программы",
+      icon: <Users />,
+      label: t("settings.referralRules"),
       onClick: () => navigate("/referral-rules"),
     },
   ];
@@ -78,16 +110,14 @@ export default function SettingsPage({ username }: Props) {
   const legalItems: SettingsItemDef[] = [
     {
       key: "policy",
-      icon: <SafetyOutlined />,
-      iconBg: "rgba(78,203,168,0.15)",
-      label: "Политика конфиденциальности",
+      icon: <Shield />,
+      label: t("settings.privacy"),
       onClick: () => navigate("/policy"),
     },
     {
       key: "agreement",
-      icon: <FileTextOutlined />,
-      iconBg: "rgba(78,203,168,0.15)",
-      label: "Пользовательское соглашение",
+      icon: <FileText />,
+      label: t("settings.agreement"),
       onClick: () => navigate("/agreement"),
     },
   ];
@@ -96,15 +126,10 @@ export default function SettingsPage({ username }: Props) {
     <div className="settings-section">
       {items.map((item) => (
         <button key={item.key} className="settings-item" onClick={item.onClick}>
-          <div
-            className="settings-item__icon"
-            style={{ background: item.iconBg, color: "rgba(255,255,255,0.80)" }}
-          >
-            {item.icon}
-          </div>
+          <div className="settings-item__icon">{item.icon}</div>
           <span className="settings-item__text">{item.label}</span>
           {item.badge && <span>{item.badge}</span>}
-          <RightOutlined className="settings-item__arrow" />
+          <ChevronRight className="settings-item__arrow" />
         </button>
       ))}
     </div>
@@ -112,117 +137,106 @@ export default function SettingsPage({ username }: Props) {
 
   return (
     <div className="page">
-      <div style={{ fontSize: 22, fontWeight: 700, color: "#FFFFFF", letterSpacing: "-0.3px", marginBottom: 20 }}>
-        Аккаунт
+      <div className="text-[22px] font-bold text-foreground tracking-tight mb-5">
+        {t("settings.title")}
       </div>
 
-      {/* User chip */}
       {username && (
-        <div style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          background: "rgba(255,255,255,0.06)",
-          border: "1px solid rgba(255,255,255,0.10)",
-          borderRadius: 16,
-          padding: "14px 16px",
-          marginBottom: 12,
-        }}>
-          <span style={{ color: "rgba(255,255,255,0.45)", fontSize: 14 }}>Telegram</span>
-          <Tag color="processing" style={{ margin: 0, fontWeight: 600 }}>@{username}</Tag>
+        <div className="flex items-center justify-between bg-card border border-border rounded-2xl px-4 py-3.5 mb-3">
+          <span className="text-muted-foreground text-sm">{t("settings.telegram")}</span>
+          <Badge>@{username}</Badge>
         </div>
       )}
 
-      {/* Active promo banner */}
-      {promoState?.active_promo && (
-        <div style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          background: "rgba(78,203,168,0.10)",
-          border: "1px solid rgba(78,203,168,0.28)",
-          borderRadius: 16,
-          padding: "14px 16px",
-          marginBottom: 12,
-          gap: 12,
-        }}>
-          <span style={{ color: "rgba(255,255,255,0.60)", fontSize: 14 }}>Скидка активна</span>
-          <Tag color="success" style={{ margin: 0, fontWeight: 600 }}>
-            −{promoState.discount_percent}% на следующую покупку
-          </Tag>
+      {(promoState?.balance ?? 0) > 0 && (
+        <div className="flex items-center justify-between gap-3 bg-card border border-border rounded-2xl px-4 py-3.5 mb-3">
+          <span className="text-muted-foreground text-sm">{t("settings.bonusBalance")}</span>
+          <Badge variant="success">
+            {formatPoints(promoState!.balance)}
+          </Badge>
         </div>
       )}
 
-      {/* Promo activation row */}
-      <div className="settings-section" style={{ marginBottom: 12 }}>
+      <div className="settings-section mb-3">
+        <div className="settings-item" style={{ cursor: "default" }}>
+          <div className="settings-item__icon">
+            <Languages />
+          </div>
+          <span className="settings-item__text">{t("settings.language")}</span>
+          <div className="flex gap-1.5 ml-auto">
+            {LANG_OPTIONS.map((code) => {
+              const active = locale === code;
+              return (
+                <button
+                  key={code}
+                  type="button"
+                  disabled={savingLang}
+                  onClick={() => handleLanguage(code)}
+                  className={
+                    "inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium border transition-colors " +
+                    (active
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-transparent text-muted-foreground border-border")
+                  }
+                >
+                  {active && <Check className="size-3" />}
+                  {t(`settings.language.${code}`)}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      <div className="settings-section mb-3">
         <button
           className="settings-item"
-          onClick={() => {
-            if (promoState?.active_promo) {
-              showAlert(
-                `Активный промокод: ${promoState.active_promo}\nСкидка: ${promoState.discount_percent}% на следующую покупку`
-              );
-            } else {
-              setModalOpen(true);
-            }
-          }}
+          onClick={() => setModalOpen(true)}
         >
-          <div
-            className="settings-item__icon"
-            style={{ background: "rgba(255,212,121,0.15)", color: "#FFD479" }}
-          >
-            <GiftOutlined />
+          <div className="settings-item__icon">
+            <Gift />
           </div>
-          <span className="settings-item__text">
-            {promoState?.active_promo
-              ? `Промокод: ${promoState.active_promo}`
-              : "Активировать промокод"}
-          </span>
-          {promoState?.active_promo && (
-            <Tag color="warning" style={{ margin: 0, fontSize: 11 }}>
-              −{promoState.discount_percent}%
-            </Tag>
+          <span className="settings-item__text">{t("settings.activatePromo")}</span>
+          {(promoState?.balance ?? 0) > 0 && (
+            <Badge className="text-[11px]">
+              {formatPoints(promoState!.balance)}
+            </Badge>
           )}
-          <RightOutlined className="settings-item__arrow" />
+          <ChevronRight className="settings-item__arrow" />
         </button>
       </div>
 
       {renderSection(referralItems)}
       {renderSection(legalItems)}
 
-      {/* Promo modal */}
-      <Modal
-        title="Активировать промокод"
-        open={modalOpen}
-        onCancel={() => { setModalOpen(false); setInputCode(""); }}
-        footer={null}
-        centered
-      >
-        <Space direction="vertical" size={12} style={{ width: "100%", paddingTop: 4 }}>
-          <p style={{ color: "rgba(255,255,255,0.50)", margin: 0, fontSize: 14 }}>
-            Введите промокод для получения скидки на следующую покупку
-          </p>
-          <Input
-            placeholder="EXAMPLE123"
-            value={inputCode}
-            onChange={(e) => setInputCode(e.target.value.toUpperCase())}
-            onPressEnter={handleActivate}
-            maxLength={20}
-            size="large"
-            autoFocus
-          />
-          <Button
-            type="primary"
-            block
-            size="large"
-            loading={activating}
-            disabled={!inputCode.trim()}
-            onClick={handleActivate}
-          >
-            Применить
-          </Button>
-        </Space>
-      </Modal>
+      <Dialog open={modalOpen} onOpenChange={(open: boolean) => { setModalOpen(open); if (!open) setInputCode(""); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("settings.promo.modalTitle")}</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-3 pt-1">
+            <p className="text-muted-foreground m-0 text-sm">
+              {t("settings.promo.modalBody", { icon: POINTS_ICON })}
+            </p>
+            <Input
+              placeholder={t("settings.promo.placeholder")}
+              value={inputCode}
+              onChange={(e) => setInputCode(e.target.value.toUpperCase())}
+              onKeyDown={(e) => e.key === "Enter" && handleActivate()}
+              maxLength={20}
+              autoFocus
+            />
+            <Button
+              size="lg"
+              className="w-full"
+              disabled={activating || !inputCode.trim()}
+              onClick={handleActivate}
+            >
+              {activating ? t("settings.promo.applying") : t("settings.promo.apply")}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

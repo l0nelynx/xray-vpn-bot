@@ -139,8 +139,9 @@ GET /api/menu/tree          → display menu
 POST /api/payments/invoice  → { "node_id": 42 }
 ```
 
-Server reads `webapp_menu_nodes`, applies promo discount, calls
-`payments.create_invoice()`, stores a `transactions` row.
+Server reads `webapp_menu_nodes`, creates the gateway invoice via
+`payments.create_invoice()`, stores a `transactions` row. Bonus credits are a
+separate wallet (pay-with-credits) — see [referral.md](referral.md).
 
 ### 3. User pays at the gateway
 

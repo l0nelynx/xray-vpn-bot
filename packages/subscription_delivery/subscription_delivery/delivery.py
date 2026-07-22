@@ -256,3 +256,112 @@ async def deliver_android_paid(
         "uuid": rw_uuid,
         "subscription_url": result.get("subscription_url"),
     }
+
+
+async def deliver_telegram_paid(
+    *,
+    transaction_id: str,
+    tg_id: int,
+    username: str,
+    days: int,
+    tariff_slug: Optional[str],
+    session_factory,
+    notifier: Notifier,
+    squad_resolver: Optional[SquadResolver] = None,
+) -> dict:
+    """Provision/extend a PAID Remnawave subscription for a Telegram user."""
+    squad = _parse_squad_slug(tariff_slug)
+    if not squad and tariff_slug and squad_resolver is not None:
+        squad = await squad_resolver(tariff_slug)
+    if not squad:
+        await notifier(
+            f"❌ <b>Telegram delivery FAILED</b>\n"
+            f"user: <code>{tg_id}</code> @{esc(username)}\n"
+            f"error: <code>bad tariff_slug: {esc(tariff_slug or '—')}</code>\n"
+            f"tx: <code>{esc(transaction_id)}</code>"
+        )
+        return {"status": "error", "message": f"bad tariff_slug: {tariff_slug!r}"}
+
+    info = await rem.get_user_from_username(username)
+    scenario = resolve_scenario(info, SubscriptionType.PAID)
+
+    try:
+        if scenario == SubscriptionScenario.NEW_USER:
+            result = await apply_new_user(
+                username=username,
+                telegram_id=tg_id,
+                days=days,
+                limit_gb=0,
+                email=f"{username}@telegram.user",
+                description="Paid subscription (bonus credits)",
+                squad_id=squad["squad_id"],
+                external_squad_id=squad["external_squad_id"],
+            )
+        elif scenario == SubscriptionScenario.EXTEND:
+            uuid = (info or {}).get("uuid")
+            if not uuid:
+                return {"status": "error", "message": "extend without uuid"}
+            result = await apply_extend(
+                user_uuid=uuid,
+                username=username,
+                days=days,
+                current_days_left=_days_left(info),
+                squad_id=squad["squad_id"],
+                external_squad_id=squad["external_squad_id"],
+                description="Paid extend (bonus credits)",
+            )
+        else:
+            uuid = (info or {}).get("uuid")
+            if not uuid:
+                return {"status": "error", "message": f"{scenario.value} without uuid"}
+            result = await apply_update(
+                user_uuid=uuid,
+                username=username,
+                days=days,
+                limit_gb=0,
+                squad_id=squad["squad_id"],
+                external_squad_id=squad["external_squad_id"],
+                status="active",
+                description="Paid update (bonus credits)",
+            )
+    except Exception as exc:
+        logger.error("telegram delivery for tx=%s failed: %s", transaction_id, exc)
+        await notifier(
+            f"❌ <b>Telegram delivery FAILED</b>\n"
+            f"user: <code>{tg_id}</code> @{esc(username)}\n"
+            f"error: <code>{esc(str(exc)[:300])}</code>\n"
+            f"tx: <code>{esc(transaction_id)}</code>"
+        )
+        return {"status": "error", "message": str(exc)}
+
+    if not result:
+        return {"status": "error", "message": "remnawave_apply_returned_none"}
+
+    rw_uuid = result.get("uuid") or (info or {}).get("uuid")
+    if rw_uuid and tg_id:
+        try:
+            async with session_factory() as session:
+                await session.execute(
+                    text(
+                        "UPDATE users SET vless_uuid = :u WHERE tg_id = :t"
+                    ),
+                    {"u": rw_uuid, "t": tg_id},
+                )
+                await session.commit()
+        except Exception as exc:
+            logger.warning("Failed to save vless_uuid for tg_id %s: %s", tg_id, exc)
+
+    await _update_delivery_status(session_factory, transaction_id, 1)
+    await notifier(
+        f"📦 <b>Subscription delivered (bonus credits)</b>\n"
+        f"user: <code>{tg_id}</code> @{esc(username)}\n"
+        f"days: <code>{days}</code>\n"
+        f"slug: <code>{esc(tariff_slug or '—')}</code>\n"
+        f"tx: <code>{esc(transaction_id)}</code>"
+    )
+    return {
+        "status": "success",
+        "scenario": scenario.value,
+        "uuid": rw_uuid,
+        "subscription_url": result.get("subscription_url"),
+    }

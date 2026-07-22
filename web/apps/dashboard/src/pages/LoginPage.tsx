@@ -1,113 +1,88 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { Form, Input, Button, App } from "antd";
-import { LockOutlined, UserOutlined } from "@ant-design/icons";
+import { useNavigate } from "react-router";
+import { toast } from "sonner";
+import { Lock, User } from "lucide-react";
+import { Input } from "@xray/ui/components/input";
+import { Button } from "@xray/ui/components/button";
+import { Label } from "@xray/ui/components/label";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@xray/ui/components/card";
 import { api, setToken } from "../api/client";
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const { message } = App.useApp();
   const [loading, setLoading] = useState(false);
+  const [login, setLogin] = useState("");
+  const [password, setPassword] = useState("");
 
-  const onFinish = async (values: { login: string; password: string }) => {
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!login.trim() || !password) {
+      toast.error("Enter login and password");
+      return;
+    }
     setLoading(true);
     try {
-      const res = await api.post<{ access_token: string }>("/auth/login", values);
+      const res = await api.post<{ access_token: string }>("/auth/login", { login, password });
       setToken(res.access_token);
       navigate("/", { replace: true });
     } catch {
-      message.error("Invalid credentials");
+      toast.error("Invalid credentials");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 24,
-        background: "#0C0F1A",
-      }}
-    >
-      <div style={{ width: "100%", maxWidth: 360 }}>
-        {/* Logo mark */}
-        <div style={{ textAlign: "center", marginBottom: 32 }}>
-          <div
-            style={{
-              width: 48,
-              height: 48,
-              borderRadius: 14,
-              background: "linear-gradient(135deg, #6C8EFF, #A78BFF)",
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: 20,
-              fontWeight: 700,
-              color: "#fff",
-              marginBottom: 16,
-              boxShadow: "0 8px 24px rgba(108, 142, 255, 0.30)",
-            }}
-          >
+    <div className="flex min-h-screen items-center justify-center bg-background p-6">
+      <Card className="w-full max-w-sm shadow-sm">
+        <CardHeader className="space-y-1 text-center">
+          <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground">
             VP
           </div>
-          <div
-            style={{
-              fontSize: 20,
-              fontWeight: 700,
-              color: "#E2E8F8",
-              letterSpacing: -0.3,
-              marginBottom: 6,
-            }}
-          >
-            VPN Admin
-          </div>
-          <div style={{ fontSize: 13, color: "rgba(255,255,255,0.35)" }}>
-            Sign in to continue
-          </div>
-        </div>
-
-        {/* Card */}
-        <div
-          style={{
-            background: "#111827",
-            border: "1px solid #1E2540",
-            borderRadius: 14,
-            padding: "28px 24px",
-          }}
-        >
-          <Form onFinish={onFinish} autoComplete="off" size="large">
-            <Form.Item
-              name="login"
-              style={{ marginBottom: 12 }}
-              rules={[{ required: true, message: "Enter login" }]}
-            >
-              <Input
-                prefix={<UserOutlined style={{ color: "rgba(255,255,255,0.22)", fontSize: 14 }} />}
-                placeholder="Login"
-              />
-            </Form.Item>
-            <Form.Item
-              name="password"
-              style={{ marginBottom: 20 }}
-              rules={[{ required: true, message: "Enter password" }]}
-            >
-              <Input.Password
-                prefix={<LockOutlined style={{ color: "rgba(255,255,255,0.22)", fontSize: 14 }} />}
-                placeholder="Password"
-              />
-            </Form.Item>
-            <Form.Item style={{ marginBottom: 0 }}>
-              <Button type="primary" htmlType="submit" loading={loading} block>
-                Sign In
-              </Button>
-            </Form.Item>
-          </Form>
-        </div>
-      </div>
+          <CardTitle className="text-xl">VPN Admin</CardTitle>
+          <CardDescription>Sign in to your account</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={onSubmit} autoComplete="off" className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="login">Login</Label>
+              <div className="relative">
+                <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  id="login"
+                  className="pl-9"
+                  placeholder="admin"
+                  value={login}
+                  onChange={(e) => setLogin(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  id="password"
+                  className="pl-9"
+                  type="password"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+              </div>
+            </div>
+            <Button type="submit" disabled={loading} className="w-full">
+              {loading ? "Signing in…" : "Sign in"}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
     </div>
   );
 }

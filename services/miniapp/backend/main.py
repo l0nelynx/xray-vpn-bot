@@ -6,16 +6,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 
-from .config import get_expose_api_docs, get_log_level, get_web_allowed_origins
+from .config import get_expose_api_docs, get_log_level, get_web_allowed_origins, get_yaml_config
 from .security_config import validate_security_config
+from .maintenance import MaintenanceMiddleware
 
 logging.basicConfig(
     level=get_log_level(),
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
 )
 from .android import auth_router as android_auth_router
+from .android import claim_router as android_claim_router
 from .android import data_router as android_data_router
 from .android import email_router as android_email_router
+from .android import fcm_router as android_fcm_router
 from .android import iap_router as android_iap_router
 from .android import link_router as android_link_router
 from .android import payments_router as android_payments_router
@@ -60,7 +63,24 @@ def _run_migrations() -> None:
 async def lifespan(app: FastAPI):
     validate_security_config()
     _run_migrations()
-    yield
+    from .database.session import async_session
+    from common_db.runtime_config import bootstrap_runtime_overlay, runtime_overlay_poll_loop
+    import asyncio
+
+    yaml_cfg = get_yaml_config()
+    crypto_secret = str(
+        yaml_cfg.get("payments_secrets_key") or yaml_cfg.get("dashboard_secret") or ""
+    )
+    await bootstrap_runtime_overlay(async_session, yaml_cfg, crypto_secret=crypto_secret)
+    poll_task = asyncio.create_task(runtime_overlay_poll_loop(async_session))
+    try:
+        yield
+    finally:
+        poll_task.cancel()
+        try:
+            await poll_task
+        except asyncio.CancelledError:
+            pass
 
 
 # Swagger UI / openapi.json are gated behind a config flag — off in production so
@@ -74,6 +94,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 app.state.limiter = limiter
+app.add_middleware(MaintenanceMiddleware)
 
 # CORS for the external web portal (separate static hosting)
 _cors_origins = get_web_allowed_origins()
@@ -106,8 +127,10 @@ app.include_router(android_iap_router.router, prefix=BASE_PATH)
 app.include_router(android_data_router.router, prefix=BASE_PATH)
 app.include_router(android_link_router.router, prefix=BASE_PATH)
 app.include_router(android_subscription_router.router, prefix=BASE_PATH)
+app.include_router(android_claim_router.router, prefix=BASE_PATH)
 app.include_router(android_promo_router.router, prefix=BASE_PATH)
 app.include_router(android_support_router.router, prefix=BASE_PATH)
+app.include_router(android_fcm_router.router, prefix=BASE_PATH)
 app.include_router(web_router.router, prefix=BASE_PATH)
 app.include_router(connect_router, prefix=BASE_PATH)
 

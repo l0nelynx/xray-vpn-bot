@@ -106,13 +106,18 @@ The override path is configurable via `connect_app_config_path` in `config.yml`
 | `subscriptionLink` | Custom-scheme deep-link (`happ://…`). Navigates directly so the OS opens the app. Rendered as the primary button. |
 | `copyButton` | Copies the (substituted) link to the clipboard with a toast. |
 
-> **Deep-link handling.** The Mini App webview can't launch custom schemes
-> (`happ://…`) directly — `tg.openLink` only opens `http(s)`. So `subscriptionLink`
-> buttons open a static redirector, `web/apps/miniapp/public/connect-open.html`
-> (served at `/bot/miniapp/connect-open.html`), in the external browser, which
-> then fires the scheme. The deep-link is passed in the URL `#fragment`, so the
-> user's subscription URL never reaches server access logs. `external` (App
-> Store / Google Play) buttons are plain `http(s)` and open directly. Adding the
+> **Deep-link / query handling.** The Mini App webview can't launch custom
+> schemes (`happ://…`) directly — `tg.openLink` only opens `http(s)`. Telegram's
+> `openLink` also **strips URL fragments** on external https, and Remnawave
+> often does **not** substitute `{{SUBSCRIPTION_LINK}}` inside a `#fragment`.
+> Desktop claim buttons therefore use a **query** param
+> (`https://cheezyvpn.uk/claim?url={{SUBSCRIPTION_LINK}}`). Custom-scheme
+> buttons and any https URL that still carries `?`/`#` with the subscription
+> open a static redirector, `web/apps/miniapp/public/connect-open.html`
+> (served at `/bot/miniapp/connect-open.html`); the real target rides in the
+> redirector's own `#fragment` (same-origin) and `connect-open.html` then
+> `location.replace`s. Plain `external` buttons without query/fragment
+> (App Store / Google Play / GitHub) still open directly. Adding the
 > redirector file needs a `frontend` image rebuild (it's a build-time asset).
 
 ## Adding an app
@@ -120,6 +125,40 @@ The override path is configurable via `connect_app_config_path` in `config.yml`
 Add an entry under the relevant `platforms.<os>.apps[]`. Reuse an existing
 `svgIconKey` to get an icon immediately, set `featured: true` to surface it, and
 provide at least `en` + `ru` strings (other locales fall back to `en`).
+
+## CheezyVPN / CheezyClash entries
+
+The bundled default ships our own clients as `featured` on four platforms:
+
+| Platform | App | Key buttons |
+|---|---|---|
+| `android` | CheezyVPN | APK download + `cheezy://add/{{SUBSCRIPTION_LINK}}` (subscriptionLink) |
+| `windows` / `macos` / `linux` | CheezyClash | GitHub Releases + browser claim page (`external`) + copy-link fallback |
+
+Notes:
+
+- `cheezy://add/…` expects the **raw** subscription URL after the host segment.
+  The client's deep-link parser percent-decodes `%XX` only when present, so the
+  raw substitution `fillLink` performs is parsed correctly. Senders that build
+  the link by hand may percent-encode; both forms work.
+- The desktop "Connect via browser" button points at the web portal `/claim`
+  with the subscription in a **query** param
+  (`https://cheezyvpn.uk/claim?url={{SUBSCRIPTION_LINK}}`) so Remnawave
+  substitutes the placeholder (it often skips `#fragment`s). The portal
+  resolves the claim status via `POST /api/android/claim/resolve`
+  (see [android-api.md](android-api.md)) and, after auth, hands the session to
+  the installed app via `cheezy://login/<one-time token>`.
+
+## Using the catalog on the Remnawave subscription page
+
+The format is the upstream Remnawave subscription-page `app-config.json`, so
+the same document can be uploaded as-is: in the Remnawave panel open the
+**Subscription Page** template settings and paste the catalog JSON (or point
+the subscription-page container at the file, depending on your deployment).
+Remnawave performs the same `{{SUBSCRIPTION_LINK}}` substitution, so the
+CheezyVPN deep-link buttons work identically there. Remember to fill
+`brandingSettings` / `baseSettings` in the copy you upload — the bundled
+default ships them neutralised.
 
 ## Icons
 

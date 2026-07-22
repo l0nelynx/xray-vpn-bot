@@ -1,37 +1,68 @@
-import { App, Button, Descriptions, Divider, Drawer, Input, List, Space, Tag, Typography } from "antd";
-import { EditOutlined, GiftOutlined, IdcardOutlined, SendOutlined } from "@ant-design/icons";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
+import { Copy, Gift, IdCard, Pencil, Send, Wallet } from "lucide-react";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@xray/ui/components/sheet";
+import { Button } from "@xray/ui/components/button";
+import { Input } from "@xray/ui/components/input";
+import { Textarea } from "@xray/ui/components/textarea";
+import { Badge } from "@xray/ui/components/badge";
+import { Separator } from "@xray/ui/components/separator";
+import { Spinner } from "@xray/ui/components/spinner";
 import { api } from "../api/client";
 import type { TransactionItem, UserDetail } from "../api/types";
+import { formatPoints, POINTS_ICON } from "../points";
 import useIsMobile from "../hooks/useIsMobile";
 
 interface Props {
-  /** When non-null the drawer fetches & shows this user. */
-  tgId: number | null;
+  /** Local DB users.id. When non-null the drawer fetches & shows this user. */
+  userId: number | null;
   open: boolean;
   onClose: () => void;
   /** Called after edits so the opener can refresh its list. */
   onChanged?: () => void;
 }
 
-/**
- * Reusable user card. Fetches the user detail + transactions for `tgId` and
- * renders the account info, identifier editor (tg_id/username/vless_uuid),
- * email editor, promo/ticket stats, transaction history and a send-message box.
- * Used by the Users table and the Support ticket view.
- */
-export default function UserDrawer({ tgId, open, onClose, onChanged }: Props) {
-  const { message } = App.useApp();
+function copyText(text: string) {
+  navigator.clipboard?.writeText(text).then(
+    () => toast.success("Copied"),
+    () => toast.error("Copy failed"),
+  );
+}
+
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex gap-3 border-b border-border/60 py-1.5 text-sm last:border-0">
+      <div className="w-32 flex-shrink-0 text-muted-foreground">{label}</div>
+      <div className="min-w-0 flex-1 break-words text-foreground">{children}</div>
+    </div>
+  );
+}
+
+function LabeledInput({
+  label,
+  ...props
+}: { label: string } & React.ComponentProps<typeof Input>) {
+  return (
+    <div className="flex items-center overflow-hidden rounded-md border border-input">
+      <span className="flex-shrink-0 border-r border-input bg-muted px-3 py-2 text-xs text-muted-foreground">
+        {label}
+      </span>
+      <Input className="h-9 rounded-none border-0 focus-visible:ring-0" {...props} />
+    </div>
+  );
+}
+
+export default function UserDrawer({ userId, open, onClose, onChanged }: Props) {
   const isMobile = useIsMobile();
 
   const [user, setUser] = useState<UserDetail | null>(null);
   const [tx, setTx] = useState<TransactionItem[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // editable identifier fields
   const [editTgId, setEditTgId] = useState("");
   const [editUsername, setEditUsername] = useState("");
   const [editUuid, setEditUuid] = useState("");
+  const [editRwId, setEditRwId] = useState("");
   const [idSaving, setIdSaving] = useState(false);
 
   const [emailInput, setEmailInput] = useState("");
@@ -40,6 +71,9 @@ export default function UserDrawer({ tgId, open, onClose, onChanged }: Props) {
   const [msgText, setMsgText] = useState("");
   const [msgSending, setMsgSending] = useState(false);
 
+  const [creditsDelta, setCreditsDelta] = useState<string>("");
+  const [creditsSaving, setCreditsSaving] = useState(false);
+
   const load = async (id: number) => {
     setLoading(true);
     try {
@@ -47,47 +81,51 @@ export default function UserDrawer({ tgId, open, onClose, onChanged }: Props) {
       const t = await api.get<TransactionItem[]>(`/users/${id}/transactions`);
       setUser(u);
       setTx(t);
-      setEditTgId(String(u.tg_id));
+      setEditTgId(u.tg_id != null ? String(u.tg_id) : "");
       setEditUsername(u.username || "");
       setEditUuid(u.vless_uuid || "");
+      setEditRwId(u.rw_id != null ? String(u.rw_id) : "");
       setEmailInput(u.email || "");
       setMsgText("");
+      setCreditsDelta("");
     } catch {
-      message.error("Не удалось загрузить пользователя");
+      toast.error("Failed to load user");
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (open && tgId != null) load(tgId);
+    if (open && userId != null) load(userId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, tgId]);
+  }, [open, userId]);
 
   const handleSaveIdentifiers = async () => {
     if (!user) return;
     const newTgId = editTgId.trim();
     if (newTgId && !/^-?\d+$/.test(newTgId)) {
-      message.error("TG ID должен быть числом");
+      toast.error("TG ID must be a number");
+      return;
+    }
+    const rwIdTrimmed = editRwId.trim();
+    if (rwIdTrimmed && !/^\d+$/.test(rwIdTrimmed)) {
+      toast.error("rw_id must be a number");
       return;
     }
     setIdSaving(true);
     try {
-      const res = await api.patch<{ ok: boolean; tg_id: number; username: string | null; vless_uuid: string | null }>(
-        `/users/${user.tg_id}/identifiers`,
-        {
-          tg_id: newTgId ? Number(newTgId) : undefined,
-          username: editUsername,
-          vless_uuid: editUuid,
-        }
-      );
-      message.success("Сохранено");
-      // tg_id may have changed → reload by the new id and refresh the opener
-      await load(res.tg_id);
+      await api.patch(`/users/${user.id}/identifiers`, {
+        tg_id: newTgId ? Number(newTgId) : null,
+        username: editUsername,
+        vless_uuid: editUuid,
+        rw_id: rwIdTrimmed ? Number(rwIdTrimmed) : null,
+      });
+      toast.success("Saved");
+      await load(user.id);
       onChanged?.();
     } catch (e) {
       const status = (e as { status?: number })?.status;
-      message.error(status === 409 ? "Этот TG ID уже занят" : "Ошибка сохранения");
+      toast.error(status === 409 ? "This TG ID is already in use" : "Failed to save");
     } finally {
       setIdSaving(false);
     }
@@ -97,159 +135,280 @@ export default function UserDrawer({ tgId, open, onClose, onChanged }: Props) {
     if (!user || !emailInput.trim()) return;
     setEmailSaving(true);
     try {
-      const res = await api.patch<{ ok: boolean; rw_uuid: string | null }>(
-        `/users/${user.tg_id}/email`,
-        { email: emailInput.trim() }
+      const res = await api.patch<{ ok: boolean; rw_uuid: string | null; rw_id: number | null }>(
+        `/users/${user.id}/email`,
+        { email: emailInput.trim() },
       );
-      message.success(res.rw_uuid ? `Email сохранён, UUID: ${res.rw_uuid}` : "Email сохранён");
-      await load(user.tg_id);
+      const parts = ["Email saved"];
+      if (res.rw_uuid) parts.push(`UUID: ${res.rw_uuid}`);
+      if (res.rw_id != null) parts.push(`rw_id: ${res.rw_id}`);
+      toast.success(parts.join(", "));
+      await load(user.id);
       onChanged?.();
     } catch {
-      message.error("Ошибка сохранения email");
+      toast.error("Failed to save email");
     } finally {
       setEmailSaving(false);
     }
   };
 
+  const handleAdjustCredits = async () => {
+    const delta = Number(creditsDelta);
+    if (!user || !creditsDelta || Number.isNaN(delta) || delta === 0) return;
+    setCreditsSaving(true);
+    try {
+      const res = await api.post<{ ok: boolean; balance: number }>(`/users/${user.id}/credits`, {
+        amount: delta,
+      });
+      toast.success(`Balance updated: ${formatPoints(res.balance)}`);
+      setCreditsDelta("");
+      await load(user.id);
+      onChanged?.();
+    } catch (e) {
+      const status = (e as { status?: number })?.status;
+      toast.error(status === 400 ? "Not enough points to deduct" : "Failed to update balance");
+    } finally {
+      setCreditsSaving(false);
+    }
+  };
+
   const handleSendMessage = async () => {
     if (!user || !msgText.trim()) return;
+    if (user.tg_id == null) {
+      toast.error("User has no Telegram ID");
+      return;
+    }
     setMsgSending(true);
     try {
-      await api.post(`/users/${user.tg_id}/send-message`, { text: msgText });
-      message.success("Сообщение отправлено");
+      await api.post(`/users/${user.id}/send-message`, { text: msgText });
+      toast.success("Message sent");
       setMsgText("");
     } catch {
-      message.error("Ошибка отправки");
+      toast.error("Failed to send");
     } finally {
       setMsgSending(false);
     }
   };
 
-  const labelStyle = { color: "rgba(255,255,255,0.85)" } as const;
+  const displayName = user
+    ? user.username || user.email || (user.tg_id != null ? String(user.tg_id) : `#${user.id}`)
+    : "User";
 
   return (
-    <Drawer
-      title={user ? `User: ${user.username || user.tg_id}` : "User"}
-      open={open}
-      onClose={onClose}
-      width={isMobile ? "100%" : 520}
-      loading={loading}
-    >
-      {user && (
-        <>
-          <Descriptions column={1} bordered size="small">
-            <Descriptions.Item label="TG ID">{user.tg_id}</Descriptions.Item>
-            <Descriptions.Item label="Username">{user.username || "—"}</Descriptions.Item>
-            <Descriptions.Item label="Email">{user.email || "—"}</Descriptions.Item>
-            <Descriptions.Item label="vless_uuid">
-              <Typography.Text copyable={!!user.vless_uuid} style={{ fontSize: 12, wordBreak: "break-all" }}>
-                {user.vless_uuid || "—"}
-              </Typography.Text>
-            </Descriptions.Item>
-            <Descriptions.Item label="Provider">{user.api_provider}</Descriptions.Item>
-            <Descriptions.Item label="Промокод">
-              {user.promo_code ? <Tag color="purple" icon={<GiftOutlined />}>{user.promo_code}</Tag> : "—"}
-            </Descriptions.Item>
-            <Descriptions.Item label="Тикетов открыто">{user.tickets_count}</Descriptions.Item>
-            <Descriptions.Item label="Banned">{user.is_banned ? "Yes" : "No"}</Descriptions.Item>
-            <Descriptions.Item label="VIP">{user.vip ? "Yes" : "No"}</Descriptions.Item>
-            <Descriptions.Item label="Language">{user.language || "—"}</Descriptions.Item>
-            <Descriptions.Item label="Total Spent">{user.total_spent}</Descriptions.Item>
-            <Descriptions.Item label="Transactions">{user.transactions_count}</Descriptions.Item>
-          </Descriptions>
+    <Sheet open={open} onOpenChange={(o: boolean) => !o && onClose()}>
+      <SheetContent
+        side="right"
+        className="flex w-full flex-col gap-0 overflow-y-auto sm:max-w-[520px]"
+        style={isMobile ? { maxWidth: "100%" } : undefined}
+      >
+        <SheetHeader>
+          <SheetTitle>{user ? `User: ${displayName}` : "User"}</SheetTitle>
+        </SheetHeader>
 
-          <Divider style={{ borderColor: "rgba(255,255,255,0.1)" }} />
-
-          <Typography.Text strong style={labelStyle}>
-            <IdcardOutlined style={{ marginRight: 6 }} />
-            Идентификаторы
-          </Typography.Text>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
-            <Input
-              addonBefore="TG ID"
-              value={editTgId}
-              onChange={(e) => setEditTgId(e.target.value)}
-              placeholder="123456789"
-            />
-            <Input
-              addonBefore="Username"
-              value={editUsername}
-              onChange={(e) => setEditUsername(e.target.value)}
-              placeholder="username"
-              allowClear
-            />
-            <Input
-              addonBefore="UUID"
-              value={editUuid}
-              onChange={(e) => setEditUuid(e.target.value)}
-              placeholder="vless_uuid"
-              allowClear
-            />
-            <Button type="primary" icon={<EditOutlined />} loading={idSaving} onClick={handleSaveIdentifiers}>
-              Сохранить идентификаторы
-            </Button>
+        {loading ? (
+          <div className="flex flex-1 items-center justify-center py-20">
+            <Spinner className="h-6 w-6" />
           </div>
+        ) : (
+          user && (
+            <div className="mt-4 space-y-4">
+              <div className="rounded-lg border border-border p-3">
+                <Row label="ID">{user.id}</Row>
+                <Row label="TG ID">{user.tg_id ?? "—"}</Row>
+                <Row label="Username">{user.username || "—"}</Row>
+                <Row label="Email">{user.email || "—"}</Row>
+                <Row label="vless_uuid">
+                  {user.vless_uuid ? (
+                    <span className="flex items-center gap-2">
+                      <span className="break-all font-mono text-xs">{user.vless_uuid}</span>
+                      <button
+                        type="button"
+                        onClick={() => copyText(user.vless_uuid!)}
+                        className="text-muted-foreground hover:text-foreground"
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                      </button>
+                    </span>
+                  ) : (
+                    "—"
+                  )}
+                </Row>
+                <Row label="rw_id">{user.rw_id ?? "—"}</Row>
+                <Row label="Provider">{user.api_provider}</Row>
+                <Row label="Promo code">
+                  {user.promo_code ? (
+                    <Badge variant="secondary" className="gap-1">
+                      <Gift className="h-3 w-3" />
+                      {user.promo_code}
+                    </Badge>
+                  ) : (
+                    "—"
+                  )}
+                </Row>
+                <Row label="Bonus points">
+                  <span className="flex flex-wrap items-center gap-2">
+                    <Badge variant="secondary" className="gap-1">
+                      <Wallet className="h-3 w-3" />
+                      {formatPoints(user.bonus_credits ?? 0)}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground">
+                      1 point = 1 {POINTS_ICON} of tariff price
+                    </span>
+                  </span>
+                </Row>
+                <Row label="Open tickets">{user.tickets_count}</Row>
+                <Row label="Banned">{user.is_banned ? "Yes" : "No"}</Row>
+                <Row label="VIP">{user.vip ? "Yes" : "No"}</Row>
+                <Row label="Language">{user.language || "—"}</Row>
+                <Row label="Total Spent">{user.total_spent}</Row>
+                <Row label="Transactions">{user.transactions_count}</Row>
+              </div>
 
-          <Divider style={{ borderColor: "rgba(255,255,255,0.1)" }} />
+              <Separator />
 
-          <Typography.Text strong style={labelStyle}>
-            <EditOutlined style={{ marginRight: 6 }} />
-            Email пользователя
-          </Typography.Text>
-          <Space.Compact style={{ width: "100%", marginTop: 8 }}>
-            <Input
-              value={emailInput}
-              onChange={(e) => setEmailInput(e.target.value)}
-              placeholder="user@example.com"
-              onPressEnter={handleSaveEmail}
-            />
-            <Button type="primary" onClick={handleSaveEmail} loading={emailSaving} icon={<EditOutlined />}>
-              Сохранить
-            </Button>
-          </Space.Compact>
+              <div>
+                <div className="mb-2 flex items-center gap-1.5 text-sm font-semibold">
+                  <IdCard className="h-4 w-4" />
+                  Identifiers
+                </div>
+                <div className="flex flex-col gap-2">
+                  <LabeledInput
+                    label="TG ID"
+                    value={editTgId}
+                    onChange={(e) => setEditTgId(e.target.value)}
+                    placeholder="123456789 (optional)"
+                  />
+                  <LabeledInput
+                    label="Username"
+                    value={editUsername}
+                    onChange={(e) => setEditUsername(e.target.value)}
+                    placeholder="username"
+                  />
+                  <LabeledInput
+                    label="UUID"
+                    value={editUuid}
+                    onChange={(e) => setEditUuid(e.target.value)}
+                    placeholder="vless_uuid"
+                  />
+                  <LabeledInput
+                    label="rw_id"
+                    value={editRwId}
+                    onChange={(e) => setEditRwId(e.target.value)}
+                    placeholder="Remnawave panel user id"
+                  />
+                  <Button onClick={handleSaveIdentifiers} disabled={idSaving}>
+                    <Pencil className="h-4 w-4" />
+                    Save identifiers
+                  </Button>
+                </div>
+              </div>
 
-          <Divider style={{ borderColor: "rgba(255,255,255,0.1)" }} />
+              <Separator />
 
-          <Typography.Text strong style={labelStyle}>
-            <SendOutlined style={{ marginRight: 6 }} />
-            Сообщение пользователю
-          </Typography.Text>
-          <Input.TextArea
-            style={{ marginTop: 8 }}
-            rows={3}
-            value={msgText}
-            onChange={(e) => setMsgText(e.target.value)}
-            placeholder="Текст сообщения..."
-          />
-          <Button
-            type="primary"
-            style={{ marginTop: 8 }}
-            icon={<SendOutlined />}
-            loading={msgSending}
-            onClick={handleSendMessage}
-            disabled={!msgText.trim()}
-          >
-            Отправить
-          </Button>
+              <div>
+                <div className="mb-2 flex items-center gap-1.5 text-sm font-semibold">
+                  <Pencil className="h-4 w-4" />
+                  User email
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    value={emailInput}
+                    onChange={(e) => setEmailInput(e.target.value)}
+                    placeholder="user@example.com"
+                    onKeyDown={(e) => e.key === "Enter" && handleSaveEmail()}
+                  />
+                  <Button onClick={handleSaveEmail} disabled={emailSaving}>
+                    Save
+                  </Button>
+                </div>
+              </div>
 
-          <Divider style={{ borderColor: "rgba(255,255,255,0.1)" }} />
+              <Separator />
 
-          <h4 style={{ color: "rgba(255,255,255,0.85)" }}>Transactions</h4>
-          <List
-            size="small"
-            dataSource={tx}
-            locale={{ emptyText: "Нет транзакций" }}
-            renderItem={(t) => (
-              <List.Item>
-                <List.Item.Meta
-                  title={`${t.transaction_id} — ${t.order_status}`}
-                  description={`${t.payment_method || "—"} | ${t.amount ?? 0} | ${t.days_ordered}d | ${t.created_at || "—"}`}
+              <div>
+                <div className="mb-2 flex items-center gap-1.5 text-sm font-semibold">
+                  <Wallet className="h-4 w-4" />
+                  Bonus balance
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    type="number"
+                    className="flex-1"
+                    value={creditsDelta}
+                    onChange={(e) => setCreditsDelta(e.target.value)}
+                    placeholder={`± ${POINTS_ICON}`}
+                    min={-3650}
+                    max={3650}
+                  />
+                  <Button
+                    onClick={handleAdjustCredits}
+                    disabled={creditsSaving || !creditsDelta || Number(creditsDelta) === 0}
+                  >
+                    Apply
+                  </Button>
+                </div>
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  Positive number credits, negative debits.
+                </p>
+              </div>
+
+              <Separator />
+
+              <div>
+                <div className="mb-2 flex items-center gap-1.5 text-sm font-semibold">
+                  <Send className="h-4 w-4" />
+                  Message to user
+                </div>
+                {user.tg_id == null && (
+                  <p className="mb-2 text-xs text-muted-foreground">
+                    Unavailable: this account has no Telegram ID (Android / web).
+                  </p>
+                )}
+                <Textarea
+                  rows={3}
+                  value={msgText}
+                  onChange={(e) => setMsgText(e.target.value)}
+                  placeholder="Message text..."
+                  disabled={user.tg_id == null}
                 />
-              </List.Item>
-            )}
-          />
-        </>
-      )}
-    </Drawer>
+                <Button
+                  className="mt-2"
+                  disabled={msgSending || !msgText.trim() || user.tg_id == null}
+                  onClick={handleSendMessage}
+                >
+                  <Send className="h-4 w-4" />
+                  Send
+                </Button>
+              </div>
+
+              <Separator />
+
+              <div>
+                <h4 className="mb-2 text-sm font-semibold">Transactions</h4>
+                {tx.length === 0 ? (
+                  <div className="py-4 text-center text-sm text-muted-foreground">
+                    No transactions
+                  </div>
+                ) : (
+                  <div className="divide-y divide-border rounded-lg border border-border">
+                    {tx.map((t) => (
+                      <div key={t.transaction_id} className="p-2.5">
+                        <div className="text-sm font-medium">
+                          {t.transaction_id} — {t.order_status}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {t.payment_method || "—"} | {t.amount ?? 0} | {t.days_ordered}d |{" "}
+                          {t.created_at || "—"}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )
+        )}
+      </SheetContent>
+    </Sheet>
   );
 }

@@ -17,7 +17,7 @@ from . import api
 from .api import set_config_provider
 from .client import RemnawaveClient, configure, get_default_client
 from .operations import apply_extend, apply_new_user, apply_update
-from .perks import apply_crm_bonus_days, apply_crm_bonus_traffic
+from .perks import apply_crm_bonus_days, apply_crm_bonus_traffic, is_free_tier_user
 from .scenarios import SubscriptionScenario, SubscriptionType, resolve_scenario
 from .segmentation import (
     DEFAULT_DAYS_THRESHOLD,
@@ -42,12 +42,19 @@ from .torrent_blocker import collect_torrent_user_uuids, fetch_torrent_blocker_r
 from . import webhooks
 from .webhooks import (
     RemnawaveWebhookPayload,
+    extract_device_model,
+    extract_device_os_version,
+    extract_device_platform,
+    extract_not_connected_after_hours,
+    extract_telegram_id,
     extract_vless_uuid,
+    is_known_webhook_pair,
     is_torrent_block_report,
     parse_webhook,
     torrent_block_ip,
     torrent_block_minutes,
     verify_webhook_signature,
+    webhook_event_catalog,
 )
 
 __all__ = [
@@ -64,6 +71,7 @@ __all__ = [
     "apply_update",
     "apply_crm_bonus_days",
     "apply_crm_bonus_traffic",
+    "is_free_tier_user",
     "DEFAULT_DAYS_THRESHOLD",
     "DEFAULT_INVOICE_MAX_AGE_HOURS",
     "DEFAULT_TORRENT_DAYS",
@@ -88,7 +96,14 @@ __all__ = [
     "verify_webhook_signature",
     "parse_webhook",
     "extract_vless_uuid",
+    "extract_telegram_id",
+    "extract_not_connected_after_hours",
+    "extract_device_model",
+    "extract_device_platform",
+    "extract_device_os_version",
+    "is_known_webhook_pair",
     "is_torrent_block_report",
     "torrent_block_minutes",
     "torrent_block_ip",
+    "webhook_event_catalog",
 ]

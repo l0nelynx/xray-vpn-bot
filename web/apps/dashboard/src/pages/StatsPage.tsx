@@ -1,53 +1,58 @@
 import { useState, useEffect, useCallback } from "react";
-import { Row, Col, Select, Typography, Card, App } from "antd";
 import {
-  WalletOutlined,
-  UserAddOutlined,
-  ShoppingOutlined,
-  RiseOutlined,
-  TeamOutlined,
-  CrownOutlined,
-  PercentageOutlined,
-  DollarOutlined,
-} from "@ant-design/icons";
+  Wallet,
+  UserPlus,
+  ShoppingCart,
+  TrendingUp,
+  Users2,
+  Crown,
+  Percent,
+  DollarSign,
+} from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@xray/ui/components/card";
+import { Alert, AlertDescription } from "@xray/ui/components/alert";
+import { Button } from "@xray/ui/components/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@xray/ui/components/select";
+import { toast } from "sonner";
 import RevenueChart from "../components/RevenueChart";
 import UserGrowthChart from "../components/UserGrowthChart";
 import PaymentMethodPieChart from "../components/PaymentMethodPieChart";
 import MetricCard from "../components/MetricCard";
 import { api } from "../api/client";
 import type { SummaryStats, OrderStatusStat } from "../api/types";
-import useIsMobile from "../hooks/useIsMobile";
 import { PERIOD_OPTIONS } from "../utils/constants";
 
 const rub = (v: number) => Math.round(v).toLocaleString("en-US");
-
-const STATUS_HEX: Record<string, string> = {
-  created: "#6C8EFF",
-  confirmed: "#34D399",
-  delivered: "#22D3EE",
-  failed: "#F87171",
-  cancelled: "#FBBF24",
-};
 
 export default function StatsPage() {
   const [period, setPeriod] = useState("month");
   const [summary, setSummary] = useState<SummaryStats | null>(null);
   const [orderStatuses, setOrderStatuses] = useState<OrderStatusStat[]>([]);
   const [loading, setLoading] = useState(true);
-  const isMobile = useIsMobile();
-  const { message } = App.useApp();
+  const [error, setError] = useState<string | null>(null);
 
-  const loadSummary = useCallback(
-    (p: string) => {
-      setLoading(true);
-      api
-        .get<SummaryStats>(`/stats/summary?period=${p}`)
-        .then(setSummary)
-        .catch(() => message.error("Failed to load statistics"))
-        .finally(() => setLoading(false));
-    },
-    [message]
-  );
+  const loadSummary = useCallback((p: string) => {
+    setLoading(true);
+    setError(null);
+    api
+      .get<SummaryStats>(`/stats/summary?period=${p}`)
+      .then((data) => {
+        setSummary(data);
+        setError(null);
+      })
+      .catch(() => {
+        setSummary(null);
+        setError("Failed to load statistics");
+        toast.error("Failed to load statistics");
+      })
+      .finally(() => setLoading(false));
+  }, []);
 
   useEffect(() => {
     loadSummary(period);
@@ -63,176 +68,163 @@ export default function StatsPage() {
   const totalOrders = orderStatuses.reduce((acc, s) => acc + s.count, 0);
   const maxStatus = Math.max(...orderStatuses.map((s) => s.count), 1);
 
-  const gap = isMobile ? 10 : 16;
-
   return (
-    <div>
-      <div
-        style={{
-          marginBottom: gap,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          flexWrap: "wrap",
-          gap: 8,
-        }}
-      >
-        <Typography.Title level={isMobile ? 5 : 4} style={{ margin: 0, color: "rgba(255,255,255,0.88)" }}>
-          Statistics
-        </Typography.Title>
-        <Select value={period} onChange={setPeriod} style={{ width: 140 }} options={PERIOD_OPTIONS} />
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-2xl font-semibold tracking-tight">Statistics</h2>
+          <p className="text-sm text-muted-foreground">
+            Deeper breakdown of revenue, growth and order health.
+          </p>
+        </div>
+        <Select value={period} onValueChange={(v: string) => setPeriod(v)}>
+          <SelectTrigger className="w-[140px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {PERIOD_OPTIONS.map((o) => (
+              <SelectItem key={o.value} value={o.value}>
+                {o.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
-      {/* Period KPIs with deltas vs previous period */}
-      <Row gutter={[gap, gap]}>
-        <Col xs={12} lg={6}>
+      {error && (
+        <Alert variant="destructive" className="flex items-center justify-between gap-3">
+          <AlertDescription>{error}</AlertDescription>
+          <Button size="sm" variant="outline" onClick={() => loadSummary(period)}>
+            Retry
+          </Button>
+        </Alert>
+      )}
+
+      {!error && (
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           <MetricCard
             label="Revenue"
             value={summary?.revenue.value ?? 0}
             prev={summary?.revenue.prev}
-            icon={<WalletOutlined />}
-            color="#A78BFF"
+            icon={<Wallet />}
             format={rub}
             suffix="₽"
             loading={loading}
           />
-        </Col>
-        <Col xs={12} lg={6}>
           <MetricCard
             label="New Users"
             value={summary?.new_users.value ?? 0}
             prev={summary?.new_users.prev}
-            icon={<UserAddOutlined />}
-            color="#34D399"
+            icon={<UserPlus />}
             loading={loading}
           />
-        </Col>
-        <Col xs={12} lg={6}>
           <MetricCard
             label="Orders"
             value={summary?.orders.value ?? 0}
             prev={summary?.orders.prev}
-            icon={<ShoppingOutlined />}
-            color="#6C8EFF"
+            icon={<ShoppingCart />}
             loading={loading}
           />
-        </Col>
-        <Col xs={12} lg={6}>
           <MetricCard
             label="Avg Order"
             value={summary?.avg_order.value ?? 0}
             prev={summary?.avg_order.prev}
-            icon={<RiseOutlined />}
-            color="#FBBF24"
+            icon={<TrendingUp />}
             format={rub}
             suffix="₽"
             loading={loading}
           />
-        </Col>
-      </Row>
+        </div>
+      )}
 
-      {/* All-time context */}
-      <Row gutter={[gap, gap]} style={{ marginTop: gap }}>
-        <Col xs={12} lg={6}>
-          <MetricCard label="Total Users" value={summary?.totals.total_users ?? 0} icon={<TeamOutlined />} color="#6C8EFF" loading={loading} />
-        </Col>
-        <Col xs={12} lg={6}>
-          <MetricCard label="Active Subs" value={summary?.totals.active_subs ?? 0} icon={<CrownOutlined />} color="#34D399" loading={loading} />
-        </Col>
-        <Col xs={12} lg={6}>
+      {!error && (
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <MetricCard
+            label="Total Users"
+            value={summary?.totals.total_users ?? 0}
+            icon={<Users2 />}
+            loading={loading}
+          />
+          <MetricCard
+            label="Active Subs"
+            value={summary?.totals.active_subs ?? 0}
+            icon={<Crown />}
+            loading={loading}
+          />
           <MetricCard
             label="Conversion"
             value={summary?.totals.conversion ?? 0}
-            icon={<PercentageOutlined />}
-            color="#22D3EE"
+            icon={<Percent />}
             format={(v) => v.toFixed(1)}
             suffix="%"
             loading={loading}
           />
-        </Col>
-        <Col xs={12} lg={6}>
           <MetricCard
             label="Lifetime Revenue"
             value={summary?.totals.revenue_all_time ?? 0}
-            icon={<DollarOutlined />}
-            color="#A78BFF"
+            icon={<DollarSign />}
             format={rub}
             suffix="₽"
             loading={loading}
           />
-        </Col>
-      </Row>
+        </div>
+      )}
 
-      {/* Revenue + payment methods */}
-      <Row gutter={[gap, gap]} style={{ marginTop: gap }}>
-        <Col xs={24} lg={16}>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="lg:col-span-2">
           <RevenueChart period={period} />
-        </Col>
-        <Col xs={24} lg={8}>
+        </div>
+        <div>
           <PaymentMethodPieChart />
-        </Col>
-      </Row>
+        </div>
+      </div>
 
-      {/* Growth + order-status breakdown */}
-      <Row gutter={[gap, gap]} style={{ marginTop: gap }}>
-        <Col xs={24} lg={12}>
-          <UserGrowthChart period={period} />
-        </Col>
-        <Col xs={24} lg={12}>
-          <Card title={<span style={{ color: "rgba(255,255,255,0.85)" }}>Order Statuses</span>}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <UserGrowthChart period={period} />
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Order Statuses</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col gap-4">
               {orderStatuses.length === 0 && (
-                <div style={{ color: "rgba(255,255,255,0.35)", textAlign: "center", padding: 20 }}>No data</div>
+                <div className="py-5 text-center text-muted-foreground">No data for this period</div>
               )}
               {orderStatuses.map((s) => {
                 const pct = totalOrders ? (s.count / totalOrders) * 100 : 0;
                 const barPct = (s.count / maxStatus) * 100;
-                const hex = STATUS_HEX[s.status] || "#6C8EFF";
                 return (
                   <div key={s.status}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                      <span style={{ fontSize: 13, color: "rgba(255,255,255,0.7)", textTransform: "capitalize" }}>
-                        {s.status}
-                      </span>
-                      <span style={{ fontSize: 13 }}>
-                        <span style={{ fontWeight: 700, color: "#E2E8F8" }}>{s.count.toLocaleString("en-US")}</span>
-                        <span style={{ color: "rgba(255,255,255,0.35)", marginLeft: 6, fontSize: 12 }}>{pct.toFixed(0)}%</span>
+                    <div className="mb-1.5 flex items-center justify-between">
+                      <span className="text-sm capitalize text-muted-foreground">{s.status}</span>
+                      <span className="text-sm">
+                        <span className="font-semibold">{s.count.toLocaleString("en-US")}</span>
+                        <span className="ml-1.5 text-xs text-muted-foreground">
+                          {pct.toFixed(0)}%
+                        </span>
                       </span>
                     </div>
-                    <div style={{ height: 8, borderRadius: 6, background: "rgba(255,255,255,0.05)", overflow: "hidden" }}>
+                    <div className="h-2 overflow-hidden rounded-md bg-muted">
                       <div
-                        style={{
-                          width: `${barPct}%`,
-                          height: "100%",
-                          borderRadius: 6,
-                          background: `linear-gradient(90deg, ${hex}99, ${hex})`,
-                          transition: "width 0.4s ease",
-                        }}
+                        className="h-full rounded-md bg-primary transition-all"
+                        style={{ width: `${barPct}%` }}
                       />
                     </div>
                   </div>
                 );
               })}
               {totalOrders > 0 && (
-                <div
-                  style={{
-                    marginTop: 4,
-                    paddingTop: 12,
-                    borderTop: "1px solid rgba(255,255,255,0.06)",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    fontSize: 12,
-                    color: "rgba(255,255,255,0.45)",
-                  }}
-                >
+                <div className="mt-1 flex justify-between border-t pt-3 text-xs text-muted-foreground">
                   <span>Total orders</span>
-                  <span style={{ color: "#E2E8F8", fontWeight: 600 }}>{totalOrders.toLocaleString("en-US")}</span>
+                  <span className="font-semibold text-foreground">
+                    {totalOrders.toLocaleString("en-US")}
+                  </span>
                 </div>
               )}
             </div>
-          </Card>
-        </Col>
-      </Row>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

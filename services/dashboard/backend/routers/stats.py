@@ -1,10 +1,10 @@
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select, func
+from sqlalchemy import or_, select, func
 
 from ..auth import get_current_user
-from ..currency import convert_to_rub, get_rates
+from ..currency import NON_REVENUE_PAYMENT_METHODS, convert_to_rub, get_rates
 from ..database.models import User, Transaction
 from ..database.session import async_session
 
@@ -13,6 +13,14 @@ from ..database.session import async_session
 from common_db.repo import users as _repo_users
 
 router = APIRouter(prefix="/api/stats", tags=["stats"])
+
+
+def _revenue_payment_filter():
+    """Exclude wallet spend (BONUS_CREDITS) from cash revenue / paid-order KPIs."""
+    return or_(
+        Transaction.payment_method.is_(None),
+        Transaction.payment_method.notin_(tuple(NON_REVENUE_PAYMENT_METHODS)),
+    )
 
 
 def _period_range(period: str):
@@ -88,7 +96,10 @@ async def overview(_: str = Depends(get_current_user)):
                 Transaction.payment_method,
                 func.sum(Transaction.amount).label("total"),
             )
-            .where(Transaction.order_status.in_(_repo_users.PAID_ORDER_STATUSES))
+            .where(
+                Transaction.order_status.in_(_repo_users.PAID_ORDER_STATUSES),
+                _revenue_payment_filter(),
+            )
             .group_by(Transaction.payment_method)
         )
         revenue = sum(
@@ -97,7 +108,8 @@ async def overview(_: str = Depends(get_current_user)):
         )
         order_count = await session.scalar(
             select(func.count()).select_from(Transaction).where(
-                Transaction.order_status.in_(_repo_users.PAID_ORDER_STATUSES)
+                Transaction.order_status.in_(_repo_users.PAID_ORDER_STATUSES),
+                _revenue_payment_filter(),
             )
         ) or 0
         avg_order = round(revenue / order_count, 2) if order_count else 0
@@ -127,6 +139,7 @@ async def _revenue_in_range(session, rates, date_from, date_to) -> float:
         .where(
             Transaction.order_status.in_(_repo_users.PAID_ORDER_STATUSES),
             Transaction.amount != None,
+            _revenue_payment_filter(),
         )
         .group_by(Transaction.payment_method)
     )
@@ -140,7 +153,8 @@ async def _revenue_in_range(session, rates, date_from, date_to) -> float:
 
 async def _orders_in_range(session, date_from, date_to) -> int:
     q = select(func.count()).select_from(Transaction).where(
-        Transaction.order_status.in_(_repo_users.PAID_ORDER_STATUSES)
+        Transaction.order_status.in_(_repo_users.PAID_ORDER_STATUSES),
+        _revenue_payment_filter(),
     )
     if date_from:
         q = q.where(Transaction.created_at >= date_from)
@@ -191,7 +205,10 @@ async def summary(period: str = Query("month"), _: str = Depends(get_current_use
 
         method_rows = await session.execute(
             select(Transaction.payment_method, func.sum(Transaction.amount).label("total"))
-            .where(Transaction.order_status.in_(_repo_users.PAID_ORDER_STATUSES))
+            .where(
+                Transaction.order_status.in_(_repo_users.PAID_ORDER_STATUSES),
+                _revenue_payment_filter(),
+            )
             .group_by(Transaction.payment_method)
         )
         revenue_all = sum(
@@ -245,6 +262,7 @@ async def revenue(
                 Transaction.order_status.in_(_repo_users.PAID_ORDER_STATUSES),
                 Transaction.created_at != None,
                 Transaction.amount != None,
+                _revenue_payment_filter(),
             )
             .group_by("date", Transaction.payment_method)
             .order_by("date")
@@ -352,6 +370,7 @@ async def payment_methods(_: str = Depends(get_current_user)):
             .where(
                 Transaction.order_status.in_(_repo_users.PAID_ORDER_STATUSES),
                 Transaction.payment_method != None,
+                _revenue_payment_filter(),
             )
             .group_by(Transaction.payment_method)
         )

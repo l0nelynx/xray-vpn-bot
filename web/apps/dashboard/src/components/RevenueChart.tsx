@@ -1,91 +1,78 @@
-import { useEffect, useState, useMemo } from "react";
-import { Card, Spin } from "antd";
-import { Column } from "@ant-design/charts";
+import { useEffect, useState } from "react";
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { api } from "../api/client";
 import type { RevenuePoint } from "../api/types";
 import useIsMobile from "../hooks/useIsMobile";
+import ChartCard from "./ChartCard";
 
 interface Props {
   period?: string;
 }
 
+const AXIS = { fill: "oklch(0.68 0 0)", fontSize: 11 };
+const GRID = "oklch(1 0 0 / 8%)";
+const TOOLTIP = {
+  background: "oklch(0.18 0 0)",
+  border: "1px solid oklch(1 0 0 / 14%)",
+  borderRadius: 8,
+  color: "oklch(0.985 0 0)",
+  fontSize: 12,
+};
+
 export default function RevenueChart({ period = "month" }: Props) {
   const [data, setData] = useState<RevenuePoint[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const isMobile = useIsMobile();
 
-  useEffect(() => {
+  const load = () => {
     setLoading(true);
+    setError(null);
     api
       .get<RevenuePoint[]>(`/stats/revenue?period=${period}`)
-      .then(setData)
+      .then((d) => {
+        setData(d);
+        setError(null);
+      })
+      .catch(() => {
+        setData([]);
+        setError("Failed to load revenue chart");
+      })
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [period]);
 
-  // Replace zero values with a small visual minimum so stems are always visible
-  const chartData = useMemo(() => {
-    const maxVal = Math.max(...data.map((d) => d.revenue), 1);
-    const minVisible = maxVal * 0.015; // 1.5% of max
-    return data.map((d) => ({
-      ...d,
-      _realRevenue: d.revenue,
-      revenue: d.revenue === 0 ? minVisible : d.revenue,
-    }));
-  }, [data]);
-
-  const chartHeight = isMobile ? 220 : 300;
-
-  if (loading)
-    return (
-      <Card style={{ minHeight: chartHeight + 80 }}>
-        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: chartHeight }}>
-          <Spin />
-        </div>
-      </Card>
-    );
+  const chartHeight = isMobile ? 240 : 280;
+  const isEmpty = data.length === 0 || data.every((d) => d.revenue === 0);
 
   return (
-    <Card
-      title={<span style={{ color: "rgba(255,255,255,0.85)" }}>Revenue</span>}
+    <ChartCard
+      title="Revenue"
+      description="Daily revenue for the selected period."
+      loading={loading}
+      error={error}
+      empty={isEmpty}
+      onRetry={load}
+      height={chartHeight}
     >
-      <Column
-        data={chartData}
-        xField="date"
-        yField="revenue"
-        height={chartHeight}
-        style={{
-          radiusTopLeft: 4,
-          radiusTopRight: 4,
-          fill: (d: Record<string, unknown>) =>
-            (d as { _realRevenue: number })._realRevenue === 0
-              ? "rgba(124, 156, 255, 0.25)"
-              : "#7C9CFF",
-          maxWidth: isMobile ? 16 : 32,
-        }}
-        axis={{
-          x: {
-            labelFill: "rgba(255,255,255,0.75)",
-            labelFontSize: isMobile ? 9 : 11,
-            labelAutoRotate: true,
-            labelAutoHide: true,
-            lineStroke: "rgba(255,255,255,0.12)",
-            tick: false,
-          },
-          y: {
-            labelFill: "rgba(255,255,255,0.75)",
-            labelFontSize: isMobile ? 9 : 11,
-            gridStroke: "rgba(255,255,255,0.08)",
-            gridLineDash: [3, 3],
-          },
-        }}
-        tooltip={{
-          channel: "y",
-          valueFormatter: (_v: number, datum: Record<string, unknown>) => {
-            const real = (datum as { _realRevenue?: number })?._realRevenue;
-            return `${real ?? _v}`;
-          },
-        }}
-      />
-    </Card>
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={data} margin={{ top: 8, right: 8, left: 4, bottom: 4 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke={GRID} vertical={false} />
+          <XAxis dataKey="date" tick={AXIS} stroke={GRID} tickMargin={8} />
+          <YAxis tick={AXIS} stroke={GRID} tickMargin={8} width={48} />
+          <Tooltip contentStyle={TOOLTIP} cursor={{ fill: "oklch(1 0 0 / 4%)" }} />
+          <Bar
+            dataKey="revenue"
+            fill="oklch(0.92 0 0)"
+            radius={[4, 4, 0, 0]}
+            maxBarSize={isMobile ? 18 : 28}
+          />
+        </BarChart>
+      </ResponsiveContainer>
+    </ChartCard>
   );
 }

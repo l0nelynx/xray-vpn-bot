@@ -12,7 +12,7 @@ Schema canon (synced with production after Alembic 0001..0011):
 """
 from __future__ import annotations
 
-from sqlalchemy import BigInteger, Boolean, Index, String
+from sqlalchemy import BigInteger, Boolean, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..base import Base
@@ -31,6 +31,9 @@ class User(Base):
 
     # VLESS UUID assigned by the VPN provider.
     vless_uuid: Mapped[str] = mapped_column(String(100), nullable=True)
+
+    # Remnawave panel numeric user id (int64). Nullable until backfilled.
+    rw_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
     # API provider key. Python default ≠ DB server_default by design — see
     # module docstring. Don't change without an explicit Alembic migration.
@@ -54,6 +57,11 @@ class User(Base):
     # VIP flag (Sub Clean protection). BigInteger on prod since 0007.
     vip: Mapped[int] = mapped_column(
         BigInteger, default=0, server_default="0", nullable=True
+    )
+
+    # Spendable subscription-day credits (1 credit = 1 day on any tariff).
+    bonus_credits: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", nullable=False
     )
 
     # Android API: argon2id password hash (NULL for Telegram-only accounts).

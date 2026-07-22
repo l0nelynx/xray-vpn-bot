@@ -123,9 +123,9 @@ client-supplied amounts.
 
 ### Promo discounts
 
-Effective discount is calculated server-side (`promos.get_effective_discount`) at
-invoice creation. The UI may show an estimated discount, but the invoice amount
-is authoritative.
+Promo **percentage discounts on invoices are not used** anymore. Users redeem
+codes for **bonus credits** and can pay with the wallet separately. See
+[Referral & promocodes](referral.md).
 
 ### Post-payment
 
@@ -205,17 +205,21 @@ Telegram notification.
 
 ## Promo & referral
 
-**Route:** `/settings`, `/invite`
+**Route:** `/settings`, `/invite`, `/referral-rules`
+
+Full guide: **[Referral & promocodes](referral.md)**.
 
 | Feature | Endpoint |
 |---------|----------|
-| Activate promo code | `POST /api/promo` |
-| View active promo | `GET /api/promo` |
-| Referral stats | `GET /api/promo/referral` |
+| Wallet + last code | `GET /api/promo` → `{ balance, last_promo_code, default_credit_grant }` |
+| Activate code | `POST /api/promo` → credits wallet immediately |
+| Referral card | `GET /api/promo/referral` → code, deeplink, points stats |
 
-Referral page shows the user's code, deeplink, share button, and reward stats.
+Referral codes are for **new users only** (no prior transactions). Promotional
+codes can be redeemed by anyone (each code once). Owner rewards are **bonus
+points**, not subscription days.
 
-Promo settings are configured in Dashboard → Promocodes.
+Settings: Dashboard → Promocodes.
 
 ---
 

@@ -21,15 +21,15 @@ _VALID_TYPES = {PROMO_TYPE_REFERRAL, PROMO_TYPE_PROMOTIONAL}
 
 class PromoCreateRequest(BaseModel):
     promo_code: str = Field(min_length=2, max_length=20)
-    discount_percent: int | None = Field(default=None, ge=0, le=100)
+    credit_grant: int | None = Field(default=None, ge=0, le=3650)
     owner_tg_id: int | None = None
     promo_type: str = Field(default=PROMO_TYPE_PROMOTIONAL)
 
 
 class PromoSettingsRequest(BaseModel):
-    default_discount_percent: int = Field(ge=0, le=100)
-    days_reward_per_30: int = Field(ge=0, le=365)
-    reward_cap_days: int = Field(ge=0, le=3650)
+    default_credit_grant: int = Field(ge=0, le=3650)
+    points_reward_per_30: int = Field(ge=0, le=3650)
+    reward_cap_points: int = Field(ge=0, le=365_000)
 
 
 @router.get("")
@@ -61,8 +61,9 @@ async def list_promos(
         "owner_tg_id": Promo.tg_id,
         "usage_count": usage_sq,
         "days_purchased": Promo.days_purchased,
-        "days_rewarded": Promo.days_rewarded,
+        "points_rewarded": Promo.points_rewarded,
         "discount_percent": Promo.discount_percent,
+        "credit_grant": Promo.credit_grant,
     }
 
     async with async_session() as session:
@@ -96,8 +97,9 @@ async def list_promos(
                 "owner_tg_id": promo.tg_id,
                 "usage_count": usage_count or 0,
                 "days_purchased": promo.days_purchased,
-                "days_rewarded": promo.days_rewarded,
+                "points_rewarded": promo.points_rewarded,
                 "discount_percent": promo.discount_percent,
+                "credit_grant": promo.credit_grant,
             }
             for promo, owner_username, usage_count in rows
         ]
@@ -131,7 +133,7 @@ async def create_promo(body: PromoCreateRequest, _: str = Depends(get_current_us
         promo = Promo(
             tg_id=owner_tg_id,
             promo_code=code,
-            discount_percent=body.discount_percent,
+            credit_grant=body.credit_grant,
             promo_type=promo_type,
         )
         session.add(promo)
@@ -140,7 +142,7 @@ async def create_promo(body: PromoCreateRequest, _: str = Depends(get_current_us
     return {
         "promo_code": code,
         "owner_tg_id": owner_tg_id,
-        "discount_percent": body.discount_percent,
+        "credit_grant": body.credit_grant,
         "promo_type": promo_type,
     }
 
@@ -167,9 +169,10 @@ async def get_promo_settings(_: str = Depends(get_current_user)):
         settings = await _repo_system.get_promo_settings(session)
         await session.commit()
         return {
+            "default_credit_grant": settings.default_credit_grant,
             "default_discount_percent": settings.default_discount_percent,
-            "days_reward_per_30": settings.days_reward_per_30,
-            "reward_cap_days": settings.reward_cap_days,
+            "points_reward_per_30": settings.points_reward_per_30,
+            "reward_cap_points": settings.reward_cap_points,
         }
 
 
@@ -180,15 +183,40 @@ async def update_promo_settings(
 ):
     async with async_session() as session:
         settings = await _repo_system.get_promo_settings(session)
-        settings.default_discount_percent = body.default_discount_percent
-        settings.days_reward_per_30 = body.days_reward_per_30
-        settings.reward_cap_days = body.reward_cap_days
+        settings.default_credit_grant = body.default_credit_grant
+        settings.points_reward_per_30 = body.points_reward_per_30
+        settings.reward_cap_points = body.reward_cap_points
         await session.commit()
     return {
-        "default_discount_percent": body.default_discount_percent,
-        "days_reward_per_30": body.days_reward_per_30,
-        "reward_cap_days": body.reward_cap_days,
+        "default_credit_grant": body.default_credit_grant,
+        "points_reward_per_30": body.points_reward_per_30,
+        "reward_cap_points": body.reward_cap_points,
     }
+
+
+@router.get("/referral-stats")
+async def referral_stats(
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=100),
+    sort: str = Query(""),
+    order: str = Query("desc"),
+    search: str = Query(""),
+    metric: str = Query("total"),
+    _: str = Depends(get_current_user),
+):
+    if metric not in ("total", "paying"):
+        metric = "total"
+    async with async_session() as session:
+        items, total = await _repo_promos.list_referral_stats_paginated(
+            session,
+            page=page,
+            per_page=per_page,
+            sort=sort,
+            order=order,
+            search=search,
+            metric=metric,
+        )
+    return {"items": items, "total": total, "page": page, "per_page": per_page}
 
 
 @router.get("/{code}/users")

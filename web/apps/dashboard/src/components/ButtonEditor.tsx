@@ -1,5 +1,25 @@
 import { useEffect, useState } from "react";
-import { Modal, Form, Input, Select, Switch, Typography, Divider } from "antd";
+import { toast } from "sonner";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@xray/ui/components/dialog";
+import { Input } from "@xray/ui/components/input";
+import { Label } from "@xray/ui/components/label";
+import { Switch } from "@xray/ui/components/switch";
+import { Button } from "@xray/ui/components/button";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@xray/ui/components/select";
 import type { MenuButton, MenuScreen } from "../api/types";
 import { api } from "../api/client";
 
@@ -25,6 +45,16 @@ const KNOWN_CALLBACKS = [
   { value: "Telemt_Free", label: "Telemt_Free — Telemt free (channel sub)" },
 ];
 
+const DEFAULTS: Partial<MenuButton> = {
+  text_ru: "",
+  text_en: "",
+  callback_data: "",
+  url: "",
+  button_type: "callback",
+  is_active: true,
+  visibility_condition: "always",
+};
+
 interface ButtonEditorProps {
   open: boolean;
   button: Partial<MenuButton> | null;
@@ -33,9 +63,8 @@ interface ButtonEditorProps {
 }
 
 export default function ButtonEditor({ open, button, onSave, onCancel }: ButtonEditorProps) {
-  const [form] = Form.useForm();
   const [screens, setScreens] = useState<MenuScreen[]>([]);
-  const buttonType = Form.useWatch("button_type", form);
+  const [values, setValues] = useState<Partial<MenuButton>>(DEFAULTS);
 
   useEffect(() => {
     if (open) {
@@ -43,115 +72,143 @@ export default function ButtonEditor({ open, button, onSave, onCancel }: ButtonE
     }
   }, [open]);
 
-  // Sync form values when button or open changes to avoid stale data
   useEffect(() => {
-    if (open && button) {
-      form.setFieldsValue(button);
+    if (open) setValues({ ...DEFAULTS, ...(button || {}) });
+  }, [open, button]);
+
+  const set = <K extends keyof MenuButton>(field: K, value: MenuButton[K]) =>
+    setValues((v) => ({ ...v, [field]: value }));
+
+  const buttonType = values.button_type;
+  const isUrlType = buttonType === "url" || buttonType === "webapp";
+
+  const handleOk = () => {
+    if (!values.text_ru?.trim() || !values.text_en?.trim()) {
+      toast.error("Text (RU) and Text (EN) are required");
+      return;
     }
-  }, [open, button, form]);
-
-  const screenOptions = screens.map((s) => ({
-    value: `screen:${s.slug}`,
-    label: `${s.name} (${s.slug})`,
-  }));
-
-  const allCallbackOptions = [
-    {
-      label: "Open Screen (dynamic)",
-      options: screenOptions,
-    },
-    {
-      label: "Bot Handlers (hardcoded)",
-      options: KNOWN_CALLBACKS,
-    },
-  ];
-
-  const handleOk = async () => {
-    const values = await form.validateFields();
+    if (isUrlType && !values.url?.trim()) {
+      toast.error("URL is required");
+      return;
+    }
     onSave({ ...button, ...values });
   };
 
   return (
-    <Modal
-      title={button?.id ? "Edit Button" : "New Button"}
-      open={open}
-      onOk={handleOk}
-      onCancel={onCancel}
-      destroyOnClose
-    >
-      <Form
-        form={form}
-        layout="vertical"
-        initialValues={button || {
-          text_ru: "",
-          text_en: "",
-          callback_data: "",
-          url: "",
-          button_type: "callback",
-          is_active: true,
-          visibility_condition: "always",
-        }}
-        preserve={false}
-      >
-        <Form.Item name="text_ru" label="Text (RU)" rules={[{ required: true }]}>
-          <Input />
-        </Form.Item>
-        <Form.Item name="text_en" label="Text (EN)" rules={[{ required: true }]}>
-          <Input />
-        </Form.Item>
-        <Form.Item name="button_type" label="Type">
-          <Select
-            options={[
-              { value: "callback", label: "Callback" },
-              { value: "url", label: "URL" },
-              { value: "webapp", label: "WebApp" },
-              { value: "tariff", label: "Tariff" },
-            ]}
-          />
-        </Form.Item>
+    <Dialog open={open} onOpenChange={(o: boolean) => !o && onCancel()}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{button?.id ? "Edit Button" : "New Button"}</DialogTitle>
+        </DialogHeader>
 
-        {buttonType !== "url" && buttonType !== "webapp" && (
-          <>
-            <Form.Item
-              name="callback_data"
-              label="Callback Data"
-              tooltip="Select a bot handler or a screen from the constructor"
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label>Text (RU)</Label>
+            <Input value={values.text_ru ?? ""} onChange={(e) => set("text_ru", e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Text (EN)</Label>
+            <Input value={values.text_en ?? ""} onChange={(e) => set("text_en", e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Type</Label>
+            <Select
+              value={values.button_type ?? "callback"}
+              onValueChange={(v: string) => set("button_type", v)}
             >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="callback">Callback</SelectItem>
+                <SelectItem value="url">URL</SelectItem>
+                <SelectItem value="webapp">WebApp</SelectItem>
+                <SelectItem value="tariff">Tariff</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {!isUrlType && (
+            <div className="space-y-1.5">
+              <Label>Callback Data</Label>
               <Select
-                showSearch
-                allowClear
-                options={allCallbackOptions}
-                placeholder="Select handler or screen..."
-                filterOption={(input, option: any) =>
-                  (option?.value ?? "").toLowerCase().includes(input.toLowerCase()) ||
-                  (option?.label ?? "").toLowerCase().includes(input.toLowerCase())
-                }
+                value={values.callback_data || undefined}
+                onValueChange={(v: string) => set("callback_data", v)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select handler or screen..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {screens.length > 0 && (
+                    <SelectGroup>
+                      <SelectLabel>Open Screen (dynamic)</SelectLabel>
+                      {screens.map((s) => (
+                        <SelectItem key={s.slug} value={`screen:${s.slug}`}>
+                          {s.name} ({s.slug})
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  )}
+                  <SelectGroup>
+                    <SelectLabel>Bot Handlers (hardcoded)</SelectLabel>
+                    {KNOWN_CALLBACKS.map((c) => (
+                      <SelectItem key={c.value} value={c.value}>
+                        {c.label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground">
+                "Open Screen" items use prefix <code>screen:</code> — the bot renders them
+                dynamically from the constructor.
+              </p>
+            </div>
+          )}
+
+          {isUrlType && (
+            <div className="space-y-1.5">
+              <Label>URL</Label>
+              <Input
+                placeholder="https://..."
+                value={values.url ?? ""}
+                onChange={(e) => set("url", e.target.value)}
               />
-            </Form.Item>
-            <Typography.Text type="secondary" style={{ fontSize: 11, display: "block", marginTop: -16, marginBottom: 12 }}>
-              "Open Screen" items use prefix <code>screen:</code> — the bot renders them dynamically from the constructor.
-            </Typography.Text>
-          </>
-        )}
+            </div>
+          )}
 
-        {(buttonType === "url" || buttonType === "webapp") && (
-          <Form.Item name="url" label="URL" rules={[{ required: true }]}>
-            <Input placeholder="https://..." />
-          </Form.Item>
-        )}
+          <div className="space-y-1.5">
+            <Label>Visibility</Label>
+            <Select
+              value={values.visibility_condition ?? "always"}
+              onValueChange={(v: string) => set("visibility_condition", v)}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="always">Always</SelectItem>
+                <SelectItem value="show_promo">Show Promo Only</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-        <Form.Item name="visibility_condition" label="Visibility">
-          <Select
-            options={[
-              { value: "always", label: "Always" },
-              { value: "show_promo", label: "Show Promo Only" },
-            ]}
-          />
-        </Form.Item>
-        <Form.Item name="is_active" label="Active" valuePropName="checked">
-          <Switch />
-        </Form.Item>
-      </Form>
-    </Modal>
+          <div className="flex items-center gap-2">
+            <Switch
+              checked={!!values.is_active}
+              onCheckedChange={(v: boolean) => set("is_active", v)}
+            />
+            <Label>Active</Label>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button onClick={handleOk}>OK</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

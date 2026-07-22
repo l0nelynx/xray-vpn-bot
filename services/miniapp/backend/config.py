@@ -2,6 +2,8 @@ import logging
 import os
 import yaml
 
+from common_db.runtime_config import DualSourceConfig, set_crypto_secret
+
 CONFIG_PATH = os.environ.get("CONFIG_PATH", "/app/config.yml")
 
 _LOG_LEVEL_ALIASES = {
@@ -14,15 +16,35 @@ _LOG_LEVEL_ALIASES = {
     "critical": logging.CRITICAL,
 }
 
-_config = None
+_yaml_config = None
+_config: DualSourceConfig | None = None
 
 
-def get_config() -> dict:
-    global _config
+def _load_yaml() -> dict:
+    with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+        return yaml.safe_load(f) or {}
+
+
+def get_config() -> DualSourceConfig:
+    global _yaml_config, _config
     if _config is None:
-        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-            _config = yaml.safe_load(f) or {}
+        _yaml_config = _load_yaml()
+        set_crypto_secret(
+            str(
+                _yaml_config.get("payments_secrets_key")
+                or _yaml_config.get("dashboard_secret")
+                or ""
+            )
+        )
+        _config = DualSourceConfig(_yaml_config)
     return _config
+
+
+def get_yaml_config() -> dict:
+    """Raw YAML dict (no DB overlay) — used for Dashboard import / source display."""
+    get_config()
+    assert _yaml_config is not None
+    return _yaml_config
 
 
 def get_log_level() -> int:
@@ -139,27 +161,9 @@ _remna.set_config_provider(lambda: {
 # Wire the shared payments package to the miniapp's config (replaces the local
 # miniapp.backend.payments package).
 import payments as _payments
+from common_db.runtime_config import payments_config_kwargs
 
-_payments.set_config_provider(lambda: _payments.PaymentsConfig(
-    apay_id=get_apay_id(),
-    apay_secret=get_apay_secret(),
-    apay_api_url=get_apay_api_url(),
-    crypto_bot_token=get_crypto_bot_token(),
-    crystal_login=get_crystal_login(),
-    crystal_secret=get_crystal_secret(),
-    crystal_salt=get_crystal_salt(),
-    crystal_webhook=get_crystal_webhook(),
-    platega_merchant_id=get_platega_merchant_id(),
-    platega_api_key=get_platega_api_key(),
-    platega_url=get_platega_url(),
-    platega_payment_method=get_platega_payment_method(),
-    paritypay_shop_id=get_paritypay_shop_id(),
-    paritypay_secret_1=get_paritypay_secret_1(),
-    paritypay_secret_2=get_paritypay_secret_2(),
-    paritypay_url=get_paritypay_url(),
-    paritypay_webhook=get_paritypay_webhook(),
-    paritypay_service=get_paritypay_service(),
-))
+_payments.set_config_provider(lambda: _payments.PaymentsConfig(**payments_config_kwargs(get_config())))
 
 
 def get_apay_api_url() -> str:

@@ -18,9 +18,11 @@ from app.api.paritypay import payment_webhook_handler as paritypay_webhook_handl
 from app.api.remnawave_webhook import remnawave_webhook_handler
 from app.admin import router as router_admin
 from app.handlers.base import router as router_base
+from app.handlers.giveaways import giveaway_router
 from app.handlers.devices import router as router_devices
 from app.handlers.events import start_bot, stop_bot
-from app.settings import bot, admin_bot, cp, run_webserver, app_uvi, limiter, secrets
+from app.middlewares import MaintenanceMiddleware
+from app.settings import bot, admin_bot, cp, run_webserver, app_uvi, limiter, secrets, _yaml_secrets
 
 app_uvi.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -42,8 +44,16 @@ class UsernameRequiredMiddleware(BaseMiddleware):
 
 # Инициализация основного бота
 dp = Dispatcher()
+_admin_id = secrets.get("admin_id")
+try:
+    _admin_id_int = int(_admin_id) if _admin_id is not None else None
+except (TypeError, ValueError):
+    _admin_id_int = None
+dp.message.middleware(MaintenanceMiddleware(_admin_id_int))
+dp.callback_query.middleware(MaintenanceMiddleware(_admin_id_int))
 dp.callback_query.middleware(UsernameRequiredMiddleware())
 dp.include_router(router_base)
+dp.include_router(giveaway_router)
 dp.include_router(router_devices)
 dp.startup.register(start_bot)
 dp.shutdown.register(stop_bot)
@@ -110,8 +120,19 @@ async def on_startup(dispatcher, **kwargs):
     # Requires a bot restart to take effect after toggling in Dashboard.
     from app.database.models import async_session
     from common_db.repo.system import get_bot_feature_flags
+    from common_db.runtime_config import bootstrap_runtime_overlay, runtime_overlay_poll_loop
     from app.handlers import events as _events
     from app.admin.backup import scheduled_backup_loop
+    from app.settings import _yaml_secrets
+
+    crypto_secret = str(
+        _yaml_secrets.get("payments_secrets_key")
+        or _yaml_secrets.get("dashboard_secret")
+        or ""
+    )
+    await bootstrap_runtime_overlay(async_session, _yaml_secrets, crypto_secret=crypto_secret)
+    asyncio.create_task(runtime_overlay_poll_loop(async_session))
+
     async with async_session() as session:
         flags = await get_bot_feature_flags(session)
         _events._legacy_constructor_enabled = flags.legacy_bot_constructor

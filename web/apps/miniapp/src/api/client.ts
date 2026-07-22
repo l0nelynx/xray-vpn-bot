@@ -44,6 +44,13 @@ export interface MeResponse {
   links: LinksInfo;
 }
 
+export type UiLanguage = "ru" | "en";
+
+export const me = {
+  setLanguage: (language: UiLanguage) =>
+    api.patch<UserInfo>("/me/language", { language }),
+};
+
 export interface TicketSummary {
   id: number;
   subject: string;
@@ -142,8 +149,11 @@ export interface InvoiceResponse {
 
 export const payments = {
   listProviders: () => api.get<ProvidersResponse>("/payments/providers"),
+  getBalance: () => api.get<{ balance: number }>("/payments/balance"),
   createInvoice: (body: InvoiceCreateRequest) =>
     api.post<InvoiceResponse>("/payments/invoice", body),
+  payWithCredits: (body: { node_id: number }) =>
+    api.post<PayCreditsResponse>("/payments/pay-credits", body),
 };
 
 export type MenuNodeAction = "buttons" | "invoice";
@@ -155,6 +165,7 @@ export interface MenuInvoice {
   days: number | null;
   tariff_slug: string | null;
   method: string | null;
+  points_cost?: number;
 }
 
 export interface MenuNode {
@@ -175,16 +186,27 @@ export const menu = {
 };
 
 export interface PromoState {
-  can_activate: boolean;
-  active_promo: string | null;
-  discount_percent: number;
-  default_discount_percent: number;
+  balance: number;
+  last_promo_code: string | null;
+  default_credit_grant: number;
 }
 
 export interface PromoActivateResponse {
   ok: boolean;
-  active_promo: string;
-  discount_percent: number;
+  promo_code: string;
+  credit_grant: number;
+  balance: number;
+}
+
+export interface PayCreditsResponse {
+  ok: boolean;
+  transaction_id?: string;
+  points_spent?: number;
+  points_cost?: number;
+  credits_spent?: number;
+  balance_after?: number;
+  subscription_url?: string | null;
+  message?: string | null;
 }
 
 export const promo = {
@@ -196,11 +218,11 @@ export const promo = {
 export interface ReferralState {
   code: string;
   deeplink: string;
-  discount_percent: number;
-  days_reward_per_30: number;
-  reward_cap_days: number;
+  credit_grant: number;
+  points_reward_per_30: number;
+  reward_cap_points: number;
   days_purchased: number;
-  days_rewarded: number;
+  points_rewarded: number;
 }
 
 export const referral = {

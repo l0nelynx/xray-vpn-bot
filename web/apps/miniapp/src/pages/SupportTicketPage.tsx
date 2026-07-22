@@ -1,47 +1,43 @@
-import { ArrowLeftOutlined, PaperClipOutlined, SendOutlined } from "@ant-design/icons";
-import {
-  Alert,
-  Button,
-  Card,
-  Descriptions,
-  Image,
-  Input,
-  Space,
-  Tag,
-  Typography,
-} from "antd";
-import dayjs from "dayjs";
+import { ArrowLeft, Paperclip, Send, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router";
+import { Alert, AlertTitle } from "@xray/ui/components/alert";
+import { Badge } from "@xray/ui/components/badge";
+import { Button } from "@xray/ui/components/button";
+import { Card, CardContent } from "@xray/ui/components/card";
+import { Dialog, DialogContent } from "@xray/ui/components/dialog";
+import { Textarea } from "@xray/ui/components/textarea";
 import { AttachmentOut, MessageItem, TicketDetail, api, support } from "../api/client";
 import { useAuthedImage } from "../hooks/useAuthedImage";
+import { useT } from "../i18n/LocaleContext";
 
-const STATUS_LABELS: Record<string, string> = {
-  open: "Открыт",
-  in_progress: "В работе",
-  closed: "Закрыт",
+const STATUS_KEYS: Record<string, string> = {
+  open: "tickets.status.open",
+  in_progress: "tickets.status.inProgress",
+  closed: "tickets.status.closed",
 };
 
-const STATUS_COLOR: Record<string, string> = {
-  open: "processing",
+const STATUS_VARIANT: Record<string, "default" | "warning" | "secondary"> = {
+  open: "default",
   in_progress: "warning",
-  closed: "default",
+  closed: "secondary",
 };
 
 const MAX_IMAGES = 3;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
-function AttachmentThumb({ attachment }: { attachment: AttachmentOut }) {
+function AttachmentThumb({ attachment, onOpen }: { attachment: AttachmentOut; onOpen: (url: string) => void }) {
   const objectUrl = useAuthedImage(attachment.url);
   if (!objectUrl) {
-    return <div style={{ width: 96, height: 96, background: "#f0f0f0", borderRadius: 6 }} />;
+    return <div className="w-24 h-24 bg-muted rounded-md" />;
   }
   return (
-    <Image
+    <img
       src={objectUrl}
       width={96}
       height={96}
-      style={{ objectFit: "cover", borderRadius: 6 }}
+      className="object-cover rounded-md cursor-pointer"
+      onClick={() => onOpen(objectUrl)}
     />
   );
 }
@@ -49,13 +45,29 @@ function AttachmentThumb({ attachment }: { attachment: AttachmentOut }) {
 export default function SupportTicketPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { t, dateLocale } = useT();
   const [ticket, setTicket] = useState<TicketDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reply, setReply] = useState("");
   const [pendingImages, setPendingImages] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const formatDateTime = (iso: string): string => {
+    try {
+      return new Date(iso).toLocaleString(dateLocale, {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch {
+      return iso;
+    }
+  };
 
   useEffect(() => {
     if (!id) return;
@@ -79,12 +91,12 @@ export default function SupportTicketPage() {
     const incoming = Array.from(files);
     const combined = [...pendingImages, ...incoming];
     if (combined.length > MAX_IMAGES) {
-      setSendError(`Можно прикрепить не более ${MAX_IMAGES} изображений`);
+      setSendError(t("supportTicket.error.maxImages", { max: MAX_IMAGES }));
       return;
     }
     for (const f of incoming) {
       if (f.size > MAX_IMAGE_BYTES) {
-        setSendError(`Файл слишком большой (макс. 5MB): ${f.name}`);
+        setSendError(t("supportTicket.error.fileTooLarge", { name: f.name }));
         return;
       }
     }
@@ -121,142 +133,152 @@ export default function SupportTicketPage() {
 
   return (
     <div className="page">
-      <Button
-        icon={<ArrowLeftOutlined />}
-        onClick={() => navigate("/support")}
-        style={{ marginBottom: 12 }}
-      >
-        Назад
+      <Button variant="outline" onClick={() => navigate("/support")} className="mb-3">
+        <ArrowLeft />
+        {t("supportTicket.back")}
       </Button>
 
-      {error && <Alert type="error" title={error} style={{ marginBottom: 16 }} />}
+      {error && (
+        <Alert variant="destructive" className="mb-4">
+          <AlertTitle>{error}</AlertTitle>
+        </Alert>
+      )}
 
       {ticket && (
         <>
-          <Typography.Title level={3} style={{ marginBottom: 16 }}>
+          <div className="text-xl font-bold text-foreground mb-4">
             {ticket.subject}
-          </Typography.Title>
+          </div>
 
-          <Card size="small" style={{ marginBottom: 16 }}>
-            <Descriptions column={1} size="small" colon={false}>
-              <Descriptions.Item label="Статус">
-                <Tag color={STATUS_COLOR[ticket.status] || "default"}>
-                  {STATUS_LABELS[ticket.status] || ticket.status}
-                </Tag>
-              </Descriptions.Item>
-              <Descriptions.Item label="Создан">
-                {dayjs(ticket.created_at).format("DD.MM.YYYY HH:mm")}
-              </Descriptions.Item>
-            </Descriptions>
+          <Card className="mb-4">
+            <CardContent className="p-3.5 flex flex-col gap-2">
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground text-[13px]">{t("supportTicket.statusLabel")}</span>
+                <Badge variant={STATUS_VARIANT[ticket.status] || "secondary"}>
+                  {STATUS_KEYS[ticket.status]
+                    ? t(STATUS_KEYS[ticket.status])
+                    : ticket.status}
+                </Badge>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground text-[13px]">{t("supportTicket.createdLabel")}</span>
+                <span className="text-[13px] text-foreground">{formatDateTime(ticket.created_at)}</span>
+              </div>
+            </CardContent>
           </Card>
 
           <div className="thread">
             {ticket.messages.map((m) => (
-              <Card
-                key={m.id}
-                size="small"
-                className={`message-bubble ${m.sender}`}
-                styles={{ body: { padding: 12 } }}
-              >
-                {m.text && (
-                  <Typography.Paragraph style={{ marginBottom: 6, whiteSpace: "pre-wrap" }}>
-                    {m.text}
-                  </Typography.Paragraph>
-                )}
-                {m.attachments && m.attachments.length > 0 && (
-                  <Image.PreviewGroup>
-                    <Space size={8} wrap style={{ marginBottom: 6 }}>
+              <Card key={m.id} className={`message-bubble ${m.sender}`}>
+                <CardContent className="p-3">
+                  {m.text && (
+                    <p className="mb-1.5 whitespace-pre-wrap mt-0">{m.text}</p>
+                  )}
+                  {m.attachments && m.attachments.length > 0 && (
+                    <div className="flex gap-2 flex-wrap mb-1.5">
                       {m.attachments.map((a) => (
-                        <AttachmentThumb key={a.id} attachment={a} />
+                        <AttachmentThumb key={a.id} attachment={a} onOpen={setPreviewUrl} />
                       ))}
-                    </Space>
-                  </Image.PreviewGroup>
-                )}
-                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                  {m.sender === "admin" ? "Поддержка" : "Вы"} ·{" "}
-                  {dayjs(m.created_at).format("DD.MM.YYYY HH:mm")}
-                </Typography.Text>
+                    </div>
+                  )}
+                  <span className="message-bubble__meta text-xs opacity-60">
+                    {m.sender === "admin"
+                      ? t("supportTicket.sender.admin")
+                      : t("supportTicket.sender.you")}{" "}
+                    · {formatDateTime(m.created_at)}
+                  </span>
+                </CardContent>
               </Card>
             ))}
           </div>
 
           {isClosed ? (
-            <Alert
-              type="info"
-              title="Обращение закрыто. Создайте новое, если нужна помощь."
-              style={{ marginTop: 16 }}
-            />
+            <Alert className="mt-4">
+              <AlertTitle>{t("supportTicket.closed")}</AlertTitle>
+            </Alert>
           ) : (
-            <Card size="small" style={{ marginTop: 16 }}>
-              <Space direction="vertical" size={12} style={{ width: "100%" }}>
-                {sendError && <Alert type="error" title={sendError} />}
-                <Input.TextArea
-                  value={reply}
-                  onChange={(e) => setReply(e.target.value)}
-                  placeholder="Ваше сообщение"
-                  rows={4}
-                  maxLength={4000}
-                  showCount
-                />
+            <Card className="mt-4">
+              <CardContent className="p-3.5 flex flex-col gap-3">
+                {sendError && (
+                  <Alert variant="destructive">
+                    <AlertTitle>{sendError}</AlertTitle>
+                  </Alert>
+                )}
+                <div className="flex flex-col gap-1">
+                  <Textarea
+                    value={reply}
+                    onChange={(e) => setReply(e.target.value.slice(0, 4000))}
+                    placeholder={t("supportTicket.replyPlaceholder")}
+                    rows={4}
+                    maxLength={4000}
+                  />
+                  <span className="text-[11px] text-muted-foreground text-right">
+                    {reply.length}/4000
+                  </span>
+                </div>
                 {pendingImages.length > 0 && (
-                  <Space size={8} wrap>
-                    {pendingImages.map((f, idx) => (
-                      <div key={idx} style={{ position: "relative" }}>
+                  <div className="flex gap-2 flex-wrap">
+                    {pendingImages.map((_, idx) => (
+                      <div key={idx} className="relative">
                         <img
                           src={previewUrls[idx]}
                           width={64}
                           height={64}
-                          style={{ objectFit: "cover", borderRadius: 6 }}
+                          className="object-cover rounded-md"
                         />
-                        <Button
-                          size="small"
-                          danger
-                          shape="circle"
-                          style={{ position: "absolute", top: -8, right: -8 }}
+                        <button
                           onClick={() => removePendingImage(idx)}
+                          className="absolute -top-2 -right-2 w-[22px] h-[22px] rounded-full bg-destructive text-destructive-foreground border-0 cursor-pointer flex items-center justify-center"
                         >
-                          ×
-                        </Button>
+                          <X className="w-3 h-3" />
+                        </button>
                       </div>
                     ))}
-                  </Space>
+                  </div>
                 )}
                 <input
                   ref={fileInputRef}
                   type="file"
                   accept="image/*"
                   multiple
-                  style={{ display: "none" }}
+                  className="hidden"
                   onChange={(e) => {
                     onFilesSelected(e.target.files);
                     e.target.value = "";
                   }}
                 />
-                <Space style={{ width: "100%" }}>
+                <div className="flex gap-2 w-full">
                   <Button
-                    icon={<PaperClipOutlined />}
+                    variant="outline"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={pendingImages.length >= MAX_IMAGES}
                   >
-                    Фото
+                    <Paperclip />
+                    {t("supportTicket.photo")}
                   </Button>
                   <Button
-                    type="primary"
-                    size="large"
-                    icon={<SendOutlined />}
-                    loading={sending}
-                    disabled={!reply.trim() && pendingImages.length === 0}
+                    className="flex-1"
+                    size="lg"
+                    disabled={sending || (!reply.trim() && pendingImages.length === 0)}
                     onClick={sendReply}
-                    style={{ flex: 1 }}
                   >
-                    Отправить
+                    <Send />
+                    {t("supportTicket.send")}
                   </Button>
-                </Space>
-              </Space>
+                </div>
+              </CardContent>
             </Card>
           )}
         </>
       )}
+
+      <Dialog open={!!previewUrl} onOpenChange={(open: boolean) => !open && setPreviewUrl(null)}>
+        <DialogContent className="max-w-[90vw] bg-transparent border-0 shadow-none p-0">
+          {previewUrl && (
+            <img src={previewUrl} className="w-full max-h-[80vh] object-contain rounded-xl" />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

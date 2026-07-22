@@ -31,6 +31,7 @@ async def _persist_vless_uuid(
     user_id: int,
     username: str,
     uuid: str | None,
+    rw_id: int | None = None,
 ) -> None:
     if not uuid:
         return
@@ -41,6 +42,7 @@ async def _persist_vless_uuid(
         username=username,
         vless_uuid=str(uuid),
         api_provider="remnawave",
+        rw_id=rw_id,
     )
 
 
@@ -192,80 +194,28 @@ async def deliver_subscription(
         elif scenario == SubscriptionScenario.ALREADY_ACTIVE:
             result = await _handle_already_active(message, username, subscription_type, lang, user_info=user_info)
 
-        # Referral reward + promo consume. Consume the buyer's active
-        # redemption first (so the discount applies only once), which returns
-        # the snapshotted promo_code used to route the referral reward — no
-        # reliance on the legacy used_promo column.
+        # Referral owner reward: bonus points credited in record_purchase_and_compute_reward.
         if subscription_type == SubscriptionType.PAID:
-            consumed = None
             try:
-                consumed = await rq.consume_promo_redemption(user_id)
-            except Exception as consume_err:
-                logging.warning(f"Failed to consume promo redemption: {consume_err}")
-
-            try:
-                if consumed and consumed.get('promo_code'):
-                    referral_data = await rq.add_referral_days(consumed['promo_code'], days)
-                    if referral_data:
-                        days_reward_per_30, reward_cap_days = await rq.get_promo_reward_settings()
-                        total_purchased = referral_data['days_purchased']
-                        already_rewarded = referral_data['days_rewarded']
-                        reward_days = (total_purchased // 30) * days_reward_per_30 - already_rewarded
-                        # Cap cumulative reward per owner (req: max 180 days).
-                        reward_days = max(0, min(reward_days, reward_cap_days - already_rewarded))
-
-                        if reward_days > 0:
-                            owner_tg_id = referral_data['tg_id']
-                            # Get owner username to extend subscription
-                            owner_info = await rq.get_user_full_info_by_tg_id(owner_tg_id)
-                            if owner_info and owner_info.get('username'):
-                                from app.handlers.tools import get_user_info, set_user_info, get_user_days
-                                owner_user_info = await get_user_info(owner_info['username'])
-                                if owner_user_info != 404:
-                                    owner_status = owner_user_info.get("status")
-                                    owner_limit = owner_user_info.get("data_limit")
-                                    is_owner_pro = owner_status == "active" and owner_limit is None
-
-                                    if is_owner_pro:
-                                        # PRO — просто добавляем дни
-                                        owner_days = await get_user_days(owner_user_info)
-                                        new_days = (owner_days if isinstance(owner_days, int) else 0) + reward_days
-                                        await set_user_info(
-                                            name=owner_info['username'],
-                                            limit=0,
-                                            res_strat="no_reset",
-                                            expire_days=new_days,
-                                            # template=templates.vless_france,  # DISABLED: Marzban templates removed
-                                            api="remnawave"
-                                        )
-                                    else:
-                                        # FREE — апгрейд до PRO на reward_days дней (без лимита трафика)
-                                        await set_user_info(
-                                            name=owner_info['username'],
-                                            limit=0,
-                                            res_strat="no_reset",
-                                            expire_days=reward_days,
-                                            # template=templates.vless_france,  # DISABLED: Marzban templates removed
-                                            api="remnawave",
-                                            squad_id=secrets.get("rw_pro_id")
-                                        )
-
-                            await rq.update_promo_days_rewarded(owner_tg_id, already_rewarded + reward_days)
-
-                            # Notify promo owner (in their language)
-                            try:
-                                owner_lang = await get_user_lang(owner_tg_id)
-                                await bot.send_message(
-                                    chat_id=owner_tg_id,
-                                    text=owner_lang.promo_reward_notification.format(
-                                        reward_days=reward_days,
-                                        total_days=total_purchased,
-                                        total_rewarded=already_rewarded + reward_days
-                                    ),
-                                    parse_mode='HTML'
-                                )
-                            except Exception as notify_err:
-                                logging.warning(f"Failed to notify promo owner {owner_tg_id}: {notify_err}")
+                reward_info = await rq.process_referral_reward_for_purchase(user_id, days)
+                if reward_info and reward_info.reward_points > 0:
+                    try:
+                        owner_lang = await get_user_lang(reward_info.owner_tg_id)
+                        await bot.send_message(
+                            chat_id=reward_info.owner_tg_id,
+                            text=owner_lang.promo_reward_notification.format(
+                                reward_points=reward_info.reward_points,
+                                total_days=reward_info.days_purchased,
+                                total_rewarded=reward_info.points_rewarded_after,
+                            ),
+                            parse_mode="HTML",
+                        )
+                    except Exception as notify_err:
+                        logging.warning(
+                            "Failed to notify promo owner %s: %s",
+                            reward_info.owner_tg_id,
+                            notify_err,
+                        )
             except Exception as promo_err:
                 logging.error(f"Error processing referral reward: {promo_err}")
 
@@ -337,6 +287,7 @@ async def _handle_new_user(
             username=username,
             vless_uuid=buyer_info["uuid"],
             api_provider="remnawave",
+            rw_id=buyer_info.get("rw_id"),
         )
 
     expire_day = await get_user_days(buyer_info)
@@ -437,6 +388,7 @@ async def _handle_extend_subscription(
         user_id,
         username,
         target_uuid or (buyer_info or {}).get("uuid"),
+        rw_id=(buyer_info or {}).get("rw_id"),
     )
 
     return {"days": final_expire_day, "link": sub_link}
@@ -517,6 +469,7 @@ async def _handle_update_subscription(
         user_id,
         username,
         target_uuid or (buyer_info or {}).get("uuid"),
+        rw_id=(buyer_info or {}).get("rw_id"),
     )
 
     return {"days": expire_day, "link": sub_link}
@@ -553,9 +506,13 @@ async def _handle_limited(
         logging.warning(f"Cannot send limited message: message={message}")
 
     if isinstance(message, Message):
-        await _persist_vless_uuid(message.from_user.id, username, user_info.get("uuid"))
+        await _persist_vless_uuid(
+            message.from_user.id, username, user_info.get("uuid"), user_info.get("rw_id"),
+        )
     elif isinstance(message, CallbackQuery):
-        await _persist_vless_uuid(message.from_user.id, username, user_info.get("uuid"))
+        await _persist_vless_uuid(
+            message.from_user.id, username, user_info.get("uuid"), user_info.get("rw_id"),
+        )
 
     return {"days": expire_day, "limited": True}
 
@@ -593,7 +550,9 @@ async def _handle_already_active(
     await _send_response(message, response_text, sub_link, user_id, lang)
 
     if user_id:
-        await _persist_vless_uuid(user_id, username, user_info.get("uuid"))
+        await _persist_vless_uuid(
+            user_id, username, user_info.get("uuid"), user_info.get("rw_id"),
+        )
 
     return {"days": expire_day, "link": sub_link, "already_active": True}
 

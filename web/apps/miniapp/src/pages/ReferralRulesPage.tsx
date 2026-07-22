@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
-import { Typography, Spin } from "antd";
+import { Spinner } from "@xray/ui/components/spinner";
 import LegalLayout from "../components/LegalLayout";
 import { ReferralState, referral as referralApi } from "../api/client";
+import { useT } from "../i18n/LocaleContext";
+import { formatPoints } from "../points";
 
 export default function ReferralRulesPage() {
+  const { t } = useT();
   const [referralState, setReferralState] = useState<ReferralState | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -17,58 +20,52 @@ export default function ReferralRulesPage() {
 
   if (loading) {
     return (
-      <LegalLayout title="Правила программы">
+      <LegalLayout title={t("referralRules.titleLoading")}>
         <div style={{ textAlign: "center", padding: "40px 0" }}>
-          <Spin size="large" />
+          <Spinner className="h-8 w-8" />
         </div>
       </LegalLayout>
     );
   }
 
   return (
-    <LegalLayout title="Правила реферальной программы">
+    <LegalLayout title={t("referralRules.title")}>
       <section className="legal-section">
-        <h2>Реферальные промокоды</h2>
+        <h2>{t("referralRules.s1.title")}</h2>
         <ul>
+          <li>{t("referralRules.s1.i1")}</li>
           <li>
-            У каждого пользователя есть личный промокод — поделитесь им с
-            друзьями.
+            {t("referralRules.s1.i2", {
+              creditGrant: formatPoints(referralState?.credit_grant ?? 0),
+            })}
           </li>
-          <li>
-            Друг получает скидку{" "}
-            <strong>{referralState?.discount_percent ?? 0}%</strong> на первую покупку.
-          </li>
-          <li>
-            Реферальный промокод доступен только новым пользователям — у кого
-            ещё не было покупок.
-          </li>
-          <li>Активировать реферальный промокод можно только один раз.</li>
+          <li>{t("referralRules.s1.i3")}</li>
+          <li>{t("referralRules.s1.i4")}</li>
         </ul>
       </section>
 
       <section className="legal-section">
-        <h2>Бонусы за приглашения</h2>
+        <h2>{t("referralRules.s2.title")}</h2>
         <ul>
           <li>
-            За каждые 30 дней, купленных по вашему коду, вы получаете{" "}
-            <strong>{referralState?.days_reward_per_30 ?? 0}</strong> бонусных дней.
+            {t("referralRules.s2.i1", {
+              per30: formatPoints(referralState?.points_reward_per_30 ?? 0),
+            })}
           </li>
           <li>
-            Всего можно получить до{" "}
-            <strong>{referralState?.reward_cap_days ?? 0}</strong> бонусных дней.
+            {t("referralRules.s2.i2", {
+              cap: formatPoints(referralState?.reward_cap_points ?? 0),
+            })}
           </li>
         </ul>
       </section>
 
       <section className="legal-section">
-        <h2>Обычные промокоды</h2>
+        <h2>{t("referralRules.s3.title")}</h2>
         <ul>
-          <li>Доступны всем пользователям.</li>
-          <li>Каждый конкретный промокод можно использовать только один раз.</li>
-          <li>
-            Одновременно может быть активен только один промокод — используйте
-            его при оплате перед активацией следующего.
-          </li>
+          <li>{t("referralRules.s3.i1")}</li>
+          <li>{t("referralRules.s3.i2")}</li>
+          <li>{t("referralRules.s3.i3")}</li>
         </ul>
       </section>
     </LegalLayout>

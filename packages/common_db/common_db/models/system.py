@@ -24,6 +24,8 @@ class TelmtFreeParams(Base):
     max_unique_ips: Mapped[int] = mapped_column(Integer, nullable=True)
     data_quota_bytes: Mapped[int] = mapped_column(BigInteger, nullable=True)
     expire_days: Mapped[int] = mapped_column(Integer, default=30)
+    rate_limit_up_bps: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    rate_limit_down_bps: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
 
 class BotFeatureFlags(Base):

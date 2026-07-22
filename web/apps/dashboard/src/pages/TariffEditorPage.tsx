@@ -1,24 +1,40 @@
 import { useEffect, useState, useCallback, useRef } from "react";
+import { Plus, Trash2, GripVertical, Save, ChevronDown } from "lucide-react";
 import {
-  Typography, Card, Button, Input, InputNumber, Switch, Space, Row, Col,
-  App, Popconfirm, Select, Collapse, Empty,
-} from "antd";
-import {
-  PlusOutlined, DeleteOutlined, HolderOutlined, SaveOutlined,
-} from "@ant-design/icons";
-import {
-  DndContext, closestCenter, PointerSensor, useSensor, useSensors,
-  DragEndEvent,
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
 } from "@dnd-kit/core";
 import {
-  SortableContext, verticalListSortingStrategy, useSortable, arrayMove,
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable,
+  arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { toast } from "sonner";
+import { Card, CardContent, CardHeader, CardTitle } from "@xray/ui/components/card";
+import { Button } from "@xray/ui/components/button";
+import { Input } from "@xray/ui/components/input";
+import { Label } from "@xray/ui/components/label";
+import { Switch } from "@xray/ui/components/switch";
+import { Skeleton } from "@xray/ui/components/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@xray/ui/components/select";
+import { cn } from "@xray/ui/lib/utils";
 import { api } from "../api/client";
 import type { TariffPlan, TariffPrice, SquadProfile } from "../api/types";
 import TariffPriceMatrix from "../components/TariffPriceMatrix";
 import TelegramPreview from "../components/TelegramPreview";
-import useIsMobile from "../hooks/useIsMobile";
+import ConfirmButton from "../components/ConfirmButton";
 import useUnsavedWarning from "../hooks/useUnsavedWarning";
 
 const DEFAULT_PRICES: TariffPrice[] = [
@@ -28,8 +44,13 @@ const DEFAULT_PRICES: TariffPrice[] = [
   { payment_method: "CRYSTAL", price: 0, currency: "RUB", is_active: true },
 ];
 
+const NO_SQUAD = "__none__";
+
 function SortableTariffCard({
-  plan, onUpdate, onDelete, squadProfiles,
+  plan,
+  onUpdate,
+  onDelete,
+  squadProfiles,
 }: {
   plan: TariffPlan;
   onUpdate: (plan: TariffPlan) => void;
@@ -37,6 +58,7 @@ function SortableTariffCard({
   squadProfiles: SquadProfile[];
 }) {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: plan.id });
+  const [open, setOpen] = useState(false);
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -48,89 +70,127 @@ function SortableTariffCard({
   };
 
   return (
-    <div ref={setNodeRef} style={style}>
-      <Collapse
-        size="small"
-        items={[{
-          key: plan.id,
-          label: (
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span {...attributes} {...listeners} style={{ cursor: "grab" }}>
-                <HolderOutlined style={{ color: "rgba(255,255,255,0.3)" }} />
-              </span>
-              <Switch
-                size="small"
-                checked={plan.is_active}
-                onChange={(v) => updateField("is_active", v)}
-                onClick={(_, e) => e.stopPropagation()}
-              />
-              <span style={{ fontWeight: 600, color: "rgba(255,255,255,0.85)" }}>
-                {plan.name_ru}
-              </span>
-              <span style={{ color: "rgba(255,255,255,0.35)", fontSize: 12 }}>
-                {plan.days} days — {plan.slug}
-              </span>
-            </div>
-          ),
-          children: (
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              <Row gutter={12}>
-                <Col span={6}>
-                  <label style={{ fontSize: 11, color: "rgba(255,255,255,0.45)" }}>Slug</label>
-                  <Input size="small" value={plan.slug} onChange={(e) => updateField("slug", e.target.value)} />
-                </Col>
-                <Col span={6}>
-                  <label style={{ fontSize: 11, color: "rgba(255,255,255,0.45)" }}>Name RU</label>
-                  <Input size="small" value={plan.name_ru} onChange={(e) => updateField("name_ru", e.target.value)} />
-                </Col>
-                <Col span={6}>
-                  <label style={{ fontSize: 11, color: "rgba(255,255,255,0.45)" }}>Name EN</label>
-                  <Input size="small" value={plan.name_en} onChange={(e) => updateField("name_en", e.target.value)} />
-                </Col>
-                <Col span={3}>
-                  <label style={{ fontSize: 11, color: "rgba(255,255,255,0.45)" }}>Days</label>
-                  <InputNumber size="small" min={1} value={plan.days} onChange={(v) => updateField("days", v ?? 30)} style={{ width: "100%" }} />
-                </Col>
-                <Col span={3}>
-                  <label style={{ fontSize: 11, color: "rgba(255,255,255,0.45)" }}>Discount %</label>
-                  <InputNumber size="small" min={0} max={100} value={plan.discount_percent} onChange={(v) => updateField("discount_percent", v ?? 0)} style={{ width: "100%" }} />
-                </Col>
-              </Row>
-              <Row gutter={12}>
-                <Col span={8}>
-                  <label style={{ fontSize: 11, color: "rgba(255,255,255,0.45)" }}>Squad Profile</label>
-                  <Select
-                    size="small"
-                    allowClear
-                    placeholder="None (use config)"
-                    value={plan.squad_profile_id}
-                    onChange={(v) => updateField("squad_profile_id", v ?? null)}
-                    style={{ width: "100%" }}
-                    options={squadProfiles.map((s) => ({ value: s.id, label: s.name }))}
-                  />
-                </Col>
-              </Row>
-
+    <div ref={setNodeRef} style={style} className="mb-2">
+      <Card>
+        <div className="flex items-center gap-2 px-3 py-2">
+          <span {...attributes} {...listeners} className="cursor-grab text-muted-foreground/50">
+            <GripVertical className="h-4 w-4" />
+          </span>
+          <Switch
+            checked={plan.is_active}
+            onCheckedChange={(v: boolean) => updateField("is_active", v)}
+          />
+          <button
+            type="button"
+            onClick={() => setOpen((o) => !o)}
+            className="flex flex-1 items-center gap-2 text-left"
+          >
+            <span className="font-semibold text-foreground/85">{plan.name_ru}</span>
+            <span className="text-xs text-muted-foreground">
+              {plan.days} days — {plan.slug}
+            </span>
+            <ChevronDown
+              className={cn("ml-auto h-4 w-4 transition-transform", open && "rotate-180")}
+            />
+          </button>
+        </div>
+        {open && (
+          <CardContent className="flex flex-col gap-3 border-t border-border pt-3">
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
               <div>
-                <Typography.Text style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", display: "block", marginBottom: 8 }}>
-                  Prices by Payment Method
-                </Typography.Text>
-                <TariffPriceMatrix
-                  prices={plan.prices}
-                  onChange={(prices) => onUpdate({ ...plan, prices })}
+                <Label className="text-[11px] text-muted-foreground">Slug</Label>
+                <Input
+                  className="h-8"
+                  value={plan.slug}
+                  onChange={(e) => updateField("slug", e.target.value)}
                 />
               </div>
-
-              <div style={{ textAlign: "right" }}>
-                <Popconfirm title="Delete this tariff?" onConfirm={() => onDelete(plan.id)}>
-                  <Button size="small" danger icon={<DeleteOutlined />}>Delete</Button>
-                </Popconfirm>
+              <div>
+                <Label className="text-[11px] text-muted-foreground">Name RU</Label>
+                <Input
+                  className="h-8"
+                  value={plan.name_ru}
+                  onChange={(e) => updateField("name_ru", e.target.value)}
+                />
+              </div>
+              <div>
+                <Label className="text-[11px] text-muted-foreground">Name EN</Label>
+                <Input
+                  className="h-8"
+                  value={plan.name_en}
+                  onChange={(e) => updateField("name_en", e.target.value)}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-[11px] text-muted-foreground">Days</Label>
+                  <Input
+                    type="number"
+                    className="h-8"
+                    min={1}
+                    value={plan.days}
+                    onChange={(e) => updateField("days", Number(e.target.value) || 30)}
+                  />
+                </div>
+                <div>
+                  <Label className="text-[11px] text-muted-foreground">Disc %</Label>
+                  <Input
+                    type="number"
+                    className="h-8"
+                    min={0}
+                    max={100}
+                    value={plan.discount_percent}
+                    onChange={(e) => updateField("discount_percent", Number(e.target.value) || 0)}
+                  />
+                </div>
               </div>
             </div>
-          ),
-        }]}
-        style={{ marginBottom: 8 }}
-      />
+            <div className="max-w-[240px]">
+              <Label className="text-[11px] text-muted-foreground">Squad Profile</Label>
+              <Select
+                value={plan.squad_profile_id != null ? String(plan.squad_profile_id) : NO_SQUAD}
+                onValueChange={(v: string) =>
+                  updateField("squad_profile_id", v === NO_SQUAD ? null : Number(v))
+                }
+              >
+                <SelectTrigger className="h-8">
+                  <SelectValue placeholder="None (use config)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_SQUAD}>None (use config)</SelectItem>
+                  {squadProfiles.map((s) => (
+                    <SelectItem key={s.id} value={String(s.id)}>
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <div className="mb-2 text-xs text-muted-foreground">Prices by Payment Method</div>
+              <TariffPriceMatrix
+                prices={plan.prices}
+                onChange={(prices) => onUpdate({ ...plan, prices })}
+              />
+            </div>
+
+            <div className="text-right">
+              <ConfirmButton
+                title="Delete this tariff?"
+                confirmText="Delete"
+                destructive
+                onConfirm={() => onDelete(plan.id)}
+              >
+                <Button size="sm" variant="destructive">
+                  <Trash2 className="h-4 w-4" />
+                  Delete
+                </Button>
+              </ConfirmButton>
+            </div>
+          </CardContent>
+        )}
+      </Card>
     </div>
   );
 }
@@ -143,9 +203,7 @@ export default function TariffEditorPage() {
   const [previewMethod, setPreviewMethod] = useState("stars");
   const [previewLang, setPreviewLang] = useState<"ru" | "en">("ru");
   const [isDirty, setIsDirty] = useState(false);
-  const isMobile = useIsMobile();
   const snapshotRef = useRef("");
-  const { message } = App.useApp();
 
   useUnsavedWarning(isDirty);
 
@@ -163,12 +221,14 @@ export default function TariffEditorPage() {
       snapshotRef.current = JSON.stringify(data);
       setIsDirty(false);
     } catch {
-      message.error("Failed to load tariffs");
+      toast.error("Failed to load tariffs");
     }
     setLoading(false);
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -193,9 +253,9 @@ export default function TariffEditorPage() {
     try {
       await api.delete(`/tariffs/plans/${id}`);
       setPlans((prev) => prev.filter((p) => p.id !== id));
-      message.success("Tariff deleted");
+      toast.success("Tariff deleted");
     } catch {
-      message.error("Failed to delete");
+      toast.error("Failed to delete");
     }
   };
 
@@ -213,42 +273,41 @@ export default function TariffEditorPage() {
         prices: DEFAULT_PRICES,
       });
       setPlans((prev) => [...prev, newPlan]);
-      message.success("Tariff created");
+      toast.success("Tariff created");
     } catch {
-      message.error("Failed to create");
+      toast.error("Failed to create");
     }
   };
 
   const handleSaveAll = async () => {
     setSaving(true);
     try {
-      // Save reorder
       await api.put("/tariffs/plans/reorder", {
         items: plans.map((p, i) => ({ id: p.id, sort_order: i })),
       });
-      // Save each plan in parallel
-      await Promise.all(plans.map((plan) =>
-        api.put(`/tariffs/plans/${plan.id}`, {
-          slug: plan.slug,
-          name_ru: plan.name_ru,
-          name_en: plan.name_en,
-          days: plan.days,
-          sort_order: plan.sort_order,
-          is_active: plan.is_active,
-          discount_percent: plan.discount_percent,
-          squad_profile_id: plan.squad_profile_id,
-          prices: plan.prices,
-        })
-      ));
-      message.success("All tariffs saved!");
+      await Promise.all(
+        plans.map((plan) =>
+          api.put(`/tariffs/plans/${plan.id}`, {
+            slug: plan.slug,
+            name_ru: plan.name_ru,
+            name_en: plan.name_en,
+            days: plan.days,
+            sort_order: plan.sort_order,
+            is_active: plan.is_active,
+            discount_percent: plan.discount_percent,
+            squad_profile_id: plan.squad_profile_id,
+            prices: plan.prices,
+          }),
+        ),
+      );
+      toast.success("All tariffs saved!");
       await load();
     } catch {
-      message.error("Failed to save");
+      toast.error("Failed to save");
     }
     setSaving(false);
   };
 
-  // Build preview buttons
   const previewButtons = plans
     .filter((p) => p.is_active)
     .map((p, i) => {
@@ -265,27 +324,45 @@ export default function TariffEditorPage() {
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
-        <Typography.Title level={isMobile ? 5 : 4} style={{ margin: 0, color: "rgba(255,255,255,0.88)" }}>
-          Tariff Editor
-        </Typography.Title>
-        <Space>
-          <Button icon={<PlusOutlined />} onClick={handleAdd}>Add Tariff</Button>
-          <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={handleSaveAll}>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-lg font-semibold text-foreground md:text-xl">Tariff Editor</h1>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleAdd}>
+            <Plus className="h-4 w-4" />
+            Add Tariff
+          </Button>
+          <Button onClick={handleSaveAll} disabled={saving}>
+            <Save className="h-4 w-4" />
             Save All
           </Button>
-        </Space>
+        </div>
       </div>
 
-      <Row gutter={24}>
-        <Col xs={24} lg={14}>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr]">
+        <div>
           {loading ? (
-            <Card loading />
+            <Card>
+              <CardContent className="space-y-3 p-6">
+                <Skeleton className="h-8 w-full" />
+                <Skeleton className="h-8 w-3/4" />
+              </CardContent>
+            </Card>
           ) : plans.length === 0 ? (
-            <Card><Empty description="No tariffs yet" /></Card>
+            <Card>
+              <CardContent className="py-10 text-center text-muted-foreground">
+                No tariffs yet
+              </CardContent>
+            </Card>
           ) : (
-            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-              <SortableContext items={plans.map((p) => p.id)} strategy={verticalListSortingStrategy}>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={plans.map((p) => p.id)}
+                strategy={verticalListSortingStrategy}
+              >
                 {plans.map((plan) => (
                   <SortableTariffCard
                     key={plan.id}
@@ -298,45 +375,44 @@ export default function TariffEditorPage() {
               </SortableContext>
             </DndContext>
           )}
-        </Col>
+        </div>
 
-        <Col xs={24} lg={10}>
-          <Card
-            title={<span style={{ color: "rgba(255,255,255,0.85)" }}>Live Preview</span>}
-            extra={
-              <Space size={4}>
+        <div>
+          <Card>
+            <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm text-foreground/85">Live Preview</CardTitle>
+              <div className="flex gap-1">
+                <Select value={previewMethod} onValueChange={(v: string) => setPreviewMethod(v)}>
+                  <SelectTrigger className="h-8 w-[110px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="stars">Stars</SelectItem>
+                    <SelectItem value="crypto">Crypto</SelectItem>
+                    <SelectItem value="SBP_APAY">SBP</SelectItem>
+                    <SelectItem value="CRYSTAL">Crystal</SelectItem>
+                  </SelectContent>
+                </Select>
                 <Select
-                  size="small"
-                  value={previewMethod}
-                  onChange={setPreviewMethod}
-                  style={{ width: 110 }}
-                  options={[
-                    { value: "stars", label: "Stars" },
-                    { value: "crypto", label: "Crypto" },
-                    { value: "SBP_APAY", label: "SBP" },
-                    { value: "CRYSTAL", label: "Crystal" },
-                  ]}
-                />
-                <Select
-                  size="small"
                   value={previewLang}
-                  onChange={(v) => setPreviewLang(v as "ru" | "en")}
-                  style={{ width: 60 }}
-                  options={[
-                    { value: "ru", label: "RU" },
-                    { value: "en", label: "EN" },
-                  ]}
-                />
-              </Space>
-            }
-          >
-            <TelegramPreview
-              messageText="Выберите тарифный план:"
-              buttons={previewButtons}
-            />
+                  onValueChange={(v: string) => setPreviewLang(v as "ru" | "en")}
+                >
+                  <SelectTrigger className="h-8 w-[64px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ru">RU</SelectItem>
+                    <SelectItem value="en">EN</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <TelegramPreview messageText="Выберите тарифный план:" buttons={previewButtons} />
+            </CardContent>
           </Card>
-        </Col>
-      </Row>
+        </div>
+      </div>
     </div>
   );
 }

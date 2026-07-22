@@ -9,7 +9,7 @@ list/delete HWID devices. Users are assigned to Remnawave **squads**; a tariff's
 `squad_id` selects the squad. Config: `remnawave_url`, `remnawave_token` (and the
 free squad id) in `config.yml`.
 
-### Inbound webhooks (torrent blocker)
+### Inbound webhooks (CRM rules)
 
 The seller bot accepts panel webhooks at `POST /bot/remnawave_webhook`.
 Parsing and signature verification live in `packages/remnawave_client/remnawave_client/webhooks.py`.
@@ -34,11 +34,22 @@ WEBHOOK_URL=https://your-domain/bot/remnawave_webhook
 WEBHOOK_SECRET_HEADER=<same secret as remnawave_webhook_secret>
 ```
 
-When `scope=torrent_blocker` and `event=torrent_blocker.report` with an active
-block, the bot looks up the local user by `data.user.uuid` → `users.vless_uuid`
-and sends a localized Telegram warning (at most once per user per 24 hours).
+After HMAC verification the bot **acks immediately** and enqueues the payload to
+Redis (`execute_crm_webhook`). The `crm-worker` matches enabled rules from
+Dashboard → CRM → **Webhooks** by `scope` + `event`, resolves the local user
+(`vless_uuid` / `telegramId`), and runs the same CRM actions as campaigns
+(messages, Remnawave perks, credits).
 
-Other scopes are acknowledged with HTTP 200 but not processed.
+Supported scopes for rules: `user`, `torrent_blocker`, `user_hwid_devices`.
+Other Remnawave scopes are acknowledged with HTTP 200 but match no rules.
+
+Configure torrent warnings (and other events) in the Webhooks tab — there is no
+hardcoded torrent message anymore. Optional per-rule `cooldown_hours` limits
+repeat sends to the same user.
+
+Webhook-only message variables: `{{notConnectedAfterHours}}`, `{{deviceModel}}`,
+`{{platform}}`, `{{osVersion}}`, `{{ip}}`, `{{blockMinutes}}` (plus the usual CRM
+placeholders).
 
 ## Payments
 
@@ -51,6 +62,10 @@ gateway → bot verifies webhook signature → subscription delivered via Remnaw
 
 Also supported outside `packages/payments`: **Telegram Stars** (legacy bot) and
 **Google Play IAP** (Android — see [android-api.md](android-api.md)).
+
+**FCM push** (Android): clients register device tokens via `/api/android/fcm`;
+operators send campaigns from Dashboard → **Push**. Config: `fcm_project_id`,
+`fcm_service_account_path` (readable by `dashboard` and `crm-worker`).
 
 ## Server monitoring: Telemt
 

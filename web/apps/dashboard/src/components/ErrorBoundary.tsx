@@ -1,5 +1,6 @@
 import { Component, type ReactNode } from "react";
-import { Card, Button } from "antd";
+import { Card, CardContent } from "@xray/ui/components/card";
+import { Button } from "@xray/ui/components/button";
 
 interface Props {
   children: ReactNode;
@@ -23,15 +24,15 @@ export default class ErrorBoundary extends Component<Props, State> {
   render() {
     if (this.state.hasError) {
       return (
-        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "60vh" }}>
-          <Card style={{ maxWidth: 400, textAlign: "center" }}>
-            <h3 style={{ color: "rgba(255,255,255,0.85)" }}>Something went wrong</h3>
-            <p style={{ color: "rgba(255,255,255,0.55)" }}>
-              An unexpected error occurred. Please reload the page.
-            </p>
-            <Button type="primary" onClick={() => window.location.reload()}>
-              Reload
-            </Button>
+        <div className="flex min-h-[60vh] items-center justify-center p-4">
+          <Card className="max-w-sm text-center">
+            <CardContent className="flex flex-col items-center gap-3 p-6">
+              <h3 className="text-lg font-semibold text-foreground">Something went wrong</h3>
+              <p className="text-sm text-muted-foreground">
+                An unexpected error occurred. Please reload the page.
+              </p>
+              <Button onClick={() => window.location.reload()}>Reload</Button>
+            </CardContent>
           </Card>
         </div>
       );

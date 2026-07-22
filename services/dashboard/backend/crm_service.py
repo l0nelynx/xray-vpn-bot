@@ -73,6 +73,8 @@ async def scan_segment(
     traffic_threshold: float = DEFAULT_TRAFFIC_THRESHOLD,
     invoice_max_age_hours: int = DEFAULT_INVOICE_MAX_AGE_HOURS,
     torrent_days: int = DEFAULT_TORRENT_DAYS,
+    preview_limit: int | None = PREVIEW_LIMIT,
+    user_type: str = seg_repo.USER_TYPE_ALL,
 ) -> tuple[list[dict], int, str | None]:
     """Return (preview_users, total_count, warning)."""
 
@@ -80,15 +82,20 @@ async def scan_segment(
         users = await seg_repo.users_with_unpaid_invoices(
             session, max_age_hours=invoice_max_age_hours
         )
+        users = await seg_repo.filter_users_by_type(session, users, user_type)
         rows = [_scan_user_row(u, {"order_status": "created"}) for u in users]
-        return rows[:PREVIEW_LIMIT], len(rows), None
+        preview = rows if preview_limit is None else rows[:preview_limit]
+        return preview, len(rows), None
 
     if segment_id == SEGMENT_ALL_USERS:
         users = await seg_repo.get_broadcast_eligible_users(session)
+        users = await seg_repo.filter_users_by_type(session, users, user_type)
         rows = [_scan_user_row(u) for u in users]
-        return rows[:PREVIEW_LIMIT], len(rows), None
+        preview = rows if preview_limit is None else rows[:preview_limit]
+        return preview, len(rows), None
 
     local_users = await seg_repo.get_remnawave_broadcast_users(session)
+    local_users = await seg_repo.filter_users_by_type(session, local_users, user_type)
     if not local_users:
         return [], 0, None
 
@@ -100,15 +107,15 @@ async def scan_segment(
         torrent_uuids = await collect_torrent_user_uuids(rw_client, days=torrent_days)
         if not torrent_uuids:
             warning = (
-                "Torrent-blocker API вернул пустой список — проверьте версию панели "
-                "или права API-токена."
+                "Torrent-blocker API returned an empty list — check panel version "
+                "or API token permissions."
             )
 
     try:
         crm_users = await rw_client.get_all_users_for_crm()
     except Exception as exc:
         logger.error("CRM scan: Remnawave bulk fetch failed: %s", exc)
-        return [], 0, f"Не удалось загрузить пользователей Remnawave: {exc}"
+        return [], 0, f"Failed to load Remnawave users: {exc}"
 
     crm_by_uuid = {u["uuid"]: u for u in crm_users if u.get("uuid")}
 
@@ -144,11 +151,12 @@ async def scan_segment(
         # Warn when panel does not expose firstConnectedAt on any user
         if crm_users and all(u.get("first_connected_at") is None for u in crm_users):
             warning = (
-                "Поле firstConnectedAt недоступно в ответе API — все пользователи "
-                "могут попасть в сегмент. Обновите панель Remnawave."
+                "firstConnectedAt is missing from the API response — all users "
+                "may match this segment. Upgrade the Remnawave panel."
             )
 
-    return matched[:PREVIEW_LIMIT], len(matched), warning
+    preview = matched if preview_limit is None else matched[:preview_limit]
+    return preview, len(matched), warning
 
 
 async def apply_campaign_perks(
@@ -199,95 +207,107 @@ async def apply_campaign_perks(
 
 
 def segment_catalog() -> list[dict[str, Any]]:
+    user_type_param = {
+        "name": "user_type",
+        "label": "User type",
+        "type": "select",
+        "default": seg_repo.USER_TYPE_ALL,
+        "options": seg_repo.USER_TYPE_OPTIONS,
+    }
+    common_filters = [user_type_param]
+
+    def _params(extra: list[dict] | None = None) -> list[dict]:
+        return list(extra or []) + common_filters
+
     return [
         {
             "id": SEGMENT_ALL_USERS,
-            "title": "Все пользователи",
-            "description": "Все незабаненные пользователи с tg_id (массовая рассылка)",
-            "params": [],
+            "title": "All users",
+            "description": "All non-banned users with a tg_id (mass broadcast)",
+            "params": _params(),
         },
         {
             "id": SEGMENT_NEVER_CONNECTED,
-            "title": "Не подключались",
-            "description": "Пользователи с подпиской, но без firstConnectedAt в Remnawave",
-            "params": [],
+            "title": "Never connected",
+            "description": "Users with a subscription but no firstConnectedAt in Remnawave",
+            "params": _params(),
         },
         {
             "id": SEGMENT_EXPIRED,
             "title": "Expired",
-            "description": "Статус подписки expired",
-            "params": [],
+            "description": "Subscription status is expired",
+            "params": _params(),
         },
         {
             "id": SEGMENT_LIMITED,
             "title": "LIMITED",
-            "description": "Статус подписки limited (трафик исчерпан)",
-            "params": [],
+            "description": "Subscription status is limited (traffic exhausted)",
+            "params": _params(),
         },
         {
             "id": SEGMENT_TRAFFIC_LOW,
-            "title": "Скоро кончится трафик",
-            "description": "Использовано ≥ порога от лимита трафика",
-            "params": [
+            "title": "Traffic running low",
+            "description": "Used ≥ threshold of the traffic limit",
+            "params": _params([
                 {
                     "name": "traffic_threshold",
-                    "label": "Порог использования (0.5–0.95)",
+                    "label": "Usage threshold (0.5–0.95)",
                     "type": "float",
                     "default": DEFAULT_TRAFFIC_THRESHOLD,
                     "min": 0.5,
                     "max": 0.95,
                 }
-            ],
+            ]),
         },
         {
             "id": SEGMENT_EXPIRING_SOON,
-            "title": "Скоро истечёт подписка",
-            "description": "Осталось ≤ N дней до expire_at",
-            "params": [
+            "title": "Subscription expiring soon",
+            "description": "≤ N days left until expire_at",
+            "params": _params([
                 {
                     "name": "days_threshold",
-                    "label": "Дней до истечения",
+                    "label": "Days until expiration",
                     "type": "int",
                     "default": DEFAULT_DAYS_THRESHOLD,
                     "min": 1,
                     "max": 30,
                 }
-            ],
+            ]),
         },
         {
             "id": SEGMENT_UNPAID_INVOICE,
-            "title": "Неоплаченный инвойс",
-            "description": "Транзакции со статусом created",
-            "params": [
+            "title": "Unpaid invoice",
+            "description": "Transactions with status created",
+            "params": _params([
                 {
                     "name": "invoice_max_age_hours",
-                    "label": "Макс. возраст инвойса (часы)",
+                    "label": "Max invoice age (hours)",
                     "type": "int",
                     "default": DEFAULT_INVOICE_MAX_AGE_HOURS,
                     "min": 1,
                     "max": 168,
                 }
-            ],
+            ]),
         },
         {
             "id": SEGMENT_TORRENT,
             "title": "Torrent Reports",
-            "description": "Пользователи из отчётов torrent-blocker",
-            "params": [
+            "description": "Users from torrent-blocker reports",
+            "params": _params([
                 {
                     "name": "torrent_days",
-                    "label": "Период (дней)",
+                    "label": "Period (days)",
                     "type": "int",
                     "default": DEFAULT_TORRENT_DAYS,
                     "min": 1,
                     "max": 90,
                 }
-            ],
+            ]),
         },
         {
             "id": SEGMENT_DEVICE_LIMIT,
-            "title": "Лимит устройств",
-            "description": "Число устройств ≥ hwidDeviceLimit",
-            "params": [],
+            "title": "Device limit",
+            "description": "Device count ≥ hwidDeviceLimit",
+            "params": _params(),
         },
     ]

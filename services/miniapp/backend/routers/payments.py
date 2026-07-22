@@ -10,9 +10,11 @@ from payments import (
     create_invoice,
     get_provider,
 )
-from common_db.repo import promos as _repo_promos
+from common_db.repo import balance as _repo_balance
 from common_db.repo import users as _repo_users
 
+from ..bonus_points import resolve_points_cost
+from ..credits_delivery import pay_and_deliver
 from ..database.models import Transaction
 from ..database.session import async_session
 from ..menu_invoice import invoice_from_node, load_menu_node
@@ -20,6 +22,8 @@ from ..notify_log import esc, notify_log
 from ..schemas.payments import (
     InvoiceCreateRequest,
     InvoiceResponse,
+    PayCreditsRequest,
+    PayCreditsResponse,
     ProviderInfo,
     ProvidersResponse,
 )
@@ -45,6 +49,82 @@ async def list_providers() -> ProvidersResponse:
             )
             for p in available_providers()
         ]
+    )
+
+
+@router.get("/balance")
+async def get_credit_balance(tg: TgUser = Depends(get_tg_user)):
+    async with async_session() as session:
+        user = await _repo_users.get_user_by_tg_id(session, tg.tg_id)
+        if not user:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "user not registered")
+        balance = await _repo_balance.get_balance(session, user.id)
+        return {"balance": balance}
+
+
+@router.post("/pay-credits", response_model=PayCreditsResponse)
+@limiter.limit("10/minute")
+async def pay_with_credits(
+    request: Request,
+    body: PayCreditsRequest,
+    tg: TgUser = Depends(get_tg_user),
+) -> PayCreditsResponse:
+    async with async_session() as session:
+        user = await _repo_users.get_user_by_tg_id(session, tg.tg_id)
+    if not user:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "user not registered")
+    if user.is_banned:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "user is banned")
+
+    node = await load_menu_node(body.node_id)
+    if node is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "menu node not found")
+
+    invoice_data = invoice_from_node(node)
+    if invoice_data is None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "menu node is not a valid invoice tariff",
+        )
+
+    days = invoice_data["days"]
+    points_cost = await resolve_points_cost(invoice_data)
+    async with async_session() as session:
+        balance = await _repo_balance.get_balance(session, user.id)
+
+    if balance < points_cost:
+        raise HTTPException(
+            status.HTTP_402_PAYMENT_REQUIRED,
+            detail={
+                "code": "insufficient_credits",
+                "need": points_cost,
+                "have": balance,
+            },
+        )
+
+    result = await pay_and_deliver(
+        user_id=user.id,
+        tg_id=tg.tg_id,
+        username=tg.username or f"id_{tg.tg_id}",
+        points_cost=points_cost,
+        days=days,
+        tariff_slug=invoice_data["tariff_slug"],
+    )
+
+    if result.get("status") != "success":
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            result.get("message", "delivery failed"),
+        )
+
+    return PayCreditsResponse(
+        ok=True,
+        transaction_id=result.get("transaction_id"),
+        points_spent=result.get("points_spent"),
+        points_cost=points_cost,
+        credits_spent=result.get("credits_spent"),
+        balance_after=result.get("balance_after"),
+        subscription_url=result.get("subscription_url"),
     )
 
 
@@ -85,15 +165,7 @@ async def create_payment_invoice(
             f"'{invoice_data['currency']}'",
         )
 
-    # Apply promo discount if user has an unconsumed active redemption.
     invoice_amount = invoice_data["amount"]
-    async with async_session() as session:
-        ed = await _repo_promos.get_effective_discount(session, tg.tg_id)
-        await session.commit()  # persist auto-seeded PromoSettings
-        if ed is not None:
-            invoice_amount = round(
-                invoice_data["amount"] * (1 - ed.discount_percent / 100), 2
-            )
 
     transaction_id = str(uuid.uuid4())
     invoice_req = InvoiceRequest(
@@ -117,7 +189,7 @@ async def create_payment_invoice(
             e,
         )
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(e))
-    except Exception as e:  # defensive: SDKs can raise unexpected types
+    except Exception as e:
         logger.exception("unexpected invoice failure")
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"invoice failed: {e}")
 
@@ -138,7 +210,7 @@ async def create_payment_invoice(
                 days_ordered=invoice_data["days"],
                 user_id=user.id,
                 payment_method=provider.payment_method,
-                amount=float(invoice_data["amount"]),
+                amount=float(invoice_amount),
                 created_at=_now_iso(),
                 tariff_slug=invoice_data["tariff_slug"],
             )

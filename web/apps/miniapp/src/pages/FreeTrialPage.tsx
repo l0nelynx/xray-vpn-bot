@@ -1,8 +1,12 @@
-import { CheckCircleFilled, LoadingOutlined } from "@ant-design/icons";
-import { Alert, Button, Card, Space, Spin, Typography } from "antd";
+import { CheckCircle2, Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router";
+import { Alert, AlertTitle, AlertDescription } from "@xray/ui/components/alert";
+import { Button } from "@xray/ui/components/button";
+import { Card, CardContent } from "@xray/ui/components/card";
+import { Spinner } from "@xray/ui/components/spinner";
 import { free } from "../api/client";
+import { useT } from "../i18n/LocaleContext";
 import { hapticImpact, openLink, openTelegramLink } from "../tg/webapp";
 
 const POLL_INTERVAL_MS = 3000;
@@ -33,14 +37,13 @@ function openProxyLink(url: string) {
 
 export default function FreeTrialPage() {
   const navigate = useNavigate();
+  const { t } = useT();
   const params = useParams<{ mode: Mode }>();
   const mode: Mode = params.mode === "telemt" ? "telemt" : "vpn";
 
-  const title = mode === "telemt" ? "Telegram Прокси" : "Попробовать бесплатно";
+  const title = mode === "telemt" ? t("freeTrial.title.telemt") : t("freeTrial.title.vpn");
   const description =
-    mode === "telemt"
-      ? "Подпишитесь на наш канал, чтобы получить бесплатный Telegram-прокси."
-      : "Подпишитесь на наш канал, чтобы получить бесплатную подписку VPN.";
+    mode === "telemt" ? t("freeTrial.desc.telemt") : t("freeTrial.desc.vpn");
 
   const [bootstrapping, setBootstrapping] = useState(true);
   const [newsUrl, setNewsUrl] = useState<string>("");
@@ -52,7 +55,22 @@ export default function FreeTrialPage() {
 
   const startedAtRef = useRef<number>(0);
   const cancelledRef = useRef<boolean>(false);
-  const timerRef = useRef<number | undefined>();
+  const timerRef = useRef<number | undefined>(undefined);
+
+  const humanizeDetail = (detail: string): string => {
+    switch (detail) {
+      case "create_failed":
+        return t("freeTrial.error.createFailed");
+      case "update_failed":
+        return t("freeTrial.error.updateFailed");
+      case "user is banned":
+        return t("freeTrial.error.banned");
+      case "username required":
+        return t("freeTrial.error.usernameRequired");
+      default:
+        return detail;
+    }
+  };
 
   const stopPolling = () => {
     cancelledRef.current = true;
@@ -112,7 +130,7 @@ export default function FreeTrialPage() {
         return false;
       }
     } catch {
-      setClaimError("Сетевая ошибка, повторите попытку.");
+      setClaimError(t("freeTrial.error.network"));
       return false;
     }
   };
@@ -161,7 +179,7 @@ export default function FreeTrialPage() {
     const ok = await tryClaim();
     setChecking(false);
     if (!ok && !claimError) {
-      setClaimError("Подписка на канал не найдена. Подпишитесь и попробуйте снова.");
+      setClaimError(t("freeTrial.error.notSubscribed"));
     }
   };
 
@@ -176,8 +194,8 @@ export default function FreeTrialPage() {
 
   if (bootstrapping) {
     return (
-      <div className="page" style={{ textAlign: "center", paddingTop: 60 }}>
-        <Spin size="large" />
+      <div className="page text-center pt-16">
+        <Spinner className="h-8 w-8" />
       </div>
     );
   }
@@ -185,24 +203,26 @@ export default function FreeTrialPage() {
   if (claimed) {
     return (
       <div className="page">
-        <Card style={{ textAlign: "center" }}>
-          <CheckCircleFilled style={{ fontSize: 56, color: "#52c41a" }} />
-          <Typography.Title level={3} style={{ marginTop: 16 }}>
-            {mode === "telemt" ? "Прокси готов" : "Подписка активна"}
-          </Typography.Title>
-          <Typography.Paragraph type="secondary">
-            {claimed.alreadyActive
-              ? "У вас уже есть активный доступ. Используйте кнопку ниже."
-              : "Спасибо за подписку! Нажмите кнопку, чтобы подключиться."}
-          </Typography.Paragraph>
-          <Space direction="vertical" size={12} style={{ width: "100%" }}>
-            <Button type="primary" size="large" block onClick={openConnect}>
-              Подключить
-            </Button>
-            <Button size="large" block onClick={() => navigate("/", { replace: true })}>
-              На главную
-            </Button>
-          </Space>
+        <Card className="text-center">
+          <CardContent className="p-6">
+            <CheckCircle2 className="w-14 h-14 text-emerald-500 mx-auto" />
+            <div className="text-xl font-bold text-foreground mt-4">
+              {mode === "telemt" ? t("freeTrial.success.proxyReady") : t("freeTrial.success.subActive")}
+            </div>
+            <p className="text-muted-foreground mt-2 mb-5">
+              {claimed.alreadyActive
+                ? t("freeTrial.success.alreadyActive")
+                : t("freeTrial.success.thanks")}
+            </p>
+            <div className="flex flex-col gap-3 w-full">
+              <Button size="lg" className="w-full" onClick={openConnect}>
+                {t("freeTrial.connect")}
+              </Button>
+              <Button size="lg" variant="outline" className="w-full" onClick={() => navigate("/", { replace: true })}>
+                {t("freeTrial.toHome")}
+              </Button>
+            </div>
+          </CardContent>
         </Card>
       </div>
     );
@@ -210,76 +230,57 @@ export default function FreeTrialPage() {
 
   return (
     <div className="page">
-      <Typography.Title level={3} style={{ marginBottom: 16 }}>
-        {title}
-      </Typography.Title>
+      <div className="text-xl font-bold text-foreground mb-4">{title}</div>
 
       <Card>
-        <Typography.Paragraph>{description}</Typography.Paragraph>
+        <CardContent className="p-5 flex flex-col gap-4">
+          <p className="m-0 text-foreground">{description}</p>
 
-        {claimError && (
-          <Alert
-            type="error"
-            showIcon
-            title={claimError}
-            style={{ marginBottom: 16 }}
-            closable
-            onClose={() => setClaimError(null)}
-          />
-        )}
+          {claimError && (
+            <Alert variant="destructive">
+              <AlertTitle>{claimError}</AlertTitle>
+            </Alert>
+          )}
 
-        {timedOut && !waiting && (
-          <Alert
-            type="warning"
-            showIcon
-            title="Не удалось подтвердить подписку"
-            description="Убедитесь, что вы подписались на канал, и нажмите «Проверить»."
-            style={{ marginBottom: 16 }}
-          />
-        )}
+          {timedOut && !waiting && (
+            <Alert variant="warning">
+              <AlertTitle>{t("freeTrial.timeoutTitle")}</AlertTitle>
+              <AlertDescription>
+                {t("freeTrial.timeoutBody")}
+              </AlertDescription>
+            </Alert>
+          )}
 
-        {waiting && (
-          <Card type="inner" style={{ textAlign: "center", marginBottom: 16 }}>
-            <LoadingOutlined style={{ fontSize: 36 }} spin />
-            <Typography.Paragraph type="secondary" style={{ marginTop: 12, marginBottom: 0 }}>
-              Проверяем подписку…
-            </Typography.Paragraph>
-          </Card>
-        )}
+          {waiting && (
+            <Card className="text-center bg-muted">
+              <CardContent className="p-5">
+                <Loader2 className="animate-spin w-9 h-9 mx-auto" />
+                <p className="text-muted-foreground mt-3 mb-0">
+                  {t("freeTrial.checking")}
+                </p>
+              </CardContent>
+            </Card>
+          )}
 
-        <Space direction="vertical" size={12} style={{ width: "100%" }}>
-          <Button
-            type="primary"
-            size="large"
-            block
-            onClick={onSubscribeClick}
-            disabled={!newsUrl || waiting}
-          >
-            Подписаться
-          </Button>
-          <Button size="large" block onClick={onManualCheck} loading={checking} disabled={waiting}>
-            Проверить
-          </Button>
-          <Button size="large" block onClick={() => navigate("/", { replace: true })}>
-            Назад
-          </Button>
-        </Space>
+          <div className="flex flex-col gap-3 w-full">
+            <Button
+              size="lg"
+              className="w-full"
+              onClick={onSubscribeClick}
+              disabled={!newsUrl || waiting}
+            >
+              {t("freeTrial.subscribe")}
+            </Button>
+            <Button size="lg" variant="outline" className="w-full" onClick={onManualCheck} disabled={waiting || checking}>
+              {checking ? <Spinner /> : null}
+              {t("freeTrial.check")}
+            </Button>
+            <Button size="lg" variant="outline" className="w-full" onClick={() => navigate("/", { replace: true })}>
+              {t("freeTrial.back")}
+            </Button>
+          </div>
+        </CardContent>
       </Card>
     </div>
   );
-}
-
-function humanizeDetail(detail: string): string {
-  switch (detail) {
-    case "create_failed":
-      return "Не удалось создать подписку. Попробуйте позже.";
-    case "update_failed":
-      return "Не удалось обновить подписку. Попробуйте позже.";
-    case "user is banned":
-      return "Аккаунт заблокирован.";
-    case "username required":
-      return "Установите username в Telegram.";
-    default:
-      return detail;
-  }
 }

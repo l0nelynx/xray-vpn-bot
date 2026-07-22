@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router";
 import { isAuthenticated } from "./api/client";
 import Layout from "./components/Layout";
 import LoginPage from "./pages/LoginPage";
@@ -15,8 +15,10 @@ import SupportPage from "./pages/SupportPage";
 import WebAppTariffsPage from "./pages/WebAppTariffsPage";
 import WebAppSettingsPage from "./pages/WebAppSettingsPage";
 import TgAdminPage from "./pages/TgAdminPage";
-import CrmPage from "./pages/CrmPage";
+import CrmPage from "./pages/crm/CrmPage";
 import PromocodesPage from "./pages/PromocodesPage";
+import GiveawaysPage from "./pages/GiveawaysPage";
+import PushPage from "./pages/push/PushPage";
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   if (!isAuthenticated()) {
@@ -48,10 +50,12 @@ export default function App() {
         <Route path="store" element={<StorePage />} />
         <Route path="support" element={<SupportPage />} />
         <Route path="promocodes" element={<PromocodesPage />} />
+        <Route path="giveaways" element={<GiveawaysPage />} />
         <Route path="webapp/tariffs" element={<WebAppTariffsPage />} />
         <Route path="webapp/settings" element={<WebAppSettingsPage />} />
         <Route path="tg-admin" element={<TgAdminPage />} />
         <Route path="crm" element={<CrmPage />} />
+        <Route path="push" element={<PushPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

@@ -51,6 +51,7 @@ async def resolve_user(tg_id: int, username: str) -> tuple[str, dict | int]:
             username=username,
             vless_uuid=str(uuid) if uuid else None,
             api_provider="remnawave",
+            rw_id=info.get("rw_id"),
         )
         return "remnawave", info
 
@@ -135,6 +136,7 @@ async def get_user_info(username, api: str = "remnawave"):
                 # Нормализуем ответ для совместимости
                 return {
                     "uuid": user_info.get("uuid"),
+                    "rw_id": user_info.get("rw_id"),
                     "status": user_info.get("status", "active"),
                     "expire": expire,
                     "subscription_url": user_info.get("subscription_url"),
@@ -172,6 +174,11 @@ async def resolve_remnawave_account(
     if db_uuid:
         info = await rem.get_user_from_uuid(db_uuid)
         if info:
+            rw_id = info.get("rw_id")
+            if rw_id is not None:
+                await rq.update_user_api_info(
+                    tg_id=tg_id, username=username, rw_id=rw_id,
+                )
             try:
                 by_name = await rem.get_user_from_username(username)
                 if (by_name and by_name.get("uuid")
@@ -202,6 +209,7 @@ async def resolve_remnawave_account(
             await rq.update_user_api_info(
                 tg_id=tg_id, username=username,
                 vless_uuid=str(info["uuid"]), api_provider="remnawave",
+                rw_id=info.get("rw_id"),
             )
             return _normalize_info_uuid(info), _normalize_info(info)
 
@@ -210,6 +218,7 @@ async def resolve_remnawave_account(
         await rq.update_user_api_info(
             tg_id=tg_id, username=username,
             vless_uuid=str(info["uuid"]), api_provider="remnawave",
+            rw_id=info.get("rw_id"),
         )
         return _normalize_info_uuid(info), _normalize_info(info)
 
@@ -233,6 +242,7 @@ def _normalize_info(info: dict) -> dict:
             expire = int(expire) if expire else None
     return {
         "uuid": _normalize_info_uuid(info),
+        "rw_id": info.get("rw_id"),
         "status": info.get("status", "active"),
         "expire": expire,
         "subscription_url": info.get("subscription_url"),
@@ -315,7 +325,8 @@ async def add_new_user_info(
                     tg_id=userid,
                     username=name,
                     vless_uuid=buyer_nfo.get("uuid"),
-                    api_provider="remnawave"
+                    api_provider="remnawave",
+                    rw_id=buyer_nfo.get("rw_id"),
                 )
                 logger.info(f"DB updated with RemnaWave user info for {name}")
 
@@ -437,6 +448,7 @@ async def detect_user_api_provider(tg_id: int,username: str) -> str:
                 username,
                 vless_uuid=str(uuid) if uuid else None,
                 api_provider="remnawave",
+                rw_id=user_info.get("rw_id"),
             )
             return "remnawave"
     except Exception as e:

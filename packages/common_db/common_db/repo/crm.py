@@ -18,6 +18,8 @@ async def create_campaign(
     session: AsyncSession,
     *,
     name: str,
+    conditions: list[dict],
+    actions: list[dict],
     segment_type: str | None,
     segment_params: dict,
     message_text: str,
@@ -26,6 +28,7 @@ async def create_campaign(
     bonus_traffic_gb: int | None,
     created_by: str,
     target_tg_ids: list[int] | None = None,
+    event_id: int | None = None,
 ) -> CrmCampaign:
     params = dict(segment_params)
     if target_tg_ids:
@@ -35,12 +38,15 @@ async def create_campaign(
         name=name,
         segment_type=segment_type,
         segment_params=json.dumps(params),
+        conditions_json=json.dumps(conditions, ensure_ascii=False),
+        actions_json=json.dumps(actions, ensure_ascii=False),
         message_text=message_text,
         attach_button=attach_button,
         bonus_days=bonus_days,
         bonus_traffic_gb=bonus_traffic_gb,
         status="draft",
         total_targets=len(target_tg_ids) if target_tg_ids else 0,
+        event_id=event_id,
         created_at=_now_iso(),
         created_by=created_by,
     )

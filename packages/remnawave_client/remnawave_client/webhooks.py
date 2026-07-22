@@ -14,6 +14,63 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+# Scopes supported by CRM webhook rules (subset of Remnawave panel scopes).
+SCOPE_USER = "user"
+SCOPE_TORRENT_BLOCKER = "torrent_blocker"
+SCOPE_USER_HWID_DEVICES = "user_hwid_devices"
+
+WEBHOOK_EVENT_CATALOG: list[dict[str, Any]] = [
+    {
+        "scope": SCOPE_USER,
+        "label": "User",
+        "events": [
+            {"value": "user.created", "label": "User created"},
+            {"value": "user.modified", "label": "User modified"},
+            {"value": "user.deleted", "label": "User deleted"},
+            {"value": "user.revoked", "label": "User revoked"},
+            {"value": "user.disabled", "label": "User disabled"},
+            {"value": "user.enabled", "label": "User enabled"},
+            {"value": "user.limited", "label": "User limited"},
+            {"value": "user.expired", "label": "User expired"},
+            {"value": "user.traffic_reset", "label": "User traffic reset"},
+            {"value": "user.first_connected", "label": "User first connected"},
+            {
+                "value": "user.bandwidth_usage_threshold_reached",
+                "label": "Bandwidth threshold reached",
+            },
+            {"value": "user.not_connected", "label": "User not connected"},
+            {"value": "user.expiration", "label": "User expiration"},
+        ],
+    },
+    {
+        "scope": SCOPE_TORRENT_BLOCKER,
+        "label": "Torrent Blocker",
+        "events": [
+            {"value": "torrent_blocker.report", "label": "Torrent blocker report"},
+        ],
+    },
+    {
+        "scope": SCOPE_USER_HWID_DEVICES,
+        "label": "HWID Devices",
+        "events": [
+            {"value": "user_hwid_devices.added", "label": "Device added"},
+            {"value": "user_hwid_devices.deleted", "label": "Device deleted"},
+        ],
+    },
+]
+
+
+def webhook_event_catalog() -> list[dict[str, Any]]:
+    return [dict(item) for item in WEBHOOK_EVENT_CATALOG]
+
+
+def is_known_webhook_pair(scope: str, event: str) -> bool:
+    for group in WEBHOOK_EVENT_CATALOG:
+        if group["scope"] != scope:
+            continue
+        return any(e["value"] == event for e in group["events"])
+    return False
+
 
 class RemnawaveWebhookUser(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
@@ -90,34 +147,168 @@ def parse_webhook(raw_body: bytes) -> RemnawaveWebhookPayload:
     return RemnawaveWebhookPayload.model_validate(data)
 
 
+def _data_dict(payload: RemnawaveWebhookPayload) -> dict[str, Any]:
+    if payload.data is None:
+        return {}
+    if isinstance(payload.data, TorrentBlockerData):
+        return payload.data.model_dump(by_alias=True)
+    if isinstance(payload.data, dict):
+        return payload.data
+    return {}
+
+
 def _as_torrent_data(
     payload: RemnawaveWebhookPayload,
 ) -> TorrentBlockerData | None:
-    if payload.scope != "torrent_blocker" or not isinstance(payload.data, dict):
-        if isinstance(payload.data, TorrentBlockerData):
-            return payload.data
+    if payload.scope != SCOPE_TORRENT_BLOCKER:
         return None
-    return TorrentBlockerData.model_validate(payload.data)
+    if isinstance(payload.data, TorrentBlockerData):
+        return payload.data
+    if isinstance(payload.data, dict):
+        return TorrentBlockerData.model_validate(payload.data)
+    return None
+
+
+def _find_user_dict(data: dict[str, Any]) -> dict[str, Any] | None:
+    user = data.get("user")
+    if isinstance(user, dict):
+        return user
+    # Some HWID events nest user under hwidUser / device payload.
+    for key in ("hwidUser", "hwid_user"):
+        nested = data.get(key)
+        if isinstance(nested, dict) and (
+            "uuid" in nested or "telegramId" in nested or "telegram_id" in nested
+        ):
+            return nested
+    return None
 
 
 def extract_vless_uuid(payload: RemnawaveWebhookPayload) -> str | None:
     """Return the Remnawave user UUID from webhook data, if present."""
-    if payload.scope == "torrent_blocker":
+    if payload.scope == SCOPE_TORRENT_BLOCKER:
         tb = _as_torrent_data(payload)
         if tb and tb.user and tb.user.uuid:
             return tb.user.uuid
-    if isinstance(payload.data, dict):
-        user = payload.data.get("user")
-        if isinstance(user, dict):
-            uuid = user.get("uuid")
-            if uuid:
-                return str(uuid)
+    data = _data_dict(payload)
+    # user scope: data often IS the user object
+    if payload.scope == SCOPE_USER:
+        uuid = data.get("uuid")
+        if uuid:
+            return str(uuid)
+    user = _find_user_dict(data)
+    if user:
+        uuid = user.get("uuid")
+        if uuid:
+            return str(uuid)
     return None
+
+
+def extract_telegram_id(payload: RemnawaveWebhookPayload) -> int | None:
+    """Return telegramId from webhook user data, if present."""
+    if payload.scope == SCOPE_TORRENT_BLOCKER:
+        tb = _as_torrent_data(payload)
+        if tb and tb.user and tb.user.telegram_id is not None:
+            return int(tb.user.telegram_id)
+    data = _data_dict(payload)
+    if payload.scope == SCOPE_USER:
+        tg = data.get("telegramId", data.get("telegram_id"))
+        if tg is not None:
+            try:
+                return int(tg)
+            except (TypeError, ValueError):
+                return None
+    user = _find_user_dict(data)
+    if user:
+        tg = user.get("telegramId", user.get("telegram_id"))
+        if tg is not None:
+            try:
+                return int(tg)
+            except (TypeError, ValueError):
+                return None
+    return None
+
+
+def extract_not_connected_after_hours(
+    payload: RemnawaveWebhookPayload,
+) -> int | None:
+    """Hours offline from ``meta.notConnectedAfterHours`` (user.not_connected)."""
+    data = _data_dict(payload)
+    meta = data.get("meta")
+    if not isinstance(meta, dict):
+        return None
+    value = meta.get("notConnectedAfterHours", meta.get("not_connected_after_hours"))
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _find_device_dict(data: dict[str, Any]) -> dict[str, Any] | None:
+    for key in (
+        "hwidUserDevice",
+        "hwid_user_device",
+        "hwidDevice",
+        "hwid_device",
+        "device",
+        "userHwidDevice",
+        "user_hwid_device",
+    ):
+        device = data.get(key)
+        if isinstance(device, dict):
+            return device
+    # Payload may be the device itself
+    if any(
+        k in data
+        for k in (
+            "deviceModel",
+            "device_model",
+            "platform",
+            "osVersion",
+            "os_version",
+            "hwid",
+        )
+    ):
+        return data
+    return None
+
+
+def _device_str_field(
+    payload: RemnawaveWebhookPayload, *keys: str
+) -> str | None:
+    data = _data_dict(payload)
+    device = _find_device_dict(data)
+    if not device:
+        return None
+    for key in keys:
+        value = device.get(key)
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            return text
+    return None
+
+
+def extract_device_model(payload: RemnawaveWebhookPayload) -> str | None:
+    """Device model from HWID device webhook payloads."""
+    return _device_str_field(payload, "deviceModel", "device_model")
+
+
+def extract_device_platform(payload: RemnawaveWebhookPayload) -> str | None:
+    """Platform from HWID device webhook payloads (e.g. ios, android)."""
+    return _device_str_field(payload, "platform")
+
+
+def extract_device_os_version(payload: RemnawaveWebhookPayload) -> str | None:
+    """OS version from HWID device webhook payloads."""
+    return _device_str_field(payload, "osVersion", "os_version")
 
 
 def is_torrent_block_report(payload: RemnawaveWebhookPayload) -> bool:
     """True when this is a torrent blocker report with an active block."""
-    if payload.scope != "torrent_blocker":
+    if payload.scope != SCOPE_TORRENT_BLOCKER:
         return False
     if payload.event != "torrent_blocker.report":
         return False

@@ -1,6 +1,7 @@
 # Env / secrets
 .env
 config.yml
+fcm-sa.json
 
 # Editors / tooling
 .idea
@@ -27,6 +28,9 @@ uvicorn
 db.sqlite3
 support.db
 dig_data.json
+
+# MkDocs / Pages build output
+site/
 
 # Legacy / local scratch
 Deprecated

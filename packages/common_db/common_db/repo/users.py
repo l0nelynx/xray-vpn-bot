@@ -212,8 +212,9 @@ async def persist_remnawave_uuid(
     tg_id: int,
     vless_uuid: str,
     username: str | None = None,
+    rw_id: int | None = None,
 ) -> bool:
-    """Write Remnawave uuid onto the local user row (CRM / delivery join key)."""
+    """Write Remnawave uuid (and optional panel id) onto the local user row."""
     if not vless_uuid:
         return False
     user = await get_user_by_tg_id(session, tg_id)
@@ -221,6 +222,8 @@ async def persist_remnawave_uuid(
         return False
     user.vless_uuid = str(vless_uuid)
     user.api_provider = "remnawave"
+    if rw_id is not None:
+        user.rw_id = rw_id
     if username:
         user.username = username
     await session.flush()

@@ -5,40 +5,59 @@ shared `webapp_menu_nodes` table. We read it directly via SQL so the miniapp
 backend does not need to import the dashboard ORM models.
 """
 
+from typing import Mapping
+
 from fastapi import APIRouter, Depends
+from payments.rub_pricing import get_rub_rates_for_currencies
 from sqlalchemy import text
 
+from ..bonus_points import enrich_invoice_dict
+from ..config import get_config
 from ..database.session import async_session
+from ..menu_invoice import invoice_from_node
 from ..tg_auth import TgUser, get_tg_user
 
 router = APIRouter(prefix="/api/menu", tags=["menu"])
 
 
-def _build_tree(rows: list[dict], parent_id: int | None) -> list[dict]:
+async def _build_tree(
+    rows: list[dict],
+    parent_id: int | None,
+    rates: Mapping[str, float],
+) -> list[dict]:
     items = [r for r in rows if r["parent_id"] == parent_id]
     items.sort(key=lambda r: (r["sort_order"], r["id"]))
-    return [
-        {
-            "id": r["id"],
-            "parent_id": r["parent_id"],
-            "text": r["text"],
-            "action": r["action"],
-            "invoice": (
-                {
-                    "provider": r["invoice_provider"],
-                    "amount": r["invoice_amount"],
-                    "currency": r["invoice_currency"],
-                    "method": r["invoice_method"],
-                    "days": r["invoice_days"],
-                    "tariff_slug": r["invoice_tariff_slug"],
-                }
-                if r["action"] == "invoice"
-                else None
-            ),
-            "children": _build_tree(rows, r["id"]),
-        }
-        for r in items
-    ]
+    out: list[dict] = []
+    for r in items:
+        children = await _build_tree(rows, r["id"], rates)
+        inv_raw = invoice_from_node(r)
+        if r["action"] == "invoice" and inv_raw is None:
+            continue
+        if r["action"] != "invoice" and not children and inv_raw is None:
+            continue
+        inv = None
+        if inv_raw:
+            enriched = await enrich_invoice_dict(inv_raw, rates)
+            inv = {
+                "provider": enriched["provider"],
+                "amount": enriched["amount"],
+                "currency": enriched["currency"],
+                "method": enriched["method"],
+                "days": enriched["days"],
+                "tariff_slug": enriched["tariff_slug"],
+                "points_cost": enriched["points_cost"],
+            }
+        out.append(
+            {
+                "id": r["id"],
+                "parent_id": r["parent_id"],
+                "text": r["text"],
+                "action": r["action"],
+                "invoice": inv,
+                "children": children,
+            }
+        )
+    return out
 
 
 @router.get("/tree")
@@ -52,4 +71,12 @@ async def get_menu_tree(_: TgUser = Depends(get_tg_user)) -> dict:
         ))
         rows = [dict(r._mapping) for r in result.all()]
 
-    return {"tree": _build_tree(rows, None)}
+    currencies = [
+        str(r.get("invoice_currency") or "RUB")
+        for r in rows
+        if r.get("action") == "invoice"
+    ]
+    # One rate resolution for the whole tree — not once per invoice leaf.
+    # RUB/STAR-only menus skip the CBR network call entirely.
+    rates = await get_rub_rates_for_currencies(currencies, get_config())
+    return {"tree": await _build_tree(rows, None, rates)}

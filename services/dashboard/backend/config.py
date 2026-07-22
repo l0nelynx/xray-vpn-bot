@@ -1,17 +1,38 @@
 import os
 import yaml
 
+from common_db.runtime_config import DualSourceConfig, set_crypto_secret
+
 CONFIG_PATH = os.environ.get("CONFIG_PATH", "/app/config.yml")
 
-_config = None
+_yaml_config = None
+_config: DualSourceConfig | None = None
 
 
-def get_config() -> dict:
-    global _config
+def _load_yaml() -> dict:
+    with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+        return yaml.safe_load(f) or {}
+
+
+def get_config() -> DualSourceConfig:
+    global _yaml_config, _config
     if _config is None:
-        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-            _config = yaml.safe_load(f)
+        _yaml_config = _load_yaml()
+        set_crypto_secret(
+            str(
+                _yaml_config.get("payments_secrets_key")
+                or _yaml_config.get("dashboard_secret")
+                or ""
+            )
+        )
+        _config = DualSourceConfig(_yaml_config)
     return _config
+
+
+def get_yaml_config() -> dict:
+    get_config()
+    assert _yaml_config is not None
+    return _yaml_config
 
 
 # Legacy built-in default — now rejected at startup. Kept as a constant so the
@@ -33,6 +54,19 @@ def get_secret_key() -> str:
     # No insecure default — an unset/weak secret would let anyone forge admin
     # JWTs. validate_security_config() refuses to boot in that case.
     return get_config().get("dashboard_secret", "") or ""
+
+
+def get_payments_secrets_key() -> str:
+    """Key used to encrypt payment_integrations blobs.
+
+    Prefer dedicated ``payments_secrets_key``; fall back to dashboard_secret
+    during the dual-source period so existing installs work without a new key.
+    """
+    return (
+        get_config().get("payments_secrets_key")
+        or get_secret_key()
+        or ""
+    )
 
 
 def get_expose_api_docs() -> bool:
@@ -94,3 +128,11 @@ def get_remnawave_token() -> str:
 
 def get_redis_url() -> str:
     return os.environ.get("REDIS_URL", "redis://redis:6379/0")
+
+
+def get_fcm_project_id() -> str:
+    return (get_config().get("fcm_project_id") or "").strip()
+
+
+def get_fcm_service_account_path() -> str:
+    return (get_config().get("fcm_service_account_path") or "").strip()

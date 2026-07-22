@@ -31,6 +31,10 @@ class PaymentCallbackData(CallbackData, prefix=""):
     days: int
 
 
+class CreditsNodeCallbackData(CallbackData, prefix="crd"):
+    node_id: int
+
+
 def payment_keyboard(amount):
     builder = InlineKeyboardBuilder()
     builder.button(text=f"Оплатить {amount} ⭐️", pay=True)
@@ -182,3 +186,5 @@ def create_tariff_keyboard(
         discount_func=discount_func,
         extra_discount=extra_discount,
     ).build()
+
+

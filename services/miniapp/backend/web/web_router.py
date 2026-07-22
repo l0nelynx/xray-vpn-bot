@@ -51,14 +51,16 @@ from ..android import repo as android_repo
 from ..android import security as android_security
 from ..android.auth_router import _issue_pair, _user_summary, limiter
 from ..android.payments_router import _load_menu_rows, _load_node, _node_payload
+from ..bonus_points import enrich_invoice_dict, resolve_points_cost
 from ..android.schemas import AuthResponse, UserSummary
 from ..database.session import async_session
-from ..config import get_bot_token, get_tg_client_secret
+from ..config import get_bot_token, get_config, get_tg_client_secret
+from payments.rub_pricing import get_rub_rates_for_currencies
 from ..notify_log import esc, notify_log, notify_web
 from remnawave_client.api import get_user_from_username as _rw_get_by_username
 from payments import InvoiceRequest, PaymentError, create_invoice, get_provider
 from . import brute_force
-from common_db.models.promo_redemptions import PromoRedemption, REDEMPTION_ACTIVE
+from common_db.repo import balance as _repo_balance
 from common_db.repo import promos as _repo_promos
 from common_db.repo import system as _repo_system
 
@@ -113,12 +115,11 @@ def _promo_tg_id(user: android_repo.UserRow) -> int:
     return user.tg_id if user.tg_id is not None else _fake_tg_id(user.id)
 
 
-async def _resolve_discount_for_promo(promo) -> int:
-    """Cascade: promo.discount_percent (incl. explicit 0) → PromoSettings default."""
-    if promo.discount_percent is not None:
-        return promo.discount_percent
+async def _resolve_credit_grant_for_promo(promo) -> int:
+    if promo.credit_grant is not None:
+        return promo.credit_grant
     async with async_session() as session:
-        return await _repo_system.get_default_discount_percent(session)
+        return await _repo_system.get_default_credit_grant(session)
 
 
 # ---------------------------------------------------------------------------
@@ -131,7 +132,7 @@ class ValidateInviteRequest(BaseModel):
 
 class ValidateInviteResponse(BaseModel):
     valid: bool
-    discount_percent: int | None = None
+    credit_grant: int | None = None
     promo_type: str | None = None
 
 
@@ -159,6 +160,7 @@ class WebMenuInvoice(BaseModel):
     method: str | None
     days: int
     tariff_slug: str
+    points_cost: int
 
 
 class WebMenuNode(BaseModel):
@@ -172,8 +174,7 @@ class WebMenuNode(BaseModel):
 
 class WebMenuResponse(BaseModel):
     tree: list[WebMenuNode]
-    discount_percent: int
-    promo_code: str | None
+    balance: int
 
 
 class WebInvoiceRequest(BaseModel):
@@ -192,10 +193,24 @@ class WebInvoiceResponse(BaseModel):
     url: str
     amount: float
     original_amount: float
-    discount_percent: int
     currency: str
     transaction_id: str
     payment_method: str
+
+
+class WebPayCreditsRequest(BaseModel):
+    node_id: int = Field(..., ge=1)
+
+
+class WebPayCreditsResponse(BaseModel):
+    ok: bool
+    transaction_id: str | None = None
+    points_spent: int | None = None
+    points_cost: int | None = None
+    credits_spent: int | None = None
+    balance_after: int | None = None
+    subscription_url: str | None = None
+    message: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -223,12 +238,12 @@ async def validate_invite(
         if promo is None:
             brute_force.record_fail(ip)
             return ValidateInviteResponse(valid=False)
-        discount = await _resolve_discount_for_promo(promo)
+        discount = await _resolve_credit_grant_for_promo(promo)
 
     brute_force.clear(ip)
     return ValidateInviteResponse(
         valid=True,
-        discount_percent=discount,
+        credit_grant=discount,
         promo_type=promo.promo_type,
     )
 
@@ -290,8 +305,7 @@ async def web_register(
                 status.HTTP_400_BAD_REQUEST,
                 detail={"code": "invalid_invite"},
             )
-        discount = await _resolve_discount_for_promo(promo)
-        promo_type = promo.promo_type
+        grant = await _resolve_credit_grant_for_promo(promo)
 
     brute_force.clear(ip)
 
@@ -309,16 +323,13 @@ async def web_register(
 
     fake_tg = _fake_tg_id(user_id)
     async with async_session() as session:
-        session.add(
-            PromoRedemption(
-                tg_id=fake_tg,
-                promo_code=code,
-                promo_type=promo_type,
-                discount_percent=discount,
-                status=REDEMPTION_ACTIVE,
-                created_at=_now_iso(),
+        redeem_result = await _repo_promos.redeem_promo(session, fake_tg, code)
+        if not redeem_result.ok:
+            await session.rollback()
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail={"code": "invalid_invite"},
             )
-        )
         await session.commit()
 
     tokens = await _issue_pair(user_id, request)
@@ -327,7 +338,7 @@ async def web_register(
         f"🌐 <b>Web registration</b>\n"
         f"ID: <code>{user_id}</code>\n"
         f"email: <code>{esc(user.email)}</code>\n"
-        f"invite: <code>{esc(code)}</code> ({discount}% discount)\n"
+        f"invite: <code>{esc(code)}</code> (+{grant} credits)\n"
         f"IP: <code>{esc(ip_log or '—')}</code>"
     )
     return AuthResponse(tokens=tokens, user=_user_summary(user))
@@ -337,44 +348,45 @@ async def web_register(
 async def web_payments_menu(
     user: android_repo.UserRow = Depends(deps.get_current_user),
 ) -> WebMenuResponse:
-    """Tariff tree with prices discounted by the user's active promo."""
-    promo_tg_id = _promo_tg_id(user)
+    """Tariff tree with user's bonus credit balance."""
     async with async_session() as session:
-        discount_info = await _repo_promos.get_effective_discount(session, promo_tg_id)
-
-    discount_pct = discount_info.discount_percent if discount_info else 0
-    promo_code = discount_info.promo_code if discount_info else None
+        balance = await _repo_balance.get_balance(session, user.id)
 
     rows = await _load_menu_rows()
+    currencies = [
+        str(r.get("invoice_currency") or "RUB")
+        for r in rows
+        if r.get("action") == "invoice"
+    ]
+    rates = await get_rub_rates_for_currencies(currencies, get_config())
 
-    def _build(parent_id) -> list[dict]:
+    async def _build(parent_id) -> list[dict]:
         items = sorted(
             [r for r in rows if r["parent_id"] == parent_id],
             key=lambda r: (r["sort_order"], r["id"]),
         )
         out: list[dict] = []
         for r in items:
-            children = _build(r["id"])
+            children = await _build(r["id"])
             inv_raw = _node_payload(r)
             if r["action"] == "invoice" and inv_raw is None:
                 continue
             if r["action"] != "invoice" and not children and inv_raw is None:
                 continue
             orig = float(inv_raw["amount"]) if inv_raw else 0
-            discounted = round(orig * (1 - discount_pct / 100), 2) if (inv_raw and discount_pct) else orig
-            inv = (
-                {
-                    "provider": inv_raw["provider"],
-                    "amount": discounted,
+            inv = None
+            if inv_raw:
+                enriched = await enrich_invoice_dict(inv_raw, rates)
+                inv = {
+                    "provider": enriched["provider"],
+                    "amount": orig,
                     "original_amount": orig,
-                    "currency": inv_raw["currency"],
-                    "method": inv_raw["method"],
-                    "days": inv_raw["days"],
-                    "tariff_slug": inv_raw["tariff_slug"],
+                    "currency": enriched["currency"],
+                    "method": enriched["method"],
+                    "days": enriched["days"],
+                    "tariff_slug": enriched["tariff_slug"],
+                    "points_cost": enriched["points_cost"],
                 }
-                if inv_raw
-                else None
-            )
             out.append(
                 {
                     "id": r["id"],
@@ -387,11 +399,10 @@ async def web_payments_menu(
             )
         return out
 
-    tree = _build(None)
+    tree = await _build(None)
     return WebMenuResponse(
         tree=[WebMenuNode(**n) for n in tree],
-        discount_percent=discount_pct,
-        promo_code=promo_code,
+        balance=balance,
     )
 
 
@@ -402,7 +413,7 @@ async def web_invoice(
     request: Request,
     user: android_repo.UserRow = Depends(deps.require_verified_email),
 ) -> WebInvoiceResponse:
-    """Create a payment invoice with promo discount applied to the price."""
+    """Create a payment invoice at full price (no promo discount)."""
     node = await _load_node(body.node_id)
     if node is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail={"code": "node_not_found"})
@@ -421,13 +432,8 @@ async def web_invoice(
     if invoice_data["amount"] <= 0 or invoice_data["days"] <= 0:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail={"code": "node_misconfigured"})
 
-    promo_tg_id = _promo_tg_id(user)
-    async with async_session() as session:
-        discount_info = await _repo_promos.get_effective_discount(session, promo_tg_id)
-
-    discount_pct = discount_info.discount_percent if discount_info else 0
     original_amount = float(invoice_data["amount"])
-    final_amount = round(original_amount * (1 - discount_pct / 100), 2) if discount_pct else original_amount
+    final_amount = original_amount
 
     transaction_id = str(uuid.uuid4())
     invoice_req = InvoiceRequest(
@@ -435,7 +441,7 @@ async def web_invoice(
         amount=final_amount,
         currency=invoice_data["currency"],
         days=invoice_data["days"],
-        user_tg_id=promo_tg_id,
+        user_tg_id=_promo_tg_id(user),
         username=user.email,
         description=body.description or f"WebUser:{user.id}",
         method=invoice_data["method"],
@@ -481,8 +487,7 @@ async def web_invoice(
     await notify_log(
         f"🌐🧾 <b>Invoice (Web)</b>\n"
         f"user: <code>{user.id}</code> {esc(user.email or '')}\n"
-        f"amount: <code>{final_amount} {esc(invoice_data['currency'])}</code>"
-        f" (orig {original_amount}, -{discount_pct}%)\n"
+        f"amount: <code>{final_amount} {esc(invoice_data['currency'])}</code>\n"
         f"days: <code>{invoice_data['days']}</code>\n"
         f"tx: <code>{esc(persisted_id)}</code>"
     )
@@ -493,10 +498,64 @@ async def web_invoice(
         url=invoice.url,
         amount=final_amount,
         original_amount=original_amount,
-        discount_percent=discount_pct,
         currency=invoice.currency,
         transaction_id=persisted_id,
         payment_method=provider.payment_method,
+    )
+
+
+@router.post("/payments/pay-credits", response_model=WebPayCreditsResponse)
+@limiter.limit("10/minute")
+async def web_pay_credits(
+    body: WebPayCreditsRequest,
+    request: Request,
+    user: android_repo.UserRow = Depends(deps.require_verified_email),
+) -> WebPayCreditsResponse:
+    from ..credits_delivery import pay_and_deliver
+
+    node = await _load_node(body.node_id)
+    if node is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail={"code": "node_not_found"})
+
+    invoice_data = _node_payload(node)
+    if invoice_data is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail={"code": "node_not_invoice"})
+
+    days = invoice_data["days"]
+    points_cost = await resolve_points_cost(invoice_data)
+    async with async_session() as session:
+        balance = await _repo_balance.get_balance(session, user.id)
+    if balance < points_cost:
+        raise HTTPException(
+            status.HTTP_402_PAYMENT_REQUIRED,
+            detail={"code": "insufficient_credits", "need": points_cost, "have": balance},
+        )
+
+    promo_tg_id = _promo_tg_id(user)
+    result = await pay_and_deliver(
+        user_id=user.id,
+        tg_id=user.tg_id,
+        username=user.email or f"webuser_{user.id}",
+        points_cost=points_cost,
+        days=days,
+        tariff_slug=invoice_data["tariff_slug"],
+        android_user_id=user.id if user.tg_id is None else None,
+        email=user.email,
+        referral_tg_id=_promo_tg_id(user),
+    )
+    if result.get("status") != "success":
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            detail={"code": result.get("message", "delivery_failed")},
+        )
+    return WebPayCreditsResponse(
+        ok=True,
+        transaction_id=result.get("transaction_id"),
+        points_spent=result.get("points_spent"),
+        points_cost=points_cost,
+        credits_spent=result.get("credits_spent"),
+        balance_after=result.get("balance_after"),
+        subscription_url=result.get("subscription_url"),
     )
 
 

@@ -109,6 +109,17 @@ async def cmd_start(message: Message, command: CommandObject = None):
         )
         return
 
+    # Giveaway deeplink: t.me/<bot>?start=gw_<id>
+    if raw_payload.lower().startswith("gw_"):
+        try:
+            giveaway_id = int(raw_payload[3:])
+        except ValueError:
+            giveaway_id = 0
+        if giveaway_id > 0:
+            from app.handlers.giveaways import handle_giveaway_join
+            await handle_giveaway_join(message, giveaway_id)
+            return
+
     payload = raw_payload.lower()
     if payload in ("buy", "extend", "trial"):
         lang = await get_user_lang(message.from_user.id)
@@ -136,11 +147,12 @@ async def cmd_start(message: Message, command: CommandObject = None):
                 )
                 return
         show_promo = await rq.can_use_promo(message.from_user.id)
+        balance = await rq.get_user_bonus_credits(message.from_user.id)
         text = lang.text_extend_pay_method if payload == "extend" else lang.text_pay_method
         await message.answer(
             text=text, parse_mode='HTML',
             disable_web_page_preview=True,
-            reply_markup=get_pay_methods_localized(lang, show_promo=show_promo),
+            reply_markup=get_pay_methods_localized(lang, show_promo=show_promo, bonus_credits=balance),
         )
         return
 
@@ -154,7 +166,7 @@ async def cmd_start(message: Message, command: CommandObject = None):
         result = await rq.redeem_promo_for_user(message.from_user.id, raw_payload.upper())
         if result.ok:
             await message.answer(
-                text=lang.promo_deeplink_applied_text.format(discount=result.discount_percent),
+                text=lang.promo_deeplink_applied_text.format(points=result.credit_grant or 0),
                 parse_mode='HTML', disable_web_page_preview=True,
             )
         elif result.reason == rq_promos.REASON_REFERRAL_NOT_NEW:
@@ -350,6 +362,8 @@ async def telemt_free_buy(callback: CallbackQuery):
         max_tcp_conns=params.get("max_tcp_conns"),
         max_unique_ips=params.get("max_unique_ips"),
         data_quota_bytes=params.get("data_quota_bytes"),
+        rate_limit_up_bps=params.get("rate_limit_up_bps"),
+        rate_limit_down_bps=params.get("rate_limit_down_bps"),
     )
 
     if not result:
@@ -395,15 +409,15 @@ async def invite_friends(callback: CallbackQuery):
 
     # Discount + reward tunables now come from promo_settings (single source
     # of truth) rather than config.yml.
-    promo_discount = await rq.get_default_promo_discount()
-    promo_days_reward, _reward_cap = await rq.get_promo_reward_settings()
+    promo_grant = await rq.get_default_promo_credit_grant()
+    promo_points_reward, _reward_cap = await rq.get_promo_reward_settings()
 
     text = lang.promo_invite_text.format(
         promo_code=code,
-        discount=promo_discount,
-        reward_days=promo_days_reward,
+        invite_grant=promo_grant,
+        reward_points=promo_points_reward,
         days_purchased=promo['days_purchased'] if promo else 0,
-        days_rewarded=promo['days_rewarded'] if promo else 0,
+        points_rewarded=promo['points_rewarded'] if promo else 0,
     )
 
     await callback.message.edit_text(text=text, parse_mode='HTML', disable_web_page_preview=True,

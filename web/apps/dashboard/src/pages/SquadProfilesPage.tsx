@@ -1,20 +1,44 @@
 import { useEffect, useState, useCallback } from "react";
+import { toast } from "sonner";
+import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Button } from "@xray/ui/components/button";
+import { Input } from "@xray/ui/components/input";
+import { Label } from "@xray/ui/components/label";
 import {
-  Typography, Table, Button, Space, Modal, Form, Input, App, Popconfirm,
-} from "antd";
-import { PlusOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons";
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@xray/ui/components/dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@xray/ui/components/table";
 import { api } from "../api/client";
 import type { SquadProfile } from "../api/types";
-import useIsMobile from "../hooks/useIsMobile";
+import ConfirmButton from "../components/ConfirmButton";
+
+interface SquadForm {
+  name: string;
+  squad_id: string;
+  external_squad_id: string;
+}
+
+const emptyForm: SquadForm = { name: "", squad_id: "", external_squad_id: "" };
 
 export default function SquadProfilesPage() {
   const [squads, setSquads] = useState<SquadProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<SquadProfile | null>(null);
-  const [form] = Form.useForm();
-  const isMobile = useIsMobile();
-  const { message } = App.useApp();
+  const [form, setForm] = useState<SquadForm>(emptyForm);
+
+  const patchForm = (patch: Partial<SquadForm>) => setForm((f) => ({ ...f, ...patch }));
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -22,109 +46,157 @@ export default function SquadProfilesPage() {
       const data = await api.get<SquadProfile[]>("/squads");
       setSquads(data);
     } catch {
-      message.error("Failed to load squad profiles");
+      toast.error("Failed to load squad profiles");
     }
     setLoading(false);
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const openCreate = () => {
     setEditing(null);
-    form.resetFields();
+    setForm(emptyForm);
     setModalOpen(true);
   };
 
   const openEdit = (record: SquadProfile) => {
     setEditing(record);
-    form.setFieldsValue(record);
+    setForm({
+      name: record.name,
+      squad_id: record.squad_id,
+      external_squad_id: record.external_squad_id,
+    });
     setModalOpen(true);
   };
 
   const handleSave = async () => {
+    if (!form.name || !form.squad_id || !form.external_squad_id) {
+      toast.error("All fields are required");
+      return;
+    }
     try {
-      const values = await form.validateFields();
       if (editing) {
-        await api.put(`/squads/${editing.id}`, values);
-        message.success("Squad updated");
+        await api.put(`/squads/${editing.id}`, form);
+        toast.success("Squad updated");
       } else {
-        await api.post("/squads", values);
-        message.success("Squad created");
+        await api.post("/squads", form);
+        toast.success("Squad created");
       }
       setModalOpen(false);
       await load();
     } catch {
-      message.error("Failed to save");
+      toast.error("Failed to save");
     }
   };
 
   const handleDelete = async (id: number) => {
     try {
       await api.delete(`/squads/${id}`);
-      message.success("Squad deleted");
+      toast.success("Squad deleted");
       await load();
     } catch (err: unknown) {
       const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      message.error(detail || "Failed to delete");
+      toast.error(detail || "Failed to delete");
     }
   };
 
-  const columns = [
-    { title: "Name", dataIndex: "name", key: "name" },
-    { title: "Squad ID", dataIndex: "squad_id", key: "squad_id" },
-    { title: "External Squad ID", dataIndex: "external_squad_id", key: "external_squad_id" },
-    {
-      title: "Actions",
-      key: "actions",
-      width: 120,
-      render: (_: unknown, record: SquadProfile) => (
-        <Space size="small">
-          <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(record)} />
-          <Popconfirm title="Delete this squad profile?" onConfirm={() => handleDelete(record.id)}>
-            <Button size="small" danger icon={<DeleteOutlined />} />
-          </Popconfirm>
-        </Space>
-      ),
-    },
-  ];
-
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
-        <Typography.Title level={isMobile ? 5 : 4} style={{ margin: 0, color: "rgba(255,255,255,0.88)" }}>
-          Squad Profiles
-        </Typography.Title>
-        <Button icon={<PlusOutlined />} onClick={openCreate}>Add Squad</Button>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-lg font-semibold text-foreground md:text-xl">Squad Profiles</h1>
+        <Button variant="outline" onClick={openCreate}>
+          <Plus className="h-4 w-4" />
+          Add Squad
+        </Button>
       </div>
 
-      <Table
-        dataSource={squads}
-        columns={columns}
-        rowKey="id"
-        loading={loading}
-        pagination={false}
-        size="small"
-      />
+      <div className="overflow-auto rounded-lg border border-border">
+        <Table>
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <TableHead>Name</TableHead>
+              <TableHead>Squad ID</TableHead>
+              <TableHead>External Squad ID</TableHead>
+              <TableHead>Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {squads.length === 0 ? (
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
+                  {loading ? "Loading..." : "No squad profiles"}
+                </TableCell>
+              </TableRow>
+            ) : (
+              squads.map((record) => (
+                <TableRow key={record.id}>
+                  <TableCell>{record.name}</TableCell>
+                  <TableCell>{record.squad_id}</TableCell>
+                  <TableCell>{record.external_squad_id}</TableCell>
+                  <TableCell>
+                    <div className="flex gap-1">
+                      <Button size="icon" variant="outline" onClick={() => openEdit(record)}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <ConfirmButton
+                        title="Delete this squad profile?"
+                        destructive
+                        onConfirm={() => handleDelete(record.id)}
+                      >
+                        <Button size="icon" variant="destructive">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </ConfirmButton>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
 
-      <Modal
-        title={editing ? "Edit Squad Profile" : "New Squad Profile"}
-        open={modalOpen}
-        onOk={handleSave}
-        onCancel={() => setModalOpen(false)}
-        okText="Save"
-      >
-        <Form form={form} layout="vertical">
-          <Form.Item name="name" label="Name" rules={[{ required: true }]}>
-            <Input placeholder="e.g. France Pro" />
-          </Form.Item>
-          <Form.Item name="squad_id" label="Squad ID" rules={[{ required: true }]}>
-            <Input placeholder="RemnaWave squad ID" />
-          </Form.Item>
-          <Form.Item name="external_squad_id" label="External Squad ID" rules={[{ required: true }]}>
-            <Input placeholder="External squad ID" />
-          </Form.Item>
-        </Form>
-      </Modal>
+      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editing ? "Edit Squad Profile" : "New Squad Profile"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label>Name *</Label>
+              <Input
+                placeholder="e.g. France Pro"
+                value={form.name}
+                onChange={(e) => patchForm({ name: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Squad ID *</Label>
+              <Input
+                placeholder="RemnaWave squad ID"
+                value={form.squad_id}
+                onChange={(e) => patchForm({ squad_id: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>External Squad ID *</Label>
+              <Input
+                placeholder="External squad ID"
+                value={form.external_squad_id}
+                onChange={(e) => patchForm({ external_squad_id: e.target.value })}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSave}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

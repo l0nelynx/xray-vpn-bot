@@ -1,22 +1,38 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { BrowserRouter } from "react-router-dom";
-import { ConfigProvider, App as AntApp } from "antd";
+import { BrowserRouter } from "react-router";
+import { registerSW } from "virtual:pwa-register";
+import { Toaster } from "@xray/ui/components/sonner";
 import App from "./App";
 import ErrorBoundary from "./components/ErrorBoundary";
-import { liquidGlassConfig } from "./theme/liquidGlass";
+import "./index.css";
 import "./theme.css";
 
-ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <BrowserRouter basename="/bot/dashboard">
-      <ConfigProvider {...liquidGlassConfig}>
-        <AntApp>
-          <ErrorBoundary>
-            <App />
-          </ErrorBoundary>
-        </AntApp>
-      </ConfigProvider>
-    </BrowserRouter>
-  </React.StrictMode>
-);
+async function prepare() {
+  if (import.meta.env.VITE_MOCK_API === "1") {
+    const { worker } = await import("./mocks/browser");
+    await worker.start({
+      onUnhandledRequest: "bypass",
+      serviceWorker: {
+        url: `${import.meta.env.BASE_URL}mockServiceWorker.js`,
+      },
+      quiet: true,
+    });
+    console.info("[mock] MSW enabled — dashboard API is mocked");
+    return;
+  }
+  registerSW({ immediate: true });
+}
+
+prepare().then(() => {
+  ReactDOM.createRoot(document.getElementById("root")!).render(
+    <React.StrictMode>
+      <BrowserRouter basename="/bot/dashboard">
+        <ErrorBoundary>
+          <App />
+        </ErrorBoundary>
+        <Toaster />
+      </BrowserRouter>
+    </React.StrictMode>,
+  );
+});

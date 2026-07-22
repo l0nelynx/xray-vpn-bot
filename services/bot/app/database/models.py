@@ -25,19 +25,25 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 # keeps working for every class.
 from common_db import Base  # noqa: F401
 from common_db.models import (  # noqa: F401
+    AndroidFcmToken,
+    AppRuntimeSettings,
     BotFeatureFlags,
     CacheVersion,
     CrmCampaign,
     CrmCampaignDelivery,
+    CreditLedger,
     DisabledUser,
     EmailVerification,
     GooglePlayPurchase,
     GooglePlaySku,
     MenuButton,
     MenuScreen,
+    PaymentIntegration,
     Promo,
     PromoRedemption,
     PromoSettings,
+    PushCampaign,
+    PushCampaignDelivery,
     RefreshToken,
     SquadProfile,
     SupportAttachment,
@@ -78,19 +84,25 @@ __all__ = [
     "async_session",
     "async_main",
     # models (re-exported from common_db.models)
+    "AndroidFcmToken",
+    "AppRuntimeSettings",
     "BotFeatureFlags",
     "CacheVersion",
     "CrmCampaign",
     "CrmCampaignDelivery",
+    "CreditLedger",
     "DisabledUser",
     "EmailVerification",
     "GooglePlayPurchase",
     "GooglePlaySku",
     "MenuButton",
     "MenuScreen",
+    "PaymentIntegration",
     "Promo",
     "PromoRedemption",
     "PromoSettings",
+    "PushCampaign",
+    "PushCampaignDelivery",
     "RefreshToken",
     "SquadProfile",
     "SupportAttachment",
@@ -123,6 +135,16 @@ async def async_main():
     await _seed_telemt_free_params()
     await _seed_promo_settings()
     await _seed_bot_feature_flags()
+    await _seed_runtime_settings()
+
+
+async def _seed_runtime_settings():
+    """Ensure app_runtime_settings singleton exists (migration also inserts)."""
+    from common_db.repo.runtime import get_runtime_settings
+
+    async with async_session() as session:
+        await get_runtime_settings(session)
+        await session.commit()
 
 
 async def _seed_cache_version():
@@ -328,7 +350,8 @@ async def _seed_telemt_free_params():
         count = await session.scalar(select(func.count()).select_from(TelmtFreeParams))
         if not count:
             session.add(TelmtFreeParams(id=1, max_tcp_conns=None, max_unique_ips=None,
-                                        data_quota_bytes=None, expire_days=30))
+                                        data_quota_bytes=None, expire_days=30,
+                                        rate_limit_up_bps=None, rate_limit_down_bps=None))
             await session.commit()
             logging.info("Seed: telemt_free_params default row created")
 
@@ -339,7 +362,7 @@ async def _seed_promo_settings():
     async with async_session() as session:
         count = await session.scalar(select(func.count()).select_from(PromoSettings))
         if not count:
-            session.add(PromoSettings(id=1, default_discount_percent=20))
+            session.add(PromoSettings(id=1, default_discount_percent=20, default_credit_grant=100))
             await session.commit()
             logging.info("Seed: promo_settings default row created")
 

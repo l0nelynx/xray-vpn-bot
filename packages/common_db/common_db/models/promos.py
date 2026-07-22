@@ -15,7 +15,7 @@ class Promo(Base):
     """Catalog of promo codes (one row = one code).
 
     A "referral" promo is a user's own code, auto-generated the first time
-    they open the invite screen; its owner earns reward days when invitees
+    they open the invite screen; its owner earns bonus points when invitees
     purchase. A "promotional" promo is an admin/dashboard marketing code,
     usually owned by a synthetic negative tg_id.
 
@@ -35,9 +35,12 @@ class Promo(Base):
     )
 
     days_purchased: Mapped[int] = mapped_column(Integer, default=0)
-    days_rewarded: Mapped[int] = mapped_column(Integer, default=0)
+    points_rewarded: Mapped[int] = mapped_column(Integer, default=0)
 
-    # NULL = use PromoSettings.default_discount_percent.
+    # NULL = use PromoSettings.default_credit_grant.
+    credit_grant: Mapped[int] = mapped_column(Integer, nullable=True)
+
+    # Legacy — superseded by credit_grant; kept for migration reads.
     discount_percent: Mapped[int] = mapped_column(Integer, nullable=True)
 
     # --- legacy single-redemption columns (superseded by promo_redemptions) ---
@@ -59,13 +62,18 @@ class PromoSettings(Base):
     __tablename__ = "promo_settings"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    default_credit_grant: Mapped[int] = mapped_column(
+        Integer, default=100, server_default="100"
+    )
+
+    # Legacy — superseded by default_credit_grant.
     default_discount_percent: Mapped[int] = mapped_column(Integer, default=20)
 
-    # Reward days granted to a referral owner per 30 days an invitee buys.
-    days_reward_per_30: Mapped[int] = mapped_column(
-        Integer, default=3, server_default="3"
+    # Bonus points granted to referral owner per 30 invitee-days purchased.
+    points_reward_per_30: Mapped[int] = mapped_column(
+        Integer, default=30, server_default="30"
     )
-    # Cumulative cap (days) on the reward a single owner can ever earn.
-    reward_cap_days: Mapped[int] = mapped_column(
-        Integer, default=180, server_default="180"
+    # Cumulative cap (points) on owner rewards from one referral code.
+    reward_cap_points: Mapped[int] = mapped_column(
+        Integer, default=1800, server_default="1800"
     )

@@ -65,9 +65,38 @@ list). Highlights:
 | Devices | list, reset traffic |
 | Support | tickets CRUD + attachments |
 | Landing | partnership / feedback form |
+| Claim | browser onboarding for a subscription URL → account (see below) |
 
 Invoice creation matches Android/MiniApp security: the client sends only
 `node_id`; price, days, provider and `tariff_slug` come from `webapp_menu_nodes`.
+
+## Claim page (`/claim`) + desktop handoff
+
+Public SPA route that turns a Remnawave subscription link into a full portal
+account (and optionally signs the desktop/mobile app in).
+
+1. Catalog / Remnawave subscription page links to
+   `https://cheezyvpn.uk/claim?url={{SUBSCRIPTION_LINK}}` (query — Remnawave
+   substitutes placeholders in the query string; `#fragment` often stays
+   literal `{{SUBSCRIPTION_LINK}}`). The SPA also still accepts legacy
+   `/claim#url=…`.
+2. SPA calls `POST /android/claim/resolve` → status + masked `email_hint` +
+   `claim_token` + `email_verified`, then branches:
+   - `ready_login` → `/android/claim/login` (password only + hint; or
+     `/forgot-password`; if `email_verified=false`, “use a different email”
+     → `/claim/complete` rebind)
+   - `needs_password` → OTP + `/android/claim/complete` (set password)
+   - `rw_only` → registration + bind (`acc_email` + password); OTP only when
+     resolve returned a deliverable `email_hint`
+3. After auth, **Open in app** mints
+   `POST /android/auth/app-login/create` and navigates to
+   `cheezy://login/<token>`. Fallback: `cheezy://add/<url>` (import without
+   account).
+4. Forgot-password UI lives at `/forgot-password` (request + confirm against
+   existing `/android/auth/password/reset-*`).
+
+Full claim API: [android-api.md](android-api.md) (`/claim/*`, `/auth/app-login/*`).
+Connect-page catalog entries: [connect-page.md](connect-page.md).
 
 ## Deployment checklist
 

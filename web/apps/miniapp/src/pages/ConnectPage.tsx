@@ -1,7 +1,10 @@
-import { App as AntApp, Button, Collapse, Segmented, Spin, Tag, Typography } from "antd";
-import { ArrowLeftOutlined, CopyOutlined, StarFilled } from "@ant-design/icons";
+import { ArrowLeft, ChevronDown, Copy, Star } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
+import { toast } from "sonner";
+import { Button } from "@xray/ui/components/button";
+import { Badge } from "@xray/ui/components/badge";
+import { Spinner } from "@xray/ui/components/spinner";
 import {
   api,
   AppConfig,
@@ -11,26 +14,23 @@ import {
   LocalizedText,
   MeResponse,
 } from "../api/client";
+import { useT } from "../i18n/LocaleContext";
 import { copyToClipboard, hapticImpact, openLink, tg } from "../tg/webapp";
 import { AppIcon, LibIcon, resolveColor } from "../connect/icons";
 
-const { Text } = Typography;
-
-// MiniApp UI is Russian-first; fall back to English then any available locale.
-const LANG = "ru";
-function tr(obj?: LocalizedText): string {
+function tr(obj: LocalizedText | undefined, locale: string): string {
   if (!obj) return "";
-  return obj[LANG] ?? obj.en ?? Object.values(obj)[0] ?? "";
+  return obj[locale] ?? obj.en ?? Object.values(obj)[0] ?? "";
 }
 
-const PLATFORM_LABELS: Record<string, string> = {
-  ios: "iOS",
-  android: "Android",
-  windows: "Windows",
-  macos: "macOS",
-  linux: "Linux",
-  appleTV: "Apple TV",
-  androidTV: "Android TV",
+const PLATFORM_KEYS: Record<string, string> = {
+  ios: "connect.platform.ios",
+  android: "connect.platform.android",
+  windows: "connect.platform.windows",
+  macos: "connect.platform.macos",
+  linux: "connect.platform.linux",
+  appleTV: "connect.platform.appleTV",
+  androidTV: "connect.platform.androidTV",
 };
 const PLATFORM_ORDER = ["ios", "android", "windows", "macos", "linux", "appleTV", "androidTV"];
 
@@ -48,14 +48,39 @@ function detectPlatform(available: string[]): string {
 }
 
 function fillLink(link: string, subUrl: string, username: string): string {
-  return link
-    .split("{{SUBSCRIPTION_LINK}}").join(subUrl)
-    .split("{{USERNAME}}").join(username);
+  // Encode subscription/username when they land in a query (?url= / &url=)
+  // or a #fragment so ?&= inside the value don't break URL parsing.
+  const hashIdx = link.indexOf("#");
+  const before = hashIdx >= 0 ? link.slice(0, hashIdx) : link;
+  const after = hashIdx >= 0 ? link.slice(hashIdx) : "";
+
+  const fillQueryAware = (s: string, value: string, user: string) => {
+    // Prefer encoding for url= / name= style placeholders in query strings.
+    let out = s.replace(
+      /([?&](?:url|name)=)\{\{SUBSCRIPTION_LINK\}\}/g,
+      (_m, prefix: string) => prefix + encodeURIComponent(value),
+    );
+    out = out.replace(
+      /([?&](?:url|name)=)\{\{USERNAME\}\}/g,
+      (_m, prefix: string) => prefix + encodeURIComponent(user),
+    );
+    // Remaining placeholders (path segments, custom schemes) stay raw.
+    return out
+      .split("{{SUBSCRIPTION_LINK}}").join(value)
+      .split("{{USERNAME}}").join(user);
+  };
+
+  const fillHash = (s: string, value: string, user: string) =>
+    s
+      .split("{{SUBSCRIPTION_LINK}}").join(encodeURIComponent(value))
+      .split("{{USERNAME}}").join(encodeURIComponent(user));
+
+  return fillQueryAware(before, subUrl, username) + fillHash(after, subUrl, username);
 }
 
 export default function ConnectPage() {
   const navigate = useNavigate();
-  const { message } = AntApp.useApp();
+  const { t, locale } = useT();
 
   const [cfg, setCfg] = useState<AppConfig | null>(null);
   const [subUrl, setSubUrl] = useState<string>("");
@@ -63,6 +88,7 @@ export default function ConnectPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [platform, setPlatform] = useState<string>("");
+  const [openApp, setOpenApp] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -104,26 +130,31 @@ export default function ConnectPage() {
     return [...list].sort((a, b) => Number(!!b.featured) - Number(!!a.featured));
   }, [cfg, platform]);
 
+  useEffect(() => {
+    setOpenApp(apps.length ? apps[0].name : null);
+  }, [apps]);
+
   async function onButton(btn: ConnectButton) {
     hapticImpact("light");
     const url = fillLink(btn.link, subUrl, username);
     if (btn.type === "copyButton") {
       const ok = await copyToClipboard(url);
-      message[ok ? "success" : "error"](ok ? "Скопировано" : "Не удалось скопировать");
+      toast[ok ? "success" : "error"](
+        ok ? t("connect.toast.copied") : t("connect.toast.copyFailed")
+      );
       return;
     }
-    if (/^https?:\/\//i.test(url)) {
-      // External http(s) link (App Store / Google Play) — open as-is.
-      openLink(url);
-    } else {
-      // Custom-scheme deep-link (happ://, rabbithole://…). tg.openLink only
-      // handles http(s) and the Mini App webview can't launch a custom scheme
-      // itself, so bounce through a static https redirector opened in the
-      // external browser, which then fires the scheme. The deep-link rides in
-      // the #fragment so the subscription URL never reaches server logs.
+    // Plain https without query/fragment (App Store / GitHub) — open directly.
+    // Custom schemes and claim links (?url= / #url=) bounce through
+    // connect-open.html so Telegram cannot strip the subscription payload.
+    const needsRedirector =
+      !/^https?:\/\//i.test(url) || url.includes("#") || /[?&]url=/.test(url);
+    if (needsRedirector) {
       const redirector =
         `${window.location.origin}/bot/miniapp/connect-open.html#${encodeURIComponent(url)}`;
       openLink(redirector);
+    } else {
+      openLink(url);
     }
   }
 
@@ -131,13 +162,15 @@ export default function ConnectPage() {
     if (!subUrl) return;
     hapticImpact("light");
     const ok = await copyToClipboard(subUrl);
-    message[ok ? "success" : "error"](ok ? "Ссылка скопирована" : "Не удалось скопировать");
+    toast[ok ? "success" : "error"](
+      ok ? t("connect.toast.linkCopied") : t("connect.toast.copyFailed")
+    );
   }
 
   if (loading) {
     return (
       <div className="spinner-wrap">
-        <Spin size="large" />
+        <Spinner className="h-8 w-8" />
       </div>
     );
   }
@@ -147,16 +180,19 @@ export default function ConnectPage() {
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18 }}>
         <Button
-          shape="circle"
-          icon={<ArrowLeftOutlined />}
+          size="icon"
+          variant="outline"
+          className="rounded-full"
           onClick={() => navigate(-1)}
-          aria-label="Назад"
-        />
-        <div style={{ fontSize: 20, fontWeight: 700, color: "#FFFFFF" }}>Подключение</div>
+          aria-label={t("connect.backAria")}
+        >
+          <ArrowLeft />
+        </Button>
+        <div style={{ fontSize: 20, fontWeight: 700, color: "#FFFFFF" }}>{t("connect.title")}</div>
       </div>
 
       {error && (
-        <Text style={{ color: "#FF7C7C", display: "block", marginBottom: 16 }}>{error}</Text>
+        <span style={{ color: "#FF7C7C", display: "block", marginBottom: 16 }}>{error}</span>
       )}
 
       {/* Subscription link */}
@@ -171,7 +207,7 @@ export default function ConnectPage() {
           }}
         >
           <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)", marginBottom: 8 }}>
-            Ссылка-подписка
+            {t("connect.subLinkLabel")}
           </div>
           <div
             style={{
@@ -185,134 +221,165 @@ export default function ConnectPage() {
           >
             {subUrl}
           </div>
-          <Button block icon={<CopyOutlined />} onClick={copySub}>
-            Скопировать ссылку
+          <Button variant="outline" className="w-full" onClick={copySub}>
+            <Copy />
+            {t("connect.copyLink")}
           </Button>
         </div>
       )}
 
       {/* Platform selector */}
       {platforms.length > 1 && (
-        <div style={{ marginBottom: 16, overflowX: "auto" }}>
-          <Segmented
-            value={platform}
-            onChange={(v) => setPlatform(String(v))}
-            options={platforms.map((p) => ({ label: PLATFORM_LABELS[p] ?? p, value: p }))}
-          />
+        <div className="chip-row-wrap" style={{ marginBottom: 16 }}>
+          <div className="chip-row">
+            {platforms.map((p) => (
+              <button
+                key={p}
+                className={`plan-chip${platform === p ? " active" : ""}`}
+                onClick={() => setPlatform(p)}
+              >
+                {PLATFORM_KEYS[p] ? t(PLATFORM_KEYS[p]) : p}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
       {/* App guides */}
-      <Collapse
-        accordion
-        bordered={false}
-        defaultActiveKey={apps.length ? [apps[0].name] : []}
-        style={{ background: "transparent" }}
-        items={apps.map((app) => ({
-          key: app.name,
-          label: (
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <AppIcon
-                library={cfg?.svgLibrary}
-                name={app.name}
-                iconKey={app.svgIconKey}
-                size={36}
-              />
-              <span style={{ fontSize: 16, fontWeight: 600, color: "#FFFFFF" }}>{app.name}</span>
-              {app.featured && (
-                <Tag
-                  color="gold"
-                  icon={<StarFilled />}
-                  style={{ marginInlineStart: "auto", marginInlineEnd: 0 }}
-                >
-                  Рекомендуем
-                </Tag>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {apps.map((app) => {
+          const isOpen = openApp === app.name;
+          return (
+            <div
+              key={app.name}
+              style={{
+                background: "rgba(255,255,255,0.04)",
+                border: "1px solid rgba(255,255,255,0.09)",
+                borderRadius: 16,
+                overflow: "hidden",
+              }}
+            >
+              <button
+                onClick={() => setOpenApp(isOpen ? null : app.name)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  width: "100%",
+                  padding: "14px 16px",
+                  background: "transparent",
+                  border: 0,
+                  cursor: "pointer",
+                  textAlign: "left",
+                  fontFamily: "inherit",
+                }}
+              >
+                <AppIcon
+                  library={cfg?.svgLibrary}
+                  name={app.name}
+                  iconKey={app.svgIconKey}
+                  size={36}
+                />
+                <span style={{ fontSize: 16, fontWeight: 600, color: "#FFFFFF" }}>{app.name}</span>
+                {app.featured && (
+                  <Badge
+                    variant="warning"
+                    style={{ marginInlineStart: "auto", marginInlineEnd: 0, display: "flex", alignItems: "center", gap: 4 }}
+                  >
+                    <Star style={{ width: 11, height: 11 }} />
+                    {t("connect.featured")}
+                  </Badge>
+                )}
+                <ChevronDown
+                  style={{
+                    width: 16,
+                    height: 16,
+                    color: "rgba(255,255,255,0.4)",
+                    marginInlineStart: app.featured ? 0 : "auto",
+                    flexShrink: 0,
+                    transition: "transform 0.2s ease",
+                    transform: isOpen ? "rotate(180deg)" : "none",
+                  }}
+                />
+              </button>
+
+              {isOpen && (
+                <div style={{ padding: "0 16px 16px", display: "flex", flexDirection: "column", gap: 18 }}>
+                  {app.blocks.map((block, bi) => {
+                    const color = resolveColor(block.svgIconColor);
+                    return (
+                      <div key={bi}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                          <span
+                            style={{
+                              width: 26,
+                              height: 26,
+                              borderRadius: 8,
+                              background: `${color}22`,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              flexShrink: 0,
+                            }}
+                          >
+                            <LibIcon
+                              library={cfg?.svgLibrary}
+                              name={block.svgIconKey}
+                              color={color}
+                              size={15}
+                            />
+                          </span>
+                          <span style={{ fontSize: 14, fontWeight: 600, color: "#FFFFFF" }}>
+                            {tr(block.title, locale)}
+                          </span>
+                        </div>
+                        {block.description && (
+                          <div
+                            style={{
+                              fontSize: 13,
+                              color: "rgba(255,255,255,0.55)",
+                              lineHeight: 1.5,
+                              marginBottom: block.buttons.length ? 10 : 0,
+                              paddingInlineStart: 34,
+                            }}
+                          >
+                            {tr(block.description, locale)}
+                          </div>
+                        )}
+                        {block.buttons.length > 0 && (
+                          <div
+                            style={{
+                              display: "flex",
+                              flexWrap: "wrap",
+                              gap: 8,
+                              paddingInlineStart: 34,
+                            }}
+                          >
+                            {block.buttons.map((btn, qi) => (
+                              <Button
+                                key={qi}
+                                variant={btn.type === "subscriptionLink" ? "default" : "outline"}
+                                onClick={() => onButton(btn)}
+                              >
+                                <LibIcon
+                                  library={cfg?.svgLibrary}
+                                  name={btn.svgIconKey}
+                                  size={15}
+                                />
+                                {tr(btn.text, locale)}
+                              </Button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </div>
-          ),
-          style: {
-            background: "rgba(255,255,255,0.04)",
-            border: "1px solid rgba(255,255,255,0.09)",
-            borderRadius: 16,
-            marginBottom: 10,
-          },
-          children: (
-            <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-              {app.blocks.map((block, bi) => {
-                const color = resolveColor(block.svgIconColor);
-                return (
-                  <div key={bi}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                      <span
-                        style={{
-                          width: 26,
-                          height: 26,
-                          borderRadius: 8,
-                          background: `${color}22`,
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          flexShrink: 0,
-                        }}
-                      >
-                        <LibIcon
-                          library={cfg?.svgLibrary}
-                          name={block.svgIconKey}
-                          color={color}
-                          size={15}
-                        />
-                      </span>
-                      <span style={{ fontSize: 14, fontWeight: 600, color: "#FFFFFF" }}>
-                        {tr(block.title)}
-                      </span>
-                    </div>
-                    {block.description && (
-                      <div
-                        style={{
-                          fontSize: 13,
-                          color: "rgba(255,255,255,0.55)",
-                          lineHeight: 1.5,
-                          marginBottom: block.buttons.length ? 10 : 0,
-                          paddingInlineStart: 34,
-                        }}
-                      >
-                        {tr(block.description)}
-                      </div>
-                    )}
-                    {block.buttons.length > 0 && (
-                      <div
-                        style={{
-                          display: "flex",
-                          flexWrap: "wrap",
-                          gap: 8,
-                          paddingInlineStart: 34,
-                        }}
-                      >
-                        {block.buttons.map((btn, qi) => (
-                          <Button
-                            key={qi}
-                            type={btn.type === "subscriptionLink" ? "primary" : "default"}
-                            icon={
-                              <LibIcon
-                                library={cfg?.svgLibrary}
-                                name={btn.svgIconKey}
-                                size={15}
-                              />
-                            }
-                            onClick={() => onButton(btn)}
-                          >
-                            {tr(btn.text)}
-                          </Button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          ),
-        }))}
-      />
+          );
+        })}
+      </div>
     </div>
   );
 }

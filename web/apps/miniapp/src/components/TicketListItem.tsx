@@ -1,17 +1,18 @@
-import { Card, Tag, Typography } from "antd";
-import dayjs from "dayjs";
+import { Card, CardContent } from "@xray/ui/components/card";
+import { Badge } from "@xray/ui/components/badge";
 import { TicketSummary } from "../api/client";
+import { useT } from "../i18n/LocaleContext";
 
-const STATUS_LABELS: Record<string, string> = {
-  open: "Открыт",
-  in_progress: "В работе",
-  closed: "Закрыт",
+const STATUS_KEYS: Record<string, string> = {
+  open: "tickets.status.open",
+  in_progress: "tickets.status.inProgress",
+  closed: "tickets.status.closed",
 };
 
-const STATUS_COLOR: Record<string, string> = {
-  open: "processing",
+const STATUS_VARIANT: Record<string, "default" | "warning" | "secondary"> = {
+  open: "default",
   in_progress: "warning",
-  closed: "default",
+  closed: "secondary",
 };
 
 interface Props {
@@ -20,31 +21,48 @@ interface Props {
 }
 
 export default function TicketListItem({ ticket, onClick }: Props) {
+  const { t, dateLocale } = useT();
+
+  const formatDateTime = (iso: string): string => {
+    try {
+      const d = new Date(iso);
+      return d.toLocaleString(dateLocale, {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch {
+      return iso;
+    }
+  };
+
   return (
-    <Card
-      hoverable
-      size="small"
-      style={{ marginBottom: 12, cursor: "pointer" }}
-      onClick={onClick}
-    >
-      <Typography.Text strong style={{ fontSize: 16, display: "block" }}>
-        {ticket.subject}
-      </Typography.Text>
-      <Typography.Paragraph
-        type="secondary"
-        ellipsis={{ rows: 2 }}
-        style={{ marginBottom: 8, marginTop: 4 }}
-      >
-        {ticket.last_message_preview}
-      </Typography.Paragraph>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <Tag color={STATUS_COLOR[ticket.status] || "default"}>
-          {STATUS_LABELS[ticket.status] || ticket.status}
-        </Tag>
-        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          {dayjs(ticket.updated_at).format("DD.MM.YYYY HH:mm")}
-        </Typography.Text>
-      </div>
+    <Card className="mb-3 cursor-pointer" onClick={onClick}>
+      <CardContent className="p-4">
+        <div className="text-base font-semibold text-foreground">{ticket.subject}</div>
+        <p
+          className="text-muted-foreground mt-1 mb-2 overflow-hidden"
+          style={{
+            display: "-webkit-box",
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: "vertical",
+          }}
+        >
+          {ticket.last_message_preview}
+        </p>
+        <div className="flex justify-between items-center">
+          <Badge variant={STATUS_VARIANT[ticket.status] || "secondary"}>
+            {STATUS_KEYS[ticket.status]
+              ? t(STATUS_KEYS[ticket.status])
+              : ticket.status}
+          </Badge>
+          <span className="text-muted-foreground text-xs">
+            {formatDateTime(ticket.updated_at)}
+          </span>
+        </div>
+      </CardContent>
     </Card>
   );
 }

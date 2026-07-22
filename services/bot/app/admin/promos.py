@@ -95,7 +95,7 @@ async def admin_promo_card(callback: CallbackQuery):
         f"<b>Промокод:</b> <code>{promo['promo_code']}</code>\n"
         f"<b>Владелец:</b> {owner_name} (<code>{promo['tg_id']}</code>)\n"
         f"<b>Куплено по промокоду:</b> {promo['days_purchased']} дней\n"
-        f"<b>Начислено бонусов:</b> {promo['days_rewarded']} дней\n\n"
+        f"<b>Начислено баллов владельцу:</b> {promo['points_rewarded']} 🪙\n\n"
         f"<b>Приглашённые пользователи ({len(usage_users)}):</b>\n"
         f"{invited_lines if invited_lines else '  нет'}"
     )

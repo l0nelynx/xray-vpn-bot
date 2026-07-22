@@ -7,6 +7,52 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import Transaction, User
+from .users import PAID_ORDER_STATUSES
+
+USER_TYPE_ALL = "all"
+USER_TYPE_FREE = "free"
+USER_TYPE_PAID_VIP = "paid_vip"
+
+USER_TYPE_OPTIONS: list[dict[str, str]] = [
+    {"value": USER_TYPE_ALL, "label": "All"},
+    {"value": USER_TYPE_FREE, "label": "Free"},
+    {"value": USER_TYPE_PAID_VIP, "label": "Paid / VIP"},
+]
+
+
+async def filter_users_by_type(
+    session: AsyncSession,
+    users: list[User],
+    user_type: str,
+) -> list[User]:
+    """Filter scan/broadcast users by Free vs Paid/VIP (local DB)."""
+    if not users or not user_type or user_type == USER_TYPE_ALL:
+        return users
+
+    now_iso = datetime.now().isoformat(timespec="seconds")
+    user_ids = [u.id for u in users]
+    paid_rows = await session.scalars(
+        select(Transaction.user_id)
+        .where(
+            Transaction.user_id.in_(user_ids),
+            Transaction.order_status.in_(PAID_ORDER_STATUSES),
+            Transaction.expire_date > now_iso,
+        )
+        .distinct()
+    )
+    paid_ids = set(paid_rows)
+
+    if user_type == USER_TYPE_FREE:
+        return [
+            u for u in users
+            if u.id not in paid_ids and not (u.vip and u.vip > 0)
+        ]
+    if user_type == USER_TYPE_PAID_VIP:
+        return [
+            u for u in users
+            if u.id in paid_ids or (u.vip and u.vip > 0)
+        ]
+    return users
 
 
 async def get_broadcast_eligible_users(session: AsyncSession) -> list[User]:

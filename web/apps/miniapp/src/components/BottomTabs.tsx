@@ -1,21 +1,18 @@
-import {
-  HomeOutlined,
-  LaptopOutlined,
-  MessageOutlined,
-  SettingOutlined,
-} from "@ant-design/icons";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Home, Laptop, MessageCircle, Settings } from "lucide-react";
+import { useLocation, useNavigate } from "react-router";
+import { useT } from "../i18n/LocaleContext";
 
 const TABS = [
-  { path: "/", icon: <HomeOutlined />, label: "Главная" },
-  { path: "/devices", icon: <LaptopOutlined />, label: "Устройства" },
-  { path: "/support", icon: <MessageOutlined />, label: "Поддержка" },
-  { path: "/settings", icon: <SettingOutlined />, label: "Аккаунт" },
-];
+  { path: "/", icon: <Home />, labelKey: "tabs.home" },
+  { path: "/devices", icon: <Laptop />, labelKey: "tabs.devices" },
+  { path: "/support", icon: <MessageCircle />, labelKey: "tabs.support" },
+  { path: "/settings", icon: <Settings />, labelKey: "tabs.account" },
+] as const;
 
 export default function BottomTabs() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const { t } = useT();
 
   const isActive = (path: string) => {
     if (path === "/") return pathname === "/";
@@ -31,7 +28,7 @@ export default function BottomTabs() {
           onClick={() => navigate(tab.path)}
         >
           <span className="icon">{tab.icon}</span>
-          <span className="label">{tab.label}</span>
+          <span className="label">{t(tab.labelKey)}</span>
         </button>
       ))}
     </nav>

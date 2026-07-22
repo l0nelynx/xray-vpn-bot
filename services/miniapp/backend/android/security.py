@@ -139,6 +139,52 @@ def decode_access_token(token: str) -> AccessClaims:
         raise JWTError("malformed token") from exc
 
 
+# --- Claim tokens ------------------------------------------------------------
+#
+# Short-lived signed token binding a claim flow to a short_uuid. Deliberately
+# carries NO PII (no email, no user id) — it is handed to an unauthenticated
+# caller and JWTs are only signed, not encrypted. Every claim endpoint
+# re-resolves the current Remnawave/DB state from the short_uuid, so the token
+# is purely a "resolve was called recently for this slug" gate.
+
+CLAIM_TOKEN_TTL_SECONDS = 15 * 60
+
+
+def issue_claim_token(short_uuid: str) -> str:
+    now = int(time.time())
+    payload = {
+        "iss": get_android_jwt_issuer(),
+        "sub": short_uuid,
+        "iat": now,
+        "exp": now + CLAIM_TOKEN_TTL_SECONDS,
+        "jti": uuid.uuid4().hex,
+        "typ": "claim",
+    }
+    return jwt.encode(payload, _require_secret(), algorithm="HS256")
+
+
+def decode_claim_token(token: str) -> str:
+    """Return the short_uuid the claim token was issued for. Raises JWTError."""
+    try:
+        payload = jwt.decode(
+            token,
+            _require_secret(),
+            algorithms=["HS256"],
+            options={"require": ["exp", "iat", "sub"]},
+            issuer=get_android_jwt_issuer(),
+        )
+    except jwt.ExpiredSignatureError as exc:
+        raise JWTError("claim token expired") from exc
+    except jwt.InvalidTokenError as exc:
+        raise JWTError("invalid claim token") from exc
+    if payload.get("typ") != "claim":
+        raise JWTError("wrong token type")
+    sub = payload.get("sub")
+    if not isinstance(sub, str) or not sub:
+        raise JWTError("malformed claim token")
+    return sub
+
+
 # --- Refresh tokens ---
 #
 # Layout: <family_id>.<random>. We store sha256(token) so DB compromise alone

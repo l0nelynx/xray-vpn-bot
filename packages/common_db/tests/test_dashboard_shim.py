@@ -24,6 +24,7 @@ dashboard_url = pytest.importorskip("dashboard.backend.database.url")
 
 
 SHIMMED_MODEL_NAMES = [
+    "AndroidFcmToken",
     "CacheVersion",
     "CrmCampaign",
     "CrmCampaignDelivery",
@@ -36,6 +37,8 @@ SHIMMED_MODEL_NAMES = [
     "Promo",
     "PromoRedemption",
     "PromoSettings",
+    "PushCampaign",
+    "PushCampaignDelivery",
     "RefreshToken",
     "SquadProfile",
     "SupportMessage",

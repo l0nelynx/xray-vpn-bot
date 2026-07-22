@@ -1,0 +1,135 @@
+"""Tests for common_db.repo.giveaways."""
+from __future__ import annotations
+
+import asyncio
+import json
+
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+from common_db import Base
+import common_db.models  # noqa: F401
+from common_db.models import Promo, PromoSettings, User
+from common_db.models.giveaways import (
+    CHANCE_DYNAMIC,
+    TICKET_SOURCE_INVITEE_REF,
+)
+from common_db.models.promos import PROMO_TYPE_REFERRAL
+from common_db.repo import giveaways as repo_giveaways
+from common_db.repo import promos as repo_promos
+
+
+def _make_engine():
+    return create_async_engine("sqlite+aiosqlite:///:memory:")
+
+
+async def _setup(engine):
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+
+def _run(coro):
+    return asyncio.run(coro)
+
+
+def test_join_static_giveaway() -> None:
+    async def go() -> None:
+        engine = _make_engine()
+        try:
+            await _setup(engine)
+            Session = async_sessionmaker(engine, expire_on_commit=False)
+            async with Session() as session:
+                g = await repo_giveaways.create_giveaway(
+                    session,
+                    title="Test",
+                    channel_text="Hello",
+                    config={"chance_mode": "static", "entry_condition": "click_only"},
+                    winner_count=1,
+                    starts_at=None,
+                    ends_at=None,
+                )
+                await repo_giveaways.activate_giveaway(session, g)
+                await session.commit()
+
+                result = await repo_giveaways.join_participant(session, g.id, 1001)
+                await session.commit()
+                assert result.ok and result.tickets == 1
+
+                again = await repo_giveaways.join_participant(session, g.id, 1001)
+                assert again.already_joined and again.tickets == 1
+        finally:
+            await engine.dispose()
+
+    _run(go())
+
+
+def test_dynamic_invitee_ref_ticket() -> None:
+    async def go() -> None:
+        engine = _make_engine()
+        try:
+            await _setup(engine)
+            Session = async_sessionmaker(engine, expire_on_commit=False)
+            async with Session() as session:
+                g = await repo_giveaways.create_giveaway(
+                    session,
+                    title="Ref",
+                    channel_text="",
+                    config={
+                        "chance_mode": CHANCE_DYNAMIC,
+                        "entry_condition": "click_only",
+                        "ticket_sources": [TICKET_SOURCE_INVITEE_REF],
+                    },
+                    winner_count=1,
+                    starts_at=None,
+                    ends_at=None,
+                )
+                await repo_giveaways.activate_giveaway(session, g)
+                session.add(PromoSettings(id=1, default_credit_grant=10))
+                session.add(Promo(id=1, tg_id=2001, promo_code="OWNER", promo_type=PROMO_TYPE_REFERRAL))
+                session.add(User(id=1, tg_id=2001, username="owner"))
+                session.add(User(id=2, tg_id=3001, username="inv"))
+                await session.commit()
+
+                await repo_giveaways.join_participant(session, g.id, 2001)
+                await session.commit()
+
+                await repo_promos.redeem_promo(session, 3001, "OWNER")
+                await session.commit()
+
+                tickets = await repo_giveaways.count_tickets(session, g.id, 2001)
+                assert tickets == 2  # join + invitee ref
+        finally:
+            await engine.dispose()
+
+    _run(go())
+
+
+def test_draw_random_winner() -> None:
+    async def go() -> None:
+        engine = _make_engine()
+        try:
+            await _setup(engine)
+            Session = async_sessionmaker(engine, expire_on_commit=False)
+            async with Session() as session:
+                g = await repo_giveaways.create_giveaway(
+                    session,
+                    title="Draw",
+                    channel_text="",
+                    config={"chance_mode": "static", "winner_selection": "random"},
+                    winner_count=1,
+                    starts_at=None,
+                    ends_at=None,
+                )
+                await repo_giveaways.activate_giveaway(session, g)
+                await repo_giveaways.join_participant(session, g.id, 1001)
+                await repo_giveaways.join_participant(session, g.id, 1002)
+                await session.commit()
+
+                winners = await repo_giveaways.draw_winners(session, g)
+                await session.commit()
+                assert len(winners) == 1
+                assert winners[0]["tg_id"] in (1001, 1002)
+                assert g.status == "drawn"
+        finally:
+            await engine.dispose()
+
+    _run(go())

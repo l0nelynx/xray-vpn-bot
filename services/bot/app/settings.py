@@ -54,14 +54,19 @@ async def run_webserver():
 
 # Загрузка конфигурации при импорте модуля
 try:
-    secrets = load_config()
+    _yaml_secrets = load_config()
 except Exception as e:
     import traceback
     traceback.print_exc()
     raise SystemExit(f"CRITICAL: failed to load config.yml — {e}") from e
 
+from common_db.runtime_config import DualSourceConfig, set_crypto_secret
+
+set_crypto_secret(str(_yaml_secrets.get("payments_secrets_key") or _yaml_secrets.get("dashboard_secret") or ""))
+secrets = DualSourceConfig(_yaml_secrets)
+
 # Сохраняем оригинальные значения config.yml (для config_manager)
-_original_config = copy.deepcopy(secrets)
+_original_config = copy.deepcopy(_yaml_secrets)
 
 # Убедитесь, что токен существует перед созданием бота
 if not secrets.get('token'):
@@ -91,33 +96,11 @@ _remna.set_config_provider(lambda: {
 # Wire the shared payments package to this service's settings (replaces the
 # per-gateway invoice-creation classes that used to live in app/api/*.py).
 import payments as _payments
+from common_db.runtime_config import payments_config_kwargs
 
 
 def _payments_config() -> "_payments.PaymentsConfig":
-    try:
-        platega_method = int(secrets.get("platega_payment_method", 2))
-    except (TypeError, ValueError):
-        platega_method = 2
-    return _payments.PaymentsConfig(
-        apay_id=secrets.get("apay_id"),
-        apay_secret=secrets.get("apay_secret", ""),
-        apay_api_url=secrets.get("apay_api_url", ""),
-        crypto_bot_token=secrets.get("crypto_bot_token", ""),
-        crystal_login=secrets.get("crystal_login", ""),
-        crystal_secret=secrets.get("crystal_secret", ""),
-        crystal_salt=secrets.get("crystal_salt", ""),
-        crystal_webhook=secrets.get("crystal_webhook", ""),
-        platega_merchant_id=secrets.get("platega_merchant_id", "") or "",
-        platega_api_key=secrets.get("platega_api_key", "") or "",
-        platega_url=secrets.get("platega_url", "https://app.platega.io"),
-        platega_payment_method=platega_method,
-        paritypay_shop_id=secrets.get("paritypay_shop_id", "") or "",
-        paritypay_secret_1=secrets.get("paritypay_secret_1", "") or "",
-        paritypay_secret_2=secrets.get("paritypay_secret_2", "") or "",
-        paritypay_url=secrets.get("paritypay_url", "https://api.paritypay.ru") or "https://api.paritypay.ru",
-        paritypay_webhook=secrets.get("paritypay_webhook", "") or "",
-        paritypay_service=secrets.get("paritypay_service", "sbp") or "sbp",
-    )
+    return _payments.PaymentsConfig(**payments_config_kwargs(secrets))
 
 
 _payments.set_config_provider(_payments_config)

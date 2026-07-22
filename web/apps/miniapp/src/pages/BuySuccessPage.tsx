@@ -1,8 +1,11 @@
-import { CheckCircleFilled, LoadingOutlined } from "@ant-design/icons";
-import { Alert, Button, Card, Space, Typography } from "antd";
+import { CheckCircle2, Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router";
+import { Alert, AlertTitle, AlertDescription } from "@xray/ui/components/alert";
+import { Button } from "@xray/ui/components/button";
+import { Card, CardContent } from "@xray/ui/components/card";
 import { api, MeResponse } from "../api/client";
+import { useT } from "../i18n/LocaleContext";
 import { hapticImpact, openLink } from "../tg/webapp";
 
 const POLL_INTERVAL_MS = 3000;
@@ -17,6 +20,7 @@ interface LocationState {
 export default function BuySuccessPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { t } = useT();
   const state = (location.state ?? {}) as LocationState;
 
   const [me, setMe] = useState<MeResponse | null>(null);
@@ -65,22 +69,24 @@ export default function BuySuccessPage() {
   if (done && subUrl) {
     return (
       <div className="page">
-        <Card style={{ textAlign: "center" }}>
-          <CheckCircleFilled style={{ fontSize: 56, color: "#52c41a" }} />
-          <Typography.Title level={3} style={{ marginTop: 16 }}>
-            Оплата получена
-          </Typography.Title>
-          <Typography.Paragraph type="secondary">
-            Подписка активирована. Откройте ссылку, чтобы подключиться:
-          </Typography.Paragraph>
-          <Space direction="vertical" size={12} style={{ width: "100%" }}>
-            <Button type="primary" size="large" block onClick={() => openLink(subUrl)}>
-              Открыть подписку
-            </Button>
-            <Button size="large" block onClick={() => navigate("/", { replace: true })}>
-              На главную
-            </Button>
-          </Space>
+        <Card className="text-center">
+          <CardContent className="p-6">
+            <CheckCircle2 className="w-14 h-14 text-emerald-500 mx-auto" />
+            <div className="text-xl font-bold text-foreground mt-4">
+              {t("buySuccess.paidTitle")}
+            </div>
+            <p className="text-muted-foreground mt-2 mb-5">
+              {t("buySuccess.paidBody")}
+            </p>
+            <div className="flex flex-col gap-3 w-full">
+              <Button size="lg" className="w-full" onClick={() => openLink(subUrl)}>
+                {t("buySuccess.openSub")}
+              </Button>
+              <Button size="lg" variant="outline" className="w-full" onClick={() => navigate("/", { replace: true })}>
+                {t("buySuccess.toHome")}
+              </Button>
+            </div>
+          </CardContent>
         </Card>
       </div>
     );
@@ -89,14 +95,15 @@ export default function BuySuccessPage() {
   if (timedOut) {
     return (
       <div className="page">
-        <Alert
-          type="warning"
-          title="Подтверждение оплаты заняло больше времени, чем ожидалось"
-          description="Если деньги уже списаны — подписка появится в течение нескольких минут. Откройте главную и нажмите «Обновить»."
-        />
-        <div style={{ marginTop: 16 }}>
-          <Button block size="large" onClick={() => navigate("/", { replace: true })}>
-            На главную
+        <Alert variant="warning">
+          <AlertTitle>{t("buySuccess.timeoutTitle")}</AlertTitle>
+          <AlertDescription>
+            {t("buySuccess.timeoutBody")}
+          </AlertDescription>
+        </Alert>
+        <div className="mt-4">
+          <Button className="w-full" size="lg" onClick={() => navigate("/", { replace: true })}>
+            {t("buySuccess.toHome")}
           </Button>
         </div>
       </div>
@@ -105,19 +112,21 @@ export default function BuySuccessPage() {
 
   return (
     <div className="page">
-      <Card style={{ textAlign: "center" }}>
-        <LoadingOutlined style={{ fontSize: 48 }} spin />
-        <Typography.Title level={4} style={{ marginTop: 16 }}>
-          Ждём подтверждение оплаты…
-        </Typography.Title>
-        <Typography.Paragraph type="secondary">
-          Это занимает обычно несколько секунд. Не закрывайте окно.
-        </Typography.Paragraph>
-        {state.paymentUrl && (
-          <Button block onClick={() => openLink(state.paymentUrl!)}>
-            Открыть страницу оплаты ещё раз
-          </Button>
-        )}
+      <Card className="text-center">
+        <CardContent className="p-6">
+          <Loader2 className="animate-spin w-12 h-12 mx-auto" />
+          <div className="text-lg font-bold text-foreground mt-4">
+            {t("buySuccess.waitingTitle")}
+          </div>
+          <p className={`text-muted-foreground mt-2 ${state.paymentUrl ? "mb-4" : "mb-0"}`}>
+            {t("buySuccess.waitingBody")}
+          </p>
+          {state.paymentUrl && (
+            <Button variant="outline" className="w-full" onClick={() => openLink(state.paymentUrl!)}>
+              {t("buySuccess.reopenPayment")}
+            </Button>
+          )}
+        </CardContent>
       </Card>
     </div>
   );

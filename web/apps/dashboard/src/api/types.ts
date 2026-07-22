@@ -1,8 +1,9 @@
 export interface UserItem {
   id: number;
-  tg_id: number;
+  tg_id: number | null;
   username: string | null;
   vless_uuid: string | null;
+  rw_id: number | null;
   api_provider: string;
   is_banned: boolean;
   is_paid: boolean;
@@ -16,6 +17,7 @@ export interface UserDetail extends UserItem {
   total_spent: number;
   promo_code: string | null;
   tickets_count: number;
+  bonus_credits: number;
 }
 
 export interface TransactionItem {
@@ -93,8 +95,8 @@ export interface PromoItem {
   owner_tg_id: number;
   usage_count: number;
   days_purchased: number;
-  days_rewarded: number;
-  discount_percent: number | null;
+  points_rewarded: number;
+  credit_grant: number | null;
 }
 
 export interface TariffPrice {
@@ -192,16 +194,20 @@ export interface TelmtUserLink {
   classic: string[];
   secure: string[];
   tls: string[];
+  tls_domains?: string[];
 }
 
 export interface TelmtUser {
   username: string;
+  enabled?: boolean;
   in_runtime: boolean;
   user_ad_tag: string | null;
   max_tcp_conns: number | null;
   expiration_rfc3339: string | null;
   data_quota_bytes: number | null;
   max_unique_ips: number | null;
+  rate_limit_up_bps: number | null;
+  rate_limit_down_bps: number | null;
   current_connections: number;
   active_unique_ips: number;
   active_unique_ips_list: string[];
@@ -211,11 +217,128 @@ export interface TelmtUser {
   links: TelmtUserLink;
 }
 
+export interface TelmtUserQuota {
+  username: string;
+  data_quota_bytes: number;
+  used_bytes: number;
+  last_reset_epoch_secs: number | null;
+}
+
+export interface TelmtUsersQuotaResponse {
+  users: TelmtUserQuota[];
+}
+
+export interface TelmtHealthReady {
+  ready: boolean;
+  status?: string;
+  reason?: string;
+  admission_open?: boolean;
+  healthy_upstreams?: number;
+  total_upstreams?: number;
+}
+
+export interface TelmtConnTopUser {
+  username: string;
+  current_connections: number;
+  total_octets: number;
+}
+
+export interface TelmtRuntimeConnectionsSummary {
+  enabled?: boolean;
+  generated_at_epoch_secs?: number;
+  reason?: string;
+  data?: {
+    totals?: {
+      current_connections?: number;
+      current_connections_me?: number;
+      current_connections_direct?: number;
+      active_users?: number;
+    };
+    top?: {
+      limit?: number;
+      by_connections?: TelmtConnTopUser[];
+      by_throughput?: TelmtConnTopUser[];
+    };
+    telemetry?: {
+      user_enabled?: boolean;
+      throughput_is_cumulative?: boolean;
+    };
+  };
+}
+
+export interface TelmtRuntimeEvent {
+  seq: number;
+  ts_epoch_secs: number;
+  event_type: string;
+  context?: string;
+}
+
+export interface TelmtRuntimeRecentEvents {
+  enabled?: boolean;
+  generated_at_epoch_secs?: number;
+  reason?: string;
+  data?: {
+    capacity?: number;
+    dropped_total?: number;
+    events?: TelmtRuntimeEvent[];
+  };
+  /** legacy/flat shape fallback */
+  events?: TelmtRuntimeEvent[];
+}
+
+export interface TelmtTlsFingerprintRow {
+  scope?: string;
+  ja3?: string;
+  ja4?: string;
+  total?: number;
+  auth_success?: number;
+  bad_or_probe?: number;
+  first_seen_epoch_secs?: number;
+  last_seen_epoch_secs?: number;
+}
+
+export interface TelmtTlsFingerprints {
+  enabled?: boolean;
+  generated_at_epoch_secs?: number;
+  reason?: string;
+  data?: {
+    limit?: number;
+    retention_secs?: number;
+    capacity?: number;
+    dropped_total?: number;
+    parse_error_total?: number;
+    by_fingerprint?: TelmtTlsFingerprintRow[];
+    by_ip?: TelmtTlsFingerprintRow[];
+    by_cidr?: TelmtTlsFingerprintRow[];
+    by_user?: TelmtTlsFingerprintRow[];
+  };
+}
+
+export interface TelmtLimitsEffective {
+  update_every_secs?: number;
+  me_reinit_every_secs?: number;
+  me_pool_force_close_secs?: number;
+  timeouts?: Record<string, number | boolean | string>;
+  upstream?: Record<string, number | boolean | string>;
+  middle_proxy?: Record<string, number | boolean | string>;
+  user_ip_policy?: Record<string, number | boolean | string>;
+  user_tcp_policy?: Record<string, number | boolean | string>;
+}
+
+export interface TelmtSecurityWhitelist {
+  enabled?: boolean;
+  entries_total?: number;
+  entries?: string[];
+  generated_at_epoch_secs?: number;
+}
+
 export interface TelmtFreeParams {
   max_tcp_conns: number | null;
   max_unique_ips: number | null;
   data_quota_bytes: number | null;
   expire_days: number;
+  rate_limit_up_bps: number | null;
+  rate_limit_down_bps: number | null;
 }
 
 export interface TelmtSecurityPosture {
@@ -228,6 +351,39 @@ export interface TelmtSecurityPosture {
   telemetry_core_enabled: boolean;
   telemetry_user_enabled: boolean;
   telemetry_me_level: string;
+}
+
+export interface TelmtBulkError {
+  username: string;
+  status: number;
+  detail: string;
+}
+
+export interface TelmtBulkResult {
+  processed: number;
+  succeeded: number;
+  failed: number;
+  errors: TelmtBulkError[];
+}
+
+/** Sections Telemt exposes via GET/PATCH /v1/config (telemt EDITABLE_SECTIONS). */
+export const TELMT_EDITABLE_CONFIG_SECTIONS = [
+  "general",
+  "timeouts",
+  "censorship",
+  "upstreams",
+  "dc_overrides",
+] as const;
+
+export type TelmtConfigSectionName = (typeof TELMT_EDITABLE_CONFIG_SECTIONS)[number];
+
+/** Telemt managed-config JSON (subset of config.toml). */
+export type TelmtConfigData = Partial<Record<TelmtConfigSectionName, unknown>>;
+
+export interface TelmtPatchConfigResponse {
+  revision: string;
+  restart_required: boolean;
+  changed: string[];
 }
 
 export interface OrderParam {

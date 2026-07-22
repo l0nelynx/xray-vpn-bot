@@ -6,6 +6,36 @@ into `bot`, `dashboard`, and `miniapp`.
 
 Compose-level variables live in **`.env`** (`cp .env.example .env`).
 
+## Dual-source configuration (YAML + Dashboard)
+
+Operator-facing settings are migrating from YAML into Postgres so they can be
+edited in **Dashboard → Settings** without editing files or restarting.
+
+**Precedence (dual-source period):**
+
+1. **Dashboard / DB** — if a runtime key was saved, or a payment provider is
+   `managed` (saved in UI).
+2. Else **`config.yml`** — current behaviour; existing installs keep working.
+3. Else **code defaults** (e.g. maintenance seed).
+
+| Prefer Dashboard | Stay in YAML (bootstrap) |
+|------------------|--------------------------|
+| Maintenance mode | `token`, `admin_bot_token`, `admin_id` |
+| `branding_name`, news/support/legal links | Remnawave URL/token/webhook secret |
+| `free_days` / `free_traffic` | `dashboard_login` / `password` / `secret` |
+| Payment gateway credentials + enable | `miniapp_url`, `bot_url`, `miniapp_tg_url` |
+| `logs_id`, `web_id`, `admin_logs_length` | Android JWT, SMTP, Telemt/Store URLs |
+
+On first boot after upgrade, empty DB rows are **imported from YAML** once so
+the Dashboard shows current values. Saving in the UI makes Dashboard the
+source of truth for that key/provider.
+
+Optional bootstrap key: `payments_secrets_key` — encrypts credentials in
+`payment_integrations`. If unset, `dashboard_secret` is used as a fallback.
+
+Do **not** delete dual-source keys from production `config.yml` yet — they are
+cut in later releases after the DB path is stable.
+
 ## `.env` (Docker Compose)
 
 | Variable | Required | Default | Description |
@@ -134,6 +164,15 @@ Required for Android/web email verification. Miniapp joins `mail-net` for outbou
 | `google_play_package_name` | Play Console package name |
 | `google_play_service_account_path` | Path to service-account JSON inside container |
 | `google_play_rtdn_token` | RTDN webhook shared secret — required when package name is set |
+
+## FCM push (optional)
+
+Token registration works without these keys; sending from Dashboard requires both.
+
+| Key | Description |
+|-----|-------------|
+| `fcm_project_id` | Firebase / GCP project id |
+| `fcm_service_account_path` | Container path to SA JSON (`/app/fcm-sa.json`; host file `./fcm-sa.json`, mounted into `dashboard` and `crm-worker`) |
 
 ## Web portal (CORS)
 

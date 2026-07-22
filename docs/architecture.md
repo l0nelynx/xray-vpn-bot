@@ -18,7 +18,7 @@ services/                     # deployable backends (one image each)
 web/
   apps/dashboard/             # React + Vite SPA (admin)
   apps/miniapp/               # React + Vite SPA (Telegram MiniApp only)
-  packages/ui/                # shared antd "liquid glass" theme builder (@xray/ui)
+  packages/ui/                # shared shadcn/ui components + dark theme (@xray/ui)
   packages/api/               # shared fetch client (@xray/api)
 # Browser web portal SPA: https://github.com/l0nelynx/web-portal (separate repo)
 packages/                     # shared python packages
@@ -42,9 +42,11 @@ docker-compose.yml  package.json (npm workspaces root)  config.yml
 | `bot` | `bot` | Main Telegram bot + payment webhook endpoints (`:5000`). Keeps a `seller-bot` network alias. |
 | `support-bot` | `support-bot` | Legacy standalone support bot, own SQLite. |
 | `dashboard` | `dashboard` | Admin JSON API (`:8000`). |
+| `crm-worker` | `dashboard` image | ARQ worker for CRM campaigns & scheduled events (Redis). |
 | `miniapp` | `miniapp` | JSON API for MiniApp / web portal / Android (`:8001`). |
 | `frontend` | `frontend` | nginx serving the two built SPAs as static files (`:80`). |
 | `postgres` | `postgres:16` | Shared database. |
+| `redis` | `redis:7` | CRM job queue. |
 | `migrate` | `bot` image | One-shot Alembic `upgrade head`, then exits. |
 
 Backends are **pure JSON APIs** — the SPAs are built once and served by the
@@ -67,11 +69,13 @@ removed once ticketing in the MiniApp/Dashboard fully replaces it.
 
 ### Dashboard
 Admin web UI (no DB/code access needed): tariff constructor, dynamic menu
-builder, users, transactions & stats, promo codes, Telemt server control. JWT
-auth from `dashboard_login` / `dashboard_password`, tokens signed with
-`dashboard_secret`. Backend is API-only; the SPA is served by `frontend`.
+builder, users, transactions & stats, promo/referral codes (bonus credits),
+CRM campaigns & scheduled events, Telemt server control. JWT auth from
+`dashboard_login` / `dashboard_password`, tokens signed with `dashboard_secret`.
+Backend is API-only; the SPA is served by `frontend`.
 
-Full feature guide: **[dashboard.md](dashboard.md)**.
+Full feature guides: **[dashboard.md](dashboard.md)**, **[crm.md](crm.md)**,
+**[referral.md](referral.md)**.
 
 ### MiniApp, web portal & Android API
 One FastAPI service (`miniapp`) backs three clients, all under `/bot/miniapp/api/`:

@@ -71,6 +71,20 @@ _STATUS_MAP = {
 }
 
 
+def _extract_rw_id(user: UserResponseDto | dict) -> int | None:
+    """Remnawave panel numeric user id from SDK DTO or raw dict."""
+    if isinstance(user, dict):
+        raw = user.get("id")
+    else:
+        raw = getattr(user, "id", None)
+    if raw is None:
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
+
+
 def _normalize_user(user: UserResponseDto) -> dict:
     """SDK user DTO -> normalized dict shared across consumers.
 
@@ -91,6 +105,7 @@ def _normalize_user(user: UserResponseDto) -> dict:
 
     return {
         "uuid": str(user.uuid) if user.uuid else None,
+        "rw_id": _extract_rw_id(user),
         "expire": expire_ts,
         "subscription_url": user.subscription_url,
         "status": user.status.value.lower() if user.status else None,
@@ -167,6 +182,64 @@ class RemnawaveClient:
         response = await self._fetch_users_page()
         logger.info("Remnawave total users: %s", response.total)
         return response
+
+    async def get_internal_squads(self) -> list[dict]:
+        """List internal squads from Remnawave panel."""
+        from .segmentation import _get_attr
+
+        try:
+            response = await self.sdk.users.client.get("/internal-squads")
+            response.raise_for_status()
+            data = _unwrap_response_envelope(response.json())
+            items: list = []
+            if isinstance(data, list):
+                items = data
+            elif isinstance(data, dict):
+                for key in ("internalSquads", "internal_squads", "squads", "root"):
+                    raw = data.get(key)
+                    if isinstance(raw, list):
+                        items = raw
+                        break
+            squads: list[dict] = []
+            for item in items:
+                uuid = _get_attr(item, "uuid", "id")
+                if not uuid:
+                    continue
+                squads.append({
+                    "uuid": str(uuid),
+                    "name": _get_attr(item, "name", "title") or str(uuid),
+                })
+            return squads
+        except Exception as e:
+            logger.error("Remnawave get_internal_squads failed: %s", e)
+            return []
+
+    async def get_users_by_tag(self, tag: str) -> list[dict]:
+        """Fetch panel users with the given tag (uppercase, no spaces)."""
+        from .segmentation import normalize_user_for_crm
+
+        normalized = tag.strip().upper().replace(" ", "")
+        if not normalized:
+            return []
+        try:
+            response = await self.sdk.users.client.get(
+                f"/users/by-tag/{normalized}"
+            )
+            response.raise_for_status()
+            data = _unwrap_response_envelope(response.json())
+            items: list = []
+            if isinstance(data, list):
+                items = data
+            elif isinstance(data, dict):
+                for key in ("users", "root"):
+                    raw = data.get(key)
+                    if isinstance(raw, list):
+                        items = raw
+                        break
+            return [normalize_user_for_crm(u) for u in items]
+        except Exception as e:
+            logger.error("Remnawave get_users_by_tag(%s) failed: %s", normalized, e)
+            raise
 
     async def get_all_users_for_crm(self) -> list[dict]:
         """Bulk-fetch every panel user normalized for CRM segmentation."""
@@ -293,6 +366,7 @@ class RemnawaveClient:
             expire_ts = int(response.expire_at.timestamp()) if response.expire_at else None
             return {
                 "uuid": str(response.uuid) if response.uuid else None,
+                "rw_id": _extract_rw_id(response),
                 "expire": expire_ts,
                 "subscription_url": response.subscription_url,
                 "status": "active",
@@ -373,6 +447,7 @@ class RemnawaveClient:
             )
             return {
                 "uuid": str(response.uuid) if response.uuid else None,
+                "rw_id": _extract_rw_id(response),
                 "expire": expire_ts,
                 "subscription_url": response.subscription_url,
                 "status": response.status.value.lower() if response.status else None,

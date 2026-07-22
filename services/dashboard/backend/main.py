@@ -15,8 +15,28 @@ from .auth import (
     validate_security_config,
     verify_credentials,
 )
-from .config import get_expose_api_docs, get_redis_url
-from .routers import users, transactions, stats, promos, tariffs, menus, squads, telemt, store, support, webapp_menu, webapp_payments, settings, tg_admin, crm
+from .config import get_expose_api_docs, get_redis_url, get_payments_secrets_key, get_yaml_config
+from .routers import (
+    users,
+    transactions,
+    stats,
+    promos,
+    tariffs,
+    menus,
+    squads,
+    telemt,
+    store,
+    support,
+    webapp_menu,
+    webapp_payments,
+    settings,
+    runtime_settings,
+    payment_integrations,
+    tg_admin,
+    crm,
+    push,
+    giveaways,
+)
 
 BASE_PATH = "/bot/dashboard"
 logger = logging.getLogger(__name__)
@@ -47,6 +67,18 @@ async def lifespan(app: FastAPI):
     # with a default/weak secret. Raises → boot aborts.
     validate_security_config()
     _migrate_schema()
+    import asyncio
+    from .database.session import async_session
+    from common_db.runtime_config import bootstrap_runtime_overlay, runtime_overlay_poll_loop
+
+    yaml_cfg = get_yaml_config()
+    await bootstrap_runtime_overlay(
+        async_session,
+        yaml_cfg,
+        crypto_secret=get_payments_secrets_key(),
+    )
+    poll_task = asyncio.create_task(runtime_overlay_poll_loop(async_session))
+
     pool = None
     try:
         pool = await create_pool(RedisSettings.from_dsn(get_redis_url()))
@@ -56,6 +88,11 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        poll_task.cancel()
+        try:
+            await poll_task
+        except asyncio.CancelledError:
+            pass
         if pool is not None:
             await pool.close()
 
@@ -86,8 +123,12 @@ app.include_router(support.router, prefix=BASE_PATH)
 app.include_router(webapp_menu.router, prefix=BASE_PATH)
 app.include_router(webapp_payments.router, prefix=BASE_PATH)
 app.include_router(settings.router, prefix=BASE_PATH)
+app.include_router(runtime_settings.router, prefix=BASE_PATH)
+app.include_router(payment_integrations.router, prefix=BASE_PATH)
 app.include_router(tg_admin.router, prefix=BASE_PATH)
 app.include_router(crm.router, prefix=BASE_PATH)
+app.include_router(push.router, prefix=BASE_PATH)
+app.include_router(giveaways.router, prefix=BASE_PATH)
 
 
 @app.get("/health")

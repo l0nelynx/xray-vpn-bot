@@ -130,13 +130,36 @@ def normalize_user_for_crm(user: UserResponseDto | dict) -> dict:
     if limit_bytes > 0:
         traffic_ratio = used_bytes / limit_bytes
 
+    rw_id_raw = _get_attr(user, "id")
+    rw_id: int | None = None
+    if rw_id_raw is not None:
+        try:
+            rw_id = int(rw_id_raw)
+        except (TypeError, ValueError):
+            rw_id = None
+
+    raw_squads = _get_attr(user, "active_internal_squads", "activeInternalSquads") or []
+    active_internal_squad_ids: list[str] = []
+    for squad in raw_squads:
+        if isinstance(squad, dict):
+            value = squad.get("uuid") or squad.get("id")
+        else:
+            value = getattr(squad, "uuid", None) or getattr(squad, "id", None)
+        if value:
+            active_internal_squad_ids.append(str(value))
+
+    tag_raw = _get_attr(user, "tag")
+    tag = str(tag_raw).strip().upper().replace(" ", "") if tag_raw else None
+
     return {
         "uuid": str(uuid) if uuid else None,
+        "rw_id": rw_id,
         "status": status,
         "expire_ts": expire_ts,
         "days_left": days_left,
         "used_traffic_bytes": used_bytes,
         "traffic_limit_bytes": limit_bytes,
+        "traffic_limit_gb": (limit_bytes // (1024 ** 3)) if limit_bytes > 0 else 0,
         "traffic_ratio": traffic_ratio,
         "first_connected_at": first_connected,
         "hwid_device_limit": int(hwid_limit) if hwid_limit is not None else None,
@@ -144,6 +167,8 @@ def normalize_user_for_crm(user: UserResponseDto | dict) -> dict:
         "telegram_id": telegram_id,
         "username": _get_attr(user, "username"),
         "email": _get_attr(user, "email"),
+        "tag": tag,
+        "active_internal_squad_ids": active_internal_squad_ids,
     }
 
 

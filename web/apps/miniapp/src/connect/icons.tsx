@@ -24,8 +24,11 @@ const COLOR_MAP: Record<string, string> = {
   grey: "rgba(255,255,255,0.6)",
 };
 
+// Neutral fallback (zinc-400) so unbranded icons blend with the shadcn dark theme.
+const NEUTRAL_ACCENT = "#A1A1AA";
+
 export function resolveColor(name?: string): string {
-  if (!name) return "#7C9CFF";
+  if (!name) return NEUTRAL_ACCENT;
   return COLOR_MAP[name.toLowerCase()] ?? name; // allow raw hex too
 }
 

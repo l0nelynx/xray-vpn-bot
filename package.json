@@ -6,5 +6,28 @@
   "workspaces": [
     "web/packages/*",
     "web/apps/*"
-  ]
+  ],
+  "msw": {
+    "workerDirectory": [
+      "web/apps/dashboard/public",
+      "web/apps/miniapp/public"
+    ]
+  },
+  "optionalDependencies": {
+    "@rollup/rollup-linux-arm64-gnu": "4.62.2",
+    "@rollup/rollup-linux-arm64-musl": "4.62.2",
+    "@rollup/rollup-linux-x64-gnu": "4.62.2",
+    "@rollup/rollup-linux-x64-musl": "4.62.2",
+    "@tailwindcss/oxide-linux-arm64-gnu": "4.3.3",
+    "@tailwindcss/oxide-linux-arm64-musl": "4.3.3",
+    "@tailwindcss/oxide-linux-x64-gnu": "4.3.3",
+    "@tailwindcss/oxide-linux-x64-musl": "4.3.3",
+    "lightningcss-linux-arm64-gnu": "1.32.0",
+    "lightningcss-linux-arm64-musl": "1.32.0",
+    "lightningcss-linux-x64-gnu": "1.32.0",
+    "lightningcss-linux-x64-musl": "1.32.0"
+  },
+  "devDependencies": {
+    "playwright": "^1.52.0"
+  }
 }

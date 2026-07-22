@@ -10,6 +10,7 @@ from sqlalchemy import BigInteger, Boolean, Integer, String, Text
 
 from common_db import Base
 from common_db.models import (
+    CreditLedger,
     GooglePlayPurchase,
     GooglePlaySku,
     MenuButton,
@@ -66,6 +67,13 @@ class TestUserCanon:
         assert col.default is not None and col.default.arg == 0
         assert _server_default(col) == "0"
         assert col.nullable is True
+
+    def test_bonus_credits_defaults_zero(self) -> None:
+        col = _col(User, "bonus_credits")
+        assert isinstance(col.type, Integer)
+        assert col.default is not None and col.default.arg == 0
+        assert _server_default(col) == "0"
+        assert col.nullable is False
 
     def test_api_provider_python_default_remnawave(self) -> None:
         # Canon: Python-side default flipped to "remnawave"; DB server_default
@@ -155,21 +163,26 @@ class TestPromoCanon:
         assert col.default is not None and col.default.arg == "referral"
         assert _server_default(col) == "referral"
 
+    def test_promo_settings_default_credit_grant(self) -> None:
+        col = _col(PromoSettings, "default_credit_grant")
+        assert col.default is not None and col.default.arg == 100
+        assert _server_default(col) == "100"
+
     def test_promo_settings_default_discount_percent(self) -> None:
         col = _col(PromoSettings, "default_discount_percent")
         assert col.default is not None and col.default.arg == 20
 
-    def test_promo_settings_days_reward_per_30(self) -> None:
-        col = _col(PromoSettings, "days_reward_per_30")
+    def test_promo_settings_points_reward_per_30(self) -> None:
+        col = _col(PromoSettings, "points_reward_per_30")
         assert isinstance(col.type, Integer)
-        assert col.default is not None and col.default.arg == 3
-        assert _server_default(col) == "3"
+        assert col.default is not None and col.default.arg == 30
+        assert _server_default(col) == "30"
 
-    def test_promo_settings_reward_cap_days(self) -> None:
-        col = _col(PromoSettings, "reward_cap_days")
+    def test_promo_settings_reward_cap_points(self) -> None:
+        col = _col(PromoSettings, "reward_cap_points")
         assert isinstance(col.type, Integer)
-        assert col.default is not None and col.default.arg == 180
-        assert _server_default(col) == "180"
+        assert col.default is not None and col.default.arg == 1800
+        assert _server_default(col) == "1800"
 
 
 # ------------------------------------------------- PromoRedemption ----------
@@ -182,21 +195,25 @@ class TestPromoRedemptionCanon:
     def test_tg_id_is_big_integer(self) -> None:
         assert isinstance(_col(PromoRedemption, "tg_id").type, BigInteger)
 
-    def test_status_defaults_active(self) -> None:
-        col = _col(PromoRedemption, "status")
-        assert col.default is not None and col.default.arg == "active"
-        assert _server_default(col) == "active"
-
     def test_promo_code_and_type_widths(self) -> None:
         assert _col(PromoRedemption, "promo_code").type.length == 20
         assert _col(PromoRedemption, "promo_type").type.length == 20
 
-    def test_discount_percent_is_integer(self) -> None:
-        assert isinstance(_col(PromoRedemption, "discount_percent").type, Integer)
+    def test_created_at_present(self) -> None:
+        assert isinstance(_col(PromoRedemption, "created_at").type, String)
 
     def test_indexes_present(self) -> None:
         assert _has_index(PromoRedemption, "ix_promo_redemptions_tg_id")
         assert _has_index(PromoRedemption, "ix_promo_redemptions_promo_code")
+
+
+# ---------------------------------------------------------- CreditLedger ----
+class TestCreditLedgerCanon:
+    def test_user_id_indexed(self) -> None:
+        assert _has_index(CreditLedger, "ix_credit_ledger_user_id")
+
+    def test_amount_is_integer(self) -> None:
+        assert isinstance(_col(CreditLedger, "amount").type, Integer)
 
 
 # ---------------------------------------------------------- Transaction ----
@@ -289,6 +306,7 @@ class TestMetadataSanity:
             "promos",
             "promo_settings",
             "promo_redemptions",
+            "credit_ledger",
             "transactions",
             "support_tickets",
             "support_messages",

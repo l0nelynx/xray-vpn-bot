@@ -368,22 +368,22 @@ admin_migration_message = """✅ <b>Миграция пользователя у
 
 # ==================== Promo / Referral ====================
 
-promo_invite_text = """<b>Invite friends — get bonuses</b>
+promo_invite_text = """<b>Invite friends — earn points</b>
 
 Your promo code: <code>{promo_code}</code>
 
 <b>How it works:</b>
 1. Share your promo code with friends
-2. A friend gets a <b>{discount}%</b> discount on purchase
-3. For every 30 days purchased with your code, you receive <b>{reward_days}</b> bonus days
+2. A friend gets <b>{invite_grant}</b> 🪙 on activation
+3. For every 30 days purchased with your code — <b>{reward_points}</b> 🪙 for you
 
 <b>Your stats:</b>
-• Purchased via promo code: {days_purchased} days
-• Bonus days received: {days_rewarded}"""
+• Purchased by invitees: {days_purchased} days
+• Points earned: {points_rewarded} 🪙"""
 
 promo_enter_text = "Enter promo code:"
 
-promo_success_text = "Promo code applied! <b>{discount}%</b> discount will be applied at payment."
+promo_success_text = "Promo code applied! <b>{points}</b> 🪙 added to your balance."
 
 promo_invalid_text = "Invalid promo code — please check and try again."
 
@@ -391,11 +391,16 @@ promo_own_code_text = "You cannot use your own promo code."
 
 promo_already_used_text = "You have already used this promo code."
 
-promo_active_exists_text = "You already have an active promo code. Use it at checkout before activating a new one."
+promo_active_exists_text = "You have already used this promo code."
 
 promo_referral_new_only_text = "This promo code is for new users only — you already have purchases."
 
-promo_deeplink_applied_text = "🎁 Promo code activated! A <b>{discount}%</b> discount will be applied to your subscription payment."
+promo_deeplink_applied_text = "🎁 Promo code activated! <b>{points}</b> 🪙 added to your balance."
+
+btn_pay_credits = "💎 Pay with points ({points} 🪙)"
+msg_insufficient_points = "Not enough points for this plan"
+msg_no_credits_plans = "No plans available for bonus payment"
+msg_plan_not_found = "Plan not found or outdated"
 
 free_traffic_exhausted = """<b>FREE subscription traffic exhausted</b>
 
@@ -405,10 +410,10 @@ Switch to <b>PRO</b> — unlimited traffic and up to 5 devices without waiting""
 
 promo_reward_notification = """<b>Referral bonus!</b>
 
-A purchase was made with your promo code — you've been credited <b>{reward_days}</b> subscription days.
+A purchase was made with your promo code — <b>{reward_points}</b> 🪙 added to your balance.
 
-Total purchased via promo code: {total_days} days
-Total bonus days: {total_rewarded}"""
+Total purchased by invitees: {total_days} days
+Total points earned: {total_rewarded} 🪙"""
 
 # ==================== MiniApp mode welcome ====================
 

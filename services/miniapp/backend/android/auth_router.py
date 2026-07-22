@@ -7,7 +7,10 @@ rotated token revokes the entire family (assumed compromise).
 """
 from __future__ import annotations
 
+import secrets
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel, Field
 from slowapi import Limiter
 from sqlalchemy.exc import IntegrityError
 
@@ -179,6 +182,82 @@ async def logout_all(
 ) -> SimpleStatus:
     await repo.revoke_all_user_tokens(user.id)
     return SimpleStatus()
+
+
+# --- One-time app login (web → desktop/app handoff) -------------------------
+#
+# An authenticated web session mints a short-lived single-use token; the app
+# receives it via the `cheezy://login/<token>` deeplink and exchanges it for
+# a normal token pair. Only the sha256 of the token is stored (reusing the
+# email_verifications table, purpose=app_login), TTL is tight and the token
+# is consumed on first exchange, so an intercepted deeplink is useless after
+# the app fires it.
+
+_APP_LOGIN_TTL_SECONDS = 90
+
+
+class AppLoginCreateResponse(BaseModel):
+    token: str
+    expires_in: int
+
+
+class AppLoginExchangeRequest(BaseModel):
+    token: str = Field(min_length=10, max_length=128)
+
+
+@router.post("/app-login/create", response_model=AppLoginCreateResponse)
+@limiter.limit("5/minute")
+async def app_login_create(
+    request: Request,
+    user: repo.UserRow = Depends(deps.get_current_user),
+) -> AppLoginCreateResponse:
+    raw = secrets.token_urlsafe(32)
+    await repo.invalidate_pending_codes(user.id, repo.PURPOSE_APP_LOGIN)
+    await repo.store_verification_code(
+        user_id=user.id,
+        purpose=repo.PURPOSE_APP_LOGIN,
+        code_hash=security.hash_email_code(raw),
+        payload=None,
+        ttl_seconds=_APP_LOGIN_TTL_SECONDS,
+    )
+    return AppLoginCreateResponse(token=raw, expires_in=_APP_LOGIN_TTL_SECONDS)
+
+
+@router.post("/app-login/exchange", response_model=AuthResponse)
+@limiter.limit("10/minute")
+async def app_login_exchange(
+    req: AppLoginExchangeRequest, request: Request
+) -> AuthResponse:
+    from datetime import datetime, timezone
+
+    row = await repo.find_active_code_by_purpose_and_hash(
+        repo.PURPOSE_APP_LOGIN, security.hash_email_code(req.token)
+    )
+    if row is None:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, detail={"code": "bad_app_login_token"}
+        )
+    if row.expires_at <= datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S"):
+        await repo.mark_code_used(row.id)
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, detail={"code": "bad_app_login_token"}
+        )
+    await repo.mark_code_used(row.id)
+    user = await repo.find_user_by_id(row.user_id)
+    if user is None or user.is_banned:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, detail={"code": "user_unavailable"}
+        )
+    tokens = await _issue_pair(user.id, request)
+    ua, ip = deps.client_meta(request)
+    await notify_log(
+        f"🔑 <b>App-login exchange</b>\n"
+        f"ID: <code>{user.id}</code>\n"
+        f"email: <code>{esc(user.email or '—')}</code>\n"
+        f"IP: <code>{esc(ip or '—')}</code>\n"
+        f"UA: <code>{esc((ua or '—')[:120])}</code>"
+    )
+    return AuthResponse(tokens=tokens, user=_user_summary(user))
 
 
 @router.post("/password/change", response_model=SimpleStatus)

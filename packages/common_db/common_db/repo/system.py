@@ -61,11 +61,10 @@ async def get_or_create_singleton(
 # Why 20: matches the seed in app/database/models.py::_seed_promo_settings.
 # Keep both in sync — when one changes, change the other.
 DEFAULT_PROMO_DISCOUNT_PERCENT = 20
-# Reward tunables — defaults mirror the PromoSettings server_defaults and the
-# legacy config.yml values (promo_days_reward=3). The 180-day cap is the new
-# product rule.
-DEFAULT_DAYS_REWARD_PER_30 = 3
-DEFAULT_REWARD_CAP_DAYS = 180
+DEFAULT_CREDIT_GRANT = 100
+# Reward tunables — bonus points (🪙) for referral owners.
+DEFAULT_POINTS_REWARD_PER_30 = 30
+DEFAULT_REWARD_CAP_POINTS = 1800
 
 
 async def get_promo_settings(session: AsyncSession) -> PromoSettings:
@@ -75,10 +74,17 @@ async def get_promo_settings(session: AsyncSession) -> PromoSettings:
         PromoSettings,
         defaults={
             "default_discount_percent": DEFAULT_PROMO_DISCOUNT_PERCENT,
-            "days_reward_per_30": DEFAULT_DAYS_REWARD_PER_30,
-            "reward_cap_days": DEFAULT_REWARD_CAP_DAYS,
+            "default_credit_grant": DEFAULT_CREDIT_GRANT,
+            "points_reward_per_30": DEFAULT_POINTS_REWARD_PER_30,
+            "reward_cap_points": DEFAULT_REWARD_CAP_POINTS,
         },
     )
+
+
+async def get_default_credit_grant(session: AsyncSession) -> int:
+    """Default credits a code grants when it has no per-code override."""
+    settings = await get_promo_settings(session)
+    return settings.default_credit_grant
 
 
 async def get_default_discount_percent(session: AsyncSession) -> int:
@@ -91,16 +97,16 @@ async def get_default_discount_percent(session: AsyncSession) -> int:
     return settings.default_discount_percent
 
 
-async def get_days_reward_per_30(session: AsyncSession) -> int:
-    """Reward days granted to a referral owner per 30 days an invitee buys."""
+async def get_points_reward_per_30(session: AsyncSession) -> int:
+    """Bonus points granted to referral owner per 30 invitee-days purchased."""
     settings = await get_promo_settings(session)
-    return settings.days_reward_per_30
+    return settings.points_reward_per_30
 
 
-async def get_reward_cap_days(session: AsyncSession) -> int:
-    """Cumulative cap (days) on the reward a single owner can ever earn."""
+async def get_reward_cap_points(session: AsyncSession) -> int:
+    """Cumulative cap (points) on referral owner rewards for one code."""
     settings = await get_promo_settings(session)
-    return settings.reward_cap_days
+    return settings.reward_cap_points
 
 
 # --- TelmtFreeParams ---------------------------------------------------------
@@ -119,6 +125,8 @@ async def get_telmt_free_params(session: AsyncSession) -> TelmtFreeParams:
             "max_unique_ips": None,
             "data_quota_bytes": None,
             "expire_days": DEFAULT_TELMT_EXPIRE_DAYS,
+            "rate_limit_up_bps": None,
+            "rate_limit_down_bps": None,
         },
     )
 
@@ -168,17 +176,19 @@ async def get_bot_feature_flags(session: AsyncSession) -> BotFeatureFlags:
 
 
 __all__ = [
-    "DEFAULT_DAYS_REWARD_PER_30",
+    "DEFAULT_CREDIT_GRANT",
+    "DEFAULT_POINTS_REWARD_PER_30",
     "DEFAULT_PROMO_DISCOUNT_PERCENT",
-    "DEFAULT_REWARD_CAP_DAYS",
+    "DEFAULT_REWARD_CAP_POINTS",
     "DEFAULT_TELMT_EXPIRE_DAYS",
     "bump_cache_version",
     "get_bot_feature_flags",
     "get_cache_version",
-    "get_days_reward_per_30",
+    "get_points_reward_per_30",
+    "get_default_credit_grant",
     "get_default_discount_percent",
     "get_or_create_singleton",
     "get_promo_settings",
-    "get_reward_cap_days",
+    "get_reward_cap_points",
     "get_telmt_free_params",
 ]
