@@ -456,7 +456,7 @@ export default function MenuEditorPage() {
           )}
         </div>
 
-        <Card>
+        <Card className="h-fit lg:sticky lg:top-4">
           <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm text-foreground/85">Live Preview</CardTitle>
             <Select value={previewLang} onValueChange={(v: string) => setPreviewLang(v as "ru" | "en")}>
@@ -469,7 +469,7 @@ export default function MenuEditorPage() {
               </SelectContent>
             </Select>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-3 pb-3">
             <TelegramPreview messageText={previewMessage} buttons={previewButtons} />
           </CardContent>
         </Card>
