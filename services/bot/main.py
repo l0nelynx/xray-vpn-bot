@@ -151,6 +151,11 @@ if __name__ == "__main__":
         level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
+    # Quiet noisy libraries — every Telegram update at INFO fills Docker
+    # json-file logs (and host page cache) on small VPSes.
+    logging.getLogger("aiogram").setLevel(logging.WARNING)
+    logging.getLogger("aiohttp").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     from app.log_buffer import init_error_log_handler
     init_error_log_handler(maxlen=secrets.get('admin_logs_length', 20))
     asyncio.run(main())
