@@ -7,7 +7,7 @@ convert everything to RUB so totals are comparable.
 USD→RUB is fetched from the Central Bank of Russia open endpoint
 (cbr-xml-daily.ru, no key required) and cached in-process. Telegram Stars have
 no market feed, so they use a fixed rate. Both rates fall back to constants if
-the network is unavailable or config overrides are absent.
+the network is unavailable.
 """
 
 from __future__ import annotations
@@ -15,8 +15,6 @@ from __future__ import annotations
 import time
 
 import httpx
-
-from .config import get_config
 
 # payment_method (as stored in the DB) -> native currency code
 PAYMENT_CURRENCY: dict[str, str] = {
@@ -41,19 +39,13 @@ _usd_cache: dict[str, float] = {"rate": 0.0, "ts": 0.0}
 
 
 def _star_rub_rate() -> float:
-    """Stars → RUB. Config override `star_rub_rate`, else default 1.3."""
-    try:
-        return float(get_config().get("star_rub_rate", _STAR_RUB_DEFAULT))
-    except (TypeError, ValueError):
-        return _STAR_RUB_DEFAULT
+    """Stars → RUB (fixed default 1.3)."""
+    return _STAR_RUB_DEFAULT
 
 
 def _usd_rub_fallback() -> float:
-    """USD → RUB fallback when CBR is unreachable. Config override `usd_rub_rate`."""
-    try:
-        return float(get_config().get("usd_rub_rate", _USD_RUB_FALLBACK))
-    except (TypeError, ValueError):
-        return _USD_RUB_FALLBACK
+    """USD → RUB fallback when CBR is unreachable."""
+    return _USD_RUB_FALLBACK
 
 
 async def get_usd_rub_rate() -> float:

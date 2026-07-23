@@ -652,7 +652,10 @@ UX: открыть `deep_link` системным интентом → бот в
 
 ## Что нужно для запуска
 
-В `config.yml`:
+Предпочтительно: **Dashboard → Settings → Android / Email / Push·Play**
+(секреты шифруются в `app_integrations`). YAML остаётся fallback до Save.
+
+В `config.yml` (или Dashboard):
 
 ```yaml
 # обязательно
@@ -670,14 +673,14 @@ android_jwt_issuer: "xray-vpn-bot"
 email_code_ttl: 900
 email_code_max_attempts: 5
 
-# нужно только для Google Play IAP
+# Google Play IAP — package/rtdn в Dashboard; SA JSON предпочтительно вставить в UI
 google_play_package_name: "com.example.app"
-google_play_service_account_path: "/run/secrets/play-sa.json"
+google_play_service_account_path: "/run/secrets/play-sa.json"  # fallback path
 google_play_rtdn_token: "<random>"
 
-# нужно только для FCM push из Dashboard (регистрация токенов работает и без этого)
+# FCM push — project id + SA JSON в Dashboard → Push/Play (path = fallback)
 fcm_project_id: "your-firebase-project-id"
-fcm_service_account_path: "/app/fcm-sa.json"       # host: ./fcm-sa.json (compose mount)
+fcm_service_account_path: "/app/fcm-sa.json"
 ```
 
 Без Android-секции `/api/android/*` отвечает 500 на auth-ручках. Без SMTP —

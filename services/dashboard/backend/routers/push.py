@@ -176,7 +176,7 @@ async def launch_campaign(
     if not fcm_configured():
         raise HTTPException(
             503,
-            "FCM is not configured (fcm_project_id / fcm_service_account_path)",
+            "FCM is not configured (Settings → Push / Play: fcm_project_id + SA JSON, or path fallback)",
         )
 
     async with async_session() as session:
@@ -211,7 +211,7 @@ async def create_and_launch(
     if not fcm_configured():
         raise HTTPException(
             503,
-            "FCM is not configured (fcm_project_id / fcm_service_account_path)",
+            "FCM is not configured (Settings → Push / Play: fcm_project_id + SA JSON, or path fallback)",
         )
 
     audience, params = _normalize_audience(body.audience, body.user_ids)

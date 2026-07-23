@@ -319,7 +319,92 @@ export const handlers: HttpHandler[] = [
   ),
   http.put(`${API}/settings/payments/:provider`, async ({ request, params }) => {
     const body = (await request.json()) as object;
-    return HttpResponse.json({ name: params.provider, ...body });
+    return HttpResponse.json({
+      provider: params.provider,
+      managed: true,
+      source: "dashboard",
+      field_meta: [],
+      fields: {},
+      enabled: true,
+      ...body,
+    });
+  }),
+  http.get(`${API}/settings/integrations`, () =>
+    HttpResponse.json({
+      providers: [
+        {
+          provider: "smtp",
+          enabled: true,
+          managed: false,
+          source: "yaml",
+          fields: {},
+          field_meta: [{ name: "smtp_password", secret: true }],
+        },
+        {
+          provider: "android",
+          enabled: true,
+          managed: false,
+          source: "none",
+          fields: {},
+          field_meta: [{ name: "android_jwt_secret", secret: true }],
+        },
+        {
+          provider: "telemt",
+          enabled: true,
+          managed: false,
+          source: "yaml",
+          fields: {},
+          field_meta: [{ name: "telemt_header", secret: true }],
+        },
+        {
+          provider: "store",
+          enabled: false,
+          managed: false,
+          source: "none",
+          fields: {},
+          field_meta: [{ name: "store_api_token", secret: true }],
+        },
+        {
+          provider: "fcm",
+          enabled: false,
+          managed: false,
+          source: "none",
+          fields: {},
+          field_meta: [{ name: "fcm_sa_json", secret: true }],
+        },
+        {
+          provider: "google_play",
+          enabled: false,
+          managed: false,
+          source: "none",
+          fields: {},
+          field_meta: [
+            { name: "google_play_rtdn_token", secret: true },
+            { name: "google_play_sa_json", secret: true },
+          ],
+        },
+        {
+          provider: "web",
+          enabled: false,
+          managed: false,
+          source: "none",
+          fields: {},
+          field_meta: [{ name: "tg_client_secret", secret: true }],
+        },
+      ],
+    }),
+  ),
+  http.put(`${API}/settings/integrations/:provider`, async ({ request, params }) => {
+    const body = (await request.json()) as object;
+    return HttpResponse.json({
+      provider: params.provider,
+      managed: true,
+      source: "dashboard",
+      field_meta: [],
+      fields: {},
+      enabled: true,
+      ...body,
+    });
   }),
 
   // ── Promos / giveaways / store ────────────────────────

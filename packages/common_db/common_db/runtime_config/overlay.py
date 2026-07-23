@@ -15,11 +15,13 @@ from typing import Any, Mapping
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models.runtime import AppRuntimeSettings, PaymentIntegration
+from ..models.runtime import AppIntegration, AppRuntimeSettings, PaymentIntegration
 from .crypto import decrypt_json, derive_key
 from .keys import (
     DEFAULT_MAINTENANCE,
     DEFAULT_RUNTIME_CONFIG,
+    INTEGRATION_EMPTY_DEFAULTS,
+    INTEGRATION_PROVIDER_FIELDS,
     PAYMENT_PROVIDER_FIELDS,
     RUNTIME_KEYS,
 )
@@ -33,6 +35,8 @@ _overlay: dict[str, Any] = {}
 # provider -> decrypted field dict when managed; None means unmanaged / YAML.
 _payment_overlay: dict[str, dict[str, Any] | None] = {}
 _payment_enabled: dict[str, bool] = {}
+_integration_overlay: dict[str, dict[str, Any] | None] = {}
+_integration_enabled: dict[str, bool] = {}
 _known_version: int = -1
 _last_refresh: float = 0.0
 _crypto_key: bytes | None = None
@@ -94,6 +98,23 @@ def apply_payments_to_mapping(target: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def apply_integrations_to_mapping(target: dict[str, Any]) -> dict[str, Any]:
+    """Overlay managed app_integrations secrets onto a flat config mapping."""
+    out = dict(target)
+    for provider, fields in INTEGRATION_PROVIDER_FIELDS.items():
+        payload = _integration_overlay.get(provider)
+        if payload is None:
+            continue
+        if not _integration_enabled.get(provider, False):
+            for field in fields:
+                out[field] = INTEGRATION_EMPTY_DEFAULTS.get(field, "")
+            continue
+        for field in fields:
+            if field in payload:
+                out[field] = payload[field]
+    return out
+
+
 def payments_config_kwargs(yaml_config: Mapping[str, Any]) -> dict[str, Any]:
     """Build kwargs for ``payments.PaymentsConfig`` with dual-source precedence."""
     base = {
@@ -146,7 +167,8 @@ def parse_runtime_json(raw: str | None) -> dict[str, Any]:
 
 async def refresh_from_session(session: AsyncSession, *, force: bool = False) -> None:
     """Reload overlay from DB. Optionally skip if cache_version unchanged."""
-    global _overlay, _payment_overlay, _payment_enabled, _known_version, _last_refresh
+    global _overlay, _payment_overlay, _payment_enabled
+    global _integration_overlay, _integration_enabled, _known_version, _last_refresh
 
     now = time.monotonic()
     if not force and (now - _last_refresh) < _POLL_INTERVAL and _known_version >= 0:
@@ -168,10 +190,11 @@ async def refresh_from_session(session: AsyncSession, *, force: bool = False) ->
         if key in config:
             flat[key] = config[key]
 
+    key = _ensure_key()
+
     pay_map: dict[str, dict[str, Any] | None] = {}
     pay_en: dict[str, bool] = {}
     result = await session.execute(select(PaymentIntegration))
-    key = _ensure_key()
     for integ in result.scalars().all():
         if not integ.managed:
             pay_map[integ.provider] = None
@@ -187,9 +210,29 @@ async def refresh_from_session(session: AsyncSession, *, force: bool = False) ->
             )
             pay_map[integ.provider] = {}
 
+    int_map: dict[str, dict[str, Any] | None] = {}
+    int_en: dict[str, bool] = {}
+    result = await session.execute(select(AppIntegration))
+    for integ in result.scalars().all():
+        if not integ.managed:
+            int_map[integ.provider] = None
+            continue
+        int_en[integ.provider] = bool(integ.enabled)
+        try:
+            int_map[integ.provider] = decrypt_json(integ.encrypted_config, key)
+        except Exception as exc:
+            logger.error(
+                "Failed to decrypt app_integrations[%s]: %s",
+                integ.provider,
+                exc,
+            )
+            int_map[integ.provider] = {}
+
     _overlay = flat
     _payment_overlay = pay_map
     _payment_enabled = pay_en
+    _integration_overlay = int_map
+    _integration_enabled = int_en
     _known_version = version
     _last_refresh = now
 

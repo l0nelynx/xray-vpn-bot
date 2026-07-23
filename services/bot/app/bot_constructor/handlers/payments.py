@@ -22,10 +22,6 @@ from app.bot_constructor.keyboards.tools import (
     PaymentCallbackData,
     CreditsNodeCallbackData,
     OptimizedTariffKeyboard,
-    create_tariff_keyboard,
-    get_price_stars,
-    get_price_crypto,
-    get_sbp_price,
     payment_keyboard,
 )
 from app.bot_constructor.menu_credits import (
@@ -33,7 +29,6 @@ from app.bot_constructor.menu_credits import (
     load_menu_node,
     resolve_node_points_cost,
 )
-from app.bot_constructor.tariffs import get_tariffs_stars, get_tariffs_crypto, get_tariffs_sbp
 from app.settings import bot, cp, secrets
 import app.database.requests as rq
 from app.database.models import async_session
@@ -141,29 +136,12 @@ async def stars_plan(callback: CallbackQuery, state: FSMContext):
     lang_code = await rq.get_user_language(callback.from_user.id) or "ru"
     lang = await get_user_lang(callback.from_user.id)
 
-    db_keyboards = {
-        "Stars_Plans": ("stars", get_price_stars()),
-        "Crypto_Plans": ("crypto", get_price_crypto()),
-        "SBP_Plans": ("SBP", get_sbp_price()),
-        "SBP_Apay": ("SBP_APAY", get_sbp_price()),
-        "Crystal_plans": ("CRYSTAL", get_sbp_price()),
-    }
-    fallback_keyboards = {
-        "Stars_Plans": lambda: create_tariff_keyboard(
-            tariff=get_tariffs_stars(), method="stars", base_price=get_price_stars()
-        ),
-        "Crypto_Plans": lambda: create_tariff_keyboard(
-            tariff=get_tariffs_crypto(), method="crypto", base_price=get_price_crypto()
-        ),
-        "SBP_Plans": lambda: create_tariff_keyboard(
-            tariff=get_tariffs_sbp(), method="SBP", base_price=get_sbp_price()
-        ),
-        "SBP_Apay": lambda: create_tariff_keyboard(
-            tariff=get_tariffs_sbp(), method="SBP_APAY", base_price=get_sbp_price()
-        ),
-        "Crystal_plans": lambda: create_tariff_keyboard(
-            tariff=get_tariffs_sbp(), method="CRYSTAL", base_price=get_sbp_price()
-        ),
+    method_by_callback = {
+        "Stars_Plans": "stars",
+        "Crypto_Plans": "crypto",
+        "SBP_Plans": "SBP",
+        "SBP_Apay": "SBP_APAY",
+        "Crystal_plans": "CRYSTAL",
     }
 
     keyboard = None
@@ -173,16 +151,14 @@ async def stars_plan(callback: CallbackQuery, state: FSMContext):
             await callback.answer(lang.msg_no_credits_plans, show_alert=True)
             return
     else:
-        db_info = db_keyboards.get(callback.data)
-        if db_info:
-            method, base_price = db_info
+        method = method_by_callback.get(callback.data)
+        if method:
             keyboard = await OptimizedTariffKeyboard.from_db(
-                method, base_price, extra_discount=0, lang=lang_code
+                method, extra_discount=0, lang=lang_code
             )
-        if not keyboard:
-            builder = fallback_keyboards.get(callback.data)
-            if builder:
-                keyboard = builder()
+            if not keyboard:
+                await callback.answer(lang.msg_choose_tariff, show_alert=True)
+                return
 
     if keyboard:
         await callback.message.edit_text(lang.msg_choose_tariff, reply_markup=keyboard)

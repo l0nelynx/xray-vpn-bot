@@ -1,9 +1,13 @@
-"""Dict-like wrapper: runtime overlay + managed payments win over YAML."""
+"""Dict-like wrapper: runtime overlay + managed payments/integrations win over YAML."""
 from __future__ import annotations
 
 from typing import Any, Iterator, Mapping
 
-from common_db.runtime_config.overlay import apply_payments_to_mapping, get_overlay
+from common_db.runtime_config.overlay import (
+    apply_integrations_to_mapping,
+    apply_payments_to_mapping,
+    get_overlay,
+)
 from common_db.runtime_config.keys import RUNTIME_KEYS
 
 
@@ -12,7 +16,7 @@ class DualSourceConfig(Mapping[str, Any]):
 
     Mutations (``__setitem__``) write to the underlying YAML dict — used by the
     bot's in-memory admin config_manager. Overlay values still win on read for
-    RUNTIME_KEYS / managed payments.
+    RUNTIME_KEYS / managed payments / managed integrations.
     """
 
     def __init__(self, yaml_config: dict[str, Any]):
@@ -26,7 +30,8 @@ class DualSourceConfig(Mapping[str, Any]):
                 continue
             if key in RUNTIME_KEYS:
                 merged[key] = value
-        return apply_payments_to_mapping(merged)
+        merged = apply_payments_to_mapping(merged)
+        return apply_integrations_to_mapping(merged)
 
     def get(self, key: str, default: Any = None) -> Any:
         return self._merged().get(key, default)

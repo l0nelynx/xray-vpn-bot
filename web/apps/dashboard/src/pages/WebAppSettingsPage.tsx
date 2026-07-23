@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@xray/ui/components/card";
 import { Button } from "@xray/ui/components/button";
@@ -32,7 +32,7 @@ interface ProviderFieldMeta {
   secret: boolean;
 }
 
-interface PaymentProviderState {
+interface ProviderState {
   provider: string;
   enabled: boolean;
   managed: boolean;
@@ -42,7 +42,7 @@ interface PaymentProviderState {
   updated_at?: string | null;
 }
 
-const RUNTIME_LABELS: Record<string, string> = {
+const RUNTIME_CORE: Record<string, string> = {
   branding_name: "Brand name",
   news_id: "News channel ID",
   news_url: "News URL",
@@ -56,6 +56,53 @@ const RUNTIME_LABELS: Record<string, string> = {
   free_traffic: "Free plan traffic (GB)",
 };
 
+const RUNTIME_REMNAWAVE: Record<string, string> = {
+  rw_free_id: "FREE squad UUID",
+  rw_pro_id: "PRO squad UUID",
+  rw_ext_free_id: "External FREE squad UUID",
+  rw_ext_pro_id: "External PRO squad UUID",
+  subscription_url: "Subscription base URL",
+};
+
+const RUNTIME_EMAIL: Record<string, string> = {
+  smtp_host: "SMTP host",
+  smtp_port: "SMTP port",
+  smtp_user: "SMTP user",
+  smtp_from: "SMTP from",
+  smtp_use_tls: "SMTP use TLS (465)",
+  email_code_ttl: "Email code TTL (sec)",
+  email_code_max_attempts: "Email code max attempts",
+};
+
+const RUNTIME_ANDROID: Record<string, string> = {
+  android_access_ttl: "Access token TTL (sec)",
+  android_refresh_ttl: "Refresh token TTL (sec)",
+  android_jwt_issuer: "JWT issuer",
+};
+
+const RUNTIME_STORE: Record<string, string> = {
+  store_url: "Store API URL",
+};
+
+const RUNTIME_WEB: Record<string, string> = {
+  web_allowed_origins: "Allowed origins (comma or JSON list)",
+};
+
+const RUNTIME_PUSH: Record<string, string> = {
+  fcm_project_id: "FCM project ID",
+  google_play_package_name: "Google Play package name",
+};
+
+const ALL_RUNTIME_LABELS: Record<string, string> = {
+  ...RUNTIME_CORE,
+  ...RUNTIME_REMNAWAVE,
+  ...RUNTIME_EMAIL,
+  ...RUNTIME_ANDROID,
+  ...RUNTIME_STORE,
+  ...RUNTIME_WEB,
+  ...RUNTIME_PUSH,
+};
+
 const NUMERIC_KEYS = new Set([
   "free_days",
   "free_traffic",
@@ -63,7 +110,22 @@ const NUMERIC_KEYS = new Set([
   "news_id",
   "logs_id",
   "web_id",
+  "smtp_port",
+  "email_code_ttl",
+  "email_code_max_attempts",
+  "android_access_ttl",
+  "android_refresh_ttl",
 ]);
+
+const BOOL_KEYS = new Set(["smtp_use_tls"]);
+
+const INTEGRATION_TABS: { id: string; label: string; providers: string[]; runtime: Record<string, string> }[] = [
+  { id: "email", label: "Email", providers: ["smtp"], runtime: RUNTIME_EMAIL },
+  { id: "android", label: "Android", providers: ["android"], runtime: RUNTIME_ANDROID },
+  { id: "store", label: "Store", providers: ["store"], runtime: RUNTIME_STORE },
+  { id: "web", label: "Web", providers: ["web"], runtime: RUNTIME_WEB },
+  { id: "push", label: "Push / Play", providers: ["fcm", "google_play"], runtime: RUNTIME_PUSH },
+];
 
 type BadgeVariant = "default" | "secondary" | "destructive" | "outline" | "success" | "warning";
 
@@ -78,15 +140,165 @@ interface ProviderForm {
   fields: Record<string, string>;
 }
 
+function formatRuntimeValue(key: string, v: unknown): string {
+  if (v == null) return "";
+  if (BOOL_KEYS.has(key)) return v ? "true" : "false";
+  if (key === "web_allowed_origins") {
+    if (Array.isArray(v)) return v.join(", ");
+    return String(v);
+  }
+  return String(v);
+}
+
+function parseRuntimeValue(key: string, raw: string): unknown {
+  if (NUMERIC_KEYS.has(key)) return raw === "" ? null : Number(raw);
+  if (BOOL_KEYS.has(key)) {
+    const s = raw.trim().toLowerCase();
+    return s === "1" || s === "true" || s === "yes" || s === "on";
+  }
+  if (key === "web_allowed_origins") {
+    const trimmed = raw.trim();
+    if (!trimmed) return [];
+    if (trimmed.startsWith("[")) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) return parsed.map(String);
+      } catch {
+        /* fall through */
+      }
+    }
+    return trimmed.split(",").map((s) => s.trim()).filter(Boolean);
+  }
+  return raw;
+}
+
+function RuntimeFields({
+  labels,
+  runtime,
+  runtimeValues,
+  setRuntimeValues,
+}: {
+  labels: Record<string, string>;
+  runtime: RuntimeResponse;
+  runtimeValues: Record<string, string>;
+  setRuntimeValues: Dispatch<SetStateAction<Record<string, string>>>;
+}) {
+  return (
+    <>
+      {Object.entries(labels).map(([key, label]) => (
+        <div key={key} className="space-y-1.5">
+          <Label className="flex items-center gap-2">
+            {label}
+            {sourceBadge(runtime.sources[key] || "default")}
+          </Label>
+          <Input
+            type={NUMERIC_KEYS.has(key) ? "number" : "text"}
+            value={runtimeValues[key] ?? ""}
+            onChange={(e) => setRuntimeValues((prev) => ({ ...prev, [key]: e.target.value }))}
+          />
+        </div>
+      ))}
+    </>
+  );
+}
+
+function IntegrationCards({
+  providers,
+  forms,
+  setForms,
+  saving,
+  onSave,
+}: {
+  providers: ProviderState[];
+  forms: Record<string, ProviderForm>;
+  setForms: Dispatch<SetStateAction<Record<string, ProviderForm>>>;
+  saving: boolean;
+  onSave: (p: ProviderState) => void;
+}) {
+  if (!providers.length) return null;
+  return (
+    <div className="space-y-4">
+      {providers.map((p) => {
+        const pf = forms[p.provider] ?? { enabled: p.enabled, fields: {} };
+        return (
+          <Card key={p.provider}>
+            <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="flex items-center gap-2 text-sm">
+                {p.provider}
+                {sourceBadge(p.source)}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={pf.enabled}
+                  onCheckedChange={(v: boolean) =>
+                    setForms((prev) => ({
+                      ...prev,
+                      [p.provider]: { ...pf, enabled: v },
+                    }))
+                  }
+                />
+                <Label>Enabled</Label>
+              </div>
+              {p.field_meta.map((f) => (
+                <div key={f.name} className="space-y-1.5">
+                  <Label>{f.name}</Label>
+                  {f.name.endsWith("_sa_json") || f.name.includes("sa_json") ? (
+                    <Textarea
+                      rows={4}
+                      placeholder={f.secret ? "paste JSON or leave blank to keep" : undefined}
+                      value={pf.fields[f.name] ?? ""}
+                      onChange={(e) =>
+                        setForms((prev) => ({
+                          ...prev,
+                          [p.provider]: {
+                            ...pf,
+                            fields: { ...pf.fields, [f.name]: e.target.value },
+                          },
+                        }))
+                      }
+                    />
+                  ) : (
+                    <Input
+                      type={f.secret ? "password" : "text"}
+                      placeholder={f.secret ? "leave blank to keep" : undefined}
+                      value={pf.fields[f.name] ?? ""}
+                      onChange={(e) =>
+                        setForms((prev) => ({
+                          ...prev,
+                          [p.provider]: {
+                            ...pf,
+                            fields: { ...pf.fields, [f.name]: e.target.value },
+                          },
+                        }))
+                      }
+                    />
+                  )}
+                </div>
+              ))}
+              <Button onClick={() => onSave(p)} disabled={saving}>
+                Save {p.provider}
+              </Button>
+            </CardContent>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function WebAppSettingsPage() {
   const [flags, setFlags] = useState<FeatureFlags | null>(null);
   const [runtime, setRuntime] = useState<RuntimeResponse | null>(null);
-  const [payments, setPayments] = useState<PaymentProviderState[] | null>(null);
+  const [payments, setPayments] = useState<ProviderState[] | null>(null);
+  const [integrations, setIntegrations] = useState<ProviderState[] | null>(null);
   const [saving, setSaving] = useState(false);
 
   const [maintenance, setMaintenance] = useState<Maintenance>({ enabled: false, title: "", text: "" });
   const [runtimeValues, setRuntimeValues] = useState<Record<string, string>>({});
   const [providerForms, setProviderForms] = useState<Record<string, ProviderForm>>({});
+  const [integrationForms, setIntegrationForms] = useState<Record<string, ProviderForm>>({});
 
   useEffect(() => {
     api
@@ -99,15 +311,14 @@ export default function WebAppSettingsPage() {
         setRuntime(data);
         setMaintenance(data.maintenance);
         const values: Record<string, string> = {};
-        for (const k of Object.keys(RUNTIME_LABELS)) {
-          const v = data.values[k];
-          values[k] = v == null ? "" : String(v);
+        for (const k of Object.keys(ALL_RUNTIME_LABELS)) {
+          values[k] = formatRuntimeValue(k, data.values[k]);
         }
         setRuntimeValues(values);
       })
       .catch(() => toast.error("Failed to load runtime settings"));
     api
-      .get<{ providers: PaymentProviderState[] }>("/settings/payments")
+      .get<{ providers: ProviderState[] }>("/settings/payments")
       .then((data) => {
         setPayments(data.providers);
         const forms: Record<string, ProviderForm> = {};
@@ -122,6 +333,22 @@ export default function WebAppSettingsPage() {
         setProviderForms(forms);
       })
       .catch(() => toast.error("Failed to load payment integrations"));
+    api
+      .get<{ providers: ProviderState[] }>("/settings/integrations")
+      .then((data) => {
+        setIntegrations(data.providers);
+        const forms: Record<string, ProviderForm> = {};
+        for (const p of data.providers) {
+          const fields: Record<string, string> = {};
+          for (const f of p.field_meta) {
+            const v = p.fields[f.name];
+            fields[f.name] = f.secret ? "" : v == null ? "" : String(v);
+          }
+          forms[p.provider] = { enabled: p.enabled, fields };
+        }
+        setIntegrationForms(forms);
+      })
+      .catch(() => toast.error("Failed to load service integrations"));
   }, []);
 
   async function handleToggle(value: boolean) {
@@ -143,15 +370,11 @@ export default function WebAppSettingsPage() {
     }
   }
 
-  async function saveRuntime() {
+  async function saveRuntime(keys: string[]) {
     setSaving(true);
     try {
       const values = Object.fromEntries(
-        Object.keys(RUNTIME_LABELS).map((k) => {
-          const raw = runtimeValues[k] ?? "";
-          if (NUMERIC_KEYS.has(k)) return [k, raw === "" ? null : Number(raw)];
-          return [k, raw];
-        }),
+        keys.map((k) => [k, parseRuntimeValue(k, runtimeValues[k] ?? "")]),
       );
       const payload = {
         maintenance: {
@@ -165,30 +388,60 @@ export default function WebAppSettingsPage() {
       setRuntime(data);
       setMaintenance(data.maintenance);
       const next: Record<string, string> = {};
-      for (const k of Object.keys(RUNTIME_LABELS)) {
-        const v = data.values[k];
-        next[k] = v == null ? "" : String(v);
+      for (const k of Object.keys(ALL_RUNTIME_LABELS)) {
+        next[k] = formatRuntimeValue(k, data.values[k]);
       }
       setRuntimeValues(next);
-      toast.success("Runtime settings saved (no restart needed)");
+      toast.success("Settings saved (no restart needed)");
     } catch {
-      toast.error("Failed to save runtime settings");
+      toast.error("Failed to save settings");
     } finally {
       setSaving(false);
     }
   }
 
-  async function saveProvider(provider: PaymentProviderState) {
+  async function saveProvider(provider: ProviderState) {
     const pf = providerForms[provider.provider];
     if (!pf) return;
     setSaving(true);
     try {
-      const updated = await api.put<PaymentProviderState>(`/settings/payments/${provider.provider}`, {
+      const updated = await api.put<ProviderState>(`/settings/payments/${provider.provider}`, {
         enabled: !!pf.enabled,
         fields: Object.fromEntries(provider.field_meta.map((f) => [f.name, pf.fields[f.name]])),
       });
       setPayments((prev) => (prev || []).map((p) => (p.provider === updated.provider ? updated : p)));
       setProviderForms((prev) => {
+        const fields: Record<string, string> = {};
+        for (const f of updated.field_meta) {
+          const v = updated.fields[f.name];
+          fields[f.name] = f.secret ? "" : v == null ? "" : String(v);
+        }
+        return { ...prev, [updated.provider]: { enabled: updated.enabled, fields } };
+      });
+      toast.success(`${provider.provider}: saved (Dashboard is now source of truth)`);
+    } catch {
+      toast.error(`Failed to save ${provider.provider}`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveIntegration(provider: ProviderState) {
+    const pf = integrationForms[provider.provider];
+    if (!pf) return;
+    setSaving(true);
+    try {
+      const updated = await api.put<ProviderState>(
+        `/settings/integrations/${provider.provider}`,
+        {
+          enabled: !!pf.enabled,
+          fields: Object.fromEntries(provider.field_meta.map((f) => [f.name, pf.fields[f.name]])),
+        },
+      );
+      setIntegrations((prev) =>
+        (prev || []).map((p) => (p.provider === updated.provider ? updated : p)),
+      );
+      setIntegrationForms((prev) => {
         const fields: Record<string, string> = {};
         for (const f of updated.field_meta) {
           const v = updated.fields[f.name];
@@ -213,8 +466,14 @@ export default function WebAppSettingsPage() {
       </p>
 
       <Tabs defaultValue="runtime">
-        <TabsList className="mb-4 flex-wrap">
+        <TabsList className="mb-4 flex h-auto flex-wrap gap-1">
           <TabsTrigger value="runtime">Runtime</TabsTrigger>
+          <TabsTrigger value="remnawave">Remnawave</TabsTrigger>
+          {INTEGRATION_TABS.map((t) => (
+            <TabsTrigger key={t.id} value={t.id}>
+              {t.label}
+            </TabsTrigger>
+          ))}
           <TabsTrigger value="payments">Payments</TabsTrigger>
           <TabsTrigger value="flags">Feature flags</TabsTrigger>
         </TabsList>
@@ -256,22 +515,13 @@ export default function WebAppSettingsPage() {
                     onChange={(e) => setMaintenance((m) => ({ ...m, text: e.target.value }))}
                   />
                 </div>
-                {Object.entries(RUNTIME_LABELS).map(([key, label]) => (
-                  <div key={key} className="space-y-1.5">
-                    <Label className="flex items-center gap-2">
-                      {label}
-                      {sourceBadge(runtime.sources[key] || "default")}
-                    </Label>
-                    <Input
-                      type={NUMERIC_KEYS.has(key) ? "number" : "text"}
-                      value={runtimeValues[key] ?? ""}
-                      onChange={(e) =>
-                        setRuntimeValues((prev) => ({ ...prev, [key]: e.target.value }))
-                      }
-                    />
-                  </div>
-                ))}
-                <Button onClick={saveRuntime} disabled={saving}>
+                <RuntimeFields
+                  labels={RUNTIME_CORE}
+                  runtime={runtime}
+                  runtimeValues={runtimeValues}
+                  setRuntimeValues={setRuntimeValues}
+                />
+                <Button onClick={() => saveRuntime(Object.keys(RUNTIME_CORE))} disabled={saving}>
                   Save runtime
                 </Button>
               </CardContent>
@@ -279,61 +529,85 @@ export default function WebAppSettingsPage() {
           )}
         </TabsContent>
 
+        <TabsContent value="remnawave">
+          {!runtime ? (
+            <Spinner className="h-6 w-6" />
+          ) : (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm">Remnawave squads</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-xs text-muted-foreground">
+                  Panel URL / API token / webhook secret stay in <code>config.yml</code>.
+                </p>
+                <RuntimeFields
+                  labels={RUNTIME_REMNAWAVE}
+                  runtime={runtime}
+                  runtimeValues={runtimeValues}
+                  setRuntimeValues={setRuntimeValues}
+                />
+                <Button
+                  onClick={() => saveRuntime(Object.keys(RUNTIME_REMNAWAVE))}
+                  disabled={saving}
+                >
+                  Save Remnawave
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {INTEGRATION_TABS.map((tab) => (
+          <TabsContent key={tab.id} value={tab.id}>
+            {!runtime || !integrations ? (
+              <Spinner className="h-6 w-6" />
+            ) : (
+              <div className="space-y-4">
+                {Object.keys(tab.runtime).length > 0 && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-sm">{tab.label} settings</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <RuntimeFields
+                        labels={tab.runtime}
+                        runtime={runtime}
+                        runtimeValues={runtimeValues}
+                        setRuntimeValues={setRuntimeValues}
+                      />
+                      <Button
+                        onClick={() => saveRuntime(Object.keys(tab.runtime))}
+                        disabled={saving}
+                      >
+                        Save {tab.label} settings
+                      </Button>
+                    </CardContent>
+                  </Card>
+                )}
+                <IntegrationCards
+                  providers={integrations.filter((p) => tab.providers.includes(p.provider))}
+                  forms={integrationForms}
+                  setForms={setIntegrationForms}
+                  saving={saving}
+                  onSave={saveIntegration}
+                />
+              </div>
+            )}
+          </TabsContent>
+        ))}
+
         <TabsContent value="payments">
           {!payments ? (
             <Spinner className="h-6 w-6" />
           ) : (
-            <div className="space-y-4">
-              {payments.map((p) => {
-                const pf = providerForms[p.provider] ?? { enabled: p.enabled, fields: {} };
-                return (
-                  <Card key={p.provider}>
-                    <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
-                      <CardTitle className="flex items-center gap-2 text-sm">
-                        {p.provider}
-                        {sourceBadge(p.source)}
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      <div className="flex items-center gap-2">
-                        <Switch
-                          checked={pf.enabled}
-                          onCheckedChange={(v: boolean) =>
-                            setProviderForms((prev) => ({
-                              ...prev,
-                              [p.provider]: { ...pf, enabled: v },
-                            }))
-                          }
-                        />
-                        <Label>Enabled</Label>
-                      </div>
-                      {p.field_meta.map((f) => (
-                        <div key={f.name} className="space-y-1.5">
-                          <Label>{f.name}</Label>
-                          <Input
-                            type={f.secret ? "password" : "text"}
-                            placeholder={f.secret ? "leave blank to keep" : undefined}
-                            value={pf.fields[f.name] ?? ""}
-                            onChange={(e) =>
-                              setProviderForms((prev) => ({
-                                ...prev,
-                                [p.provider]: {
-                                  ...pf,
-                                  fields: { ...pf.fields, [f.name]: e.target.value },
-                                },
-                              }))
-                            }
-                          />
-                        </div>
-                      ))}
-                      <Button onClick={() => saveProvider(p)} disabled={saving}>
-                        Save {p.provider}
-                      </Button>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
+            <IntegrationCards
+              providers={payments}
+              forms={providerForms}
+              setForms={setProviderForms}
+              saving={saving}
+              onSave={saveProvider}
+            />
           )}
         </TabsContent>
 
@@ -357,7 +631,7 @@ export default function WebAppSettingsPage() {
                   </div>
                   <p className="text-xs text-muted-foreground">
                     {flags.legacy_bot_constructor
-                      ? "In-bot tariff menus and inline payments are active. Users can pay directly in Telegram."
+                      ? "In-bot tariff menus and inline payments are active. Prices come from Dashboard tariffs."
                       : "Disabled — the bot directs users to the MiniApp for all purchases. Restart the bot after changing."}
                   </p>
                 </div>

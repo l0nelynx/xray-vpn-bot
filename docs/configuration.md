@@ -13,25 +13,27 @@ edited in **Dashboard → Settings** without editing files or restarting.
 
 **Precedence (dual-source period):**
 
-1. **Dashboard / DB** — if a runtime key was saved, or a payment provider is
-   `managed` (saved in UI).
+1. **Dashboard / DB** — if a runtime key was saved, or a payment/app
+   integration provider is `managed` (saved in UI).
 2. Else **`config.yml`** — current behaviour; existing installs keep working.
-3. Else **code defaults** (e.g. maintenance seed).
+3. Else **code defaults** (e.g. maintenance / Android TTL / SMTP port seed).
 
 | Prefer Dashboard | Stay in YAML (bootstrap) |
 |------------------|--------------------------|
 | Maintenance mode | `token`, `admin_bot_token`, `admin_id` |
 | `branding_name`, news/support/legal links | Remnawave URL/token/webhook secret |
 | `free_days` / `free_traffic` | `dashboard_login` / `password` / `secret` |
-| Payment gateway credentials + enable | `miniapp_url`, `bot_url`, `miniapp_tg_url` |
-| `logs_id`, `web_id`, `admin_logs_length` | Android JWT, SMTP, Telemt/Store URLs |
+| Remnawave squad IDs + `subscription_url` | `miniapp_url`, `bot_url`, `miniapp_tg_url` |
+| Payment gateway credentials + enable | uvicorn / `log_level` / `expose_api_docs` |
+| Android JWT + TTLs, SMTP, Telemt connection | SA **file paths** (JSON content preferred in Dashboard) |
+| Store / FCM / Google Play / Web portal | `support_token`, path mounts |
 
-On first boot after upgrade, empty DB rows are **imported from YAML** once so
-the Dashboard shows current values. Saving in the UI makes Dashboard the
+On boot, missing runtime keys and integration providers are **imported from YAML**
+(without overwriting Dashboard values). Saving in the UI makes Dashboard the
 source of truth for that key/provider.
 
 Optional bootstrap key: `payments_secrets_key` — encrypts credentials in
-`payment_integrations`. If unset, `dashboard_secret` is used as a fallback.
+`payment_integrations` and `app_integrations`. If unset, `dashboard_secret` is used as a fallback.
 
 Do **not** delete dual-source keys from production `config.yml` yet — they are
 cut in later releases after the DB path is stable.
@@ -95,14 +97,14 @@ SSL terminates at the edge nginx — do not enable uvicorn SSL in production.
 
 | Key | Required | Description |
 |-----|----------|-------------|
-| `remnawave_url` | Yes | Panel base URL (`https://…`) |
-| `remnawave_token` | Yes | API token from panel settings |
-| `remnawave_webhook_secret` | No | HMAC secret for inbound panel webhooks — see [Integrations](integrations.md) |
-| `rw_free_id` | Yes | Internal squad UUID for FREE users |
-| `rw_pro_id` | Yes | Internal squad UUID for PRO users |
-| `rw_ext_free_id` | No | External squad for FREE users |
-| `rw_ext_pro_id` | No | External squad for PRO users |
-| `subscription_url` | No | Base URL for subscription links (Android deep-link validation) |
+| `remnawave_url` | Yes | Panel base URL (`https://…`) — **bootstrap YAML** |
+| `remnawave_token` | Yes | API token from panel settings — **bootstrap YAML** |
+| `remnawave_webhook_secret` | No | HMAC secret for inbound panel webhooks — **bootstrap YAML** |
+| `rw_free_id` | Yes | Internal squad UUID for FREE users — preferred: Dashboard → Remnawave |
+| `rw_pro_id` | Yes | Internal squad UUID for PRO users — preferred: Dashboard → Remnawave |
+| `rw_ext_free_id` | No | External squad for FREE users — preferred: Dashboard → Remnawave |
+| `rw_ext_pro_id` | No | External squad for PRO users — preferred: Dashboard → Remnawave |
+| `subscription_url` | No | Subscription base URL (Android deep-link validation) — preferred: Dashboard → Remnawave |
 
 ## Dashboard
 
@@ -121,9 +123,11 @@ openssl rand -hex 32
 
 ## Telemt (optional)
 
+Preferred: **Dashboard → Telemt → Connection** (URL in runtime settings; header encrypted).
+
 | Key | Description |
 |-----|-------------|
-| `telemt_server` | Telemt API base URL — omit to disable Dashboard Telemt pages |
+| `telemt_server` | Telemt API base URL — omit to disable Telemt features |
 | `telemt_header` | Authorization header forwarded to Telemt |
 
 ## Free plan defaults
@@ -135,6 +139,8 @@ openssl rand -hex 32
 
 ## Android / mobile
 
+Preferred: **Dashboard → Settings → Android** (JWT secret encrypted).
+
 | Key | Required | Description |
 |-----|----------|-------------|
 | `android_jwt_secret` | For Android | HS256 JWT signing key — ≥32 bytes |
@@ -144,14 +150,14 @@ openssl rand -hex 32
 
 ## Email (SMTP)
 
-Required for Android/web email verification. Miniapp joins `mail-net` for outbound SMTP.
+Preferred: **Dashboard → Settings → Email**. Miniapp joins `mail-net` for outbound SMTP.
 
 | Key | Required | Description |
 |-----|----------|-------------|
 | `smtp_host` | For email | SMTP server |
 | `smtp_port` | No | Default `587` (STARTTLS); use `465` for implicit TLS |
 | `smtp_user` | For email | SMTP login |
-| `smtp_password` | For email | SMTP password |
+| `smtp_password` | For email | SMTP password (encrypted in Dashboard) |
 | `smtp_from` | No | Sender display name + address |
 | `smtp_use_tls` | No | `true` = implicit TLS on 465 |
 | `email_code_ttl` | No | Verification code TTL (default `900`) |
@@ -159,27 +165,31 @@ Required for Android/web email verification. Miniapp joins `mail-net` for outbou
 
 ## Google Play IAP (optional)
 
+Preferred: **Dashboard → Settings → Push / Play** (paste SA JSON; path is fallback).
+
 | Key | Description |
 |-----|-------------|
 | `google_play_package_name` | Play Console package name |
-| `google_play_service_account_path` | Path to service-account JSON inside container |
+| `google_play_service_account_path` | Bootstrap fallback path to SA JSON inside container |
 | `google_play_rtdn_token` | RTDN webhook shared secret — required when package name is set |
 
 ## FCM push (optional)
 
-Token registration works without these keys; sending from Dashboard requires both.
+Token registration works without these keys; sending from Dashboard requires project id + SA (JSON or path).
 
 | Key | Description |
 |-----|-------------|
-| `fcm_project_id` | Firebase / GCP project id |
-| `fcm_service_account_path` | Container path to SA JSON (`/app/fcm-sa.json`; host file `./fcm-sa.json`, mounted into `dashboard` and `crm-worker`) |
+| `fcm_project_id` | Firebase / GCP project id — preferred: Dashboard Push/Play |
+| `fcm_service_account_path` | Bootstrap fallback path (`/app/fcm-sa.json`) |
 
 ## Web portal (CORS)
+
+Preferred: **Dashboard → Settings → Web**.
 
 | Key | Description |
 |-----|-------------|
 | `web_allowed_origins` | List of portal SPA origins — required when portal is on a separate domain |
-| `tg_client_secret` | Telegram OIDC Client Secret from BotFather — enables "Sign in with Telegram" |
+| `tg_client_secret` | Telegram OIDC Client Secret from BotFather (encrypted in Dashboard) |
 
 See [web-portal.md](web-portal.md).
 
@@ -238,29 +248,23 @@ Only fill in gateways you use. Full setup guide: [Payment gateways](payment-gate
 
 ### Legacy bot constructor prices
 
-Used only when `legacy_bot_constructor = true` in Dashboard → WebApp → Settings.
-After enabling, **restart the bot**.
-
-| Key | Description |
-|-----|-------------|
-| `stars_price` | 1-month base price in Telegram Stars |
-| `crypto_price` | 1-month base price in USDT |
-| `sbp_price` | 1-month base price in RUB |
-| `discount` | Extra discount (%) for 3+ month plans |
+**Removed.** When `legacy_bot_constructor = true`, prices come only from
+Dashboard tariff plans / tariff prices (no YAML `stars_price` / `crypto_price` /
+`sbp_price` / `discount`).
 
 ## Currency rates (Dashboard stats)
 
-| Key | Description |
-|-----|-------------|
-| `star_rub_rate` | Telegram Stars → RUB override (default `1.3`) |
-| `usd_rub_rate` | USD → RUB fallback when CBR API is unreachable |
+USD→RUB is fetched from the CBR API (cached). Stars use a fixed `1.3` RUB
+multiplier. Config overrides (`star_rub_rate` / `usd_rub_rate`) were removed.
 
 ## Store (optional)
+
+Preferred: **Dashboard → Settings → Store**.
 
 | Key | Description |
 |-----|-------------|
 | `store_url` | External store API base URL |
-| `store_api_token` | Store API token |
+| `store_api_token` | Store API token (encrypted in Dashboard) |
 
 Omit both to hide the Store section in Dashboard.
 

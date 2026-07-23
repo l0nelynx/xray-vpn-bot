@@ -32,6 +32,7 @@ from .routers import (
     settings,
     runtime_settings,
     payment_integrations,
+    app_integrations,
     tg_admin,
     crm,
     push,
@@ -125,6 +126,7 @@ app.include_router(webapp_payments.router, prefix=BASE_PATH)
 app.include_router(settings.router, prefix=BASE_PATH)
 app.include_router(runtime_settings.router, prefix=BASE_PATH)
 app.include_router(payment_integrations.router, prefix=BASE_PATH)
+app.include_router(app_integrations.router, prefix=BASE_PATH)
 app.include_router(tg_admin.router, prefix=BASE_PATH)
 app.include_router(crm.router, prefix=BASE_PATH)
 app.include_router(push.router, prefix=BASE_PATH)

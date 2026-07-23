@@ -24,6 +24,7 @@ import common_db.models  # noqa: F401  -- side-effect: populate metadata
 CANONICAL_TABLES = frozenset({
     "android_fcm_tokens",
     "app_runtime_settings",
+    "app_integrations",
     "bot_feature_flags",
     "cache_version",
     "crm_campaign_deliveries",

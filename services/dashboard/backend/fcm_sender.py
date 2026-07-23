@@ -12,7 +12,11 @@ from typing import Any
 
 import httpx
 
-from .config import get_fcm_project_id, get_fcm_service_account_path
+from .config import (
+    get_fcm_project_id,
+    get_fcm_sa_json,
+    get_fcm_service_account_path,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -40,15 +44,17 @@ class FcmSendResult:
 
 
 def fcm_configured() -> bool:
-    return bool(get_fcm_project_id() and get_fcm_service_account_path())
+    return bool(get_fcm_project_id() and (get_fcm_sa_json() or get_fcm_service_account_path()))
 
 
 def _get_credentials():
+    sa_json = get_fcm_sa_json()
     path = get_fcm_service_account_path()
-    if not path:
-        raise FcmError("fcm_service_account_path is not configured")
+    cache_key = f"json:{hash(sa_json)}" if sa_json else f"path:{path}"
+    if not sa_json and not path:
+        raise FcmError("FCM service account is not configured (JSON or path)")
     with _CREDS_LOCK:
-        cached = _CREDS_CACHE.get(path)
+        cached = _CREDS_CACHE.get(cache_key)
         if cached is not None:
             return cached
         try:
@@ -57,10 +63,21 @@ def _get_credentials():
             raise FcmError(
                 "google-auth is required for FCM (pip install google-auth)"
             ) from exc
-        creds = service_account.Credentials.from_service_account_file(
-            path, scopes=[_FCM_SCOPE]
-        )
-        _CREDS_CACHE[path] = creds
+        if sa_json:
+            import json as _json
+
+            try:
+                info = _json.loads(sa_json)
+            except _json.JSONDecodeError as exc:
+                raise FcmError("fcm_sa_json is not valid JSON") from exc
+            creds = service_account.Credentials.from_service_account_info(
+                info, scopes=[_FCM_SCOPE]
+            )
+        else:
+            creds = service_account.Credentials.from_service_account_file(
+                path, scopes=[_FCM_SCOPE]
+            )
+        _CREDS_CACHE[cache_key] = creds
         return creds
 
 

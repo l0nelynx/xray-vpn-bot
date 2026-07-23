@@ -6,7 +6,6 @@ import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from common_db.repo.runtime import import_payments_from_yaml, import_runtime_from_yaml
 from .crypto import derive_key
 from .overlay import refresh_from_session, set_crypto_secret
 
@@ -20,16 +19,26 @@ async def bootstrap_runtime_overlay(
     crypto_secret: str,
 ) -> None:
     """One-shot import (if empty) + load overlay into memory."""
+    # Lazy import avoids circular import with repo.runtime → runtime_config.
+    from common_db.repo.runtime import (
+        import_integrations_from_yaml,
+        import_payments_from_yaml,
+        import_runtime_from_yaml,
+    )
+
     set_crypto_secret(crypto_secret)
     key = derive_key(crypto_secret)
     async with session_factory() as session:
         imported_rt = await import_runtime_from_yaml(session, yaml_config)
         imported_pay = await import_payments_from_yaml(session, yaml_config, key)
+        imported_int = await import_integrations_from_yaml(session, yaml_config, key)
         await session.commit()
         if imported_rt:
             logger.info("Imported runtime settings keys from config.yml")
         if imported_pay:
             logger.info("Imported %s payment integration placeholder(s) from config.yml", imported_pay)
+        if imported_int:
+            logger.info("Imported %s app integration placeholder(s) from config.yml", imported_int)
         await refresh_from_session(session, force=True)
 
 

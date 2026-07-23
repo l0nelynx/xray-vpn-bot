@@ -5,24 +5,6 @@ from aiogram.filters.callback_data import CallbackData
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from app.settings import secrets
-
-
-def get_price_stars():
-    return secrets.get("stars_price")
-
-
-def get_price_crypto():
-    return secrets.get("crypto_price")
-
-
-def get_price_discount():
-    return secrets.get("discount")
-
-
-def get_sbp_price():
-    return secrets.get("sbp_price")
-
 
 class PaymentCallbackData(CallbackData, prefix=""):
     tag: str
@@ -88,14 +70,12 @@ class OptimizedTariffKeyboard:
         self,
         tariff: Dict[str, dict],
         method: str,
-        base_price: int,
         discount_func: Optional[Callable[[float, int], float]] = None,
         extra_discount: int = 0,
         lang: str = "ru",
     ):
         self.tariff = tariff
         self.method = method
-        self.base_price = base_price
         self.discount_func = discount_func
         self.extra_discount = extra_discount
         self.lang = lang
@@ -104,33 +84,21 @@ class OptimizedTariffKeyboard:
         keyboard_buttons = []
         for name, params in self.tariff.items():
             days = int(params["days"])
-            disc = int(params.get("disc", 0) or 0)
             currency = params["currency"]
             period = params["period"]
 
             db_price = params.get("db_price")
-            if db_price and db_price > 0:
-                amount = db_price
-                if self.extra_discount > 0:
-                    amount = amount * (1 - self.extra_discount / 100)
-                call_data = PaymentCallbackData(
-                    tag="data", method=self.method, amount=amount, days=days
-                ).pack()
-                formatted_price = f"{amount:.2f}".rstrip("0").rstrip(".")
-                text = f"{period} | {formatted_price} {currency}"
-                keyboard_buttons.append([InlineKeyboardButton(text=text, callback_data=call_data)])
-            else:
-                builder = TariffKeyboardBuilder(
-                    method=self.method,
-                    price=self.base_price,
-                    days=days,
-                    disc=disc,
-                    currency=currency,
-                    period=period,
-                    discount_func=self.discount_func,
-                    extra_discount=self.extra_discount,
-                )
-                keyboard_buttons.append([builder.build()])
+            if not db_price or db_price <= 0:
+                continue
+            amount = db_price
+            if self.extra_discount > 0:
+                amount = amount * (1 - self.extra_discount / 100)
+            call_data = PaymentCallbackData(
+                tag="data", method=self.method, amount=amount, days=days
+            ).pack()
+            formatted_price = f"{amount:.2f}".rstrip("0").rstrip(".")
+            text = f"{period} | {formatted_price} {currency}"
+            keyboard_buttons.append([InlineKeyboardButton(text=text, callback_data=call_data)])
 
         back_text = "Back" if self.lang == "en" else "Назад"
         main_text = "Main menu" if self.lang == "en" else "На главную"
@@ -141,7 +109,6 @@ class OptimizedTariffKeyboard:
     @staticmethod
     async def from_db(
         payment_method: str,
-        base_price: int,
         extra_discount: int = 0,
         lang: str = "ru",
     ) -> Optional[InlineKeyboardMarkup]:
@@ -163,10 +130,11 @@ class OptimizedTariffKeyboard:
         if not getter:
             return None
         tariffs = await getter(lang=lang)
+        if not tariffs:
+            return None
         return OptimizedTariffKeyboard(
             tariff=tariffs,
             method=payment_method,
-            base_price=base_price,
             extra_discount=extra_discount,
             lang=lang,
         ).build()
@@ -175,16 +143,12 @@ class OptimizedTariffKeyboard:
 def create_tariff_keyboard(
     tariff: Dict[str, dict],
     method: str,
-    base_price: int,
     discount_func: Optional[Callable[[float, int], float]] = None,
     extra_discount: int = 0,
 ) -> InlineKeyboardMarkup:
     return OptimizedTariffKeyboard(
         tariff=tariff,
         method=method,
-        base_price=base_price,
         discount_func=discount_func,
         extra_discount=extra_discount,
     ).build()
-
-

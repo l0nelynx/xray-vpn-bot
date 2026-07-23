@@ -17,6 +17,7 @@ from typing import Any
 
 from ..config import (
     get_google_play_package_name,
+    get_google_play_sa_json,
     get_google_play_service_account_path,
 )
 
@@ -50,9 +51,12 @@ _SDK_CACHE: dict[str, Any] = {}
 
 
 def _build_sdk():
+    sa_json = get_google_play_sa_json()
     path = get_google_play_service_account_path()
-    if not path:
-        raise GooglePlayError("google_play_service_account_path is not configured")
+    if not sa_json and not path:
+        raise GooglePlayError(
+            "Google Play service account is not configured (JSON or path)"
+        )
     try:
         from google.oauth2 import service_account
         from googleapiclient.discovery import build
@@ -61,9 +65,20 @@ def _build_sdk():
             "google-auth / google-api-python-client are not installed"
         ) from exc
 
-    creds = service_account.Credentials.from_service_account_file(
-        path, scopes=[_PLAY_SCOPE]
-    )
+    if sa_json:
+        import json as _json
+
+        try:
+            info = _json.loads(sa_json)
+        except _json.JSONDecodeError as exc:
+            raise GooglePlayError("google_play_sa_json is not valid JSON") from exc
+        creds = service_account.Credentials.from_service_account_info(
+            info, scopes=[_PLAY_SCOPE]
+        )
+    else:
+        creds = service_account.Credentials.from_service_account_file(
+            path, scopes=[_PLAY_SCOPE]
+        )
     # cache_discovery=False avoids a noisy warning when /tmp isn't writable.
     return build("androidpublisher", "v3", credentials=creds, cache_discovery=False)
 

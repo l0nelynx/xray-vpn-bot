@@ -58,14 +58,14 @@ def test_failed_cbr_fetch_is_cached() -> None:
 
     async def _run() -> None:
         with patch("payments.rub_pricing.aiohttp.ClientSession", return_value=mock_session):
-            first = await rub_pricing.fetch_usd_rub_rate({"usd_rub_rate": 80.0})
-            assert first == 80.0
+            first = await rub_pricing.fetch_usd_rub_rate()
+            assert first == rub_pricing._USD_RUB_FALLBACK
             # Second call must hit the failure cache — no new ClientSession.
             with patch(
                 "payments.rub_pricing.aiohttp.ClientSession",
                 side_effect=AssertionError("CBR must not be re-fetched"),
             ):
-                second = await rub_pricing.fetch_usd_rub_rate({"usd_rub_rate": 80.0})
-            assert second == 80.0
+                second = await rub_pricing.fetch_usd_rub_rate()
+            assert second == rub_pricing._USD_RUB_FALLBACK
 
     asyncio.run(_run())

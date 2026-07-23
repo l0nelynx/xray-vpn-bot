@@ -144,8 +144,8 @@ export default function ComposeTab({ onLaunched }: ComposeTabProps) {
             <TriangleAlert className="h-4 w-4" />
             <AlertTitle>FCM is not configured</AlertTitle>
             <AlertDescription>
-              Set fcm_project_id and fcm_service_account_path in config.yml (readable by dashboard
-              and crm-worker).
+              Set <code>fcm_project_id</code> and paste the service-account JSON under{" "}
+              <strong>Settings → Push / Play</strong> (path in config.yml remains a fallback).
             </AlertDescription>
           </Alert>
         )}

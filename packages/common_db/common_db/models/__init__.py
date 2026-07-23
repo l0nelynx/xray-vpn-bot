@@ -29,7 +29,7 @@ from .menus import MenuButton, MenuScreen, WebAppMenuNode
 from .promo_redemptions import PromoRedemption
 from .promos import Promo, PromoSettings
 from .support import SupportAttachment, SupportMessage, SupportTicket
-from .runtime import AppRuntimeSettings, PaymentIntegration
+from .runtime import AppRuntimeSettings, AppIntegration, PaymentIntegration
 from .system import BotFeatureFlags, CacheVersion, TelmtFreeParams
 from .tariffs import SquadProfile, TariffPlan, TariffPrice
 from .transactions import Transaction
@@ -88,5 +88,6 @@ __all__ = [
     "TelmtFreeParams",
     # runtime
     "AppRuntimeSettings",
+    "AppIntegration",
     "PaymentIntegration",
 ]

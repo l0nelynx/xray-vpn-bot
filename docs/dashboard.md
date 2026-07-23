@@ -289,6 +289,8 @@ Tabs:
 | Tab | Effect |
 |-----|--------|
 | **Runtime** | Maintenance mode; branding / links / free plan / log chat IDs. Saved values override `config.yml` without restart. |
+| **Remnawave** | Squad UUIDs + subscription base URL (panel URL/token stay in YAML). |
+| **Email / Android / Store / Web / Push·Play** | Non-secret scalars + encrypted credentials (`app_integrations`). |
 | **Payments** | Enable gateways and edit credentials (encrypted in DB). After Save, Dashboard is the source of truth for that provider. |
 | **Feature flags** | `legacy_bot_constructor` — show/hide Bot Constructor nav; requires bot restart |
 
@@ -300,7 +302,9 @@ See [Configuration → Dual-source](configuration.md#dual-source-configuration-y
 
 **Route:** `/telemt`
 
-Proxy to external Telemt server (`telemt_server` + `telemt_header`). Returns
+Proxy to external Telemt server. Connection credentials
+(`telemt_server` + `telemt_header`) are edited under **Telemt → Connection**
+(dual-source with `config.yml`). Returns
 503 if not configured.
 
 Three tabs:

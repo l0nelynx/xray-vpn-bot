@@ -1152,6 +1152,123 @@ function UsersTab() {
   );
 }
 
+// ======================== Connection Tab ========================
+
+function ConnectionTab() {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [server, setServer] = useState("");
+  const [header, setHeader] = useState("");
+  const [serverSource, setServerSource] = useState("default");
+  const [headerSource, setHeaderSource] = useState("none");
+  const [headerEnabled, setHeaderEnabled] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [rt, integ] = await Promise.all([
+        api.get<{
+          values: Record<string, unknown>;
+          sources: Record<string, string>;
+        }>("/settings/runtime"),
+        api.get<{
+          providers: Array<{
+            provider: string;
+            enabled: boolean;
+            source: string;
+            fields: Record<string, unknown>;
+            field_meta: Array<{ name: string; secret: boolean }>;
+          }>;
+        }>("/settings/integrations"),
+      ]);
+      setServer(rt.values.telemt_server == null ? "" : String(rt.values.telemt_server));
+      setServerSource(rt.sources.telemt_server || "default");
+      const telemt = integ.providers.find((p) => p.provider === "telemt");
+      if (telemt) {
+        setHeaderEnabled(telemt.enabled);
+        setHeaderSource(telemt.source);
+        setHeader("");
+      }
+    } catch {
+      toast.error("Failed to load Telemt connection settings");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const onSave = async () => {
+    setSaving(true);
+    try {
+      await api.put("/settings/runtime", {
+        values: { telemt_server: server },
+      });
+      await api.put("/settings/integrations/telemt", {
+        enabled: headerEnabled,
+        fields: { telemt_header: header },
+      });
+      toast.success("Telemt connection saved");
+      await load();
+    } catch {
+      toast.error("Failed to save Telemt connection");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-12">
+        <Spinner className="h-6 w-6" />
+      </div>
+    );
+  }
+
+  return (
+    <Card className="max-w-full md:max-w-[600px]">
+      <CardHeader className="flex-row items-center justify-between space-y-0">
+        <CardTitle className="text-sm">Telemt Connection</CardTitle>
+        <Button onClick={onSave} disabled={saving}>
+          Save
+        </Button>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-sm text-muted-foreground">
+          API base URL and auth header used by Dashboard / bot / miniapp to reach Telemt.
+        </p>
+        <div className="space-y-1.5">
+          <Label className="flex items-center gap-2">
+            telemt_server
+            <Badge variant={serverSource === "dashboard" ? "success" : serverSource === "yaml" ? "warning" : "outline"}>
+              {serverSource}
+            </Badge>
+          </Label>
+          <Input value={server} onChange={(e) => setServer(e.target.value)} placeholder="https://telemt.example.com" />
+        </div>
+        <div className="flex items-center gap-2">
+          <Checkbox checked={headerEnabled} onCheckedChange={(v) => setHeaderEnabled(!!v)} id="telemt-hdr-en" />
+          <Label htmlFor="telemt-hdr-en">Auth header enabled</Label>
+          <Badge variant={headerSource === "dashboard" ? "success" : headerSource === "yaml" ? "warning" : "outline"}>
+            {headerSource}
+          </Badge>
+        </div>
+        <div className="space-y-1.5">
+          <Label>telemt_header</Label>
+          <Input
+            type="password"
+            value={header}
+            onChange={(e) => setHeader(e.target.value)}
+            placeholder="leave blank to keep"
+          />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ======================== Free Params Tab ========================
 
 interface FreeForm {
@@ -1792,6 +1909,9 @@ export default function TelmtPage() {
           <TabsTrigger value="users">
             <User className="h-4 w-4" /> Users
           </TabsTrigger>
+          <TabsTrigger value="connection">
+            <LinkIcon className="h-4 w-4" /> Connection
+          </TabsTrigger>
           <TabsTrigger value="free-params">
             <Settings className="h-4 w-4" /> Free Params
           </TabsTrigger>
@@ -1807,6 +1927,9 @@ export default function TelmtPage() {
         </TabsContent>
         <TabsContent value="users">
           <UsersTab />
+        </TabsContent>
+        <TabsContent value="connection">
+          <ConnectionTab />
         </TabsContent>
         <TabsContent value="free-params">
           <FreeParamsTab />
