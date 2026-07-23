@@ -1249,7 +1249,11 @@ function ConnectionTab() {
           <Input value={server} onChange={(e) => setServer(e.target.value)} placeholder="https://telemt.example.com" />
         </div>
         <div className="flex items-center gap-2">
-          <Checkbox checked={headerEnabled} onCheckedChange={(v) => setHeaderEnabled(!!v)} id="telemt-hdr-en" />
+          <Checkbox
+            checked={headerEnabled}
+            onCheckedChange={(v: boolean | "indeterminate") => setHeaderEnabled(v === true)}
+            id="telemt-hdr-en"
+          />
           <Label htmlFor="telemt-hdr-en">Auth header enabled</Label>
           <Badge variant={headerSource === "dashboard" ? "success" : headerSource === "yaml" ? "warning" : "outline"}>
             {headerSource}
