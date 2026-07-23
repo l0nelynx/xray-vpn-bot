@@ -99,38 +99,54 @@ const menuTree = [
   {
     id: 1,
     parent_id: null,
-    text: "Plans",
+    text_ru: "Тарифы",
+    text_en: "Plans",
     action: "buttons",
-    invoice: null,
+    sort_order: 0,
+    is_active: true,
+    invoice_provider: null,
+    invoice_amount: null,
+    invoice_currency: null,
+    invoice_method: null,
+    invoice_days: null,
+    invoice_squad_id: null,
+    invoice_external_squad_id: null,
+    needs_attention: false,
     children: [
       {
         id: 2,
         parent_id: 1,
-        text: "1 month",
+        text_ru: "1 месяц",
+        text_en: "1 month",
         action: "invoice",
-        invoice: {
-          provider: "crypto",
-          amount: 299,
-          currency: "RUB",
-          days: 30,
-          tariff_slug: "month",
-          method: "crypto",
-        },
+        sort_order: 0,
+        is_active: true,
+        invoice_provider: "crypto",
+        invoice_amount: 10,
+        invoice_currency: "USDT",
+        invoice_method: "default",
+        invoice_days: 30,
+        invoice_squad_id: "sq-1",
+        invoice_external_squad_id: "ext-1",
+        needs_attention: false,
         children: [],
       },
       {
         id: 3,
         parent_id: 1,
-        text: "3 months",
+        text_ru: "100 звёзд",
+        text_en: "100 Stars",
         action: "invoice",
-        invoice: {
-          provider: "crypto",
-          amount: 799,
-          currency: "RUB",
-          days: 90,
-          tariff_slug: "quarter",
-          method: "crypto",
-        },
+        sort_order: 1,
+        is_active: true,
+        invoice_provider: "stars",
+        invoice_amount: 100,
+        invoice_currency: "XTR",
+        invoice_method: "default",
+        invoice_days: 30,
+        invoice_squad_id: "sq-1",
+        invoice_external_squad_id: "ext-1",
+        needs_attention: false,
         children: [],
       },
     ],
@@ -232,42 +248,35 @@ export const handlers: HttpHandler[] = [
     ]),
   ),
 
-  // ── Tariffs / squads / menus ──────────────────────────
-  http.get(`${API}/tariffs/plans`, () =>
+  // ── Telegram menus ─────────────────────────────────────
+  http.get(`${API}/menus/screens`, () =>
     HttpResponse.json([
       {
         id: 1,
-        slug: "month",
-        name_ru: "1 месяц",
-        name_en: "1 month",
-        days: 30,
-        sort_order: 1,
+        slug: "main_new",
+        name: "Main · New user",
+        message_text_ru: "Выберите подходящий тариф",
+        message_text_en: "Choose a subscription plan",
+        is_system: true,
         is_active: true,
-        discount_percent: 0,
-        created_at: "2026-01-01T00:00:00Z",
-        squad_profile_id: 1,
-        prices: [
-          { id: 1, payment_method: "crypto", price: 299, currency: "RUB", is_active: true },
+        buttons: [
+          {
+            id: 1,
+            screen_id: 1,
+            text_ru: "Купить Premium",
+            text_en: "Buy Premium",
+            callback_data: null,
+            url: null,
+            row: 0,
+            col: 0,
+            sort_order: 0,
+            button_type: "tariff",
+            is_active: true,
+          },
         ],
       },
     ]),
   ),
-  http.post(`${API}/tariffs/plans`, async ({ request }) => {
-    const body = await request.json();
-    return HttpResponse.json({ id: 99, ...(body as object), prices: [] });
-  }),
-  http.put(`${API}/tariffs/plans/reorder`, () => HttpResponse.json({ ok: true })),
-  http.put(`${API}/tariffs/plans/:id`, () => HttpResponse.json({ ok: true })),
-  http.delete(`${API}/tariffs/plans/:id`, () => new HttpResponse(null, { status: 204 })),
-
-  http.get(`${API}/squads`, () =>
-    HttpResponse.json([{ id: 1, name: "Default", squad_id: "sq-1", external_squad_id: "ext-1" }]),
-  ),
-  http.post(`${API}/squads`, () => HttpResponse.json({ ok: true })),
-  http.put(`${API}/squads/:id`, () => HttpResponse.json({ ok: true })),
-  http.delete(`${API}/squads/:id`, () => new HttpResponse(null, { status: 204 })),
-
-  http.get(`${API}/menus/screens`, () => HttpResponse.json([])),
   http.post(`${API}/menus/screens`, async ({ request }) => {
     const body = await request.json();
     return HttpResponse.json({ id: 1, ...(body as object), buttons: [] });
@@ -278,8 +287,22 @@ export const handlers: HttpHandler[] = [
   http.get(`${API}/webapp-menu/providers`, () =>
     HttpResponse.json({
       providers: [
-        { name: "crypto", payment_method: "crypto", currencies: ["USDT", "TON"] },
-        { name: "platega", payment_method: "platega", currencies: ["RUB"] },
+        {
+          name: "crypto",
+          payment_method: "CRYPTOPAY",
+          currencies: ["USDT", "TON"],
+          methods: [{ value: "default", label: "Default" }],
+          surfaces: ["bot", "miniapp", "web"],
+          webhook_key: "provider",
+        },
+        {
+          name: "stars",
+          payment_method: "TG_STARS",
+          currencies: ["XTR"],
+          methods: [{ value: "default", label: "Default" }],
+          surfaces: ["bot", "miniapp"],
+          webhook_key: "merchant",
+        },
       ],
     }),
   ),

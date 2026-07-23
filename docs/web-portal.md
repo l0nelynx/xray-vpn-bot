@@ -68,7 +68,8 @@ list). Highlights:
 | Claim | browser onboarding for a subscription URL → account (see below) |
 
 Invoice creation matches Android/MiniApp security: the client sends only
-`node_id`; price, days, provider and `tariff_slug` come from `webapp_menu_nodes`.
+`node_id`; price, days, provider and the explicit delivery squad snapshot come
+from `webapp_menu_nodes`.
 
 ## Claim page (`/claim`) + desktop handoff
 

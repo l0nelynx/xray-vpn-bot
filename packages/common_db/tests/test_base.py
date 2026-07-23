@@ -40,7 +40,6 @@ class TestPackageSurface:
             "support_messages",
             "transactions",
             "promos",
-            "tariff_plans",
             "menu_screens",
             "webapp_menu_nodes",
         }

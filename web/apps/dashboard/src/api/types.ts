@@ -99,35 +99,6 @@ export interface PromoItem {
   credit_grant: number | null;
 }
 
-export interface TariffPrice {
-  id?: number;
-  payment_method: string;
-  price: number;
-  currency: string;
-  is_active: boolean;
-}
-
-export interface TariffPlan {
-  id: number;
-  slug: string;
-  name_ru: string;
-  name_en: string;
-  days: number;
-  sort_order: number;
-  is_active: boolean;
-  discount_percent: number;
-  created_at: string | null;
-  squad_profile_id: number | null;
-  prices: TariffPrice[];
-}
-
-export interface SquadProfile {
-  id: number;
-  name: string;
-  squad_id: string;
-  external_squad_id: string;
-}
-
 export interface MenuButton {
   id: number;
   screen_id: number;
@@ -140,7 +111,6 @@ export interface MenuButton {
   sort_order: number;
   button_type: string;
   is_active: boolean;
-  visibility_condition: string;
 }
 
 // Telemt types

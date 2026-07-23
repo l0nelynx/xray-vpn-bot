@@ -46,12 +46,10 @@ async def cryptopay_webhook_handler(
     if invoice_id is None:
         raise HTTPException(status_code=400, detail="missing invoice_id")
 
-    # Look up the transaction by invoice id (CryptoPay invoice id is stored as
-    # the transaction_id for miniapp-originated payments).
+    # Provider invoice IDs are resolved to the local transaction UUID.
     tx = await rq.get_full_transaction_info(str(invoice_id))
     if not tx:
-        # Not ours (likely created via in-bot flow which is handled by aiosend
-        # polling). Acknowledge so @CryptoBot does not retry.
+        # Not ours; acknowledge so @CryptoBot does not retry.
         logger.info("CryptoPay webhook: unknown invoice %s, ignoring", invoice_id)
         return {"ok": True, "skipped": True}
 

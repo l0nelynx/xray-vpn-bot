@@ -1,21 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
 import {
-  Plus,
-  Trash2,
-  Save,
-  ChevronRight,
-  ChevronDown,
-  ArrowUp,
+  AlertTriangle,
   ArrowDown,
-  Eye,
-  EyeOff,
+  ArrowUp,
+  ChevronDown,
+  ChevronRight,
+  CircleDollarSign,
+  FolderTree,
+  Plus,
+  Save,
+  Trash2,
 } from "lucide-react";
-import { Card, CardContent } from "@xray/ui/components/card";
-import { Button } from "@xray/ui/components/button";
-import { Input } from "@xray/ui/components/input";
+import { toast } from "sonner";
 import { Badge } from "@xray/ui/components/badge";
-import { Spinner } from "@xray/ui/components/spinner";
+import { Button } from "@xray/ui/components/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@xray/ui/components/card";
+import { Input } from "@xray/ui/components/input";
+import { Label } from "@xray/ui/components/label";
 import {
   Select,
   SelectContent,
@@ -23,15 +24,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@xray/ui/components/select";
+import { Spinner } from "@xray/ui/components/spinner";
+import { Switch } from "@xray/ui/components/switch";
+import { cn } from "@xray/ui/lib/utils";
 import { api } from "../api/client";
 import ConfirmButton from "../components/ConfirmButton";
+import useUnsavedWarning from "../hooks/useUnsavedWarning";
 
 type NodeAction = "buttons" | "invoice";
 
 interface MenuNode {
   id: number;
   parent_id: number | null;
-  text: string;
+  text_ru: string;
+  text_en: string;
   action: NodeAction;
   sort_order: number;
   is_active: boolean;
@@ -40,393 +46,187 @@ interface MenuNode {
   invoice_currency: string | null;
   invoice_method: string | null;
   invoice_days: number | null;
-  invoice_tariff_slug: string | null;
+  invoice_squad_id: string | null;
+  invoice_external_squad_id: string | null;
+  needs_attention: boolean;
   children: MenuNode[];
-}
-
-interface ProviderMethod {
-  value: string;
-  label: string;
 }
 
 interface ProviderInfo {
   name: string;
   payment_method: string;
   currencies: string[];
-  methods: ProviderMethod[];
+  methods: { value: string; label: string }[];
+  surfaces: string[];
 }
 
 interface DraftNode {
-  text: string;
+  id?: number;
+  parent_id: number | null;
+  text_ru: string;
+  text_en: string;
   action: NodeAction;
+  is_active: boolean;
   invoice_provider: string | null;
   invoice_amount: number | null;
   invoice_currency: string | null;
   invoice_method: string | null;
   invoice_days: number | null;
-  invoice_squad_id: string;
-  invoice_external_squad_id: string;
-  is_active: boolean;
+  invoice_squad_id: string | null;
+  invoice_external_squad_id: string | null;
 }
 
-function packSlug(sid: string, esid: string): string | null {
-  const s = sid.trim();
-  const e = esid.trim();
-  if (!s && !e) return null;
-  return `sid:${s}:esid:${e}`;
-}
+const emptyDraft = (parentId: number | null): DraftNode => ({
+  parent_id: parentId,
+  text_ru: "Новое меню",
+  text_en: "New menu",
+  action: "buttons",
+  is_active: true,
+  invoice_provider: null,
+  invoice_amount: null,
+  invoice_currency: null,
+  invoice_method: null,
+  invoice_days: null,
+  invoice_squad_id: null,
+  invoice_external_squad_id: null,
+});
 
-function unpackSlug(slug: string | null): { sid: string; esid: string } {
-  if (!slug || !slug.startsWith("sid:")) return { sid: "", esid: "" };
-  const parts = slug.split(":");
-  if (parts.length !== 4 || parts[2] !== "esid") return { sid: "", esid: "" };
-  return { sid: parts[1], esid: parts[3] };
-}
+const toDraft = (node: MenuNode): DraftNode => ({
+  id: node.id,
+  parent_id: node.parent_id,
+  text_ru: node.text_ru,
+  text_en: node.text_en,
+  action: node.action,
+  is_active: node.is_active,
+  invoice_provider: node.invoice_provider,
+  invoice_amount: node.invoice_amount,
+  invoice_currency: node.invoice_currency,
+  invoice_method: node.invoice_method,
+  invoice_days: node.invoice_days,
+  invoice_squad_id: node.invoice_squad_id,
+  invoice_external_squad_id: node.invoice_external_squad_id,
+});
 
-function nodeToDraft(n: MenuNode): DraftNode {
-  const { sid, esid } = unpackSlug(n.invoice_tariff_slug);
-  return {
-    text: n.text,
-    action: n.action,
-    invoice_provider: n.invoice_provider,
-    invoice_amount: n.invoice_amount,
-    invoice_currency: n.invoice_currency,
-    invoice_method: n.invoice_method,
-    invoice_days: n.invoice_days,
-    invoice_squad_id: sid,
-    invoice_external_squad_id: esid,
-    is_active: n.is_active,
-  };
-}
-
-function draftEquals(a: DraftNode, b: DraftNode): boolean {
-  return (
-    a.text === b.text &&
-    a.action === b.action &&
-    a.invoice_provider === b.invoice_provider &&
-    a.invoice_amount === b.invoice_amount &&
-    a.invoice_currency === b.invoice_currency &&
-    a.invoice_method === b.invoice_method &&
-    a.invoice_days === b.invoice_days &&
-    a.invoice_squad_id === b.invoice_squad_id &&
-    a.invoice_external_squad_id === b.invoice_external_squad_id &&
-    a.is_active === b.is_active
-  );
-}
-
-function NodeRow({
+function TreeRow({
   node,
-  siblings,
-  providers,
   depth,
-  drafts,
-  setDraft,
+  selectedId,
   expanded,
-  toggleExpand,
-  onSave,
-  onDelete,
-  onAddChild,
-  onMove,
-  onToggleActive,
+  onSelect,
+  onExpand,
+  onAdd,
 }: {
   node: MenuNode;
-  siblings: MenuNode[];
-  providers: ProviderInfo[];
   depth: number;
-  drafts: Record<number, DraftNode>;
-  setDraft: (id: number, patch: Partial<DraftNode>) => void;
+  selectedId?: number;
   expanded: Set<number>;
-  toggleExpand: (id: number) => void;
-  onSave: (id: number) => void;
-  onDelete: (id: number) => void;
-  onAddChild: (parentId: number) => void;
-  onMove: (id: number, direction: "up" | "down") => void;
-  onToggleActive: (id: number) => void;
+  onSelect: (node: MenuNode) => void;
+  onExpand: (id: number) => void;
+  onAdd: (parentId: number) => void;
 }) {
-  const draft = drafts[node.id] ?? nodeToDraft(node);
-  const dirty = !draftEquals(draft, nodeToDraft(node));
-  const isExpanded = expanded.has(node.id);
-  const provider = providers.find((p) => p.name === draft.invoice_provider);
-  const currencyOptions = provider?.currencies ?? [];
-  const methodOptions = provider?.methods ?? [];
-  const methodLocked = methodOptions.length <= 1;
-  const orderedSiblings = useMemo(
-    () => [...siblings].sort((a, b) => a.sort_order - b.sort_order || a.id - b.id),
-    [siblings],
-  );
-  const idx = orderedSiblings.findIndex((s) => s.id === node.id);
-  const canMoveUp = idx > 0;
-  const canMoveDown = idx >= 0 && idx < orderedSiblings.length - 1;
-
-  const handleProviderChange = (val: string | undefined) => {
-    const p = providers.find((pp) => pp.name === val);
-    const methodValues = p?.methods.map((m) => m.value) ?? [];
-    setDraft(node.id, {
-      invoice_provider: val ?? null,
-      invoice_currency:
-        draft.invoice_currency && p?.currencies.includes(draft.invoice_currency)
-          ? draft.invoice_currency
-          : (p?.currencies[0] ?? null),
-      invoice_method:
-        draft.invoice_method && methodValues.includes(draft.invoice_method)
-          ? draft.invoice_method
-          : (p?.methods[0]?.value ?? null),
-    });
-  };
-
+  const open = expanded.has(node.id);
   return (
-    <div style={{ marginLeft: depth * 24 }}>
-      <Card
-        className="mb-2"
-        style={{
-          background: depth === 0 ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.03)",
-          borderColor: dirty
-            ? "#FFD479"
-            : node.is_active
-              ? "rgba(255,255,255,0.10)"
-              : "rgba(255,255,255,0.04)",
-          opacity: node.is_active ? 1 : 0.5,
-        }}
+    <>
+      <div
+        className={cn(
+          "group flex items-center gap-1 rounded-lg border px-2 py-2 transition-colors",
+          selectedId === node.id
+            ? "border-primary/35 bg-primary/10"
+            : "border-transparent hover:border-white/10 hover:bg-white/[0.035]",
+        )}
+        style={{ marginLeft: depth * 18 }}
       >
-        <CardContent className="flex flex-wrap items-start gap-2 p-3">
-          {node.action === "buttons" ? (
-            <Button variant="ghost" size="icon" onClick={() => toggleExpand(node.id)}>
-              {isExpanded ? (
-                <ChevronDown className="h-4 w-4" />
-              ) : (
-                <ChevronRight className="h-4 w-4" />
-              )}
-            </Button>
-          ) : (
-            <Badge variant="secondary" className="mt-1">
-              invoice
-            </Badge>
-          )}
-          {!node.is_active && (
-            <Badge variant="outline" className="mt-1">
-              hidden
-            </Badge>
-          )}
-
-          <Input
-            placeholder="Button text"
-            value={draft.text}
-            onChange={(e) => setDraft(node.id, { text: e.target.value })}
-            className="w-[220px]"
-          />
-
-          <Select
-            value={draft.action}
-            onValueChange={(val: string) => setDraft(node.id, { action: val as NodeAction })}
+        {node.action === "buttons" ? (
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onExpand(node.id)}>
+            {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          </Button>
+        ) : (
+          <CircleDollarSign className="mx-1.5 h-4 w-4 text-emerald-400" />
+        )}
+        <button className="min-w-0 flex-1 text-left" onClick={() => onSelect(node)}>
+          <div className="truncate text-sm font-medium">{node.text_ru || node.text_en}</div>
+          <div className="truncate text-[11px] text-muted-foreground">{node.text_en}</div>
+        </button>
+        {!node.is_active && <Badge variant="secondary">Hidden</Badge>}
+        {node.needs_attention && <AlertTriangle className="h-4 w-4 text-amber-400" />}
+        {node.action === "buttons" && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 opacity-0 group-hover:opacity-100 focus:opacity-100"
+            onClick={() => onAdd(node.id)}
+            title="Add child"
           >
-            <SelectTrigger className="w-[120px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="buttons">Buttons</SelectItem>
-              <SelectItem value="invoice">Invoice</SelectItem>
-            </SelectContent>
-          </Select>
-
-          {draft.action === "invoice" && (
-            <>
-              <Select
-                value={draft.invoice_provider ?? undefined}
-                onValueChange={(val: string) => handleProviderChange(val)}
-              >
-                <SelectTrigger className="w-[140px]">
-                  <SelectValue placeholder="Provider" />
-                </SelectTrigger>
-                <SelectContent>
-                  {providers.map((p) => (
-                    <SelectItem key={p.name} value={p.name}>
-                      {p.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Input
-                type="number"
-                placeholder="Amount"
-                value={draft.invoice_amount ?? ""}
-                onChange={(e) =>
-                  setDraft(node.id, {
-                    invoice_amount: e.target.value === "" ? null : Number(e.target.value),
-                  })
-                }
-                min={0}
-                step={0.01}
-                className="w-[120px]"
-              />
-              <Select
-                value={draft.invoice_currency ?? undefined}
-                onValueChange={(val: string) => setDraft(node.id, { invoice_currency: val })}
-                disabled={!draft.invoice_provider}
-              >
-                <SelectTrigger className="w-[110px]">
-                  <SelectValue placeholder="Currency" />
-                </SelectTrigger>
-                <SelectContent>
-                  {currencyOptions.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {c}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select
-                value={draft.invoice_method ?? undefined}
-                onValueChange={(val: string) => setDraft(node.id, { invoice_method: val })}
-                disabled={!draft.invoice_provider || methodLocked}
-              >
-                <SelectTrigger className="w-[140px]">
-                  <SelectValue placeholder="Method" />
-                </SelectTrigger>
-                <SelectContent>
-                  {methodOptions.map((m) => (
-                    <SelectItem key={m.value} value={m.value}>
-                      {m.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Input
-                type="number"
-                placeholder="Days"
-                value={draft.invoice_days ?? ""}
-                onChange={(e) =>
-                  setDraft(node.id, {
-                    invoice_days: e.target.value === "" ? null : Number(e.target.value),
-                  })
-                }
-                min={0}
-                className="w-[90px]"
-              />
-              <Input
-                placeholder="squad_id (sid)"
-                value={draft.invoice_squad_id}
-                onChange={(e) => setDraft(node.id, { invoice_squad_id: e.target.value })}
-                className="w-[160px]"
-              />
-              <Input
-                placeholder="external_squad_id (esid)"
-                value={draft.invoice_external_squad_id}
-                onChange={(e) => setDraft(node.id, { invoice_external_squad_id: e.target.value })}
-                className="w-[200px]"
-              />
-            </>
-          )}
-
-          <div className="flex items-center gap-1">
-            <Button
-              variant="outline"
-              size="icon"
-              disabled={!canMoveUp}
-              onClick={() => onMove(node.id, "up")}
-              title="Move up"
-            >
-              <ArrowUp className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              disabled={!canMoveDown}
-              onClick={() => onMove(node.id, "down")}
-              title="Move down"
-            >
-              <ArrowDown className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => onToggleActive(node.id)}
-              title={node.is_active ? "Hide (won't appear in app/portal)" : "Show"}
-            >
-              {node.is_active ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            </Button>
-            <Button size="sm" disabled={!dirty} onClick={() => onSave(node.id)}>
-              <Save className="h-4 w-4" />
-              Save
-            </Button>
-            {node.action === "buttons" && (
-              <Button variant="outline" size="sm" onClick={() => onAddChild(node.id)}>
-                <Plus className="h-4 w-4" />
-                Sub
-              </Button>
-            )}
-            <ConfirmButton
-              title="Delete this node and all its children?"
-              destructive
-              confirmText="Delete"
-              onConfirm={() => onDelete(node.id)}
-            >
-              <Button variant="destructive" size="icon">
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </ConfirmButton>
-          </div>
-        </CardContent>
-      </Card>
-
-      {node.action === "buttons" && isExpanded && (
-        <div>
-          {[...node.children]
-            .sort((a, b) => a.sort_order - b.sort_order || a.id - b.id)
-            .map((c) => (
-              <NodeRow
-                key={c.id}
-                node={c}
-                siblings={node.children}
-                providers={providers}
-                depth={depth + 1}
-                drafts={drafts}
-                setDraft={setDraft}
-                expanded={expanded}
-                toggleExpand={toggleExpand}
-                onSave={onSave}
-                onDelete={onDelete}
-                onAddChild={onAddChild}
-                onMove={onMove}
-                onToggleActive={onToggleActive}
-              />
-            ))}
-          {node.children.length === 0 && (
-            <div className="mb-2 ml-6 text-xs text-muted-foreground">
-              Empty — click "Sub" above to add child buttons.
-            </div>
-          )}
-        </div>
-      )}
-    </div>
+            <Plus className="h-4 w-4" />
+          </Button>
+        )}
+      </div>
+      {node.action === "buttons" &&
+        open &&
+        node.children.map((child) => (
+          <TreeRow
+            key={child.id}
+            node={child}
+            depth={depth + 1}
+            selectedId={selectedId}
+            expanded={expanded}
+            onSelect={onSelect}
+            onExpand={onExpand}
+            onAdd={onAdd}
+          />
+        ))}
+    </>
   );
 }
 
 export default function WebAppTariffsPage() {
   const [tree, setTree] = useState<MenuNode[]>([]);
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
-  const [drafts, setDrafts] = useState<Record<number, DraftNode>>({});
+  const [selected, setSelected] = useState<MenuNode | null>(null);
+  const [draft, setDraft] = useState<DraftNode | null>(null);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
-  const flatten = useMemo(() => {
-    const out: MenuNode[] = [];
-    const walk = (ns: MenuNode[]) => {
-      for (const n of ns) {
-        out.push(n);
-        if (n.children?.length) walk(n.children);
-      }
-    };
+  const flat = useMemo(() => {
+    const result: MenuNode[] = [];
+    const walk = (nodes: MenuNode[]) =>
+      nodes.forEach((node) => {
+        result.push(node);
+        walk(node.children);
+      });
     walk(tree);
-    return out;
+    return result;
   }, [tree]);
 
-  const reload = async () => {
+  const originalDraft = selected ? toDraft(selected) : null;
+  const dirty = !!draft && JSON.stringify(draft) !== JSON.stringify(originalDraft);
+  useUnsavedWarning(dirty);
+
+  const reload = async (keepId?: number) => {
     setLoading(true);
     try {
-      const t = await api.get<MenuNode[]>("/webapp-menu/tree");
-      setTree(t);
-    } catch (e: unknown) {
-      toast.error(`Failed to load menu: ${(e as Error).message}`);
+      const data = await api.get<MenuNode[]>("/webapp-menu/tree");
+      setTree(data);
+      setExpanded((current) => {
+        if (current.size) return current;
+        return new Set(data.map((node) => node.id));
+      });
+      if (keepId) {
+        const find = (nodes: MenuNode[]): MenuNode | null => {
+          for (const node of nodes) {
+            if (node.id === keepId) return node;
+            const nested = find(node.children);
+            if (nested) return nested;
+          }
+          return null;
+        };
+        const next = find(data);
+        setSelected(next);
+        setDraft(next ? toDraft(next) : null);
+      }
+    } catch (error) {
+      toast.error(`Failed to load tariff tree: ${(error as Error).message}`);
     } finally {
       setLoading(false);
     }
@@ -436,221 +236,315 @@ export default function WebAppTariffsPage() {
     void reload();
     api
       .get<{ providers: ProviderInfo[] }>("/webapp-menu/providers")
-      .then((r) => setProviders(r.providers))
-      .catch((e) => toast.error(`Failed to load providers: ${(e as Error).message}`));
+      .then((value) => setProviders(value.providers))
+      .catch((error) => toast.error(`Failed to load providers: ${error.message}`));
   }, []);
 
-  useEffect(() => {
-    setDrafts((prev) => {
-      const next: Record<number, DraftNode> = {};
-      for (const n of flatten) {
-        next[n.id] =
-          prev[n.id] && !draftEquals(prev[n.id], nodeToDraft(n)) ? prev[n.id] : nodeToDraft(n);
-      }
-      return next;
-    });
-  }, [flatten]);
+  const patch = <K extends keyof DraftNode>(key: K, value: DraftNode[K]) =>
+    setDraft((current) => (current ? { ...current, [key]: value } : current));
 
-  const setDraft = (id: number, patch: Partial<DraftNode>) => {
-    setDrafts((prev) => ({
-      ...prev,
-      [id]: { ...(prev[id] ?? ({} as DraftNode)), ...patch },
-    }));
+  const selectNode = (node: MenuNode) => {
+    setSelected(node);
+    setDraft(toDraft(node));
   };
 
-  const toggleExpand = (id: number) => {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  const createAt = (parentId: number | null) => {
+    setSelected(null);
+    setDraft(emptyDraft(parentId));
+    if (parentId != null) setExpanded((current) => new Set(current).add(parentId));
   };
 
-  const handleAddRoot = async () => {
-    try {
-      const created = await api.post<MenuNode>("/webapp-menu/nodes", {
-        parent_id: null,
-        text: "New menu",
-        action: "buttons",
-        sort_order: tree.length,
-        is_active: true,
-      });
-      toast.success("Node created");
-      setExpanded((prev) => new Set(prev).add(created.id));
-      await reload();
-    } catch (e: unknown) {
-      toast.error(`Create failed: ${(e as Error).message}`);
+  const provider = providers.find((item) => item.name === draft?.invoice_provider);
+
+  const changeProvider = (name: string) => {
+    const next = providers.find((item) => item.name === name);
+    setDraft((current) =>
+      current
+        ? {
+            ...current,
+            invoice_provider: name,
+            invoice_currency: next?.currencies[0] ?? null,
+            invoice_method: next?.methods[0]?.value ?? null,
+          }
+        : current,
+    );
+  };
+
+  const validate = () => {
+    if (!draft?.text_ru.trim() || !draft.text_en.trim()) {
+      toast.error("Add both RU and EN labels");
+      return false;
     }
-  };
-
-  const handleAddChild = async (parentId: number) => {
-    const parent = flatten.find((n) => n.id === parentId);
-    try {
-      const created = await api.post<MenuNode>("/webapp-menu/nodes", {
-        parent_id: parentId,
-        text: "New button",
-        action: "buttons",
-        sort_order: parent?.children.length ?? 0,
-        is_active: true,
-      });
-      toast.success("Child node created");
-      setExpanded((prev) => {
-        const next = new Set(prev);
-        next.add(parentId);
-        next.add(created.id);
-        return next;
-      });
-      await reload();
-    } catch (e: unknown) {
-      toast.error(`Create failed: ${(e as Error).message}`);
-    }
-  };
-
-  const handleSave = async (id: number) => {
-    const draft = drafts[id];
-    if (!draft) return;
-    if (!draft.text.trim()) {
-      toast.error("Button text cannot be empty");
-      return;
-    }
-    if (draft.action === "invoice") {
-      if (!draft.invoice_provider) {
-        toast.error("Pick a payment provider for invoice nodes");
-        return;
+    if (draft.action === "invoice" && draft.is_active) {
+      if (
+        !draft.invoice_provider ||
+        !draft.invoice_currency ||
+        !draft.invoice_amount ||
+        draft.invoice_amount <= 0 ||
+        !draft.invoice_days ||
+        draft.invoice_days <= 0 ||
+        !draft.invoice_squad_id?.trim() ||
+        !draft.invoice_external_squad_id?.trim()
+      ) {
+        toast.error("Complete Payment and Delivery fields before activating this invoice");
+        return false;
       }
-      if (draft.invoice_amount == null || draft.invoice_amount <= 0) {
-        toast.error("Invoice amount must be greater than 0");
-        return;
-      }
-      if (!draft.invoice_currency) {
-        toast.error("Pick a currency");
-        return;
-      }
-      if (!draft.invoice_days || draft.invoice_days <= 0) {
-        toast.error("Invoice 'days' must be greater than 0");
-        return;
+      if (draft.invoice_provider === "stars" && !Number.isInteger(draft.invoice_amount)) {
+        toast.error("Telegram Stars amount must be a whole number");
+        return false;
       }
     }
+    return true;
+  };
+
+  const save = async () => {
+    if (!draft || !validate()) return;
+    setSaving(true);
+    const payload = {
+      ...draft,
+      invoice_provider: draft.action === "invoice" ? draft.invoice_provider : null,
+      invoice_amount: draft.action === "invoice" ? draft.invoice_amount : null,
+      invoice_currency: draft.action === "invoice" ? draft.invoice_currency : null,
+      invoice_method: draft.action === "invoice" ? draft.invoice_method : null,
+      invoice_days: draft.action === "invoice" ? draft.invoice_days : null,
+      invoice_squad_id: draft.action === "invoice" ? draft.invoice_squad_id : null,
+      invoice_external_squad_id:
+        draft.action === "invoice" ? draft.invoice_external_squad_id : null,
+    };
     try {
-      const payload = {
-        text: draft.text,
-        action: draft.action,
-        is_active: draft.is_active,
-        invoice_provider: draft.invoice_provider,
-        invoice_amount: draft.invoice_amount,
-        invoice_currency: draft.invoice_currency,
-        invoice_method: draft.invoice_method,
-        invoice_days: draft.invoice_days,
-        invoice_tariff_slug: packSlug(draft.invoice_squad_id, draft.invoice_external_squad_id),
-      };
-      await api.put<MenuNode>(`/webapp-menu/nodes/${id}`, payload);
-      toast.success("Saved");
-      await reload();
-    } catch (e: unknown) {
-      toast.error(`Save failed: ${(e as Error).message}`);
+      const saved = draft.id
+        ? await api.put<MenuNode>(`/webapp-menu/nodes/${draft.id}`, payload)
+        : await api.post<MenuNode>("/webapp-menu/nodes", {
+            ...payload,
+            sort_order:
+              draft.parent_id == null
+                ? tree.length
+                : (flat.find((node) => node.id === draft.parent_id)?.children.length ?? 0),
+          });
+      toast.success(draft.id ? "Menu item saved" : "Menu item created");
+      await reload(saved.id);
+    } catch (error) {
+      toast.error(`Save failed: ${(error as Error).message}`);
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleDelete = async (id: number) => {
+  const remove = async () => {
+    if (!draft?.id) return;
     try {
-      await api.delete(`/webapp-menu/nodes/${id}`);
-      toast.success("Deleted");
+      await api.delete(`/webapp-menu/nodes/${draft.id}`);
+      toast.success("Menu branch deleted");
+      setSelected(null);
+      setDraft(null);
       await reload();
-    } catch (e: unknown) {
-      toast.error(`Delete failed: ${(e as Error).message}`);
+    } catch (error) {
+      toast.error(`Delete failed: ${(error as Error).message}`);
     }
   };
 
-  const handleToggleActive = async (id: number) => {
-    const node = flatten.find((n) => n.id === id);
-    if (!node) return;
-    try {
-      await api.put<MenuNode>(`/webapp-menu/nodes/${id}`, { is_active: !node.is_active });
-      await reload();
-    } catch (e: unknown) {
-      toast.error(`Toggle failed: ${(e as Error).message}`);
-    }
-  };
-
-  const handleMove = async (id: number, direction: "up" | "down") => {
-    const node = flatten.find((n) => n.id === id);
-    if (!node) return;
+  const move = async (direction: -1 | 1) => {
+    if (!selected) return;
     const siblings =
-      node.parent_id == null
+      selected.parent_id == null
         ? tree
-        : (flatten.find((n) => n.id === node.parent_id)?.children ?? []);
+        : (flat.find((node) => node.id === selected.parent_id)?.children ?? []);
     const ordered = [...siblings].sort((a, b) => a.sort_order - b.sort_order || a.id - b.id);
-    const idx = ordered.findIndex((s) => s.id === id);
-    const swapIdx = direction === "up" ? idx - 1 : idx + 1;
-    if (idx < 0 || swapIdx < 0 || swapIdx >= ordered.length) return;
-
-    const reordered = [...ordered];
-    [reordered[idx], reordered[swapIdx]] = [reordered[swapIdx], reordered[idx]];
-
-    const items = reordered.map((n, i) => ({
-      id: n.id,
-      parent_id: n.parent_id,
-      sort_order: i,
-    }));
-
+    const index = ordered.findIndex((node) => node.id === selected.id);
+    const target = index + direction;
+    if (target < 0 || target >= ordered.length) return;
+    [ordered[index], ordered[target]] = [ordered[target], ordered[index]];
     try {
-      await api.put("/webapp-menu/reorder", { items });
-      await reload();
-    } catch (e: unknown) {
-      toast.error(`Reorder failed: ${(e as Error).message}`);
+      await api.put("/webapp-menu/reorder", {
+        items: ordered.map((node, sort_order) => ({
+          id: node.id,
+          parent_id: node.parent_id,
+          sort_order,
+        })),
+      });
+      await reload(selected.id);
+    } catch (error) {
+      toast.error(`Move failed: ${(error as Error).message}`);
     }
   };
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between gap-2">
-        <h1 className="text-xl font-semibold text-foreground md:text-2xl">Tariff Constructor</h1>
-        <Button onClick={handleAddRoot}>
+      <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="mb-1 flex items-center gap-2">
+            <FolderTree className="h-5 w-5 text-primary" />
+            <h1 className="text-xl font-semibold md:text-2xl">Tariff Constructor</h1>
+          </div>
+          <p className="max-w-2xl text-sm text-muted-foreground">
+            One purchase tree for Telegram Bot, MiniApp, web and Android. Each active invoice
+            stores its own payment and delivery settings.
+          </p>
+        </div>
+        <Button onClick={() => createAt(null)}>
           <Plus className="h-4 w-4" />
-          Add root menu
+          Add root item
         </Button>
       </div>
 
-      <p className="mb-4 text-sm text-muted-foreground">
-        Build the WebApp menu tree. <b>Buttons</b> nodes can hold child buttons; <b>Invoice</b> nodes
-        are leaves that trigger a payment when tapped in the WebApp.
-      </p>
+      <div className="grid gap-4 lg:grid-cols-[minmax(280px,0.9fr)_minmax(0,1.4fr)]">
+        <Card className="min-h-[420px]">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Purchase tree</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1 p-2">
+            {loading ? (
+              <div className="flex justify-center py-12"><Spinner /></div>
+            ) : tree.length ? (
+              tree.map((node) => (
+                <TreeRow
+                  key={node.id}
+                  node={node}
+                  depth={0}
+                  selectedId={draft?.id}
+                  expanded={expanded}
+                  onSelect={selectNode}
+                  onExpand={(id) =>
+                    setExpanded((current) => {
+                      const next = new Set(current);
+                      next.has(id) ? next.delete(id) : next.add(id);
+                      return next;
+                    })
+                  }
+                  onAdd={createAt}
+                />
+              ))
+            ) : (
+              <button
+                className="w-full rounded-xl border border-dashed p-10 text-sm text-muted-foreground"
+                onClick={() => createAt(null)}
+              >
+                The purchase tree is empty. Add the first category.
+              </button>
+            )}
+          </CardContent>
+        </Card>
 
-      {loading ? (
         <Card>
-          <CardContent className="flex justify-center p-6">
-            <Spinner className="h-6 w-6" />
+          <CardHeader className="flex-row items-center justify-between space-y-0">
+            <CardTitle className="text-sm">
+              {draft?.id ? "Item settings" : draft ? "New item" : "Select an item"}
+            </CardTitle>
+            {selected?.needs_attention && (
+              <Badge variant="outline" className="border-amber-400/40 text-amber-300">
+                <AlertTriangle className="h-3 w-3" /> Needs attention
+              </Badge>
+            )}
+          </CardHeader>
+          <CardContent>
+            {!draft ? (
+              <div className="py-16 text-center text-sm text-muted-foreground">
+                Select a tree item to edit its labels, payment and delivery.
+              </div>
+            ) : (
+              <div className="space-y-6">
+                <section className="space-y-3">
+                  <div className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                    Labels
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div><Label>Russian</Label><Input value={draft.text_ru} onChange={(e) => patch("text_ru", e.target.value)} /></div>
+                    <div><Label>English</Label><Input value={draft.text_en} onChange={(e) => patch("text_en", e.target.value)} /></div>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div>
+                      <Label>Type</Label>
+                      <Select
+                        value={draft.action}
+                        onValueChange={(value: string) => patch("action", value as NodeAction)}
+                        disabled={!!selected?.children.length}
+                      >
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="buttons">Category</SelectItem>
+                          <SelectItem value="invoice">Payment option</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex items-end gap-2 pb-2">
+                      <Switch checked={draft.is_active} onCheckedChange={(value: boolean) => patch("is_active", value)} />
+                      <Label>{draft.is_active ? "Visible to customers" : "Hidden draft"}</Label>
+                    </div>
+                  </div>
+                </section>
+
+                {draft.action === "invoice" && (
+                  <>
+                    <section className="space-y-3 border-t border-white/[0.07] pt-5">
+                      <div className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                        Payment
+                      </div>
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <div>
+                          <Label>Provider</Label>
+                          <Select value={draft.invoice_provider ?? undefined} onValueChange={changeProvider}>
+                            <SelectTrigger><SelectValue placeholder="Choose provider" /></SelectTrigger>
+                            <SelectContent>
+                              {providers.map((item) => (
+                                <SelectItem key={item.name} value={item.name}>
+                                  {item.name}{item.name === "stars" ? " · Telegram only" : ""}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div><Label>Amount</Label><Input type="number" min={0} step={draft.invoice_provider === "stars" ? 1 : 0.01} value={draft.invoice_amount ?? ""} onChange={(e) => patch("invoice_amount", e.target.value ? Number(e.target.value) : null)} /></div>
+                        <div>
+                          <Label>Currency</Label>
+                          <Select value={draft.invoice_currency ?? undefined} onValueChange={(value: string) => patch("invoice_currency", value)}>
+                            <SelectTrigger><SelectValue placeholder="Currency" /></SelectTrigger>
+                            <SelectContent>{provider?.currencies.map((value) => <SelectItem key={value} value={value}>{value}</SelectItem>)}</SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label>Method</Label>
+                          <Select value={draft.invoice_method ?? undefined} onValueChange={(value: string) => patch("invoice_method", value)}>
+                            <SelectTrigger><SelectValue placeholder="Method" /></SelectTrigger>
+                            <SelectContent>{provider?.methods.map((method) => <SelectItem key={method.value} value={method.value}>{method.label}</SelectItem>)}</SelectContent>
+                          </Select>
+                        </div>
+                        <div><Label>Subscription days</Label><Input type="number" min={1} value={draft.invoice_days ?? ""} onChange={(e) => patch("invoice_days", e.target.value ? Number(e.target.value) : null)} /></div>
+                      </div>
+                    </section>
+                    <section className="space-y-3 border-t border-white/[0.07] pt-5">
+                      <div className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                        Delivery
+                      </div>
+                      <div className="grid gap-3">
+                        <div><Label>Internal squad ID</Label><Input value={draft.invoice_squad_id ?? ""} onChange={(e) => patch("invoice_squad_id", e.target.value || null)} /></div>
+                        <div><Label>External squad ID</Label><Input value={draft.invoice_external_squad_id ?? ""} onChange={(e) => patch("invoice_external_squad_id", e.target.value || null)} /></div>
+                      </div>
+                    </section>
+                  </>
+                )}
+
+                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/[0.07] pt-4">
+                  <div className="flex gap-1">
+                    {draft.id && (
+                      <>
+                        <Button variant="outline" size="icon" onClick={() => void move(-1)} title="Move up"><ArrowUp className="h-4 w-4" /></Button>
+                        <Button variant="outline" size="icon" onClick={() => void move(1)} title="Move down"><ArrowDown className="h-4 w-4" /></Button>
+                        <ConfirmButton title="Delete this item and all children?" destructive confirmText="Delete" onConfirm={remove}>
+                          <Button variant="ghost" size="icon" className="text-destructive"><Trash2 className="h-4 w-4" /></Button>
+                        </ConfirmButton>
+                      </>
+                    )}
+                  </div>
+                  <Button onClick={save} disabled={saving || (!!draft.id && !dirty)}>
+                    {saving ? <Spinner /> : <Save className="h-4 w-4" />}
+                    {draft.id ? "Save changes" : "Create item"}
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
-      ) : tree.length === 0 ? (
-        <Card>
-          <CardContent className="p-6 text-center text-muted-foreground">
-            No menu nodes yet — click 'Add root menu' to start.
-          </CardContent>
-        </Card>
-      ) : (
-        [...tree]
-          .sort((a, b) => a.sort_order - b.sort_order || a.id - b.id)
-          .map((n) => (
-            <NodeRow
-              key={n.id}
-              node={n}
-              siblings={tree}
-              providers={providers}
-              depth={0}
-              drafts={drafts}
-              setDraft={setDraft}
-              expanded={expanded}
-              toggleExpand={toggleExpand}
-              onSave={handleSave}
-              onDelete={handleDelete}
-              onAddChild={handleAddChild}
-              onMove={handleMove}
-              onToggleActive={handleToggleActive}
-            />
-          ))
-      )}
+      </div>
     </div>
   );
 }

@@ -62,6 +62,15 @@ async def purchase_with_credits(
     from .balance import get_balance
 
     balance_after = await get_balance(session, user_id)
+    squad_id = None
+    external_squad_id = None
+    if tariff_slug.startswith("sid:"):
+        try:
+            _, squad_id, marker, external_squad_id = tariff_slug.split(":", 3)
+            if marker != "esid":
+                squad_id = external_squad_id = None
+        except ValueError:
+            squad_id = external_squad_id = None
 
     session.add(
         Transaction(
@@ -75,7 +84,8 @@ async def purchase_with_credits(
             payment_method=PAYMENT_METHOD_BONUS_CREDITS,
             amount=0.0,
             created_at=_now_iso(),
-            tariff_slug=tariff_slug,
+            squad_id=squad_id,
+            external_squad_id=external_squad_id,
             android_user_id=android_user_id,
         )
     )

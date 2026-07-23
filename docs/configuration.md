@@ -246,11 +246,12 @@ Only fill in gateways you use. Full setup guide: [Payment gateways](payment-gate
 | `paritypay_webhook` | Public callback URL (optional — can set in cassa UI) |
 | `paritypay_service` | Default service: `sbp` or `card` |
 
-### Legacy bot constructor prices
+### Telegram Bot purchase runtime
 
-**Removed.** When `legacy_bot_constructor = true`, prices come only from
-Dashboard tariff plans / tariff prices (no YAML `stars_price` / `crypto_price` /
-`sbp_price` / `discount`).
+Prices, currencies, methods, duration and delivery squads come only from
+Dashboard → Tariff Constructor. The `legacy_bot_constructor` flag switches the
+Bot between that tree and the MiniApp fallback within five seconds; no restart
+is required. Legacy YAML prices, tariff plans and squad profiles are removed.
 
 ## Currency rates (Dashboard stats)
 

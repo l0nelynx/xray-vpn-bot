@@ -9,10 +9,6 @@ from app.settings import bot, admin_bot, secrets
 from io import BytesIO
 from aiogram.types import BufferedInputFile, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 
-# Set by main.py:on_startup() after reading BotFeatureFlags from DB.
-# Changing the Dashboard toggle requires a bot restart to take effect.
-_legacy_constructor_enabled: bool = False
-
 logger = logging.getLogger(__name__)
 
 _notify = admin_bot or bot
@@ -60,7 +56,8 @@ async def main_menu(message_func, menu_type, user_id: int = None, days=None, dat
     from app.locale import get_lang
     lang = get_lang(lang_code)
 
-    if not _legacy_constructor_enabled:
+    from app.bot_constructor.feature import is_enabled
+    if not await is_enabled():
         # MiniApp mode: single unified welcome for all user states.
         # miniapp_url  — direct HTTPS URL for WebAppInfo (opens app inside Telegram)
         # miniapp_tg_url — t.me/Bot/appname link for the clickable text href
@@ -74,8 +71,10 @@ async def main_menu(message_func, menu_type, user_id: int = None, days=None, dat
         await message_func(text, reply_markup=keyboard, parse_mode="HTML", disable_web_page_preview=True)
         return
 
-    # Legacy constructor mode: subscription-status-specific menus.
+    # Telegram menu mode: subscription-status-specific, DB-authored screens.
     from app.keyboards.localized import get_main_new_localized, get_main_pro_localized, get_main_free_localized
+    from app.bot_constructor.keyboards.dynamic import get_dynamic_keyboard
+    from app.database.tariff_repository import get_screen_text
     keyboards_map = {
         "pro": get_main_pro_localized(lang),
         "free": get_main_free_localized(lang),
@@ -107,14 +106,24 @@ async def main_menu(message_func, menu_type, user_id: int = None, days=None, dat
             days=days, traffic=traffic, plan=plan, link=link, devices=devices_count
         ) + "\n"
 
-    texts_map = {
+    fallback_texts = {
         "pro": lang.start_pro + sub_info_text + lang.start_agreement,
         "free": lang.start_free + sub_info_text + lang.start_agreement,
         "new": lang.start_base + lang.start_new + lang.start_agreement,
     }
 
-    text = texts_map.get(menu_type, texts_map["new"])
-    keyboard = keyboards_map.get(menu_type, keyboards_map["new"])
+    slug = {"pro": "main_pro", "free": "main_free", "new": "main_new"}.get(
+        menu_type, "main_new"
+    )
+    template = await get_screen_text(slug, lang_code)
+    text = (
+        template.replace("{sub_info}", sub_info_text)
+        if template
+        else fallback_texts.get(menu_type, fallback_texts["new"])
+    )
+    keyboard = await get_dynamic_keyboard(slug, lang_code)
+    if keyboard is None:
+        keyboard = keyboards_map.get(menu_type, keyboards_map["new"])
 
     await message_func(text, reply_markup=keyboard, parse_mode="HTML", disable_web_page_preview=True)
 

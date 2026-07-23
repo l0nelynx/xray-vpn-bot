@@ -5,6 +5,7 @@ interface PreviewButton {
   text: string;
   row: number;
   col?: number;
+  destination?: string;
 }
 
 interface TelegramPreviewProps {
@@ -24,6 +25,9 @@ export default function TelegramPreview({ messageText, buttons, style }: Telegra
     if (!rows[btn.row]) rows[btn.row] = [];
     rows[btn.row].push(btn);
   });
+  Object.values(rows).forEach((row) =>
+    row.sort((a, b) => (a.col ?? 0) - (b.col ?? 0)),
+  );
   const sortedRows = Object.keys(rows)
     .map(Number)
     .sort((a, b) => a - b);
@@ -136,7 +140,18 @@ export default function TelegramPreview({ messageText, buttons, style }: Telegra
                   border: "1px solid rgba(100,149,237,0.2)",
                 }}
               >
-                {btn.text}
+                <div>{btn.text}</div>
+                {btn.destination && (
+                  <div
+                    style={{
+                      marginTop: 2,
+                      fontSize: 9,
+                      color: "rgba(100,149,237,0.7)",
+                    }}
+                  >
+                    → {btn.destination}
+                  </div>
+                )}
               </div>
             ))}
           </div>

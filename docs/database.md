@@ -15,7 +15,7 @@ under `./db/`. Redis is used for CRM job queues only — not as primary storage.
 
 - **`common_db.base`** — the single `Base` / `Base.metadata` (Alembic
   autogenerates against it).
-- **`common_db.models`** — all ORM models (`users`, `transactions`, `tariffs`,
+- **`common_db.models`** — all ORM models (`users`, `transactions`,
   `promos`, `crm`, `support`, `menus`, `google_play`, `auth`, `system`, …).
 - **`common_db.repo`** — reusable query helpers (users, promos, referral_rewards,
   balance, crm, support, system) so query logic isn't duplicated across services.
@@ -32,8 +32,7 @@ Sync variants (`postgresql+psycopg2://…`, `sqlite:///…`) are used by Alembic
 | Table | Purpose |
 |-------|---------|
 | `users` | Telegram/web/Android users + VPN profile (`tg_id`, `email`, `vless_uuid`, `is_banned`, `language`, `vip`, **`bonus_credits`**). |
-| `transactions` | Payments/orders (`transaction_id`, `order_status`, `payment_method`, `amount`, `days_ordered`, `tariff_slug`, `delivery_status`). |
-| `tariff_plans` / `tariff_prices` | Subscription plans + per-currency pricing; `squad_id` binds a plan to a Remnawave squad. |
+| `transactions` | Payments/orders. `transaction_id` is the local UUID; `provider_invoice_id` is the webhook correlation key; `squad_id` + `external_squad_id` are the immutable delivery snapshot. |
 | `promos` | Promo/referral **code catalog** (`promo_type`, `credit_grant`, `days_purchased`, `points_rewarded`). See [referral.md](referral.md). |
 | `promo_redemptions` | Audit log of code activations (gating rules). |
 | `promo_settings` | Singleton tunables: `default_credit_grant`, `points_reward_per_30`, `reward_cap_points`. |
@@ -41,8 +40,8 @@ Sync variants (`postgresql+psycopg2://…`, `sqlite:///…`) are used by Alembic
 | `crm_campaigns` / `crm_campaign_deliveries` | CRM ad-hoc campaigns and per-recipient results. See [crm.md](crm.md). |
 | `crm_events` / `crm_event_deliveries` | Scheduled CRM events + repeat-policy tracking. |
 | `support_tickets` / `support_messages` | In-app support ticketing. |
-| `menu_screens` / `menu_buttons` | Legacy bot constructor menus. |
-| `webapp_menu_nodes` | MiniApp / web / Android tariff tree (Tariff Constructor). |
+| `menu_screens` / `menu_buttons` | Telegram Bot system and custom screens. |
+| `webapp_menu_nodes` | The single RU/EN tariff tree for Telegram Bot, MiniApp, web and Android. |
 | `google_play_*` | Google Play IAP SKUs and purchases. |
 | `email_verifications` / `refresh_tokens` | Web/Android registration + JWT refresh. |
 
@@ -51,7 +50,7 @@ The full, authoritative set lives in `packages/common_db/common_db/models/`.
 ## Migrations
 
 Schema changes go exclusively through **Alembic** (`alembic/versions/`). Current
-HEAD: **`0021_referral_owner_points`**. The one-shot `migrate` container runs
+HEAD: **`0029_unified_tariff_constructor`**. The one-shot `migrate` container runs
 `alembic upgrade head` on startup; the app services wait for it (`depends_on:
 service_completed_successfully`) and run no ad-hoc DDL of their own.
 
@@ -64,6 +63,7 @@ Notable recent migrations:
 | `0019` | `users.bonus_credits`, `credit_ledger`, `promos.credit_grant` |
 | `0020` | Points scale (×10 RUB points) |
 | `0021` | Owner rewards in points (`points_rewarded`, `points_reward_per_30`, `reward_cap_points`) |
+| `0029` | Unified tariff tree, delivery snapshots, provider IDs; removes legacy tariff/squad tables |
 
 - Autogenerate target is `common_db.Base.metadata` (`alembic/env.py`).
 - Local dev without Docker:

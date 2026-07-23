@@ -18,19 +18,19 @@ depends_on = None
 
 def upgrade() -> None:
     # Увеличиваем лимит для invoice_tariff_slug
-    op.alter_column('webapp_menu_nodes', 'invoice_tariff_slug',
-                    existing_type=sa.String(length=50),
-                    type_=sa.String(length=255),
-                    existing_nullable=True)
-
-    # Рекомендую также проверить поле text, если там бывают длинные названия
-    op.alter_column('webapp_menu_nodes', 'text',
-                    existing_type=sa.String(length=100),  # проверьте текущий лимит
-                    type_=sa.String(length=255),
-                    existing_nullable=True)
+    with op.batch_alter_table("webapp_menu_nodes") as batch:
+        batch.alter_column('invoice_tariff_slug',
+                           existing_type=sa.String(length=50),
+                           type_=sa.String(length=255),
+                           existing_nullable=True)
+        batch.alter_column('text',
+                           existing_type=sa.String(length=200),
+                           type_=sa.String(length=255),
+                           existing_nullable=False)
 
 
 def downgrade() -> None:
-    op.alter_column('webapp_menu_nodes', 'invoice_tariff_slug',
-                    existing_type=sa.String(length=255),
-                    type_=sa.String(length=50))
+    with op.batch_alter_table("webapp_menu_nodes") as batch:
+        batch.alter_column('invoice_tariff_slug',
+                           existing_type=sa.String(length=255),
+                           type_=sa.String(length=50))

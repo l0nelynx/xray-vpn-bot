@@ -4,7 +4,6 @@ from pathlib import Path
 import uvicorn
 import yaml
 from aiogram import Bot
-from aiosend import CryptoPay
 from fastapi import FastAPI, Request
 from slowapi import Limiter
 
@@ -74,8 +73,6 @@ if not secrets.get('token'):
 
 
 bot = Bot(token=secrets.get('token'))
-cp = CryptoPay(secrets.get('crypto_bot_token')) if secrets.get('crypto_bot_token') else None
-
 # Admin bot (отдельный бот для админ-панели)
 if secrets.get('admin_bot_token'):
     admin_bot = Bot(token=secrets.get('admin_bot_token'))

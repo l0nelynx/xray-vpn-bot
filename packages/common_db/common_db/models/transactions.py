@@ -5,8 +5,9 @@ Schema canon:
                            to BigInteger in 0007, FK was not retyped — left
                            as Integer to match prod row-by-row).
 - transactions.username  : String(50), nullable=True
-- transactions.tariff_slug: String(200), nullable=True (history of widening
-                           required this — see prior migrations)
+- transactions.squad_id / external_squad_id: immutable delivery target
+- transactions.provider_invoice_id: provider-side correlation key; the local
+                           transaction_id remains the application identity
 - transactions.android_user_id: Integer, nullable=True + index
 - relationship user      : back_populates="transactions" on User
 """
@@ -32,8 +33,10 @@ class Transaction(Base):
     days_ordered: Mapped[int] = mapped_column(BigInteger)
     expire_date: Mapped[str] = mapped_column(String(30), nullable=True)
 
-    # Tariff slug (existing tariff slug OR ad-hoc encoded squad).
-    tariff_slug: Mapped[str] = mapped_column(String(200), nullable=True)
+    # Immutable delivery snapshot captured when the invoice is created.
+    squad_id: Mapped[str] = mapped_column(String(100), nullable=True)
+    external_squad_id: Mapped[str] = mapped_column(String(100), nullable=True)
+    provider_invoice_id: Mapped[str] = mapped_column(String(100), nullable=True)
 
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
 
@@ -46,4 +49,5 @@ class Transaction(Base):
     __table_args__ = (
         Index("ix_transaction_user_id", "user_id"),
         Index("ix_transactions_android_user_id", "android_user_id"),
+        Index("ix_transactions_provider_invoice_id", "provider_invoice_id"),
     )

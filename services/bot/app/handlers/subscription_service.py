@@ -162,17 +162,10 @@ async def deliver_subscription(
             amount=amount,
         )
 
-        # Resolve squad from tariff (for PAID subscriptions).
-        # Two formats are supported for `tariff_slug`:
-        #  1) Existing tariff slug -> looked up via tariff_repository.
-        #  2) Ad-hoc squad encoded by the WebApp tariff constructor as
-        #     "sid:<squad_id>:esid:<external_squad_id>".
+        # Resolve the immutable squad snapshot captured from Tariff Constructor.
         tariff_squad = None
         if subscription_type == SubscriptionType.PAID and tariff_slug:
             tariff_squad = _parse_squad_slug(tariff_slug)
-            if tariff_squad is None:
-                from app.database.tariff_repository import get_squad_for_tariff_slug
-                tariff_squad = await get_squad_for_tariff_slug(tariff_slug)
 
         if scenario == SubscriptionScenario.NEW_USER:
             result = await _handle_new_user(

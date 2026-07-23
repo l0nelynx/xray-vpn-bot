@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -8,40 +8,44 @@ NodeAction = Literal["buttons", "invoice"]
 
 
 class WebAppMenuNodeBase(BaseModel):
-    text: str = Field(..., max_length=200)
+    text_ru: str = Field(..., max_length=255)
+    text_en: str = Field(..., max_length=255)
     action: NodeAction = "buttons"
     sort_order: int = 0
     is_active: bool = True
-
-    invoice_provider: Optional[str] = None
-    invoice_amount: Optional[float] = None
-    invoice_currency: Optional[str] = None
-    invoice_method: Optional[str] = None
-    invoice_days: Optional[int] = None
-    invoice_tariff_slug: Optional[str] = None
+    invoice_provider: str | None = None
+    invoice_amount: float | None = None
+    invoice_currency: str | None = None
+    invoice_method: str | None = None
+    invoice_days: int | None = None
+    invoice_squad_id: str | None = None
+    invoice_external_squad_id: str | None = None
 
 
 class WebAppMenuNodeCreate(WebAppMenuNodeBase):
-    parent_id: Optional[int] = None
+    parent_id: int | None = None
 
 
 class WebAppMenuNodeUpdate(BaseModel):
-    text: Optional[str] = None
-    action: Optional[NodeAction] = None
-    sort_order: Optional[int] = None
-    is_active: Optional[bool] = None
-    parent_id: Optional[int] = None
-    invoice_provider: Optional[str] = None
-    invoice_amount: Optional[float] = None
-    invoice_currency: Optional[str] = None
-    invoice_method: Optional[str] = None
-    invoice_days: Optional[int] = None
-    invoice_tariff_slug: Optional[str] = None
+    text_ru: str | None = Field(default=None, max_length=255)
+    text_en: str | None = Field(default=None, max_length=255)
+    action: NodeAction | None = None
+    sort_order: int | None = None
+    is_active: bool | None = None
+    parent_id: int | None = None
+    invoice_provider: str | None = None
+    invoice_amount: float | None = None
+    invoice_currency: str | None = None
+    invoice_method: str | None = None
+    invoice_days: int | None = None
+    invoice_squad_id: str | None = None
+    invoice_external_squad_id: str | None = None
 
 
 class WebAppMenuNodeSchema(WebAppMenuNodeBase):
     id: int
-    parent_id: Optional[int] = None
+    parent_id: int | None = None
+    needs_attention: bool = False
     children: list["WebAppMenuNodeSchema"] = []
 
     class Config:
@@ -50,7 +54,7 @@ class WebAppMenuNodeSchema(WebAppMenuNodeBase):
 
 class ReorderItem(BaseModel):
     id: int
-    parent_id: Optional[int] = None
+    parent_id: int | None = None
     sort_order: int
 
 

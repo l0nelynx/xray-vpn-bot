@@ -6,9 +6,6 @@ This module retains only shared utilities and backward-compatible lazy accessors
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from app.keyboards.tools import *  # noqa: F401,F403
-
-
 def get_connect(link: str) -> InlineKeyboardMarkup:
     """Create a dynamic connect keyboard with link"""
     builder = InlineKeyboardBuilder()
@@ -34,10 +31,6 @@ _LAZY_BUILDERS = {
         [("На главную", "Main")],
     ),
     "to_main": lambda: _lazy_inline([("На главную", "Main")]),
-    "pay_extend_month": lambda: _lazy_inline(
-        [("🔒Продлить подписку", "Extend_Month")],
-        [("На главную", "Main")],
-    ),
 }
 
 

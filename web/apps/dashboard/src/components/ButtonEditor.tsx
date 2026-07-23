@@ -24,8 +24,6 @@ import type { MenuButton, MenuScreen } from "../api/types";
 import { api } from "../api/client";
 
 const KNOWN_CALLBACKS = [
-  { value: "Premium", label: "Premium — Buy premium menu" },
-  { value: "Extend_Month", label: "Extend_Month — Extend subscription" },
   { value: "Others", label: "Others — Instructions" },
   { value: "Free", label: "Free — Free version" },
   { value: "Sub_Info", label: "Sub_Info — Subscription info" },
@@ -36,12 +34,6 @@ const KNOWN_CALLBACKS = [
   { value: "Agreement", label: "Agreement — User agreement" },
   { value: "Privacy", label: "Privacy — Privacy policy" },
   { value: "Main", label: "Main — Back to main menu" },
-  { value: "Stars_Plans", label: "Stars_Plans — Stars tariffs" },
-  { value: "Crypto_Plans", label: "Crypto_Plans — Crypto tariffs" },
-  { value: "Crystal_plans", label: "Crystal_plans — Crystal tariffs" },
-  { value: "SBP_Apay", label: "SBP_Apay — SBP/Apple Pay tariffs" },
-  { value: "Enter_Promo", label: "Enter_Promo — Promo code input" },
-  { value: "Migrate_RemnaWave", label: "Migrate_RemnaWave — Migration" },
   { value: "Telemt_Free", label: "Telemt_Free — Telemt free (channel sub)" },
 ];
 
@@ -52,7 +44,6 @@ const DEFAULTS: Partial<MenuButton> = {
   url: "",
   button_type: "callback",
   is_active: true,
-  visibility_condition: "always",
 };
 
 interface ButtonEditorProps {
@@ -91,7 +82,16 @@ export default function ButtonEditor({ open, button, onSave, onCancel }: ButtonE
       toast.error("URL is required");
       return;
     }
-    onSave({ ...button, ...values });
+    if (buttonType === "callback" && !values.callback_data?.trim()) {
+      toast.error("Choose a bot handler or screen");
+      return;
+    }
+    onSave({
+      ...button,
+      ...values,
+      callback_data: buttonType === "callback" ? values.callback_data : null,
+      url: isUrlType ? values.url : null,
+    });
   };
 
   return (
@@ -128,7 +128,13 @@ export default function ButtonEditor({ open, button, onSave, onCancel }: ButtonE
             </Select>
           </div>
 
-          {!isUrlType && (
+          {buttonType === "tariff" && (
+            <div className="rounded-lg border border-primary/25 bg-primary/10 p-3 text-sm">
+              Opens the localized purchase tree from Tariff Constructor.
+            </div>
+          )}
+
+          {buttonType === "callback" && (
             <div className="space-y-1.5">
               <Label>Callback Data</Label>
               <Select
@@ -176,22 +182,6 @@ export default function ButtonEditor({ open, button, onSave, onCancel }: ButtonE
               />
             </div>
           )}
-
-          <div className="space-y-1.5">
-            <Label>Visibility</Label>
-            <Select
-              value={values.visibility_condition ?? "always"}
-              onValueChange={(v: string) => set("visibility_condition", v)}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="always">Always</SelectItem>
-                <SelectItem value="show_promo">Show Promo Only</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
 
           <div className="flex items-center gap-2">
             <Switch

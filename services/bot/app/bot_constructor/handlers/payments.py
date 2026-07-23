@@ -1,366 +1,328 @@
-"""In-bot tariff selection and inline payment flow (Stars / Crypto / SBP / CrystalPay / Credits)."""
+"""Stateless Telegram navigation and payment flow for Tariff Constructor."""
+from __future__ import annotations
+
 import logging
 import uuid
 
 from aiogram import F, Router
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import LabeledPrice, Message, CallbackQuery, PreCheckoutQuery
-
-from aiosend.types import Invoice
-
-from app.api.a_pay import create_sbp_link as apays_create_sbp_link
-from app.api.crystal_pay import crystal_create_link
-from app.handlers.tools import success_payment_handler
-from app.handlers.subscription_service import deliver_subscription, SubscriptionType
-from app.notify_log import esc, notify_log
-from app.database.tariff_repository import get_tariff_slug_by_days
-from app.locale.utils import get_user_lang
-from app.keyboards.localized import get_to_main_localized
-from app.bot_constructor.keyboards.payment_kb import get_pay_methods_localized
-from app.bot_constructor.keyboards.tools import (
-    PaymentCallbackData,
-    CreditsNodeCallbackData,
-    OptimizedTariffKeyboard,
-    payment_keyboard,
+from aiogram.types import (
+    CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    LabeledPrice,
+    Message,
+    PreCheckoutQuery,
+    WebAppInfo,
 )
-from app.bot_constructor.menu_credits import (
-    create_credits_menu_keyboard,
-    load_menu_node,
-    resolve_node_points_cost,
+from payments import (
+    InvoiceRequest,
+    PaymentError,
+    available_providers,
+    create_invoice,
+    validate_provider_invoice,
 )
-from app.settings import bot, cp, secrets
+from payments.stars import validate_stars_payment
+
 import app.database.requests as rq
+from app.api.handlers import payment_process_background
+from app.bot_constructor.feature import is_enabled
 from app.database.models import async_session
-from common_db.repo import credits_pay as _repo_credits_pay
-from common_db.repo import promos as rq_promos
-from common_db.repo import users as _repo_users
+from app.locale.utils import get_user_lang
+from app.notify_log import esc, notify_log
+from app.settings import bot, secrets
+from common_db.repo.webapp_menu import (
+    get_active_node,
+    invoice_target,
+    list_nodes,
+    localized_text,
+)
 
+logger = logging.getLogger(__name__)
 router = Router()
 
 
-def _promo_reason_text(lang, reason: str) -> str:
-    mapping = {
-        rq_promos.REASON_INVALID: lang.promo_invalid_text,
-        rq_promos.REASON_OWN_CODE: lang.promo_own_code_text,
-        rq_promos.REASON_ALREADY_USED: lang.promo_already_used_text,
-        rq_promos.REASON_ACTIVE_EXISTS: lang.promo_already_used_text,
-        rq_promos.REASON_REFERRAL_ONLY_ONE: lang.promo_already_used_text,
-        rq_promos.REASON_REFERRAL_NOT_NEW: lang.promo_referral_new_only_text,
-        rq_promos.REASON_NO_USER: lang.promo_invalid_text,
+def _allowed_providers() -> set[str]:
+    return {
+        provider.name
+        for provider in available_providers()
+        if "bot" in provider.surfaces
     }
-    return mapping.get(reason, lang.promo_invalid_text)
 
 
-PAYMENT_METHOD_NAMES = {
-    "stars": "TG_STARS",
-    "crypto": "CRYPTOPAY",
-    "SBP_APAY": "SBP_APAY",
-    "CRYSTAL": "CRYSTAL_PAY",
-    "BONUS_CREDITS": "BONUS_CREDITS",
-}
-
-
-class PaymentState(StatesGroup):
-    PrePayment = State()
-    PaymentMethod = State()
-    PaymentTariff = State()
-    PaymentInvoice = State()
-    PostPayment = State()
-    PromoInput = State()
-
-
-async def _payment_methods_keyboard(lang, tg_id: int):
-    balance = await rq.get_user_bonus_credits(tg_id)
-    return get_pay_methods_localized(lang, show_promo=True, bonus_credits=balance)
-
-
-@router.callback_query(F.data == "Premium")
-async def premium(callback: CallbackQuery, state: FSMContext):
-    lang = await get_user_lang(callback.from_user.id)
-    await callback.answer(lang.msg_buying_premium)
-    await callback.message.edit_text(
-        text=lang.text_pay_method,
-        parse_mode="HTML",
-        reply_markup=await _payment_methods_keyboard(lang, callback.from_user.id),
-    )
-    await state.set_state(PaymentState.PaymentMethod)
-
-
-@router.callback_query(F.data == "Extend_Month")
-async def premium_extend(callback: CallbackQuery, state: FSMContext):
-    lang = await get_user_lang(callback.from_user.id)
-    await callback.answer(lang.msg_extending_premium)
-    await callback.message.edit_text(
-        text=lang.text_extend_pay_method,
-        parse_mode="HTML",
-        reply_markup=await _payment_methods_keyboard(lang, callback.from_user.id),
-    )
-    await state.set_state(PaymentState.PaymentMethod)
-
-
-@router.callback_query(F.data == "Enter_Promo", PaymentState.PaymentMethod)
-async def enter_promo(callback: CallbackQuery, state: FSMContext):
-    lang = await get_user_lang(callback.from_user.id)
-    await callback.message.edit_text(text=lang.promo_enter_text, parse_mode="HTML")
-    await state.set_state(PaymentState.PromoInput)
-
-
-@router.message(PaymentState.PromoInput)
-async def process_promo_input(message: Message, state: FSMContext):
-    lang = await get_user_lang(message.from_user.id)
-    promo_code = message.text.strip().upper()
-    tg_id = message.from_user.id
-
-    result = await rq.redeem_promo_for_user(tg_id, promo_code)
-    if not result.ok:
-        reason_text = _promo_reason_text(lang, result.reason)
-        await message.answer(
-            text=reason_text,
-            parse_mode="HTML",
-            reply_markup=await _payment_methods_keyboard(lang, tg_id),
+def _target_for_bot(node):
+    target = invoice_target(node, allowed_providers=_allowed_providers())
+    if target is None:
+        return None
+    try:
+        validate_provider_invoice(
+            target.provider,
+            currency=target.currency,
+            method=target.method,
+            surface="bot",
         )
-        await state.set_state(PaymentState.PaymentMethod)
-        return
+    except PaymentError:
+        return None
+    return target
 
-    await message.answer(
-        text=lang.promo_success_text.format(points=result.credit_grant or 0),
-        parse_mode="HTML",
-        reply_markup=await _payment_methods_keyboard(lang, tg_id),
+
+async def _miniapp_fallback(callback: CallbackQuery) -> None:
+    lang = await get_user_lang(callback.from_user.id)
+    url = secrets.get("miniapp_url")
+    keyboard = (
+        InlineKeyboardMarkup(
+            inline_keyboard=[[
+                InlineKeyboardButton(text=lang.btn_open_app, web_app=WebAppInfo(url=url))
+            ]]
+        )
+        if url
+        else None
     )
-    await state.set_state(PaymentState.PaymentMethod)
+    await callback.message.edit_text(
+        lang.text_pay_method,
+        parse_mode="HTML",
+        reply_markup=keyboard,
+    )
+    await callback.answer()
 
 
-@router.callback_query(PaymentState.PaymentMethod)
-async def stars_plan(callback: CallbackQuery, state: FSMContext):
+async def _render_level(callback: CallbackQuery, parent_id: int | None) -> None:
     lang_code = await rq.get_user_language(callback.from_user.id) or "ru"
     lang = await get_user_lang(callback.from_user.id)
+    async with async_session() as session:
+        nodes = await list_nodes(session)
+        parent = (
+            await get_active_node(session, parent_id)
+            if parent_id is not None
+            else None
+        )
+    if parent_id is not None and (parent is None or parent.action != "buttons"):
+        await callback.answer(lang.msg_plan_not_found, show_alert=True)
+        return
 
-    method_by_callback = {
-        "Stars_Plans": "stars",
-        "Crypto_Plans": "crypto",
-        "SBP_Plans": "SBP",
-        "SBP_Apay": "SBP_APAY",
-        "Crystal_plans": "CRYSTAL",
-    }
-
-    keyboard = None
-    if callback.data == "Credits_Plans":
-        keyboard = await create_credits_menu_keyboard()
-        if not keyboard:
-            await callback.answer(lang.msg_no_credits_plans, show_alert=True)
-            return
-    else:
-        method = method_by_callback.get(callback.data)
-        if method:
-            keyboard = await OptimizedTariffKeyboard.from_db(
-                method, extra_discount=0, lang=lang_code
+    children = sorted(
+        (
+            node
+            for node in nodes
+            if node.parent_id == parent_id and node.is_active
+        ),
+        key=lambda node: (node.sort_order, node.id),
+    )
+    rows: list[list[InlineKeyboardButton]] = []
+    for node in children:
+        target = _target_for_bot(node)
+        if node.action == "invoice" and target is None:
+            continue
+        if node.action == "buttons":
+            has_visible_child = any(
+                child.parent_id == node.id
+                and child.is_active
+                and (
+                    child.action == "buttons"
+                    or _target_for_bot(child) is not None
+                )
+                for child in nodes
             )
-            if not keyboard:
-                await callback.answer(lang.msg_choose_tariff, show_alert=True)
-                return
+            if not has_visible_child:
+                continue
+        label = localized_text(node, lang_code)
+        if target is not None:
+            amount = f"{target.amount:.2f}".rstrip("0").rstrip(".")
+            label = f"{label} · {amount} {target.currency}"
+        rows.append([
+            InlineKeyboardButton(text=label, callback_data=f"tariff:node:{node.id}")
+        ])
 
-    if keyboard:
-        await callback.message.edit_text(lang.msg_choose_tariff, reply_markup=keyboard)
-        await state.set_state(PaymentState.PaymentTariff)
-    else:
-        logging.warning("Unrecognised payment method callback: %s", callback.data)
+    if parent is not None:
+        back_callback = (
+            f"tariff:node:{parent.parent_id}"
+            if parent.parent_id is not None
+            else "tariff:root"
+        )
+        rows.append([InlineKeyboardButton(text=lang.btn_back, callback_data=back_callback)])
+    rows.append([InlineKeyboardButton(text=lang.btn_to_main, callback_data="Main")])
+    text = localized_text(parent, lang_code) if parent else lang.text_pay_method
+    if not rows[:-1]:
+        await callback.answer(lang.msg_plan_not_found, show_alert=True)
+        return
+    await callback.message.edit_text(
+        text=text,
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+    )
+    await callback.answer()
 
 
-@router.callback_query(
-    CreditsNodeCallbackData.filter(),
-    PaymentState.PaymentTariff,
-)
-async def credits_node_handler(
-    callback: CallbackQuery,
-    callback_data: CreditsNodeCallbackData,
-    state: FSMContext,
-):
+async def _create_payment(callback: CallbackQuery, node_id: int) -> None:
     lang = await get_user_lang(callback.from_user.id)
-    node = await load_menu_node(callback_data.node_id)
+    async with async_session() as session:
+        node = await get_active_node(session, node_id)
     if node is None:
         await callback.answer(lang.msg_plan_not_found, show_alert=True)
         return
-
-    resolved = await resolve_node_points_cost(node)
-    if resolved is None:
+    target = _target_for_bot(node)
+    if target is None:
         await callback.answer(lang.msg_plan_not_found, show_alert=True)
         return
-    invoice, points_cost = resolved
-    days = invoice["days"]
-    tariff_slug = invoice["tariff_slug"]
-
-    async with async_session() as session:
-        user = await _repo_users.get_user_by_tg_id(session, callback.from_user.id)
-        if not user:
+    try:
+        provider = validate_provider_invoice(
+            target.provider,
+            currency=target.currency,
+            method=target.method,
+            surface="bot",
+        )
+    except PaymentError as exc:
+        await callback.answer(str(exc), show_alert=True)
+        return
+    transaction_id = str(uuid.uuid4())
+    if target.provider == "stars":
+        tx = await rq.create_transaction(
+            user_tg_id=callback.from_user.id,
+            user_transaction=transaction_id,
+            provider_invoice_id=transaction_id,
+            username=callback.from_user.username,
+            days=target.days,
+            payment_method=provider.payment_method,
+            amount=target.amount,
+            squad_id=target.squad_id,
+            external_squad_id=target.external_squad_id,
+        )
+        if tx is None:
             await callback.answer("User not found", show_alert=True)
             return
-        purchase = await _repo_credits_pay.purchase_with_credits(
-            session,
-            user_id=user.id,
-            username=callback.from_user.username or f"id_{callback.from_user.id}",
-            tg_id=callback.from_user.id,
-            points_cost=points_cost,
-            days=days,
-            tariff_slug=tariff_slug,
-        )
-        if purchase is None:
-            await session.rollback()
-            await callback.answer(lang.msg_insufficient_points, show_alert=True)
+        amount = int(target.amount)
+        try:
+            await bot.send_invoice(
+                callback.from_user.id,
+                title=localized_text(
+                    node,
+                    await rq.get_user_language(callback.from_user.id) or "ru",
+                ),
+                description=lang.msg_invoice_description.format(amount=amount),
+                payload=transaction_id,
+                currency="XTR",
+                prices=[LabeledPrice(label="VPN", amount=amount)],
+                provider_token="",
+            )
+        except Exception as exc:
+            logger.exception("Telegram Stars invoice send failed")
+            await rq.update_order_status(transaction_id, "failed")
+            await callback.answer(str(exc), show_alert=True)
             return
-        await session.commit()
-
-    await rq.claim_order_for_processing(purchase.transaction_id)
-    await deliver_subscription(
-        message=callback.message,
-        username=callback.from_user.username,
-        user_id=callback.from_user.id,
-        days=days,
-        subscription_type=SubscriptionType.PAID,
-        payment_method=PAYMENT_METHOD_NAMES["BONUS_CREDITS"],
-        data_limit_gb=None,
-        reset_strategy="no_reset",
-        transaction_id=purchase.transaction_id,
-        amount=0,
-        tariff_slug=tariff_slug,
-    )
-    await state.clear()
-    await state.set_state(PaymentState.PrePayment)
-
-
-@router.callback_query(PaymentCallbackData.filter(F.tag == "data"), PaymentState.PaymentTariff)
-async def invoice_handler(callback: CallbackQuery, callback_data: PaymentCallbackData, state: FSMContext):
-    method = callback_data.method
-    amount = callback_data.amount
-    days = callback_data.days
-    lang = await get_user_lang(callback.from_user.id)
-
-    if method == "stars":
         await callback.answer(lang.msg_pay_in_stars)
-        prices = [LabeledPrice(label="XTR", amount=int(round(amount)))]
-        await bot.send_invoice(
-            callback.from_user.id,
-            title=lang.msg_invoice_title,
-            description=lang.msg_invoice_description.format(amount=int(round(amount))),
-            prices=prices,
-            provider_token="",
-            payload=f"{days}",
-            currency="XTR",
-            reply_markup=payment_keyboard(int(round(amount))),
-        )
-    elif method == "crypto":
-        invoice = await cp.create_invoice(amount, "USDT", payload=f"{days}")
-        await callback.message.edit_text(f"pay: {invoice.bot_invoice_url}")
-        invoice.poll(message=callback)
-        await state.clear()
-        await state.set_state(PaymentState.PrePayment)
-    elif method == "SBP_APAY":
-        amount_kopecks = int(round(amount * 100))
-        link = await apays_create_sbp_link(callback=callback, amount=amount_kopecks, days=days)
-        await callback.message.edit_text(
-            lang.msg_pay_link.format(link=link), reply_markup=get_to_main_localized(lang)
-        )
-    elif method == "CRYSTAL":
-        link = await crystal_create_link(callback, amount, "RUB", days)
-        await callback.message.edit_text(
-            lang.msg_pay_link.format(link=link), reply_markup=get_to_main_localized(lang)
-        )
     else:
-        logging.warning("Unknown payment method from keyboard: %s", method)
-
-    tariff_slug = await get_tariff_slug_by_days(method, days)
-    await state.update_data(PaymentDays=days, PaymentMethod=method, TariffSlug=tariff_slug)
-    await state.set_state(PaymentState.PaymentInvoice)
-
-    if method in {"stars", "crypto", "SBP_APAY", "CRYSTAL"}:
-        await notify_log(
-            f"🧾 <b>Invoice created (bot)</b>\n"
-            f"user: <code>{callback.from_user.id}</code> "
-            f"@{esc(callback.from_user.username or '—')}\n"
-            f"method: <code>{esc(PAYMENT_METHOD_NAMES.get(method, method))}</code>\n"
-            f"amount: <code>{callback_data.amount}</code>\n"
-            f"days: <code>{days}</code>\n"
-            f"slug: <code>{esc(tariff_slug or '—')}</code>"
+        try:
+            invoice = await create_invoice(
+                target.provider,
+                InvoiceRequest(
+                    transaction_id=transaction_id,
+                    amount=target.amount,
+                    currency=target.currency,
+                    days=target.days,
+                    user_tg_id=callback.from_user.id,
+                    username=callback.from_user.username,
+                    description=localized_text(
+                        node,
+                        await rq.get_user_language(callback.from_user.id) or "ru",
+                    ),
+                    method=target.method,
+                ),
+            )
+        except PaymentError as exc:
+            logger.warning("Bot invoice failed for node %s: %s", node_id, exc)
+            await callback.answer(str(exc), show_alert=True)
+            return
+        tx = await rq.create_transaction(
+            user_tg_id=callback.from_user.id,
+            user_transaction=transaction_id,
+            provider_invoice_id=invoice.invoice_id,
+            username=callback.from_user.username,
+            days=target.days,
+            payment_method=provider.payment_method,
+            amount=target.amount,
+            squad_id=target.squad_id,
+            external_squad_id=target.external_squad_id,
         )
+        if tx is None:
+            await callback.answer("User not found", show_alert=True)
+            return
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text=lang.btn_open, url=invoice.url)],
+                [InlineKeyboardButton(text=lang.btn_back, callback_data=f"tariff:node:{node.parent_id}")
+                 if node.parent_id is not None else InlineKeyboardButton(
+                     text=lang.btn_back, callback_data="tariff:root"
+                 )],
+                [InlineKeyboardButton(text=lang.btn_to_main, callback_data="Main")],
+            ]
+        )
+        await callback.message.edit_text(
+            lang.msg_pay_link.format(link=invoice.url),
+            parse_mode="HTML",
+            reply_markup=keyboard,
+        )
+        await callback.answer()
+
+    await notify_log(
+        f"🧾 <b>Invoice created (bot tree)</b>\n"
+        f"user: <code>{callback.from_user.id}</code> "
+        f"@{esc(callback.from_user.username or '—')}\n"
+        f"provider: <code>{esc(target.provider)}</code>\n"
+        f"node: <code>{node_id}</code>\n"
+        f"amount: <code>{target.amount} {esc(target.currency)}</code>\n"
+        f"tx: <code>{transaction_id}</code>"
+    )
 
 
-@cp.invoice_paid()
-async def payment_handler(invoice: Invoice, message: CallbackQuery):
-    lang_user = await get_user_lang(message.from_user.id)
-    await message.message.answer(lang_user.msg_order_paid.format(invoice_id=invoice.invoice_id))
-    days = int(invoice.payload)
-    transaction_id = str(uuid.uuid4())
-    amount = getattr(invoice, "amount", 0)
-    tariff_slug = await get_tariff_slug_by_days("crypto", days)
-    await rq.create_transaction(
-        user_tg_id=message.from_user.id,
-        user_transaction=transaction_id,
-        username=message.from_user.username,
-        days=days,
-        payment_method="CRYPTOPAY",
-        amount=float(amount),
-    )
-    await rq.claim_order_for_processing(transaction_id)
-    await deliver_subscription(
-        message=message.message,
-        username=message.from_user.username,
-        user_id=message.from_user.id,
-        days=days,
-        subscription_type=SubscriptionType.PAID,
-        payment_method=PAYMENT_METHOD_NAMES["crypto"],
-        data_limit_gb=None,
-        reset_strategy="no_reset",
-        transaction_id=transaction_id,
-        amount=float(amount),
-        tariff_slug=tariff_slug,
-    )
+@router.callback_query(F.data.in_({"Premium", "Extend_Month", "tariff:root"}))
+async def tariff_root(callback: CallbackQuery) -> None:
+    if not await is_enabled():
+        await _miniapp_fallback(callback)
+        return
+    await _render_level(callback, None)
+
+
+@router.callback_query(F.data.startswith("tariff:node:"))
+async def tariff_node(callback: CallbackQuery) -> None:
+    if not await is_enabled():
+        await _miniapp_fallback(callback)
+        return
+    try:
+        node_id = int(callback.data.rsplit(":", 1)[1])
+    except (TypeError, ValueError):
+        await callback.answer("Invalid menu node", show_alert=True)
+        return
+    async with async_session() as session:
+        node = await get_active_node(session, node_id)
+    if node is None:
+        await callback.answer("Menu item is unavailable", show_alert=True)
+    elif node.action == "buttons":
+        await _render_level(callback, node.id)
+    else:
+        await _create_payment(callback, node.id)
 
 
 @router.pre_checkout_query()
-async def pre_checkout_handler(pre_checkout_query: PreCheckoutQuery):
-    await pre_checkout_query.answer(ok=True)
+async def pre_checkout_handler(query: PreCheckoutQuery) -> None:
+    tx = await rq.get_full_transaction_info(query.invoice_payload)
+    valid = validate_stars_payment(
+        tx,
+        user_tg_id=query.from_user.id,
+        currency=query.currency,
+        total_amount=query.total_amount,
+    )
+    await query.answer(ok=valid, error_message=None if valid else "Invoice is no longer valid")
 
 
 @router.message(F.successful_payment)
-async def success_stars_payment_handler(message: Message, state: FSMContext):
-    await state.set_state(PaymentState.PostPayment)
-    states_data = await state.get_data()
-    days = message.successful_payment.invoice_payload
-    if not days or not days.isdigit():
-        days = states_data.get("PaymentDays")
-    if not days:
-        logging.error("PaymentDays is None for user %s, cannot process payment", message.from_user.id)
-        await message.answer("Ошибка: не удалось определить тариф. Обратитесь в поддержку.")
-        await state.clear()
-        await state.set_state(PaymentState.PrePayment)
-        return
-
-    transaction_id = str(uuid.uuid4())
-    amount = message.successful_payment.total_amount
-    await rq.create_transaction(
+async def success_stars_payment_handler(message: Message) -> None:
+    payment = message.successful_payment
+    tx = await rq.get_full_transaction_info(payment.invoice_payload)
+    if not validate_stars_payment(
+        tx,
         user_tg_id=message.from_user.id,
-        user_transaction=transaction_id,
-        username=message.from_user.username,
-        days=int(days),
-        payment_method="TG_STARS",
-        amount=float(amount),
-    )
-    await rq.claim_order_for_processing(transaction_id)
-
-    tariff_slug = states_data.get("TariffSlug")
-    await deliver_subscription(
-        message=message,
-        username=message.from_user.username,
-        user_id=message.from_user.id,
-        days=int(days),
-        subscription_type=SubscriptionType.PAID,
-        payment_method=PAYMENT_METHOD_NAMES["stars"],
-        data_limit_gb=None,
-        reset_strategy="no_reset",
-        transaction_id=transaction_id,
-        amount=float(amount),
-        tariff_slug=tariff_slug,
-    )
-
-    await state.clear()
-    await state.set_state(PaymentState.PrePayment)
+        currency=payment.currency,
+        total_amount=payment.total_amount,
+    ):
+        logger.error("Rejected mismatched Stars payment %s", payment.invoice_payload)
+        return
+    await payment_process_background(tx["transaction_id"])

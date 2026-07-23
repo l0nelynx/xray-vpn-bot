@@ -9,9 +9,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Menu as MenuIcon,
-  ShoppingCart,
   LayoutGrid,
-  Users2,
   Server,
   Store,
   MessageSquare,
@@ -39,7 +37,7 @@ import {
   AlertDialogTrigger,
 } from "@xray/ui/components/alert-dialog";
 import { cn } from "@xray/ui/lib/utils";
-import { api, clearToken } from "../api/client";
+import { clearToken } from "../api/client";
 import useIsMobile from "../hooks/useIsMobile";
 
 interface BeforeInstallPromptEvent extends Event {
@@ -79,7 +77,7 @@ interface NavGroup {
   submenu?: { key: string; label: string; icon: LucideIcon };
 }
 
-function buildMenuGroups(legacyEnabled: boolean): NavGroup[] {
+function buildMenuGroups(): NavGroup[] {
   const groups: NavGroup[] = [
     {
       label: "Overview",
@@ -92,16 +90,10 @@ function buildMenuGroups(legacyEnabled: boolean): NavGroup[] {
     },
   ];
 
-  if (legacyEnabled) {
-    groups.push({
-      label: "Bot Constructor",
-      children: [
-        { key: "/tariffs", icon: ShoppingCart, label: "Tariffs" },
-        { key: "/menus", icon: LayoutGrid, label: "Bot Menus" },
-        { key: "/squads", icon: Users2, label: "Squads" },
-      ],
-    });
-  }
+  groups.push({
+    label: "Telegram Bot",
+    children: [{ key: "/menus", icon: LayoutGrid, label: "Menus" }],
+  });
 
   groups.push({
     label: "Services",
@@ -132,18 +124,10 @@ function buildMenuGroups(legacyEnabled: boolean): NavGroup[] {
 export default function Layout() {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [legacyEnabled, setLegacyEnabled] = useState<boolean>(true);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
   const isMobile = useIsMobile();
-
-  useEffect(() => {
-    api
-      .get<{ legacy_bot_constructor: boolean }>("/settings/features")
-      .then((r) => setLegacyEnabled(r.legacy_bot_constructor))
-      .catch(() => setLegacyEnabled(true));
-  }, []);
 
   useEffect(() => {
     const onBeforeInstall = (e: Event) => {
@@ -166,7 +150,7 @@ export default function Layout() {
     setInstallPrompt(null);
   };
 
-  const groups = useMemo(() => buildMenuGroups(legacyEnabled), [legacyEnabled]);
+  const groups = useMemo(() => buildMenuGroups(), []);
 
   const [webappOpen, setWebappOpen] = useState<boolean>(() =>
     location.pathname.startsWith("/webapp"),

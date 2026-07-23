@@ -12,7 +12,7 @@ flowchart LR
         MA[MiniApp]
         WP[Web portal]
         AND[Android]
-        BOT[Legacy bot]
+        BOT[Telegram Bot]
     end
 
     subgraph miniapp_svc [miniapp / bot]
@@ -63,12 +63,12 @@ Providers never read `config.yml` directly — each service calls
 | `apay` | `SBP_APAY` | RUB | `/bot/apays_webhook` | `apay_id`, `apay_secret`, `apay_api_url` |
 | `platega` | `PLATEGA` | RUB | `/bot/platega_webhook` | `platega_merchant_id`, `platega_api_key`, `platega_url`, `platega_payment_method` |
 | `paritypay` | `PARITYPAY` | RUB | `/bot/paritypay_webhook` | `paritypay_shop_id`, `paritypay_secret_1`, `paritypay_secret_2`, `paritypay_url` |
+| `stars` | `TG_STARS` | XTR | native Telegram update | `token` |
 
-**Also supported (not in `packages/payments`):**
+**Also supported outside hosted gateways:**
 
 | Method | `payment_method` | Where handled |
 |--------|------------------|---------------|
-| Telegram Stars | `TG_STARS` | Legacy bot — native `send_invoice` |
 | Google Play IAP | — | `services/miniapp/backend/android/iap_router.py` |
 
 ### CryptoBot (`crypto`)
@@ -76,7 +76,7 @@ Providers never read `config.yml` directly — each service calls
 - API: `aiosend.CryptoPay` with `crypto_bot_token`
 - Webhook auth: HMAC-SHA256 over raw body, key = `sha256(token)`
 - Success: `update_type = invoice_paid`
-- **Correlation ID:** CryptoPay `invoice_id` stored as `transactions.transaction_id`
+- **Correlation ID:** CryptoPay `invoice_id` is stored in `provider_invoice_id`
 
 Register webhook URL in @CryptoBot or rely on the HTTP endpoint.
 
@@ -130,7 +130,7 @@ Register webhook URL in @CryptoBot or rely on the HTTP endpoint.
 ### 1. Configure invoice nodes (Dashboard)
 
 **WebApp → Tariff Constructor** — create `invoice` leaves with provider, amount,
-currency, method, days, and tariff slug. See [Dashboard](dashboard.md).
+currency, method, days, and both delivery squad IDs. See [Dashboard](dashboard.md).
 
 ### 2. User selects a plan (MiniApp / web / Android)
 
@@ -166,28 +166,14 @@ On failure: 3 retries, then `pending` + admin Telegram alert.
 
 ### Correlation ID rules
 
-`payment_process_background(order_id)` looks up `transactions.transaction_id`.
-The value stored at invoice creation **must match** what the webhook passes:
+`transactions.transaction_id` is always a local UUID. Gateway identifiers are
+stored separately in `provider_invoice_id`; webhook handlers resolve either
+merchant UUID or provider ID before claiming the local transaction:
 
-| Provider | Stored `transaction_id` |
-|----------|------------------------|
-| APay | Our UUID |
-| ParityPay | Our UUID |
-| Platega | Provider `transactionId` |
-| Crystal | Provider invoice `id` |
-| Crypto (MiniApp) | CryptoPay `invoice_id` |
-
-Logic in `services/miniapp/backend/routers/payments.py`:
-
-```python
-persisted_id = (
-    invoice.invoice_id
-    if provider.name in {"crystal", "crypto", "platega"}
-    else transaction_id
-)
-```
-
-The same rule applies in `web/web_router.py` and `android/payments_router.py`.
+| Correlation mode | Providers |
+|------------------|-----------|
+| Merchant/local UUID | APay, ParityPay, Stars |
+| Provider invoice ID | CryptoPay, Crystal Pay, Platega |
 
 ---
 
@@ -199,8 +185,8 @@ The same rule applies in `web/web_router.py` and `android/payments_router.py`.
 - **Provider catalog:** `GET /api/webapp-menu/providers`
   (`services/dashboard/backend/routers/webapp_payments.py`)
 
-The catalog (`_PROVIDER_CATALOG`) must be kept in sync with `packages/payments`
-registry — the dashboard does not auto-discover providers.
+The catalog is generated from the payments registry and includes methods,
+currencies, supported surfaces and webhook-ID mapping.
 
 ### MiniApp / web / Android (runtime)
 
@@ -208,10 +194,10 @@ registry — the dashboard does not auto-discover providers.
 - Create invoice: `POST /api/payments/invoice` with `{ node_id }` only
 - Provider list (informational): `GET /api/payments/providers`
 
-### Legacy bot (optional)
+### Telegram Bot
 
-Keyboard in `services/bot/app/keyboards/localized.py` — Stars, Crypto, Crystal,
-SBP only. Requires `legacy_bot_constructor = true`.
+The same Tariff Constructor tree is rendered through stateless callbacks.
+Hosted gateways use the registry; Stars use a native Telegram invoice.
 
 ### Dashboard revenue stats
 
@@ -303,30 +289,23 @@ async def mygateway_webhook(request: Request, background_tasks: BackgroundTasks)
 
 **9. Document keys** — `config-example.yml`.
 
-### Phase C — MiniApp invoice creation
+### Phase C — Shared runtime exposure
 
-**10. Wire config** — `services/miniapp/backend/config.py`.
+**10. Wire config** in the runtime overlay and set provider metadata:
 
-**11. Set `persisted_id` rule** in all three invoice routers:
+```python
+methods = (("default", "Default"),)
+surfaces = frozenset({"bot", "miniapp", "web", "android"})
+webhook_key = "provider"  # or "merchant"
+```
 
-- `services/miniapp/backend/routers/payments.py`
-- `services/miniapp/backend/web/web_router.py`
-- `services/miniapp/backend/android/payments_router.py`
-
-Decide: does the webhook pass **our UUID** or the **provider's ID**?
+The invoice routers always persist a local UUID plus `provider_invoice_id`; no
+provider-specific persisted-ID branch is needed.
 
 ### Phase D — Dashboard exposure
 
-**12. Provider catalog** — `services/dashboard/backend/routers/webapp_payments.py`:
-
-```python
-{
-    "name": "mygateway",
-    "payment_method": "MYGATEWAY",
-    "currencies": ["RUB"],
-    "methods": [{"value": "default", "label": "Default"}],
-}
-```
+**12. Register the provider** in `payments.registry`; Dashboard discovers its
+catalog metadata automatically.
 
 **13. Currency mapping** — `services/dashboard/backend/currency.py` → `PAYMENT_CURRENCY`.
 
@@ -334,19 +313,16 @@ Decide: does the webhook pass **our UUID** or the **provider's ID**?
 
 No Tariff Constructor code changes needed — admins pick the new provider in invoice nodes.
 
-### Phase E — Legacy bot (optional)
+### Phase E — Telegram Bot
 
-Only if you want in-bot payments (not recommended for new gateways):
-
-16. `services/bot/app/keyboards/localized.py` — add button
-17. `services/bot/app/bot_constructor/handlers/payments.py` — handler branch
-18. `tariff_prices` row in Dashboard → Tariffs
+If `surfaces` contains `bot`, the same Tariff Constructor node works in the
+Telegram Bot automatically; no keyboard or handler branch is added.
 
 ### Phase F — Operations
 
-19. Register `https://your-domain/bot/mygateway_webhook` with the gateway
-20. Create invoice nodes in Dashboard → WebApp → Tariff Constructor
-21. Test: invoice → pay → webhook → subscription delivered → transaction `delivered`
+16. Register `https://your-domain/bot/mygateway_webhook` with the gateway
+17. Create invoice nodes in Dashboard → WebApp → Tariff Constructor
+18. Test: invoice → pay → webhook → subscription delivered → transaction `delivered`
 
 ---
 
@@ -358,7 +334,7 @@ Only if you want in-bot payments (not recommended for new gateways):
 - [ ] `PaymentsConfig` fields + bot/miniapp config wiring
 - [ ] Webhook handler + route in `main.py`
 - [ ] `persisted_id` rule in all invoice routers
-- [ ] `_PROVIDER_CATALOG` entry in dashboard
+- [ ] Registry metadata: methods, currencies, surfaces and webhook key
 - [ ] `PAYMENT_CURRENCY` mapping
 - [ ] `config-example.yml` keys documented
 - [ ] Public webhook URL registered with gateway provider
@@ -371,7 +347,7 @@ Only if you want in-bot payments (not recommended for new gateways):
 2. **Clients send `node_id` only** — never trust client amount/days/provider.
 3. **Config injection** — providers use `get_config()`, not direct `config.yml` imports.
 4. **`payment_method` strings are stable** — they appear in transactions, stats, and admin notifications.
-5. **Keep catalog in sync** — `_PROVIDER_CATALOG` must match the payments registry.
+5. **Single provider catalog** — Dashboard derives it from the payments registry metadata.
 6. **Delivery is centralized** — webhooks only verify + enqueue; `payment_process_background` handles all gateways.
 
 ## Troubleshooting
@@ -381,7 +357,7 @@ Only if you want in-bot payments (not recommended for new gateways):
 | Webhook 403 | Wrong signature secret or header name |
 | Payment OK, no subscription | `transaction_id` mismatch between invoice and webhook |
 | Invoice creation fails | Missing config keys or provider not registered |
-| Provider not in Dashboard dropdown | Missing `_PROVIDER_CATALOG` entry |
+| Provider not in Dashboard dropdown | Missing registry metadata or unsupported surface |
 | 413 on webhook | Edge nginx `client_max_body_size` too low (rare for JSON webhooks) |
 | All clients share one rate-limit bucket | Missing `X-Real-IP` header on edge nginx |
 

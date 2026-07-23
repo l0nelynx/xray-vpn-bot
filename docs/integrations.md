@@ -60,8 +60,9 @@ guide for adding custom gateways are documented in
 Quick summary: clients create invoices with **`node_id` only** → user pays at the
 gateway → bot verifies webhook signature → subscription delivered via Remnawave.
 
-Also supported outside `packages/payments`: **Telegram Stars** (legacy bot) and
-**Google Play IAP** (Android — see [android-api.md](android-api.md)).
+The payments registry also exposes **Telegram Stars** to Telegram Bot and
+MiniApp only. **Google Play IAP** remains an Android-specific integration (see
+[android-api.md](android-api.md)).
 
 **FCM push** (Android): clients register device tokens via `/api/android/fcm`;
 operators send campaigns from Dashboard → **Push**. Config: `fcm_project_id`,

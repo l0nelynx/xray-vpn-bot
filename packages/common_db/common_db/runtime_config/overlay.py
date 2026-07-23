@@ -118,6 +118,7 @@ def apply_integrations_to_mapping(target: dict[str, Any]) -> dict[str, Any]:
 def payments_config_kwargs(yaml_config: Mapping[str, Any]) -> dict[str, Any]:
     """Build kwargs for ``payments.PaymentsConfig`` with dual-source precedence."""
     base = {
+        "bot_token": yaml_config.get("token", "") or "",
         "apay_id": yaml_config.get("apay_id", ""),
         "apay_secret": yaml_config.get("apay_secret", "") or "",
         "apay_api_url": yaml_config.get("apay_api_url", "") or "",

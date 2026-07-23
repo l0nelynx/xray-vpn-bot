@@ -50,6 +50,13 @@ class PaymentProvider(ABC):
     name: ClassVar[str]
     payment_method: ClassVar[str]
     supported_currencies: ClassVar[tuple[str, ...]]
+    methods: ClassVar[tuple[tuple[str, str], ...]] = (("default", "Default"),)
+    surfaces: ClassVar[frozenset[str]] = frozenset(
+        {"bot", "miniapp", "web", "android"}
+    )
+    # Whether callbacks identify a payment by the gateway's invoice id instead
+    # of our merchant transaction UUID.
+    webhook_key: ClassVar[str] = "merchant"
 
     def supports(self, currency: str) -> bool:
         return currency.upper() in {c.upper() for c in self.supported_currencies}
@@ -57,10 +64,3 @@ class PaymentProvider(ABC):
     @abstractmethod
     async def create_invoice(self, request: InvoiceRequest) -> Invoice:
         ...
-
-
-SupportedCurrencies = {
-    "apay": ("RUB",),
-    "crystal": ("RUB", "USD", "EUR"),
-    "crypto": ("USDT", "TON", "BTC", "ETH", "LTC", "BNB", "TRX", "USDC"),
-}

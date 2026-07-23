@@ -15,6 +15,7 @@ class APayProvider(PaymentProvider):
     name = "apay"
     payment_method = "SBP_APAY"
     supported_currencies = ("RUB",)
+    methods = (("default", "Default"),)
 
     _session: aiohttp.ClientSession | None = None
 

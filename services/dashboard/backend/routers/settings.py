@@ -3,14 +3,17 @@
 GET  /api/settings/features  — returns current BotFeatureFlags row
 PUT  /api/settings/features  — updates BotFeatureFlags row (auth required)
 
-Changing legacy_bot_constructor requires a bot restart to take effect.
+The bot polls this flag with a short TTL, so changes apply without restart.
 """
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from ..auth import get_current_user
 from ..database.session import async_session
-from common_db.repo.system import get_bot_feature_flags
+from common_db.repo.system import (
+    bump_cache_version,
+    get_bot_feature_flags,
+)
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -36,5 +39,9 @@ async def update_features(body: BotFeatureFlagsRequest, _: str = Depends(get_cur
     async with async_session() as session:
         flags = await get_bot_feature_flags(session)
         flags.legacy_bot_constructor = body.legacy_bot_constructor
+        await bump_cache_version(session)
         await session.commit()
-        return BotFeatureFlagsResponse(legacy_bot_constructor=flags.legacy_bot_constructor)
+        response = BotFeatureFlagsResponse(
+            legacy_bot_constructor=flags.legacy_bot_constructor
+        )
+    return response

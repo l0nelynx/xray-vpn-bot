@@ -24,6 +24,14 @@ class PlategaProvider(PaymentProvider):
     name = "platega"
     payment_method = "PLATEGA"
     supported_currencies = ("RUB",)
+    methods = (
+        ("2", "SBP"),
+        ("3", "ERIP"),
+        ("11", "Card"),
+        ("12", "International"),
+        ("13", "Crypto"),
+    )
+    webhook_key = "provider"
 
     _session: aiohttp.ClientSession | None = None
 

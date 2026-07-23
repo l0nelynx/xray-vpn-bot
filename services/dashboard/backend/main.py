@@ -21,9 +21,7 @@ from .routers import (
     transactions,
     stats,
     promos,
-    tariffs,
     menus,
-    squads,
     telemt,
     store,
     support,
@@ -115,9 +113,7 @@ app.include_router(users.router, prefix=BASE_PATH)
 app.include_router(transactions.router, prefix=BASE_PATH)
 app.include_router(stats.router, prefix=BASE_PATH)
 app.include_router(promos.router, prefix=BASE_PATH)
-app.include_router(tariffs.router, prefix=BASE_PATH)
 app.include_router(menus.router, prefix=BASE_PATH)
-app.include_router(squads.router, prefix=BASE_PATH)
 app.include_router(telemt.router, prefix=BASE_PATH)
 app.include_router(store.router, prefix=BASE_PATH)
 app.include_router(support.router, prefix=BASE_PATH)

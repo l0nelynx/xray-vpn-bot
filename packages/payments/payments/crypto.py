@@ -18,6 +18,8 @@ class CryptoPayProvider(PaymentProvider):
     name = "crypto"
     payment_method = "CRYPTOPAY"
     supported_currencies = ("USDT", "TON", "BTC", "ETH", "LTC", "BNB", "TRX", "USDC")
+    surfaces = frozenset({"bot", "miniapp", "web"})
+    webhook_key = "provider"
 
     _client: CryptoPay | None = None
 

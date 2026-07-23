@@ -84,24 +84,29 @@ Implementation: `services/bot/app/api/handlers.py` → `payment_process_backgrou
 Verifies HMAC, acks, and enqueues to `crm-worker` for CRM Webhook rules.
 See [Integrations](integrations.md) and [CRM](crm.md).
 
-## Legacy bot constructor (optional)
+## Telegram Bot constructor
 
 Disabled by default (`legacy_bot_constructor = false`).
 
-When enabled via Dashboard → WebApp → Settings (requires bot restart):
+The **Telegram Bot → Menus** editor is always available. The feature flag only
+switches purchase runtime and is re-read within five seconds, without a restart:
 
-- In-bot tariff keyboard with Stars, Crypto, Crystal, SBP/A-Pays
-- Dynamic inline menus from `menu_screens` / `menu_buttons`
-- Prices from `tariff_plans` / `tariff_prices` (Dashboard → Tariffs/Menus)
+- `main_new`, `main_free`, `main_pro`, `settings` and custom screens are loaded
+  from `menu_screens` / `menu_buttons`.
+- `button_type=tariff`, `Premium` and `Extend_Month` open the same stateless
+  `tariff:root` / `tariff:node:<id>` tree.
+- Prices, delivery squads and providers come only from `webapp_menu_nodes`.
+- Telegram Stars use native Bot invoices; hosted gateways use
+  `payments.create_invoice`.
 
-**Platega and ParityPay are not available in the legacy constructor** — only
-via MiniApp/web/Android Tariff Constructor.
+When disabled, compatibility purchase callbacks open the MiniApp. Promo codes
+and bonus-credit payment are intentionally absent from this Telegram purchase
+flow; they remain available in the MiniApp.
 
 Handler: `services/bot/app/bot_constructor/handlers/payments.py`
 
-!!! note "CryptoBot dual path"
-    Legacy in-bot CryptoBot flow uses `@cp.invoice_paid()` polling (aiosend).
-    MiniApp/web CryptoBot uses the HTTP webhook at `/bot/cryptopay_webhook`.
+CryptoBot confirmation uses the same HTTP webhook as every other client; there
+is no bot-side polling loop.
 
 ## Admin bot
 
@@ -181,11 +186,11 @@ Used by Docker Compose healthcheck.
 
 | Symptom | Fix |
 |---------|-----|
-| Bot doesn't start, CryptoBot error | `crypto_bot_token` is validated on import — use real token or leave empty and don't import payment handlers |
+| CryptoBot invoice fails | Check `crypto_bot_token`; credentials are read when the provider creates an invoice |
 | Webhooks 404 | Edge nginx must route `/bot/` to `bot:5000` |
 | Payment received, no subscription | Check bot logs; verify `transaction_id` correlation — see [payment-gateways.md](payment-gateways.md) |
 | Remnawave delivery fails | Verify squad UUIDs and API token |
-| Legacy menus not updating | Dashboard writes bump `cache_version`; bot polls tariff cache |
+| Purchase runtime not updating | Feature flags use a versioned five-second cache; verify the Dashboard save and DB connectivity |
 
 ## Related docs
 

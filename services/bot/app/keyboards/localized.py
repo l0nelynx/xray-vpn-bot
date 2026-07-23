@@ -64,28 +64,6 @@ def get_others_localized(lang) -> InlineKeyboardMarkup:
     builder.button(text=lang.btn_to_main, callback_data='Main')
     return builder.as_markup()
 
-
-
-def get_pay_methods_localized(lang, show_promo: bool = False, bonus_credits: int = 0) -> InlineKeyboardMarkup:
-    buttons = [
-        [InlineKeyboardButton(text=lang.btn_pay_stars, callback_data='Stars_Plans')],
-        [InlineKeyboardButton(text=lang.btn_pay_crypto, callback_data='Crypto_Plans')],
-        [InlineKeyboardButton(text=lang.btn_pay_crystal, callback_data='Crystal_plans')],
-        [InlineKeyboardButton(text=lang.btn_pay_card, callback_data='SBP_Apay')],
-    ]
-    if bonus_credits > 0:
-        buttons.append([
-            InlineKeyboardButton(
-                text=lang.btn_pay_credits.format(points=bonus_credits),
-                callback_data='Credits_Plans',
-            )
-        ])
-    if show_promo:
-        buttons.append([InlineKeyboardButton(text=lang.btn_have_promo, callback_data='Enter_Promo')])
-    buttons.append([InlineKeyboardButton(text=lang.btn_back, callback_data='Main')])
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
-
-
 def get_to_main_localized(lang) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text=lang.btn_to_main, callback_data='Main')
@@ -164,11 +142,3 @@ def get_language_change_keyboard(lang) -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text=lang.lang_btn_en, callback_data='set_lang_en')],
         [InlineKeyboardButton(text=lang.btn_back, callback_data='Settings')],
     ])
-
-
-def get_pay_extend_month_localized(lang) -> InlineKeyboardMarkup:
-    builder = InlineKeyboardBuilder()
-    builder.button(text=lang.btn_extend_subscription, callback_data="Extend_Month")
-    builder.row()
-    builder.button(text=lang.btn_to_main, callback_data="Main")
-    return builder.as_markup()

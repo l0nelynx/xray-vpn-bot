@@ -14,7 +14,6 @@ from typing import Optional
 from subscription_delivery import deliver_android_paid as _deliver
 
 from app.database.models import async_session
-from app.database.tariff_repository import get_squad_for_tariff_slug
 from app.notify_log import notify_log
 
 
@@ -34,5 +33,5 @@ async def deliver_android_paid(
         tariff_slug=tariff_slug,
         session_factory=async_session,
         notifier=notify_log,
-        squad_resolver=get_squad_for_tariff_slug,
+        squad_resolver=None,
     )

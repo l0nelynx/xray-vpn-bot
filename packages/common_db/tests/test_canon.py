@@ -19,7 +19,6 @@ from common_db.models import (
     PromoSettings,
     SupportMessage,
     SupportTicket,
-    TariffPlan,
     Transaction,
     User,
     WebAppMenuNode,
@@ -224,11 +223,11 @@ class TestTransactionCanon:
         assert col.type.length == 50
         assert col.nullable is True
 
-    def test_tariff_slug_nullable_str200(self) -> None:
-        col = _col(Transaction, "tariff_slug")
-        assert isinstance(col.type, String)
-        assert col.type.length == 200
-        assert col.nullable is True
+    def test_delivery_snapshot_and_provider_id(self) -> None:
+        assert _col(Transaction, "squad_id").type.length == 100
+        assert _col(Transaction, "external_squad_id").type.length == 100
+        assert _col(Transaction, "provider_invoice_id").type.length == 100
+        assert _has_index(Transaction, "ix_transactions_provider_invoice_id")
 
     def test_android_user_id_nullable_integer_indexed(self) -> None:
         col = _col(Transaction, "android_user_id")
@@ -244,22 +243,14 @@ class TestTransactionCanon:
 
 # -------------------------------------------------- WebAppMenuNode widths --
 class TestWebAppMenuNodeCanon:
-    def test_text_widened_to_255(self) -> None:
-        # Alembic 0010 widened both columns; Python model must match.
-        assert _col(WebAppMenuNode, "text").type.length == 255
-
-    def test_invoice_tariff_slug_widened_to_255(self) -> None:
-        assert _col(WebAppMenuNode, "invoice_tariff_slug").type.length == 255
+    def test_localized_text_and_delivery_target(self) -> None:
+        assert _col(WebAppMenuNode, "text_ru").type.length == 255
+        assert _col(WebAppMenuNode, "text_en").type.length == 255
+        assert _col(WebAppMenuNode, "invoice_squad_id").type.length == 100
+        assert _col(WebAppMenuNode, "invoice_external_squad_id").type.length == 100
 
     def test_self_ref_index(self) -> None:
         assert _has_index(WebAppMenuNode, "ix_webapp_menu_nodes_parent_id")
-
-
-# ----------------------------------------------------------- TariffPlan ----
-class TestTariffPlanCanon:
-    def test_squad_profile_id_is_big_integer(self) -> None:
-        # Alembic 0007 widened the FK column.
-        assert isinstance(_col(TariffPlan, "squad_profile_id").type, BigInteger)
 
 
 # --------------------------------------------------- Google Play canon ----
@@ -276,9 +267,8 @@ class TestGooglePlayCanon:
 
 # ------------------------------------------------------- menus canon ------
 class TestMenuButtonCanon:
-    def test_visibility_condition_default(self) -> None:
-        col = _col(MenuButton, "visibility_condition")
-        assert col.default is not None and col.default.arg == "always"
+    def test_tariff_is_a_typed_action(self) -> None:
+        assert _col(MenuButton, "button_type").type.length == 20
 
 
 # -------------------------------------------------- nullable-or-default ---
@@ -310,9 +300,6 @@ class TestMetadataSanity:
             "transactions",
             "support_tickets",
             "support_messages",
-            "squad_profiles",
-            "tariff_plans",
-            "tariff_prices",
             "menu_screens",
             "menu_buttons",
             "webapp_menu_nodes",

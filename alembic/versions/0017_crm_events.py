@@ -75,24 +75,27 @@ def upgrade() -> None:
         )
 
     if _has_table(bind, "crm_campaigns") and not _has_column(bind, "crm_campaigns", "event_id"):
-        op.add_column("crm_campaigns", sa.Column("event_id", sa.BigInteger(), nullable=True))
-        op.create_foreign_key(
-            "fk_crm_campaigns_event_id",
-            "crm_campaigns",
-            "crm_events",
-            ["event_id"],
-            ["id"],
-            ondelete="SET NULL",
-        )
-        op.create_index("ix_crm_campaigns_event_id", "crm_campaigns", ["event_id"])
+        with op.batch_alter_table("crm_campaigns") as batch:
+            batch.add_column(sa.Column("event_id", sa.BigInteger(), nullable=True))
+            batch.create_foreign_key(
+                "fk_crm_campaigns_event_id",
+                "crm_events",
+                ["event_id"],
+                ["id"],
+                ondelete="SET NULL",
+            )
+            batch.create_index("ix_crm_campaigns_event_id", ["event_id"])
 
 
 def downgrade() -> None:
     bind = op.get_bind()
     if _has_table(bind, "crm_campaigns") and _has_column(bind, "crm_campaigns", "event_id"):
-        op.drop_index("ix_crm_campaigns_event_id", table_name="crm_campaigns")
-        op.drop_constraint("fk_crm_campaigns_event_id", "crm_campaigns", type_="foreignkey")
-        op.drop_column("crm_campaigns", "event_id")
+        with op.batch_alter_table("crm_campaigns") as batch:
+            batch.drop_index("ix_crm_campaigns_event_id")
+            batch.drop_constraint(
+                "fk_crm_campaigns_event_id", type_="foreignkey"
+            )
+            batch.drop_column("event_id")
     if _has_table(bind, "crm_event_deliveries"):
         op.drop_table("crm_event_deliveries")
     if _has_table(bind, "crm_events"):

@@ -348,14 +348,15 @@ Remnawave (`provisioning.ensure_free_subscription`) — клиент сразу 
 Источник тарифов — **Tariff Constructor** в дашборде (таблица `webapp_menu_nodes`,
 тот же источник, что у miniapp `/api/menu/tree`). Клиент получает дерево через
 `/menu` и передаёт в `/invoice` только `node_id` выбранного узла. Provider/
-amount/currency/method/days/tariff_slug сервер достаёт сам — клиент **не
+amount/currency/method/days и delivery squad сервер достаёт сам — клиент **не
 передаёт** никаких ценовых параметров (на мобильном клиенте всё подменяемо).
-Для Android фильтруем только узлы с провайдерами `apay` и `platega`.
+Для Android фильтруем только узлы с провайдерами `apay`, `platega` и
+`paritypay`; Telegram Stars отсекаются.
 
 | Метод | Путь | Auth | Rate | Назначение |
 |---|---|---|---|---|
 | GET | `/menu` | Bearer | — | Дерево тарифов из Tariff Constructor (Android-фильтр) |
-| GET | `/providers` | — | — | Список доступных провайдеров (apay, platega) |
+| GET | `/providers` | — | — | Список доступных провайдеров (apay, platega, paritypay) |
 | POST | `/invoice` | Bearer + verified | 10/min | Создать счёт по `node_id`, получить URL |
 | GET | `/transactions` | Bearer | — | Последние 50 транзакций пользователя |
 | GET | `/transactions/{id}` | Bearer | — | Состояние конкретной транзакции |
@@ -394,7 +395,7 @@ amount/currency/method/days/tariff_slug сервер достаёт сам — �
 }
 ```
 
-Узлы с invoice-провайдерами не из `(apay, platega)` отрезаются на сервере, как
+Узлы с invoice-провайдерами не из `(apay, platega, paritypay)` отрезаются на сервере, как
 и пустые ветки после фильтрации. Клиент рендерит дерево как есть; для покупки
 ему нужен только `node.id`.
 
@@ -407,7 +408,7 @@ amount/currency/method/days/tariff_slug сервер достаёт сам — �
 }
 ```
 
-Сервер берёт provider/amount/currency/method/days/tariff_slug из узла. Никаких
+Сервер берёт provider/amount/currency/method/days и delivery squad из узла. Никаких
 тарифных параметров от клиента не принимается — это защита от подмены цены и
 сквада на стороне приложения.
 

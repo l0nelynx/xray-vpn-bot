@@ -59,11 +59,11 @@ def upgrade() -> None:
         op.execute(
             sa.text(f"UPDATE credit_ledger SET balance_after = balance_after * {MULTIPLIER}")
         )
-        op.alter_column(
-            "promo_settings",
-            "default_credit_grant",
-            server_default=sa.text(str(MULTIPLIER * 10)),
-        )
+        with op.batch_alter_table("promo_settings") as batch:
+            batch.alter_column(
+                "default_credit_grant",
+                server_default=sa.text(str(MULTIPLIER * 10)),
+            )
 
 
 def downgrade() -> None:
@@ -108,8 +108,8 @@ def downgrade() -> None:
             )
         )
         op.execute(sa.text(f"UPDATE users SET bonus_credits = bonus_credits / {divisor}"))
-        op.alter_column(
-            "promo_settings",
-            "default_credit_grant",
-            server_default=sa.text("10"),
-        )
+        with op.batch_alter_table("promo_settings") as batch:
+            batch.alter_column(
+                "default_credit_grant",
+                server_default=sa.text("10"),
+            )

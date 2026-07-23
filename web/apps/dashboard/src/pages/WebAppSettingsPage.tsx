@@ -360,8 +360,8 @@ export default function WebAppSettingsPage() {
       setFlags(updated);
       toast.success(
         value
-          ? "Legacy bot constructor enabled. Restart the bot to apply."
-          : "Legacy bot constructor disabled. Restart the bot to apply.",
+          ? "Telegram bot menus enabled. Runtime updates within 5 seconds."
+          : "MiniApp mode enabled. Runtime updates within 5 seconds.",
       );
     } catch {
       toast.error("Failed to save settings");
@@ -627,12 +627,12 @@ export default function WebAppSettingsPage() {
                       onCheckedChange={(v: boolean) => handleToggle(v)}
                       disabled={saving}
                     />
-                    <Label>Legacy Bot Constructor</Label>
+                    <Label>Telegram Bot Menus</Label>
                   </div>
                   <p className="text-xs text-muted-foreground">
                     {flags.legacy_bot_constructor
-                      ? "In-bot tariff menus and inline payments are active. Prices come from Dashboard tariffs."
-                      : "Disabled — the bot directs users to the MiniApp for all purchases. Restart the bot after changing."}
+                      ? "Purchases use the shared Tariff Constructor tree directly in chat."
+                      : "The bot directs users to the MiniApp for purchases."}
                   </p>
                 </div>
               </CardContent>
