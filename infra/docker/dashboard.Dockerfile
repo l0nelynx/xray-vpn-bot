@@ -15,6 +15,12 @@ RUN apk add --no-cache --virtual .build-deps gcc musl-dev postgresql-dev \
  && pip install --no-cache-dir -r requirements.txt \
  && apk del .build-deps
 
+# Tariff Constructor provider metadata comes from the shared payments registry.
+# Install with dependencies: unlike bot/miniapp, the dashboard requirements do
+# not otherwise include aiohttp/aiosend.
+COPY packages/payments /tmp/payments
+RUN pip install --no-cache-dir /tmp/payments && rm -rf /tmp/payments
+
 # Shared with miniapp: same image-validation/save logic for support-ticket
 # attachments, so the two services can't drift on validation rules.
 COPY packages/support_attachments /tmp/support_attachments
