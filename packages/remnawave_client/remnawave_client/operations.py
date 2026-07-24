@@ -45,7 +45,11 @@ async def apply_new_user(
     email: Optional[str] = None,
     description: str = "Telegram subscription",
     squad_id: Optional[str] = None,
+    internal_squad_ids: Optional[list[str]] = None,
     external_squad_id: Optional[str] = None,
+    traffic_limit_bytes: Optional[int] = None,
+    traffic_limit_strategy: Optional[str] = None,
+    tag: Optional[str] = None,
     client: Optional[RemnawaveClient] = None,
 ) -> dict | None:
     """Create a new Remnawave user."""
@@ -57,7 +61,11 @@ async def apply_new_user(
         email=email,
         descr=description,
         squad_id=squad_id,
+        internal_squad_ids=internal_squad_ids,
         external_squad_id=external_squad_id,
+        traffic_limit_bytes=traffic_limit_bytes,
+        traffic_limit_strategy=traffic_limit_strategy,
+        tag=tag,
     )
 
 
@@ -68,8 +76,12 @@ async def apply_extend(
     days: int,
     current_days_left: int,
     squad_id: Optional[str] = None,
+    internal_squad_ids: Optional[list[str]] = None,
     external_squad_id: Optional[str] = None,
     description: Optional[str] = "extended via remnawave_client",
+    traffic_limit_bytes: Optional[int] = None,
+    traffic_limit_strategy: Optional[str] = None,
+    tag: Optional[str] = None,
     client: Optional[RemnawaveClient] = None,
 ) -> dict | None:
     """Extend an existing PAID subscription: new_expire = current_days_left + days,
@@ -81,10 +93,14 @@ async def apply_extend(
         user_uuid=user_uuid,
         username=username,
         days=_coerce_days(new_total),
-        limit_gb=0,
+        limit_gb=None,
         descr=description,
         squad_id=squad_id,
+        internal_squad_ids=internal_squad_ids,
         external_squad_id=external_squad_id,
+        traffic_limit_bytes=traffic_limit_bytes,
+        traffic_limit_strategy=traffic_limit_strategy,
+        tag=tag,
     )
 
 
@@ -95,9 +111,13 @@ async def apply_update(
     days: int,
     limit_gb: int = 0,
     squad_id: Optional[str] = None,
+    internal_squad_ids: Optional[list[str]] = None,
     external_squad_id: Optional[str] = None,
     status: Optional[str] = None,
     description: Optional[str] = "updated via remnawave_client",
+    traffic_limit_bytes: Optional[int] = None,
+    traffic_limit_strategy: Optional[str] = None,
+    tag: Optional[str] = None,
     client: Optional[RemnawaveClient] = None,
 ) -> dict | None:
     """Replace subscription parameters wholesale (used when switching FREE↔PAID
@@ -109,6 +129,10 @@ async def apply_update(
         limit_gb=limit_gb,
         descr=description,
         squad_id=squad_id,
+        internal_squad_ids=internal_squad_ids,
         external_squad_id=external_squad_id,
+        traffic_limit_bytes=traffic_limit_bytes,
+        traffic_limit_strategy=traffic_limit_strategy,
+        tag=tag,
         status=status,
     )

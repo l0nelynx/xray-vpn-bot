@@ -236,7 +236,10 @@ Build a **tree of menu nodes**:
 | Currency | `RUB`, `USDT`, etc. |
 | Method | Sub-method (Platega: `2`=SBP; ParityPay: `sbp`/`card`) |
 | Days | Subscription duration |
-| Squad ID / external squad ID | Explicit immutable Remnawave delivery target |
+| Internal squads | One or more Remnawave internal squads, loaded from the panel API |
+| External squad | One Remnawave external squad, loaded from the panel API |
+| Traffic limit / reset strategy | Whole GiB (`0` = unlimited) and Remnawave reset policy |
+| Description / tag | Optional Remnawave user profile metadata |
 
 Provider list comes from `GET /api/webapp-menu/providers` and is generated from
 the live `packages/payments` registry, including methods, currencies, surfaces
@@ -245,7 +248,8 @@ and webhook correlation metadata. Stars are visible only to Bot and MiniApp.
 **Operations:**
 
 - Create / edit / delete nodes
-- Drag to reorder and reparent
+- Reorder siblings and move Payment Options through the category selector
+- Clone a Payment Option into a local inactive draft
 - Toggle active/inactive
 - Expand/collapse tree branches
 - Fix migrated `Needs attention` nodes before activation

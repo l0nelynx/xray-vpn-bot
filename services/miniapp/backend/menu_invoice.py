@@ -23,8 +23,12 @@ async def load_menu_node(node_id: int) -> dict | None:
             "invoice_currency": node.invoice_currency,
             "invoice_method": node.invoice_method,
             "invoice_days": node.invoice_days,
-            "invoice_squad_id": node.invoice_squad_id,
+            "invoice_internal_squad_ids": node.invoice_internal_squad_ids,
             "invoice_external_squad_id": node.invoice_external_squad_id,
+            "invoice_traffic_limit_bytes": node.invoice_traffic_limit_bytes,
+            "invoice_traffic_limit_strategy": node.invoice_traffic_limit_strategy,
+            "invoice_remnawave_description": node.invoice_remnawave_description,
+            "invoice_remnawave_tag": node.invoice_remnawave_tag,
         }
 
 
@@ -44,7 +48,12 @@ def invoice_from_node(row: dict) -> dict | None:
         "currency": target.currency,
         "method": target.method,
         "days": target.days,
+        "internal_squad_ids": list(target.internal_squad_ids),
         "squad_id": target.squad_id,
         "external_squad_id": target.external_squad_id,
+        "traffic_limit_bytes": target.traffic_limit_bytes,
+        "traffic_limit_strategy": target.traffic_limit_strategy,
+        "remnawave_description": target.remnawave_description,
+        "remnawave_tag": target.remnawave_tag,
         "tariff_slug": f"sid:{target.squad_id}:esid:{target.external_squad_id}",
     }

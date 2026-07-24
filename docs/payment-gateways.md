@@ -130,7 +130,8 @@ Register webhook URL in @CryptoBot or rely on the HTTP endpoint.
 ### 1. Configure invoice nodes (Dashboard)
 
 **WebApp → Tariff Constructor** — create `invoice` leaves with provider, amount,
-currency, method, days, and both delivery squad IDs. See [Dashboard](dashboard.md).
+currency, method, days, internal/external squads, traffic policy and optional
+Remnawave description/tag. See [Dashboard](dashboard.md).
 
 ### 2. User selects a plan (MiniApp / web / Android)
 
@@ -140,7 +141,8 @@ POST /api/payments/invoice  → { "node_id": 42 }
 ```
 
 Server reads `webapp_menu_nodes`, creates the gateway invoice via
-`payments.create_invoice()`, stores a `transactions` row. Bonus credits are a
+`payments.create_invoice()`, and stores the complete immutable delivery target
+in a `transactions` row. Bonus credits are a
 separate wallet (pay-with-credits) — see [referral.md](referral.md).
 
 ### 3. User pays at the gateway

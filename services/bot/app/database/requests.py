@@ -254,7 +254,12 @@ async def create_transaction(user_tg_id: int, user_transaction: str, username: s
                              uuid: str = 'None', payment_method: str = None, amount: float = None,
                              provider_invoice_id: str | None = None,
                              squad_id: str | None = None,
-                             external_squad_id: str | None = None):
+                             internal_squad_ids: list[str] | None = None,
+                             external_squad_id: str | None = None,
+                             traffic_limit_bytes: int = 0,
+                             traffic_limit_strategy: str = "NO_RESET",
+                             remnawave_description: str | None = None,
+                             remnawave_tag: str | None = None):
     async with async_session() as session:
         # Находим пользователя по tg_id
         user = await _repo_users.get_user_by_tg_id(session, user_tg_id)
@@ -274,7 +279,12 @@ async def create_transaction(user_tg_id: int, user_transaction: str, username: s
                 created_at=datetime.now().isoformat(timespec='seconds'),
                 provider_invoice_id=provider_invoice_id,
                 squad_id=squad_id,
+                internal_squad_ids=internal_squad_ids or ([squad_id] if squad_id else None),
                 external_squad_id=external_squad_id,
+                traffic_limit_bytes=traffic_limit_bytes,
+                traffic_limit_strategy=traffic_limit_strategy,
+                remnawave_description=remnawave_description,
+                remnawave_tag=remnawave_tag,
             )
 
             session.add(new_transaction)
@@ -329,7 +339,15 @@ async def get_full_transaction_info(transaction_id: str):
                 "created_at": transaction.created_at,
                 "provider_invoice_id": transaction.provider_invoice_id,
                 "squad_id": transaction.squad_id,
+                "internal_squad_ids": (
+                    transaction.internal_squad_ids
+                    or ([transaction.squad_id] if transaction.squad_id else [])
+                ),
                 "external_squad_id": transaction.external_squad_id,
+                "traffic_limit_bytes": int(transaction.traffic_limit_bytes or 0),
+                "traffic_limit_strategy": transaction.traffic_limit_strategy or "NO_RESET",
+                "remnawave_description": transaction.remnawave_description,
+                "remnawave_tag": transaction.remnawave_tag,
                 "tariff_slug": (
                     f"sid:{transaction.squad_id}:esid:{transaction.external_squad_id}"
                     if transaction.squad_id and transaction.external_squad_id

@@ -120,6 +120,53 @@ def test_squad_resolver_used_for_plain_slug(monkeypatch):
     assert res["status"] == "success"
 
 
+def test_existing_user_receives_full_target_without_overwriting_blank_description(
+    monkeypatch,
+):
+    captured = {}
+
+    async def fake_get_user_from_username(_username):
+        return {"uuid": "rw-existing", "expire": None}
+
+    async def fake_apply_extend(**values):
+        captured.update(values)
+        return {"uuid": "rw-existing", "subscription_url": "https://sub/existing"}
+
+    monkeypatch.setattr(d.rem, "get_user_from_username", fake_get_user_from_username)
+    monkeypatch.setattr(
+        d,
+        "resolve_scenario",
+        lambda *_a, **_k: SubscriptionScenario.EXTEND,
+    )
+    monkeypatch.setattr(d, "apply_extend", fake_apply_extend)
+
+    result = asyncio.run(
+        d.deliver_android_paid(
+            transaction_id="tx-target",
+            android_user_id=8,
+            email="a@b.io",
+            days=30,
+            tariff_slug="sid:S1:esid:E1",
+            delivery_target={
+                "internal_squad_ids": ["S1", "S2"],
+                "external_squad_id": "E1",
+                "traffic_limit_bytes": 25 * 1024**3,
+                "traffic_limit_strategy": "MONTH",
+                "remnawave_description": None,
+                "remnawave_tag": "PAID",
+            },
+            session_factory=_make_session_factory([]),
+            notifier=lambda text: _noop(),
+        )
+    )
+    assert result["status"] == "success"
+    assert captured["internal_squad_ids"] == ["S1", "S2"]
+    assert captured["traffic_limit_bytes"] == 25 * 1024**3
+    assert captured["traffic_limit_strategy"] == "MONTH"
+    assert captured["description"] is None
+    assert captured["tag"] == "PAID"
+
+
 # --- tiny async helpers for the notifier callback ---------------------------
 async def _append(target, text):
     target.append(text)

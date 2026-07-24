@@ -98,6 +98,14 @@ async def payment_process_background(order_id: str):
                 logging.error("Transaction %s has no delivery squad snapshot", local_transaction_id)
                 await rq.update_order_status(local_transaction_id, "pending")
                 return
+            delivery_target = {
+                "internal_squad_ids": userdata.get("internal_squad_ids") or [],
+                "external_squad_id": userdata.get("external_squad_id"),
+                "traffic_limit_bytes": userdata.get("traffic_limit_bytes") or 0,
+                "traffic_limit_strategy": userdata.get("traffic_limit_strategy") or "NO_RESET",
+                "remnawave_description": userdata.get("remnawave_description"),
+                "remnawave_tag": userdata.get("remnawave_tag"),
+            }
 
             # Используем новую унифицированную систему доставки подписок
             # message=None для фоновых задач, пользователь получит сообщение напрямую
@@ -113,6 +121,7 @@ async def payment_process_background(order_id: str):
                 transaction_id=local_transaction_id,
                 amount=tx_amount,
                 tariff_slug=tariff_slug,
+                delivery_target=delivery_target,
             )
 
             # Проверяем результат доставки
@@ -140,6 +149,7 @@ async def payment_process_background(order_id: str):
                         transaction_id=local_transaction_id,
                         amount=tx_amount,
                         tariff_slug=tariff_slug,
+                        delivery_target=delivery_target,
                     )
 
                     if delivery_result["status"] == "success":
@@ -219,6 +229,14 @@ async def _process_android_payment(order_id: str, userdata: dict, android_user_i
         email=email,
         days=tariff_days,
         tariff_slug=userdata.get("tariff_slug"),
+        delivery_target={
+            "internal_squad_ids": userdata.get("internal_squad_ids") or [],
+            "external_squad_id": userdata.get("external_squad_id"),
+            "traffic_limit_bytes": userdata.get("traffic_limit_bytes") or 0,
+            "traffic_limit_strategy": userdata.get("traffic_limit_strategy") or "NO_RESET",
+            "remnawave_description": userdata.get("remnawave_description"),
+            "remnawave_tag": userdata.get("remnawave_tag"),
+        },
     )
 
     if result["status"] != "success":

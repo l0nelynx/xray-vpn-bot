@@ -1,6 +1,8 @@
 """Tariff Constructor repository invariants shared by every client."""
 from __future__ import annotations
 
+import uuid
+
 from common_db.models import WebAppMenuNode
 from common_db.repo.webapp_menu import build_tree, invoice_target, localized_text
 
@@ -19,6 +21,8 @@ def _node(node_id: int, **values) -> WebAppMenuNode:
 
 
 def _invoice(node_id: int, **values) -> WebAppMenuNode:
+    internal_id = str(uuid.UUID(int=node_id))
+    external_id = str(uuid.UUID(int=1000 + node_id))
     defaults = {
         "action": "invoice",
         "invoice_provider": "crypto",
@@ -26,8 +30,12 @@ def _invoice(node_id: int, **values) -> WebAppMenuNode:
         "invoice_currency": "USDT",
         "invoice_method": "default",
         "invoice_days": 30,
-        "invoice_squad_id": "squad",
-        "invoice_external_squad_id": "external",
+        "invoice_internal_squad_ids": [internal_id],
+        "invoice_external_squad_id": external_id,
+        "invoice_traffic_limit_bytes": 0,
+        "invoice_traffic_limit_strategy": "NO_RESET",
+        "invoice_remnawave_description": None,
+        "invoice_remnawave_tag": None,
     }
     defaults.update(values)
     return _node(node_id, **defaults)
@@ -79,7 +87,7 @@ def test_invoice_validation_requires_complete_positive_delivery_snapshot() -> No
     assert invoice_target(_invoice(1)) is not None
     assert invoice_target(_invoice(2, invoice_amount=0)) is None
     assert invoice_target(_invoice(3, invoice_days=0)) is None
-    assert invoice_target(_invoice(4, invoice_squad_id=None)) is None
+    assert invoice_target(_invoice(4, invoice_internal_squad_ids=None)) is None
     assert invoice_target(_invoice(5, invoice_external_squad_id=None)) is None
     assert invoice_target(
         _invoice(6, invoice_provider="stars", invoice_currency="RUB")
@@ -100,3 +108,24 @@ def test_invoice_validation_requires_complete_positive_delivery_snapshot() -> No
             invoice_amount=10,
         )
     ) is not None
+    target = invoice_target(
+        _invoice(
+            9,
+            invoice_internal_squad_ids=[
+                str(uuid.UUID(int=9)),
+                str(uuid.UUID(int=10)),
+            ],
+            invoice_traffic_limit_bytes=50 * 1024**3,
+            invoice_traffic_limit_strategy="MONTH_ROLLING",
+            invoice_remnawave_tag="PREMIUM_50",
+        )
+    )
+    assert target is not None
+    assert len(target.internal_squad_ids) == 2
+    assert target.traffic_limit_bytes == 50 * 1024**3
+    assert invoice_target(
+        _invoice(10, invoice_traffic_limit_bytes=1, invoice_traffic_limit_strategy="MONTH")
+    ) is None
+    assert invoice_target(
+        _invoice(11, invoice_remnawave_tag="invalid-tag")
+    ) is None

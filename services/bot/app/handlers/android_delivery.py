@@ -24,6 +24,7 @@ async def deliver_android_paid(
     email: Optional[str],
     days: int,
     tariff_slug: Optional[str],
+    delivery_target: Optional[dict] = None,
 ) -> dict:
     return await _deliver(
         transaction_id=transaction_id,
@@ -31,6 +32,7 @@ async def deliver_android_paid(
         email=email,
         days=days,
         tariff_slug=tariff_slug,
+        delivery_target=delivery_target,
         session_factory=async_session,
         notifier=notify_log,
         squad_resolver=None,

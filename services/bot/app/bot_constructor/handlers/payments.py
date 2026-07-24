@@ -184,7 +184,12 @@ async def _create_payment(callback: CallbackQuery, node_id: int) -> None:
             payment_method=provider.payment_method,
             amount=target.amount,
             squad_id=target.squad_id,
+            internal_squad_ids=list(target.internal_squad_ids),
             external_squad_id=target.external_squad_id,
+            traffic_limit_bytes=target.traffic_limit_bytes,
+            traffic_limit_strategy=target.traffic_limit_strategy,
+            remnawave_description=target.remnawave_description,
+            remnawave_tag=target.remnawave_tag,
         )
         if tx is None:
             await callback.answer("User not found", show_alert=True)
@@ -240,7 +245,12 @@ async def _create_payment(callback: CallbackQuery, node_id: int) -> None:
             payment_method=provider.payment_method,
             amount=target.amount,
             squad_id=target.squad_id,
+            internal_squad_ids=list(target.internal_squad_ids),
             external_squad_id=target.external_squad_id,
+            traffic_limit_bytes=target.traffic_limit_bytes,
+            traffic_limit_strategy=target.traffic_limit_strategy,
+            remnawave_description=target.remnawave_description,
+            remnawave_tag=target.remnawave_tag,
         )
         if tx is None:
             await callback.answer("User not found", show_alert=True)

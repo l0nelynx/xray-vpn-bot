@@ -247,7 +247,10 @@ async def create_user(
     telegram_id: int | None = None,
     tag: str | None = None,
     squad_id: str | None = None,
+    internal_squad_ids: list[str] | None = None,
     external_squad_id: str | None = None,
+    traffic_limit_bytes: int | None = None,
+    traffic_limit_strategy: str | None = None,
 ) -> dict | None:
     return await _client().create_user(
         username=username,
@@ -258,7 +261,10 @@ async def create_user(
         telegram_id=telegram_id,
         tag=tag,
         squad_id=squad_id,
+        internal_squad_ids=internal_squad_ids,
         external_squad_id=external_squad_id,
+        traffic_limit_bytes=traffic_limit_bytes,
+        traffic_limit_strategy=traffic_limit_strategy,
     )
 
 
@@ -272,7 +278,10 @@ async def update_user(
     tag: str | None = None,
     status: str | None = None,
     squad_id: str | None = None,
+    internal_squad_ids: list[str] | None = None,
     external_squad_id: str | None = None,
+    traffic_limit_bytes: int | None = None,
+    traffic_limit_strategy: str | None = None,
 ) -> dict | None:
     return await _client().update_user(
         user_uuid=user_uuid,
@@ -284,7 +293,10 @@ async def update_user(
         tag=tag,
         status=status,
         squad_id=squad_id,
+        internal_squad_ids=internal_squad_ids,
         external_squad_id=external_squad_id,
+        traffic_limit_bytes=traffic_limit_bytes,
+        traffic_limit_strategy=traffic_limit_strategy,
     )
 
 

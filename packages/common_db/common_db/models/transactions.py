@@ -13,7 +13,7 @@ Schema canon:
 """
 from __future__ import annotations
 
-from sqlalchemy import BigInteger, ForeignKey, Index, Integer, String
+from sqlalchemy import BigInteger, ForeignKey, Index, Integer, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..base import Base
@@ -35,7 +35,12 @@ class Transaction(Base):
 
     # Immutable delivery snapshot captured when the invoice is created.
     squad_id: Mapped[str] = mapped_column(String(100), nullable=True)
+    internal_squad_ids: Mapped[list[str]] = mapped_column(JSON, nullable=True)
     external_squad_id: Mapped[str] = mapped_column(String(100), nullable=True)
+    traffic_limit_bytes: Mapped[int] = mapped_column(BigInteger, nullable=True)
+    traffic_limit_strategy: Mapped[str] = mapped_column(String(30), nullable=True)
+    remnawave_description: Mapped[str] = mapped_column(Text, nullable=True)
+    remnawave_tag: Mapped[str] = mapped_column(String(16), nullable=True)
     provider_invoice_id: Mapped[str] = mapped_column(String(100), nullable=True)
 
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))

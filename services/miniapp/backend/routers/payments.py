@@ -110,6 +110,7 @@ async def pay_with_credits(
         points_cost=points_cost,
         days=days,
         tariff_slug=invoice_data["tariff_slug"],
+        delivery_target=invoice_data,
     )
 
     if result.get("status") != "success":
@@ -207,7 +208,12 @@ async def create_payment_invoice(
                 amount=float(invoice_amount),
                 created_at=_now_iso(),
                 squad_id=invoice_data["squad_id"],
+                internal_squad_ids=invoice_data["internal_squad_ids"],
                 external_squad_id=invoice_data["external_squad_id"],
+                traffic_limit_bytes=invoice_data["traffic_limit_bytes"],
+                traffic_limit_strategy=invoice_data["traffic_limit_strategy"],
+                remnawave_description=invoice_data["remnawave_description"],
+                remnawave_tag=invoice_data["remnawave_tag"],
             )
         )
         await session.commit()

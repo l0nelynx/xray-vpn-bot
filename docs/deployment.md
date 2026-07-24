@@ -145,7 +145,7 @@ See [Payment gateways](payment-gateways.md).
 ### 8. Configure product in Dashboard
 
 1. Open `https://your-domain/bot/dashboard/`
-2. Create squad profiles → build Tariff Constructor tree → set promos
+2. Build the Tariff Constructor tree and select live Remnawave squads → set promos
 3. Test purchase via MiniApp
 
 ## Image versioning

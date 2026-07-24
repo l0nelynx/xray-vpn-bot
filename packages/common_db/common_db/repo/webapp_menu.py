@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+import re
+import uuid
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,8 +19,23 @@ class InvoiceTarget:
     currency: str
     method: str | None
     days: int
-    squad_id: str
+    internal_squad_ids: tuple[str, ...]
     external_squad_id: str
+    traffic_limit_bytes: int
+    traffic_limit_strategy: str
+    remnawave_description: str | None
+    remnawave_tag: str | None
+
+    @property
+    def squad_id(self) -> str:
+        """Compatibility target for legacy tariff_slug consumers."""
+        return self.internal_squad_ids[0]
+
+
+TRAFFIC_LIMIT_STRATEGIES = frozenset(
+    {"NO_RESET", "DAY", "WEEK", "MONTH", "MONTH_ROLLING"}
+)
+REMANWAVE_TAG_RE = re.compile(r"^[A-Z0-9_]+$")
 
 
 def localized_text(node: WebAppMenuNode, lang: str) -> str:
@@ -36,8 +53,30 @@ def invoice_target(
         return None
     provider = (node.invoice_provider or "").strip().lower()
     currency = (node.invoice_currency or "").strip().upper()
-    squad_id = (node.invoice_squad_id or "").strip()
+    internal_squad_ids = tuple(
+        dict.fromkeys(
+            str(value).strip()
+            for value in (getattr(node, "invoice_internal_squad_ids", None) or [])
+            if str(value).strip()
+        )
+    )
     external_id = (node.invoice_external_squad_id or "").strip()
+    traffic_limit_bytes = int(getattr(node, "invoice_traffic_limit_bytes", None) or 0)
+    traffic_limit_strategy = (
+        getattr(node, "invoice_traffic_limit_strategy", None) or "NO_RESET"
+    ).strip().upper()
+    description = (
+        getattr(node, "invoice_remnawave_description", None) or ""
+    ).strip() or None
+    tag = (
+        getattr(node, "invoice_remnawave_tag", None) or ""
+    ).strip().upper() or None
+    try:
+        valid_squad_ids = all(uuid.UUID(value) for value in internal_squad_ids)
+        valid_external_id = bool(uuid.UUID(external_id))
+    except (ValueError, TypeError, AttributeError):
+        valid_squad_ids = False
+        valid_external_id = False
     amount = float(node.invoice_amount or 0)
     days = int(node.invoice_days or 0)
     if (
@@ -45,8 +84,15 @@ def invoice_target(
         or not currency
         or amount <= 0
         or days <= 0
-        or not squad_id
+        or not internal_squad_ids
         or not external_id
+        or not valid_squad_ids
+        or not valid_external_id
+        or traffic_limit_bytes < 0
+        or traffic_limit_bytes % (1024**3) != 0
+        or traffic_limit_strategy not in TRAFFIC_LIMIT_STRATEGIES
+        or (traffic_limit_bytes == 0 and traffic_limit_strategy != "NO_RESET")
+        or (tag is not None and (len(tag) > 16 or REMANWAVE_TAG_RE.fullmatch(tag) is None))
         or (allowed_providers is not None and provider not in allowed_providers)
     ):
         return None
@@ -58,8 +104,12 @@ def invoice_target(
         currency=currency,
         method=node.invoice_method,
         days=days,
-        squad_id=squad_id,
+        internal_squad_ids=internal_squad_ids,
         external_squad_id=external_id,
+        traffic_limit_bytes=traffic_limit_bytes,
+        traffic_limit_strategy=traffic_limit_strategy,
+        remnawave_description=description,
+        remnawave_tag=tag,
     )
 
 

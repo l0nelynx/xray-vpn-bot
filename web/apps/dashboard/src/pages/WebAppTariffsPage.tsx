@@ -6,8 +6,11 @@ import {
   ChevronDown,
   ChevronRight,
   CircleDollarSign,
+  Copy,
   FolderTree,
   Plus,
+  RefreshCw,
+  Search,
   Save,
   Trash2,
 } from "lucide-react";
@@ -17,6 +20,8 @@ import { Button } from "@xray/ui/components/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@xray/ui/components/card";
 import { Input } from "@xray/ui/components/input";
 import { Label } from "@xray/ui/components/label";
+import { Checkbox } from "@xray/ui/components/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "@xray/ui/components/popover";
 import {
   Select,
   SelectContent,
@@ -26,6 +31,7 @@ import {
 } from "@xray/ui/components/select";
 import { Spinner } from "@xray/ui/components/spinner";
 import { Switch } from "@xray/ui/components/switch";
+import { Textarea } from "@xray/ui/components/textarea";
 import { cn } from "@xray/ui/lib/utils";
 import { api } from "../api/client";
 import ConfirmButton from "../components/ConfirmButton";
@@ -46,8 +52,12 @@ interface MenuNode {
   invoice_currency: string | null;
   invoice_method: string | null;
   invoice_days: number | null;
-  invoice_squad_id: string | null;
+  invoice_internal_squad_ids: string[] | null;
   invoice_external_squad_id: string | null;
+  invoice_traffic_limit_bytes: number | null;
+  invoice_traffic_limit_strategy: string | null;
+  invoice_remnawave_description: string | null;
+  invoice_remnawave_tag: string | null;
   needs_attention: boolean;
   children: MenuNode[];
 }
@@ -72,9 +82,32 @@ interface DraftNode {
   invoice_currency: string | null;
   invoice_method: string | null;
   invoice_days: number | null;
-  invoice_squad_id: string | null;
+  invoice_internal_squad_ids: string[] | null;
   invoice_external_squad_id: string | null;
+  invoice_traffic_limit_bytes: number | null;
+  invoice_traffic_limit_strategy: string | null;
+  invoice_remnawave_description: string | null;
+  invoice_remnawave_tag: string | null;
 }
+
+interface SquadInfo {
+  uuid: string;
+  name: string;
+}
+
+interface SquadCatalog {
+  internal: SquadInfo[];
+  external: SquadInfo[];
+}
+
+const GIB = 1024 ** 3;
+const TRAFFIC_STRATEGIES = [
+  ["NO_RESET", "No reset"],
+  ["DAY", "Daily"],
+  ["WEEK", "Weekly"],
+  ["MONTH", "Monthly"],
+  ["MONTH_ROLLING", "Rolling month"],
+] as const;
 
 const emptyDraft = (parentId: number | null): DraftNode => ({
   parent_id: parentId,
@@ -87,8 +120,12 @@ const emptyDraft = (parentId: number | null): DraftNode => ({
   invoice_currency: null,
   invoice_method: null,
   invoice_days: null,
-  invoice_squad_id: null,
+  invoice_internal_squad_ids: [],
   invoice_external_squad_id: null,
+  invoice_traffic_limit_bytes: 0,
+  invoice_traffic_limit_strategy: "NO_RESET",
+  invoice_remnawave_description: null,
+  invoice_remnawave_tag: null,
 });
 
 const toDraft = (node: MenuNode): DraftNode => ({
@@ -103,9 +140,89 @@ const toDraft = (node: MenuNode): DraftNode => ({
   invoice_currency: node.invoice_currency,
   invoice_method: node.invoice_method,
   invoice_days: node.invoice_days,
-  invoice_squad_id: node.invoice_squad_id,
+  invoice_internal_squad_ids: node.invoice_internal_squad_ids ?? [],
   invoice_external_squad_id: node.invoice_external_squad_id,
+  invoice_traffic_limit_bytes: node.invoice_traffic_limit_bytes ?? 0,
+  invoice_traffic_limit_strategy: node.invoice_traffic_limit_strategy ?? "NO_RESET",
+  invoice_remnawave_description: node.invoice_remnawave_description,
+  invoice_remnawave_tag: node.invoice_remnawave_tag,
 });
+
+function InternalSquadSelect({
+  squads,
+  value,
+  onChange,
+}: {
+  squads: SquadInfo[];
+  value: string[];
+  onChange: (value: string[]) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const known = new Map(squads.map((squad) => [squad.uuid, squad]));
+  const options = [
+    ...squads,
+    ...value
+      .filter((uuid) => !known.has(uuid))
+      .map((uuid) => ({ uuid, name: `Missing squad · ${uuid}` })),
+  ].filter((squad) =>
+    `${squad.name} ${squad.uuid}`.toLowerCase().includes(query.toLowerCase()),
+  );
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button variant="outline" className="h-auto min-h-10 w-full justify-start text-left">
+          {value.length
+            ? value.map((uuid) => known.get(uuid)?.name ?? uuid).join(", ")
+            : "Choose internal squads"}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-2" align="start">
+        <div className="mb-2 flex items-center gap-2 rounded-md border px-2">
+          <Search className="h-4 w-4 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search squads"
+            className="border-0 px-0 shadow-none focus-visible:ring-0"
+          />
+        </div>
+        <div className="max-h-64 space-y-1 overflow-y-auto">
+          {options.map((squad) => {
+            const checked = value.includes(squad.uuid);
+            return (
+              <label
+                key={squad.uuid}
+                className="flex cursor-pointer items-start gap-2 rounded-md px-2 py-2 hover:bg-accent"
+              >
+                <Checkbox
+                  checked={checked}
+                  onCheckedChange={(next: boolean | "indeterminate") =>
+                    onChange(
+                      next === true
+                        ? [...value, squad.uuid]
+                        : value.filter((uuid) => uuid !== squad.uuid),
+                    )
+                  }
+                />
+                <span className="min-w-0">
+                  <span className="block truncate text-sm">{squad.name}</span>
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {squad.uuid}
+                  </span>
+                </span>
+              </label>
+            );
+          })}
+          {!options.length && (
+            <div className="px-2 py-4 text-center text-sm text-muted-foreground">
+              No squads found
+            </div>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 function TreeRow({
   node,
@@ -187,6 +304,9 @@ export default function WebAppTariffsPage() {
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [squads, setSquads] = useState<SquadCatalog>({ internal: [], external: [] });
+  const [squadsLoading, setSquadsLoading] = useState(false);
+  const [squadsError, setSquadsError] = useState<string | null>(null);
 
   const flat = useMemo(() => {
     const result: MenuNode[] = [];
@@ -238,7 +358,23 @@ export default function WebAppTariffsPage() {
       .get<{ providers: ProviderInfo[] }>("/webapp-menu/providers")
       .then((value) => setProviders(value.providers))
       .catch((error) => toast.error(`Failed to load providers: ${error.message}`));
+    void loadSquads();
   }, []);
+
+  const loadSquads = async (refresh = false) => {
+    setSquadsLoading(true);
+    setSquadsError(null);
+    try {
+      const value = await api.get<SquadCatalog>(
+        `/webapp-menu/remnawave-squads${refresh ? "?refresh=true" : ""}`,
+      );
+      setSquads(value);
+    } catch (error) {
+      setSquadsError((error as Error).message);
+    } finally {
+      setSquadsLoading(false);
+    }
+  };
 
   const patch = <K extends keyof DraftNode>(key: K, value: DraftNode[K]) =>
     setDraft((current) => (current ? { ...current, [key]: value } : current));
@@ -283,7 +419,7 @@ export default function WebAppTariffsPage() {
         draft.invoice_amount <= 0 ||
         !draft.invoice_days ||
         draft.invoice_days <= 0 ||
-        !draft.invoice_squad_id?.trim() ||
+        !(draft.invoice_internal_squad_ids?.length) ||
         !draft.invoice_external_squad_id?.trim()
       ) {
         toast.error("Complete Payment and Delivery fields before activating this invoice");
@@ -291,6 +427,18 @@ export default function WebAppTariffsPage() {
       }
       if (draft.invoice_provider === "stars" && !Number.isInteger(draft.invoice_amount)) {
         toast.error("Telegram Stars amount must be a whole number");
+        return false;
+      }
+      const trafficGb = (draft.invoice_traffic_limit_bytes ?? 0) / GIB;
+      if (!Number.isInteger(trafficGb) || trafficGb < 0) {
+        toast.error("Traffic limit must be a non-negative whole number of GB");
+        return false;
+      }
+      if (
+        draft.invoice_remnawave_tag &&
+        !/^[A-Z0-9_]{1,16}$/.test(draft.invoice_remnawave_tag)
+      ) {
+        toast.error("Remnawave tag must contain up to 16 A-Z, 0-9 or underscore characters");
         return false;
       }
     }
@@ -307,9 +455,18 @@ export default function WebAppTariffsPage() {
       invoice_currency: draft.action === "invoice" ? draft.invoice_currency : null,
       invoice_method: draft.action === "invoice" ? draft.invoice_method : null,
       invoice_days: draft.action === "invoice" ? draft.invoice_days : null,
-      invoice_squad_id: draft.action === "invoice" ? draft.invoice_squad_id : null,
+      invoice_internal_squad_ids:
+        draft.action === "invoice" ? draft.invoice_internal_squad_ids : null,
       invoice_external_squad_id:
         draft.action === "invoice" ? draft.invoice_external_squad_id : null,
+      invoice_traffic_limit_bytes:
+        draft.action === "invoice" ? draft.invoice_traffic_limit_bytes : null,
+      invoice_traffic_limit_strategy:
+        draft.action === "invoice" ? draft.invoice_traffic_limit_strategy : null,
+      invoice_remnawave_description:
+        draft.action === "invoice" ? draft.invoice_remnawave_description : null,
+      invoice_remnawave_tag:
+        draft.action === "invoice" ? draft.invoice_remnawave_tag : null,
     };
     try {
       const saved = draft.id
@@ -367,6 +524,22 @@ export default function WebAppTariffsPage() {
       toast.error(`Move failed: ${(error as Error).message}`);
     }
   };
+
+  const clonePaymentOption = () => {
+    if (!draft || draft.action !== "invoice") return;
+    setSelected(null);
+    setDraft({
+      ...draft,
+      id: undefined,
+      text_ru: `${draft.text_ru} (копия)`,
+      text_en: `${draft.text_en} (Copy)`,
+      is_active: false,
+      invoice_internal_squad_ids: [...(draft.invoice_internal_squad_ids ?? [])],
+    });
+    toast.info("Clone created as a local draft. Save it to add it to the tree.");
+  };
+
+  const categories = flat.filter((node) => node.action === "buttons");
 
   return (
     <div>
@@ -471,6 +644,27 @@ export default function WebAppTariffsPage() {
                       <Label>{draft.is_active ? "Visible to customers" : "Hidden draft"}</Label>
                     </div>
                   </div>
+                  {draft.action === "invoice" && (
+                    <div>
+                      <Label>Category</Label>
+                      <Select
+                        value={draft.parent_id == null ? "root" : String(draft.parent_id)}
+                        onValueChange={(value: string) =>
+                          patch("parent_id", value === "root" ? null : Number(value))
+                        }
+                      >
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="root">Root</SelectItem>
+                          {categories.map((category) => (
+                            <SelectItem key={category.id} value={String(category.id)}>
+                              {category.text_ru || category.text_en}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
                 </section>
 
                 {draft.action === "invoice" && (
@@ -512,12 +706,129 @@ export default function WebAppTariffsPage() {
                       </div>
                     </section>
                     <section className="space-y-3 border-t border-white/[0.07] pt-5">
-                      <div className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                        Delivery
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                          Delivery
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => void loadSquads(true)}
+                          disabled={squadsLoading}
+                        >
+                          <RefreshCw className={cn("h-4 w-4", squadsLoading && "animate-spin")} />
+                          Refresh squads
+                        </Button>
                       </div>
-                      <div className="grid gap-3">
-                        <div><Label>Internal squad ID</Label><Input value={draft.invoice_squad_id ?? ""} onChange={(e) => patch("invoice_squad_id", e.target.value || null)} /></div>
-                        <div><Label>External squad ID</Label><Input value={draft.invoice_external_squad_id ?? ""} onChange={(e) => patch("invoice_external_squad_id", e.target.value || null)} /></div>
+                      {squadsError && (
+                        <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+                          Failed to load Remnawave squads: {squadsError}
+                        </div>
+                      )}
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <div className="md:col-span-2">
+                          <Label>Internal squads</Label>
+                          <InternalSquadSelect
+                            squads={squads.internal}
+                            value={draft.invoice_internal_squad_ids ?? []}
+                            onChange={(value) => patch("invoice_internal_squad_ids", value)}
+                          />
+                        </div>
+                        <div className="md:col-span-2">
+                          <Label>External squad</Label>
+                          <Select
+                            value={draft.invoice_external_squad_id ?? undefined}
+                            onValueChange={(value: string) =>
+                              patch("invoice_external_squad_id", value)
+                            }
+                          >
+                            <SelectTrigger><SelectValue placeholder="Choose external squad" /></SelectTrigger>
+                            <SelectContent>
+                              {draft.invoice_external_squad_id &&
+                                !squads.external.some(
+                                  (item) => item.uuid === draft.invoice_external_squad_id,
+                                ) && (
+                                  <SelectItem value={draft.invoice_external_squad_id}>
+                                    Missing squad · {draft.invoice_external_squad_id}
+                                  </SelectItem>
+                                )}
+                              {squads.external.map((item) => (
+                                <SelectItem key={item.uuid} value={item.uuid}>
+                                  {item.name} · {item.uuid}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label>Traffic limit (GB)</Label>
+                          <Input
+                            type="number"
+                            min={0}
+                            step={1}
+                            value={(draft.invoice_traffic_limit_bytes ?? 0) / GIB}
+                            onChange={(event) => {
+                              const gb = Math.max(0, Math.trunc(Number(event.target.value) || 0));
+                              setDraft((current) =>
+                                current
+                                  ? {
+                                      ...current,
+                                      invoice_traffic_limit_bytes: gb * GIB,
+                                      invoice_traffic_limit_strategy:
+                                        gb === 0
+                                          ? "NO_RESET"
+                                          : current.invoice_traffic_limit_strategy ?? "MONTH",
+                                    }
+                                  : current,
+                              );
+                            }}
+                          />
+                          <p className="mt-1 text-xs text-muted-foreground">0 means unlimited.</p>
+                        </div>
+                        <div>
+                          <Label>Traffic reset strategy</Label>
+                          <Select
+                            value={draft.invoice_traffic_limit_strategy ?? "NO_RESET"}
+                            onValueChange={(value: string) =>
+                              patch("invoice_traffic_limit_strategy", value)
+                            }
+                            disabled={(draft.invoice_traffic_limit_bytes ?? 0) === 0}
+                          >
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              {TRAFFIC_STRATEGIES.map(([value, label]) => (
+                                <SelectItem key={value} value={value}>{label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="md:col-span-2">
+                          <Label>Remnawave user description</Label>
+                          <Textarea
+                            value={draft.invoice_remnawave_description ?? ""}
+                            onChange={(event) =>
+                              patch("invoice_remnawave_description", event.target.value || null)
+                            }
+                            placeholder="Leave empty to keep the current description"
+                          />
+                        </div>
+                        <div className="md:col-span-2">
+                          <Label>Remnawave user tag</Label>
+                          <Input
+                            value={draft.invoice_remnawave_tag ?? ""}
+                            maxLength={16}
+                            onChange={(event) =>
+                              patch(
+                                "invoice_remnawave_tag",
+                                event.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, "") || null,
+                              )
+                            }
+                            placeholder="PREMIUM_30"
+                          />
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Up to 16 uppercase letters, digits and underscores.
+                          </p>
+                        </div>
                       </div>
                     </section>
                   </>
@@ -529,6 +840,11 @@ export default function WebAppTariffsPage() {
                       <>
                         <Button variant="outline" size="icon" onClick={() => void move(-1)} title="Move up"><ArrowUp className="h-4 w-4" /></Button>
                         <Button variant="outline" size="icon" onClick={() => void move(1)} title="Move down"><ArrowDown className="h-4 w-4" /></Button>
+                        {draft.action === "invoice" && (
+                          <Button variant="outline" size="icon" onClick={clonePaymentOption} title="Clone payment option">
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                        )}
                         <ConfirmButton title="Delete this item and all children?" destructive confirmText="Delete" onConfirm={remove}>
                           <Button variant="ghost" size="icon" className="text-destructive"><Trash2 className="h-4 w-4" /></Button>
                         </ConfirmButton>

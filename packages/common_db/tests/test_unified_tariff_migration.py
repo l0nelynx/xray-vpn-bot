@@ -1,6 +1,7 @@
 """Data-preserving SQLite coverage for the unified tariff migration."""
 from __future__ import annotations
 
+import json
 import uuid
 from pathlib import Path
 
@@ -86,16 +87,18 @@ def test_upgrade_resolves_targets_and_removes_legacy_tables(tmp_path: Path) -> N
         nodes = {
             row.id: row
             for row in conn.execute(text(
-                "SELECT id, text_ru, text_en, is_active, invoice_squad_id, "
+                "SELECT id, text_ru, text_en, is_active, invoice_internal_squad_ids, "
                 "invoice_external_squad_id FROM webapp_menu_nodes"
             ))
         }
-        assert (nodes[1].invoice_squad_id, nodes[1].invoice_external_squad_id) == (
-            "squad-x", "external-x"
-        )
-        assert (nodes[2].invoice_squad_id, nodes[2].invoice_external_squad_id) == (
-            "squad-a", "external-a"
-        )
+        assert (
+            json.loads(nodes[1].invoice_internal_squad_ids),
+            nodes[1].invoice_external_squad_id,
+        ) == (["squad-x"], "external-x")
+        assert (
+            json.loads(nodes[2].invoice_internal_squad_ids),
+            nodes[2].invoice_external_squad_id,
+        ) == (["squad-a"], "external-a")
         assert nodes[2].text_ru == nodes[2].text_en == "Legacy"
         assert not nodes[3].is_active
         assert not nodes[4].is_active
@@ -103,7 +106,7 @@ def test_upgrade_resolves_targets_and_removes_legacy_tables(tmp_path: Path) -> N
         transactions = {
             row.provider_invoice_id: row
             for row in conn.execute(text(
-                "SELECT transaction_id, provider_invoice_id, squad_id, "
+                "SELECT transaction_id, provider_invoice_id, squad_id, internal_squad_ids, "
                 "external_squad_id, order_status FROM transactions"
             ))
         }
@@ -114,5 +117,6 @@ def test_upgrade_resolves_targets_and_removes_legacy_tables(tmp_path: Path) -> N
             assert transactions[provider_id].transaction_id != provider_id
         assert transactions["provider-history"].transaction_id == "provider-history"
         assert transactions["provider-derived"].squad_id == "squad-a"
+        assert json.loads(transactions["provider-derived"].internal_squad_ids) == ["squad-a"]
         assert transactions["provider-derived"].external_squad_id == "external-a"
     engine.dispose()

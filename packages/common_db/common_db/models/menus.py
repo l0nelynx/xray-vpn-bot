@@ -1,7 +1,7 @@
 """Bot menu screens/buttons + the shared purchase-menu tree."""
 from __future__ import annotations
 
-from sqlalchemy import Boolean, Float, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import BigInteger, Boolean, Float, ForeignKey, Index, Integer, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..base import Base
@@ -67,8 +67,16 @@ class WebAppMenuNode(Base):
     invoice_currency: Mapped[str] = mapped_column(String(10), nullable=True)
     invoice_method: Mapped[str] = mapped_column(String(30), nullable=True)
     invoice_days: Mapped[int] = mapped_column(Integer, nullable=True)
-    invoice_squad_id: Mapped[str] = mapped_column(String(100), nullable=True)
+    invoice_internal_squad_ids: Mapped[list[str]] = mapped_column(JSON, nullable=True)
     invoice_external_squad_id: Mapped[str] = mapped_column(String(100), nullable=True)
+    invoice_traffic_limit_bytes: Mapped[int] = mapped_column(
+        BigInteger, nullable=True
+    )
+    invoice_traffic_limit_strategy: Mapped[str] = mapped_column(
+        String(30), nullable=True
+    )
+    invoice_remnawave_description: Mapped[str] = mapped_column(Text, nullable=True)
+    invoice_remnawave_tag: Mapped[str] = mapped_column(String(16), nullable=True)
 
     parent: Mapped["WebAppMenuNode"] = relationship(
         "WebAppMenuNode",

@@ -54,6 +54,7 @@ from ..android.payments_router import _load_menu_rows, _load_node, _node_payload
 from ..bonus_points import enrich_invoice_dict, resolve_points_cost
 from ..android.schemas import AuthResponse, UserSummary
 from ..database.session import async_session
+from ..database.models import Transaction
 from ..config import get_bot_token, get_config, get_tg_client_secret
 from payments.rub_pricing import get_rub_rates_for_currencies
 from ..notify_log import esc, notify_log, notify_web
@@ -470,31 +471,28 @@ async def web_invoice(
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, detail={"code": "invoice_failed"}) from exc
 
     async with async_session() as session:
-        await session.execute(
-            text(
-                "INSERT INTO transactions ("
-                "transaction_id, provider_invoice_id, vless_uuid, username, order_status, "
-                "delivery_status, payment_method, amount, created_at, "
-                "days_ordered, squad_id, external_squad_id, user_id, android_user_id"
-                ") VALUES ("
-                ":tid, :pid, :vu, :uname, 'created', 0, :pm, :amt, :ts, "
-                ":days, :sid, :esid, :uid, :aid"
-                ")"
-            ),
-            {
-                "tid": transaction_id,
-                "pid": invoice.invoice_id,
-                "vu": "None",
-                "uname": user.email or f"webuser_{user.id}",
-                "pm": provider.payment_method,
-                "amt": final_amount,
-                "ts": _now_iso(),
-                "days": invoice_data["days"],
-                "sid": invoice_data["squad_id"],
-                "esid": invoice_data["external_squad_id"],
-                "uid": user.id,
-                "aid": user.id,
-            },
+        session.add(
+            Transaction(
+                transaction_id=transaction_id,
+                provider_invoice_id=invoice.invoice_id,
+                vless_uuid="None",
+                username=user.email or f"webuser_{user.id}",
+                order_status="created",
+                delivery_status=0,
+                payment_method=provider.payment_method,
+                amount=final_amount,
+                created_at=_now_iso(),
+                days_ordered=invoice_data["days"],
+                squad_id=invoice_data["squad_id"],
+                internal_squad_ids=invoice_data["internal_squad_ids"],
+                external_squad_id=invoice_data["external_squad_id"],
+                traffic_limit_bytes=invoice_data["traffic_limit_bytes"],
+                traffic_limit_strategy=invoice_data["traffic_limit_strategy"],
+                remnawave_description=invoice_data["remnawave_description"],
+                remnawave_tag=invoice_data["remnawave_tag"],
+                user_id=user.id,
+                android_user_id=user.id,
+            )
         )
         await session.commit()
 
@@ -553,6 +551,7 @@ async def web_pay_credits(
         points_cost=points_cost,
         days=days,
         tariff_slug=invoice_data["tariff_slug"],
+        delivery_target=invoice_data,
         android_user_id=user.id if user.tg_id is None else None,
         email=user.email,
         referral_tg_id=_promo_tg_id(user),

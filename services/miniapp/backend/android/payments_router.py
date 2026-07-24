@@ -20,8 +20,9 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import text
-from common_db.repo.webapp_menu import get_active_node
+from common_db.repo.webapp_menu import get_active_node, invoice_target, list_nodes
 
+from ..database.models import Transaction
 from ..database.session import async_session
 from ..notify_log import esc, notify_log
 from payments import (
@@ -109,14 +110,30 @@ async def _load_menu_rows() -> list[dict]:
     """Прочитать активные узлы меню из общей таблицы Tariff Constructor.
     Та же таблица, что используется miniapp `/api/menu/tree`."""
     async with async_session() as session:
-        result = await session.execute(text(
-            "SELECT id, parent_id, text_ru, text_en, action, sort_order, "
-            "invoice_provider, invoice_amount, invoice_currency, "
-            "invoice_method, invoice_days, invoice_squad_id, "
-            "invoice_external_squad_id "
-            "FROM webapp_menu_nodes WHERE is_active = TRUE"
-        ))
-        return [dict(r._mapping) for r in result.all()]
+        nodes = await list_nodes(session)
+        return [_node_as_dict(node) for node in nodes if node.is_active]
+
+
+def _node_as_dict(node) -> dict:
+    return {
+        "id": node.id,
+        "parent_id": node.parent_id,
+        "text_ru": node.text_ru,
+        "text_en": node.text_en,
+        "action": node.action,
+        "sort_order": node.sort_order,
+        "invoice_provider": node.invoice_provider,
+        "invoice_amount": node.invoice_amount,
+        "invoice_currency": node.invoice_currency,
+        "invoice_method": node.invoice_method,
+        "invoice_days": node.invoice_days,
+        "invoice_internal_squad_ids": node.invoice_internal_squad_ids,
+        "invoice_external_squad_id": node.invoice_external_squad_id,
+        "invoice_traffic_limit_bytes": node.invoice_traffic_limit_bytes,
+        "invoice_traffic_limit_strategy": node.invoice_traffic_limit_strategy,
+        "invoice_remnawave_description": node.invoice_remnawave_description,
+        "invoice_remnawave_tag": node.invoice_remnawave_tag,
+    }
 
 
 def _node_payload(row: dict, *, surface: str = "android") -> dict | None:
@@ -128,19 +145,29 @@ def _node_payload(row: dict, *, surface: str = "android") -> dict | None:
     provider = (row["invoice_provider"] or "").lower()
     if surface == "android" and provider not in _ANDROID_PROVIDERS:
         return None
-    squad_id = row["invoice_squad_id"]
-    external_squad_id = row["invoice_external_squad_id"]
-    if not squad_id or not external_squad_id:
+    class _Node:
+        pass
+
+    node = _Node()
+    for key, value in row.items():
+        setattr(node, key, value)
+    target = invoice_target(node)
+    if target is None:
         return None
     payload = {
         "provider": provider,
-        "amount": float(row["invoice_amount"] or 0),
-        "currency": (row["invoice_currency"] or "RUB").upper(),
-        "method": row["invoice_method"],
-        "days": int(row["invoice_days"] or 0),
-        "squad_id": squad_id,
-        "external_squad_id": external_squad_id,
-        "tariff_slug": f"sid:{squad_id}:esid:{external_squad_id}",
+        "amount": target.amount,
+        "currency": target.currency,
+        "method": target.method,
+        "days": target.days,
+        "squad_id": target.squad_id,
+        "internal_squad_ids": list(target.internal_squad_ids),
+        "external_squad_id": target.external_squad_id,
+        "traffic_limit_bytes": target.traffic_limit_bytes,
+        "traffic_limit_strategy": target.traffic_limit_strategy,
+        "remnawave_description": target.remnawave_description,
+        "remnawave_tag": target.remnawave_tag,
+        "tariff_slug": f"sid:{target.squad_id}:esid:{target.external_squad_id}",
     }
     if payload["amount"] <= 0 or payload["days"] <= 0:
         return None
@@ -198,21 +225,7 @@ async def _load_node(node_id: int) -> dict | None:
         node = await get_active_node(session, node_id)
         if node is None:
             return None
-        return {
-            "id": node.id,
-            "parent_id": node.parent_id,
-            "text_ru": node.text_ru,
-            "text_en": node.text_en,
-            "action": node.action,
-            "sort_order": node.sort_order,
-            "invoice_provider": node.invoice_provider,
-            "invoice_amount": node.invoice_amount,
-            "invoice_currency": node.invoice_currency,
-            "invoice_method": node.invoice_method,
-            "invoice_days": node.invoice_days,
-            "invoice_squad_id": node.invoice_squad_id,
-            "invoice_external_squad_id": node.invoice_external_squad_id,
-        }
+        return _node_as_dict(node)
 
 
 # --- Endpoints -------------------------------------------------------------
@@ -325,31 +338,28 @@ async def create_payment_invoice(
         ) from exc
 
     async with async_session() as session:
-        await session.execute(
-            text(
-                "INSERT INTO transactions ("
-                "transaction_id, provider_invoice_id, vless_uuid, username, order_status, "
-                "delivery_status, payment_method, amount, created_at, "
-                "days_ordered, squad_id, external_squad_id, user_id, android_user_id"
-                ") VALUES ("
-                ":tid, :pid, :vu, :uname, 'created', 0, :pm, :amt, :ts, "
-                ":days, :sid, :esid, :uid, :aid"
-                ")"
-            ),
-            {
-                "tid": transaction_id,
-                "pid": invoice.invoice_id,
-                "vu": "None",
-                "uname": user.email or f"android_{user.id}",
-                "pm": provider.payment_method,
-                "amt": float(invoice_data["amount"]),
-                "ts": _now_iso(),
-                "days": invoice_data["days"],
-                "sid": invoice_data["squad_id"],
-                "esid": invoice_data["external_squad_id"],
-                "uid": user.id,
-                "aid": user.id,
-            },
+        session.add(
+            Transaction(
+                transaction_id=transaction_id,
+                provider_invoice_id=invoice.invoice_id,
+                vless_uuid="None",
+                username=user.email or f"android_{user.id}",
+                order_status="created",
+                delivery_status=0,
+                payment_method=provider.payment_method,
+                amount=float(invoice_data["amount"]),
+                created_at=_now_iso(),
+                days_ordered=invoice_data["days"],
+                squad_id=invoice_data["squad_id"],
+                internal_squad_ids=invoice_data["internal_squad_ids"],
+                external_squad_id=invoice_data["external_squad_id"],
+                traffic_limit_bytes=invoice_data["traffic_limit_bytes"],
+                traffic_limit_strategy=invoice_data["traffic_limit_strategy"],
+                remnawave_description=invoice_data["remnawave_description"],
+                remnawave_tag=invoice_data["remnawave_tag"],
+                user_id=user.id,
+                android_user_id=user.id,
+            )
         )
         await session.commit()
 
@@ -453,7 +463,7 @@ async def get_user_transaction(
 async def android_pay_credits(
     body: AndroidInvoiceRequest,
     request: Request,
-    user: android_repo.UserRow = Depends(deps.require_verified_email),
+    user: repo.UserRow = Depends(deps.require_verified_email),
 ):
     from ..bonus_points import resolve_points_cost
     from ..credits_delivery import pay_and_deliver
@@ -484,6 +494,7 @@ async def android_pay_credits(
         points_cost=points_cost,
         days=days,
         tariff_slug=invoice_data["tariff_slug"],
+        delivery_target=invoice_data,
         android_user_id=user.id if user.tg_id is None else None,
         email=user.email,
         referral_tg_id=promo_tg,

@@ -109,8 +109,12 @@ const menuTree = [
     invoice_currency: null,
     invoice_method: null,
     invoice_days: null,
-    invoice_squad_id: null,
+    invoice_internal_squad_ids: null,
     invoice_external_squad_id: null,
+    invoice_traffic_limit_bytes: null,
+    invoice_traffic_limit_strategy: null,
+    invoice_remnawave_description: null,
+    invoice_remnawave_tag: null,
     needs_attention: false,
     children: [
       {
@@ -126,8 +130,12 @@ const menuTree = [
         invoice_currency: "USDT",
         invoice_method: "default",
         invoice_days: 30,
-        invoice_squad_id: "sq-1",
-        invoice_external_squad_id: "ext-1",
+        invoice_internal_squad_ids: ["11111111-1111-4111-8111-111111111111"],
+        invoice_external_squad_id: "22222222-2222-4222-8222-222222222222",
+        invoice_traffic_limit_bytes: 107374182400,
+        invoice_traffic_limit_strategy: "MONTH",
+        invoice_remnawave_description: "Premium subscription",
+        invoice_remnawave_tag: "PREMIUM",
         needs_attention: false,
         children: [],
       },
@@ -144,8 +152,12 @@ const menuTree = [
         invoice_currency: "XTR",
         invoice_method: "default",
         invoice_days: 30,
-        invoice_squad_id: "sq-1",
-        invoice_external_squad_id: "ext-1",
+        invoice_internal_squad_ids: ["11111111-1111-4111-8111-111111111111"],
+        invoice_external_squad_id: "22222222-2222-4222-8222-222222222222",
+        invoice_traffic_limit_bytes: 0,
+        invoice_traffic_limit_strategy: "NO_RESET",
+        invoice_remnawave_description: null,
+        invoice_remnawave_tag: null,
         needs_attention: false,
         children: [],
       },
@@ -284,6 +296,16 @@ export const handlers: HttpHandler[] = [
 
   // ── Webapp menu / settings ────────────────────────────
   http.get(`${API}/webapp-menu/tree`, () => HttpResponse.json(menuTree)),
+  http.get(`${API}/webapp-menu/remnawave-squads`, () =>
+    HttpResponse.json({
+      internal: [
+        { uuid: "11111111-1111-4111-8111-111111111111", name: "Premium" },
+      ],
+      external: [
+        { uuid: "22222222-2222-4222-8222-222222222222", name: "Default external" },
+      ],
+    }),
+  ),
   http.get(`${API}/webapp-menu/providers`, () =>
     HttpResponse.json({
       providers: [

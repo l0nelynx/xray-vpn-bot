@@ -1,13 +1,18 @@
 from __future__ import annotations
 
+import asyncio
+import time
+
 from fastapi import APIRouter, Depends, HTTPException
 from payments import PaymentError, get_provider
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from common_db.repo.webapp_menu import invoice_target
+from remnawave_client import configure
 
 from ..auth import get_current_user
 from ..cache_utils import bump_cache_version
+from ..config import get_remnawave_token, get_remnawave_url
 from ..database.models import WebAppMenuNode
 from ..database.session import async_session
 from ..schemas.webapp_menu import (
@@ -18,6 +23,66 @@ from ..schemas.webapp_menu import (
 )
 
 router = APIRouter(prefix="/api/webapp-menu", tags=["webapp-menu"])
+_SQUAD_CACHE_TTL_SECONDS = 30.0
+_squad_cache: tuple[float, dict] | None = None
+
+
+def _rw_client():
+    return configure(
+        base_url=get_remnawave_url(),
+        token=get_remnawave_token(),
+        free_squad_id="",
+    )
+
+
+def _node_fields(node: WebAppMenuNode) -> dict:
+    return {
+        "id": node.id,
+        "parent_id": node.parent_id,
+        "text_ru": node.text_ru,
+        "text_en": node.text_en,
+        "action": node.action,
+        "sort_order": node.sort_order,
+        "is_active": bool(node.is_active),
+        "invoice_provider": node.invoice_provider,
+        "invoice_amount": node.invoice_amount,
+        "invoice_currency": node.invoice_currency,
+        "invoice_method": node.invoice_method,
+        "invoice_days": node.invoice_days,
+        "invoice_internal_squad_ids": node.invoice_internal_squad_ids,
+        "invoice_external_squad_id": node.invoice_external_squad_id,
+        "invoice_traffic_limit_bytes": node.invoice_traffic_limit_bytes,
+        "invoice_traffic_limit_strategy": node.invoice_traffic_limit_strategy,
+        "invoice_remnawave_description": node.invoice_remnawave_description,
+        "invoice_remnawave_tag": node.invoice_remnawave_tag,
+    }
+
+
+def _normalize_node(node: WebAppMenuNode) -> None:
+    if node.action != "invoice":
+        return
+    node.invoice_internal_squad_ids = list(
+        dict.fromkeys(
+            value.strip()
+            for value in (node.invoice_internal_squad_ids or [])
+            if value and value.strip()
+        )
+    )
+    node.invoice_external_squad_id = (
+        (node.invoice_external_squad_id or "").strip() or None
+    )
+    node.invoice_traffic_limit_bytes = int(node.invoice_traffic_limit_bytes or 0)
+    node.invoice_traffic_limit_strategy = (
+        node.invoice_traffic_limit_strategy or "NO_RESET"
+    ).strip().upper()
+    if node.invoice_traffic_limit_bytes == 0:
+        node.invoice_traffic_limit_strategy = "NO_RESET"
+    node.invoice_remnawave_description = (
+        (node.invoice_remnawave_description or "").strip() or None
+    )
+    node.invoice_remnawave_tag = (
+        (node.invoice_remnawave_tag or "").strip().upper() or None
+    )
 
 
 def _needs_attention(node: WebAppMenuNode) -> bool:
@@ -44,20 +109,7 @@ def _serialize_tree(nodes: list[WebAppMenuNode], parent_id: int | None) -> list[
     )
     return [
         {
-            "id": n.id,
-            "parent_id": n.parent_id,
-            "text_ru": n.text_ru,
-            "text_en": n.text_en,
-            "action": n.action,
-            "sort_order": n.sort_order,
-            "is_active": bool(n.is_active),
-            "invoice_provider": n.invoice_provider,
-            "invoice_amount": n.invoice_amount,
-            "invoice_currency": n.invoice_currency,
-            "invoice_method": n.invoice_method,
-            "invoice_days": n.invoice_days,
-            "invoice_squad_id": n.invoice_squad_id,
-            "invoice_external_squad_id": n.invoice_external_squad_id,
+            **_node_fields(n),
             "needs_attention": _needs_attention(n),
             "children": _serialize_tree(nodes, n.id),
         }
@@ -66,8 +118,10 @@ def _serialize_tree(nodes: list[WebAppMenuNode], parent_id: int | None) -> list[
 
 
 def _validate_node(node: WebAppMenuNode) -> None:
-    if not node.text_ru.strip() or not node.text_en.strip():
+    if not (node.text_ru or "").strip() or not (node.text_en or "").strip():
         raise HTTPException(400, "RU and EN button text are required")
+    if node.action not in {"buttons", "invoice"}:
+        raise HTTPException(400, "Node action must be buttons or invoice")
     if node.action == "buttons":
         return
     if not node.is_active:
@@ -76,7 +130,7 @@ def _validate_node(node: WebAppMenuNode) -> None:
     if target is None:
         raise HTTPException(
             400,
-            "Active invoice requires provider, amount, currency, days and both squad IDs",
+            "Active invoice requires valid payment, traffic and Remnawave delivery fields",
         )
     try:
         provider = get_provider(target.provider)
@@ -117,10 +171,36 @@ async def get_tree(_: str = Depends(get_current_user)):
         return _serialize_tree(list(result.scalars().all()), None)
 
 
+@router.get("/remnawave-squads")
+async def get_remnawave_squads(
+    refresh: bool = False,
+    _: str = Depends(get_current_user),
+):
+    global _squad_cache
+    now = time.monotonic()
+    if not refresh and _squad_cache and now - _squad_cache[0] < _SQUAD_CACHE_TTL_SECONDS:
+        return _squad_cache[1]
+    client = _rw_client()
+    try:
+        internal, external = await asyncio.gather(
+            client.get_internal_squads(strict=True),
+            client.get_external_squads(strict=True),
+        )
+    except Exception as exc:
+        raise HTTPException(502, "Unable to load squads from Remnawave") from exc
+    payload = {
+        "internal": sorted(internal, key=lambda item: (item["name"], item["uuid"])),
+        "external": sorted(external, key=lambda item: (item["name"], item["uuid"])),
+    }
+    _squad_cache = (now, payload)
+    return payload
+
+
 @router.post("/nodes", response_model=WebAppMenuNodeSchema)
 async def create_node(body: WebAppMenuNodeCreate, _: str = Depends(get_current_user)):
     async with async_session() as session:
         node = WebAppMenuNode(**body.model_dump())
+        _normalize_node(node)
         session.add(node)
         await session.flush()
         await _validate_parent(session, node)
@@ -129,8 +209,7 @@ async def create_node(body: WebAppMenuNodeCreate, _: str = Depends(get_current_u
         await session.refresh(node)
     await bump_cache_version()
     return WebAppMenuNodeSchema(
-        **body.model_dump(),
-        id=node.id,
+        **_node_fields(node),
         needs_attention=_needs_attention(node),
         children=[],
     )
@@ -147,8 +226,17 @@ async def update_node(
         if node is None:
             raise HTTPException(404, "Node not found")
         values = body.model_dump(exclude_unset=True)
+        old_parent_id = node.parent_id
         for field, value in values.items():
             setattr(node, field, value)
+        _normalize_node(node)
+        if "parent_id" in values and node.parent_id != old_parent_id and "sort_order" not in values:
+            max_sort = await session.scalar(
+                select(func.max(WebAppMenuNode.sort_order)).where(
+                    WebAppMenuNode.parent_id == node.parent_id
+                )
+            )
+            node.sort_order = int(-1 if max_sort is None else max_sort) + 1
         if node.action == "invoice":
             child = await session.scalar(
                 select(WebAppMenuNode.id).where(WebAppMenuNode.parent_id == node.id)
@@ -162,8 +250,12 @@ async def update_node(
                 "invoice_currency",
                 "invoice_method",
                 "invoice_days",
-                "invoice_squad_id",
+                "invoice_internal_squad_ids",
                 "invoice_external_squad_id",
+                "invoice_traffic_limit_bytes",
+                "invoice_traffic_limit_strategy",
+                "invoice_remnawave_description",
+                "invoice_remnawave_tag",
             ):
                 setattr(node, field, None)
         await _validate_parent(session, node)
@@ -171,20 +263,7 @@ async def update_node(
         await session.commit()
         await session.refresh(node)
         response = WebAppMenuNodeSchema(
-            id=node.id,
-            parent_id=node.parent_id,
-            text_ru=node.text_ru,
-            text_en=node.text_en,
-            action=node.action,
-            sort_order=node.sort_order,
-            is_active=node.is_active,
-            invoice_provider=node.invoice_provider,
-            invoice_amount=node.invoice_amount,
-            invoice_currency=node.invoice_currency,
-            invoice_method=node.invoice_method,
-            invoice_days=node.invoice_days,
-            invoice_squad_id=node.invoice_squad_id,
-            invoice_external_squad_id=node.invoice_external_squad_id,
+            **_node_fields(node),
             needs_attention=_needs_attention(node),
             children=[],
         )

@@ -6,7 +6,7 @@ matching assertion (and write an Alembic migration if it affects prod).
 """
 from __future__ import annotations
 
-from sqlalchemy import BigInteger, Boolean, Integer, String, Text
+from sqlalchemy import BigInteger, Boolean, Integer, JSON, String, Text
 
 from common_db import Base
 from common_db.models import (
@@ -225,7 +225,11 @@ class TestTransactionCanon:
 
     def test_delivery_snapshot_and_provider_id(self) -> None:
         assert _col(Transaction, "squad_id").type.length == 100
+        assert isinstance(_col(Transaction, "internal_squad_ids").type, JSON)
         assert _col(Transaction, "external_squad_id").type.length == 100
+        assert isinstance(_col(Transaction, "traffic_limit_bytes").type, BigInteger)
+        assert _col(Transaction, "traffic_limit_strategy").type.length == 30
+        assert _col(Transaction, "remnawave_tag").type.length == 16
         assert _col(Transaction, "provider_invoice_id").type.length == 100
         assert _has_index(Transaction, "ix_transactions_provider_invoice_id")
 
@@ -246,8 +250,11 @@ class TestWebAppMenuNodeCanon:
     def test_localized_text_and_delivery_target(self) -> None:
         assert _col(WebAppMenuNode, "text_ru").type.length == 255
         assert _col(WebAppMenuNode, "text_en").type.length == 255
-        assert _col(WebAppMenuNode, "invoice_squad_id").type.length == 100
+        assert isinstance(_col(WebAppMenuNode, "invoice_internal_squad_ids").type, JSON)
         assert _col(WebAppMenuNode, "invoice_external_squad_id").type.length == 100
+        assert isinstance(_col(WebAppMenuNode, "invoice_traffic_limit_bytes").type, BigInteger)
+        assert _col(WebAppMenuNode, "invoice_traffic_limit_strategy").type.length == 30
+        assert _col(WebAppMenuNode, "invoice_remnawave_tag").type.length == 16
 
     def test_self_ref_index(self) -> None:
         assert _has_index(WebAppMenuNode, "ix_webapp_menu_nodes_parent_id")

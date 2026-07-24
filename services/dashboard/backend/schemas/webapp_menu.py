@@ -18,8 +18,12 @@ class WebAppMenuNodeBase(BaseModel):
     invoice_currency: str | None = None
     invoice_method: str | None = None
     invoice_days: int | None = None
-    invoice_squad_id: str | None = None
+    invoice_internal_squad_ids: list[str] | None = None
     invoice_external_squad_id: str | None = None
+    invoice_traffic_limit_bytes: int | None = None
+    invoice_traffic_limit_strategy: str | None = None
+    invoice_remnawave_description: str | None = None
+    invoice_remnawave_tag: str | None = None
 
 
 class WebAppMenuNodeCreate(WebAppMenuNodeBase):
@@ -38,8 +42,12 @@ class WebAppMenuNodeUpdate(BaseModel):
     invoice_currency: str | None = None
     invoice_method: str | None = None
     invoice_days: int | None = None
-    invoice_squad_id: str | None = None
+    invoice_internal_squad_ids: list[str] | None = None
     invoice_external_squad_id: str | None = None
+    invoice_traffic_limit_bytes: int | None = None
+    invoice_traffic_limit_strategy: str | None = None
+    invoice_remnawave_description: str | None = None
+    invoice_remnawave_tag: str | None = None
 
 
 class WebAppMenuNodeSchema(WebAppMenuNodeBase):

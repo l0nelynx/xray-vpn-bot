@@ -87,6 +87,7 @@ async def deliver_subscription(
     transaction_id: Optional[str] = None,
     amount: Optional[float] = None,
     tariff_slug: Optional[str] = None,
+    delivery_target: Optional[dict] = None,
 ) -> dict:
     """
     Unified function to deliver subscription to user.
@@ -166,21 +167,30 @@ async def deliver_subscription(
         tariff_squad = None
         if subscription_type == SubscriptionType.PAID and tariff_slug:
             tariff_squad = _parse_squad_slug(tariff_slug)
+        if subscription_type == SubscriptionType.PAID and delivery_target:
+            internal_ids = delivery_target.get("internal_squad_ids") or []
+            if internal_ids and delivery_target.get("external_squad_id"):
+                tariff_squad = {
+                    "squad_id": internal_ids[0],
+                    "external_squad_id": delivery_target["external_squad_id"],
+                }
 
         if scenario == SubscriptionScenario.NEW_USER:
             result = await _handle_new_user(
                 message, username, user_id, days, data_limit, reset_strategy, subscription_type, lang,
-                tariff_squad=tariff_squad,
+                tariff_squad=tariff_squad, delivery_target=delivery_target,
             )
         elif scenario == SubscriptionScenario.EXTEND:
             result = await _handle_extend_subscription(
                 message, username, user_id, days, subscription_type, lang, user_info=user_info,
                 tariff_squad=tariff_squad, account_uuid=account_uuid,
+                delivery_target=delivery_target,
             )
         elif scenario == SubscriptionScenario.UPDATE:
             result = await _handle_update_subscription(
                 message, username, user_id, days, data_limit, reset_strategy, subscription_type, lang,
                 tariff_squad=tariff_squad, account_uuid=account_uuid,
+                delivery_target=delivery_target,
             )
         elif scenario == SubscriptionScenario.LIMITED:
             result = await _handle_limited(message, username, subscription_type, lang, user_info=user_info)
@@ -252,6 +262,7 @@ async def _handle_new_user(
     subscription_type: SubscriptionType,
     lang=None,
     tariff_squad: Optional[dict] = None,
+    delivery_target: Optional[dict] = None,
 ) -> dict:
     """Handle new user subscription creation"""
     # Lazy import to avoid circular dependency
@@ -263,15 +274,20 @@ async def _handle_new_user(
     else:
         squad_id = tariff_squad["squad_id"] if tariff_squad else secrets.get("rw_pro_id")
         external_squad_id = tariff_squad["external_squad_id"] if tariff_squad else secrets.get("rw_ext_pro_id")
+    paid_target = delivery_target if subscription_type == SubscriptionType.PAID else None
     buyer_info = await apply_new_user(
         username=username,
         telegram_id=user_id,
         days=days,
         limit_gb=data_limit,
         email=f"{username}@marzban.ru",
-        description="Telegram subscription",
+        description=(paid_target or {}).get("remnawave_description") or "Telegram subscription",
         squad_id=squad_id,
+        internal_squad_ids=(paid_target or {}).get("internal_squad_ids"),
         external_squad_id=external_squad_id,
+        traffic_limit_bytes=(paid_target or {}).get("traffic_limit_bytes"),
+        traffic_limit_strategy=(paid_target or {}).get("traffic_limit_strategy"),
+        tag=(paid_target or {}).get("remnawave_tag"),
     )
 
     if buyer_info and buyer_info.get("uuid"):
@@ -308,6 +324,7 @@ async def _handle_extend_subscription(
     user_info: dict = None,
     tariff_squad: Optional[dict] = None,
     account_uuid: Optional[str] = None,
+    delivery_target: Optional[dict] = None,
 ) -> dict:
     """Handle existing subscription extension"""
     # Lazy import to avoid circular dependency
@@ -329,6 +346,12 @@ async def _handle_extend_subscription(
         current_days_left = expire_day if isinstance(expire_day, int) else 0
         new_expire_days = current_days_left + days
         days_for_apply = days
+    paid_target = delivery_target if subscription_type == SubscriptionType.PAID else None
+    paid_description = (
+        paid_target.get("remnawave_description")
+        if paid_target is not None
+        else "updated by backend v2"
+    )
 
     # Prefer the resolved account_uuid (uuid -> email -> username) over a
     # bare DB lookup so we update the same Remnawave account the scenario
@@ -360,8 +383,12 @@ async def _handle_extend_subscription(
             days=days_for_apply,
             current_days_left=current_days_left,
             squad_id=squad_id,
+            internal_squad_ids=(paid_target or {}).get("internal_squad_ids"),
             external_squad_id=external_squad_id,
-            description="updated by backend v2",
+            description=paid_description,
+            traffic_limit_bytes=(paid_target or {}).get("traffic_limit_bytes"),
+            traffic_limit_strategy=(paid_target or {}).get("traffic_limit_strategy"),
+            tag=(paid_target or {}).get("remnawave_tag"),
         )
 
     final_expire_day = await get_user_days(buyer_info)
@@ -398,6 +425,7 @@ async def _handle_update_subscription(
     lang=None,
     tariff_squad: Optional[dict] = None,
     account_uuid: Optional[str] = None,
+    delivery_target: Optional[dict] = None,
 ) -> dict:
     """Handle subscription update (replacement)"""
     # Lazy import to avoid circular dependency
@@ -412,6 +440,12 @@ async def _handle_update_subscription(
     else:
         squad_id = secrets.get("rw_free_id")
         external_squad_id = secrets.get("rw_ext_free_id")
+    paid_target = delivery_target if subscription_type == SubscriptionType.PAID else None
+    description = (
+        paid_target.get("remnawave_description")
+        if paid_target is not None
+        else "updated by backend v2"
+    )
 
     target_uuid = account_uuid
     if not target_uuid:
@@ -440,8 +474,12 @@ async def _handle_update_subscription(
         days=days,
         limit_gb=data_limit,
         squad_id=squad_id,
+        internal_squad_ids=(paid_target or {}).get("internal_squad_ids"),
         external_squad_id=external_squad_id,
-        description="updated by backend v2",
+        description=description,
+        traffic_limit_bytes=(paid_target or {}).get("traffic_limit_bytes"),
+        traffic_limit_strategy=(paid_target or {}).get("traffic_limit_strategy"),
+        tag=(paid_target or {}).get("remnawave_tag"),
     )
 
     expire_day = await get_user_days(buyer_info)

@@ -32,7 +32,7 @@ Sync variants (`postgresql+psycopg2://…`, `sqlite:///…`) are used by Alembic
 | Table | Purpose |
 |-------|---------|
 | `users` | Telegram/web/Android users + VPN profile (`tg_id`, `email`, `vless_uuid`, `is_banned`, `language`, `vip`, **`bonus_credits`**). |
-| `transactions` | Payments/orders. `transaction_id` is the local UUID; `provider_invoice_id` is the webhook correlation key; `squad_id` + `external_squad_id` are the immutable delivery snapshot. |
+| `transactions` | Payments/orders. `transaction_id` is the local UUID; `provider_invoice_id` is the webhook correlation key; squads, traffic policy and Remnawave metadata form the immutable delivery snapshot. |
 | `promos` | Promo/referral **code catalog** (`promo_type`, `credit_grant`, `days_purchased`, `points_rewarded`). See [referral.md](referral.md). |
 | `promo_redemptions` | Audit log of code activations (gating rules). |
 | `promo_settings` | Singleton tunables: `default_credit_grant`, `points_reward_per_30`, `reward_cap_points`. |
@@ -50,7 +50,7 @@ The full, authoritative set lives in `packages/common_db/common_db/models/`.
 ## Migrations
 
 Schema changes go exclusively through **Alembic** (`alembic/versions/`). Current
-HEAD: **`0029_unified_tariff_constructor`**. The one-shot `migrate` container runs
+HEAD: **`0030_tariff_delivery_options`**. The one-shot `migrate` container runs
 `alembic upgrade head` on startup; the app services wait for it (`depends_on:
 service_completed_successfully`) and run no ad-hoc DDL of their own.
 
@@ -64,6 +64,7 @@ Notable recent migrations:
 | `0020` | Points scale (×10 RUB points) |
 | `0021` | Owner rewards in points (`points_rewarded`, `points_reward_per_30`, `reward_cap_points`) |
 | `0029` | Unified tariff tree, delivery snapshots, provider IDs; removes legacy tariff/squad tables |
+| `0030` | Multi-squad tariff delivery, traffic policy and Remnawave description/tag snapshots |
 
 - Autogenerate target is `common_db.Base.metadata` (`alembic/env.py`).
 - Local dev without Docker:

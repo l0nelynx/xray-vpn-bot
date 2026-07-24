@@ -137,6 +137,7 @@ async def deliver_android_paid(
     tariff_slug: Optional[str],
     session_factory,
     notifier: Notifier,
+    delivery_target: Optional[dict] = None,
     squad_resolver: Optional[SquadResolver] = None,
 ) -> dict:
     """Provision/extend a PAID Remnawave subscription for an Android user.
@@ -157,7 +158,15 @@ async def deliver_android_paid(
     squad = _parse_squad_slug(tariff_slug)
     if not squad and tariff_slug and squad_resolver is not None:
         squad = await squad_resolver(tariff_slug)
-    if not squad:
+    target = dict(delivery_target or {})
+    has_delivery_target = delivery_target is not None
+    internal_ids = target.get("internal_squad_ids") or (
+        [squad["squad_id"]] if squad else []
+    )
+    external_squad_id = target.get("external_squad_id") or (
+        squad["external_squad_id"] if squad else None
+    )
+    if not internal_ids or not external_squad_id:
         await _notify(
             notifier, ok=False, transaction_id=transaction_id,
             android_user_id=android_user_id, email=email, days=days,
@@ -178,9 +187,13 @@ async def deliver_android_paid(
                 days=days,
                 limit_gb=0,
                 email=email,
-                description="Android paid subscription",
-                squad_id=squad["squad_id"],
-                external_squad_id=squad["external_squad_id"],
+                squad_id=internal_ids[0],
+                internal_squad_ids=internal_ids,
+                external_squad_id=external_squad_id,
+                traffic_limit_bytes=target.get("traffic_limit_bytes"),
+                traffic_limit_strategy=target.get("traffic_limit_strategy"),
+                tag=target.get("remnawave_tag"),
+                description=target.get("remnawave_description") or "Android paid subscription",
             )
         elif scenario == SubscriptionScenario.EXTEND:
             uuid = (info or {}).get("uuid")
@@ -196,9 +209,17 @@ async def deliver_android_paid(
                 username=username,
                 days=days,
                 current_days_left=_days_left(info),
-                squad_id=squad["squad_id"],
-                external_squad_id=squad["external_squad_id"],
-                description="Android paid extend",
+                squad_id=internal_ids[0],
+                internal_squad_ids=internal_ids,
+                external_squad_id=external_squad_id,
+                description=(
+                    target.get("remnawave_description")
+                    if has_delivery_target
+                    else "Android paid extend"
+                ),
+                traffic_limit_bytes=target.get("traffic_limit_bytes"),
+                traffic_limit_strategy=target.get("traffic_limit_strategy"),
+                tag=target.get("remnawave_tag"),
             )
         else:  # UPDATE / LIMITED / ALREADY_ACTIVE all fall through to update.
             uuid = (info or {}).get("uuid")
@@ -214,10 +235,18 @@ async def deliver_android_paid(
                 username=username,
                 days=days,
                 limit_gb=0,
-                squad_id=squad["squad_id"],
-                external_squad_id=squad["external_squad_id"],
+                squad_id=internal_ids[0],
+                internal_squad_ids=internal_ids,
+                external_squad_id=external_squad_id,
                 status="active",
-                description="Android paid update",
+                description=(
+                    target.get("remnawave_description")
+                    if has_delivery_target
+                    else "Android paid update"
+                ),
+                traffic_limit_bytes=target.get("traffic_limit_bytes"),
+                traffic_limit_strategy=target.get("traffic_limit_strategy"),
+                tag=target.get("remnawave_tag"),
             )
     except Exception as exc:
         logger.error("android delivery for tx=%s failed: %s", transaction_id, exc)
@@ -267,13 +296,22 @@ async def deliver_telegram_paid(
     tariff_slug: Optional[str],
     session_factory,
     notifier: Notifier,
+    delivery_target: Optional[dict] = None,
     squad_resolver: Optional[SquadResolver] = None,
 ) -> dict:
     """Provision/extend a PAID Remnawave subscription for a Telegram user."""
     squad = _parse_squad_slug(tariff_slug)
     if not squad and tariff_slug and squad_resolver is not None:
         squad = await squad_resolver(tariff_slug)
-    if not squad:
+    target = dict(delivery_target or {})
+    has_delivery_target = delivery_target is not None
+    internal_ids = target.get("internal_squad_ids") or (
+        [squad["squad_id"]] if squad else []
+    )
+    external_squad_id = target.get("external_squad_id") or (
+        squad["external_squad_id"] if squad else None
+    )
+    if not internal_ids or not external_squad_id:
         await notifier(
             f"❌ <b>Telegram delivery FAILED</b>\n"
             f"user: <code>{tg_id}</code> @{esc(username)}\n"
@@ -293,9 +331,13 @@ async def deliver_telegram_paid(
                 days=days,
                 limit_gb=0,
                 email=f"{username}@telegram.user",
-                description="Paid subscription (bonus credits)",
-                squad_id=squad["squad_id"],
-                external_squad_id=squad["external_squad_id"],
+                description=target.get("remnawave_description") or "Paid subscription (bonus credits)",
+                squad_id=internal_ids[0],
+                internal_squad_ids=internal_ids,
+                external_squad_id=external_squad_id,
+                traffic_limit_bytes=target.get("traffic_limit_bytes"),
+                traffic_limit_strategy=target.get("traffic_limit_strategy"),
+                tag=target.get("remnawave_tag"),
             )
         elif scenario == SubscriptionScenario.EXTEND:
             uuid = (info or {}).get("uuid")
@@ -306,9 +348,17 @@ async def deliver_telegram_paid(
                 username=username,
                 days=days,
                 current_days_left=_days_left(info),
-                squad_id=squad["squad_id"],
-                external_squad_id=squad["external_squad_id"],
-                description="Paid extend (bonus credits)",
+                squad_id=internal_ids[0],
+                internal_squad_ids=internal_ids,
+                external_squad_id=external_squad_id,
+                description=(
+                    target.get("remnawave_description")
+                    if has_delivery_target
+                    else "Paid extend (bonus credits)"
+                ),
+                traffic_limit_bytes=target.get("traffic_limit_bytes"),
+                traffic_limit_strategy=target.get("traffic_limit_strategy"),
+                tag=target.get("remnawave_tag"),
             )
         else:
             uuid = (info or {}).get("uuid")
@@ -319,10 +369,18 @@ async def deliver_telegram_paid(
                 username=username,
                 days=days,
                 limit_gb=0,
-                squad_id=squad["squad_id"],
-                external_squad_id=squad["external_squad_id"],
+                squad_id=internal_ids[0],
+                internal_squad_ids=internal_ids,
+                external_squad_id=external_squad_id,
                 status="active",
-                description="Paid update (bonus credits)",
+                description=(
+                    target.get("remnawave_description")
+                    if has_delivery_target
+                    else "Paid update (bonus credits)"
+                ),
+                traffic_limit_bytes=target.get("traffic_limit_bytes"),
+                traffic_limit_strategy=target.get("traffic_limit_strategy"),
+                tag=target.get("remnawave_tag"),
             )
     except Exception as exc:
         logger.error("telegram delivery for tx=%s failed: %s", transaction_id, exc)
