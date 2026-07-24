@@ -7,6 +7,7 @@ rotated token revokes the entire family (assumed compromise).
 """
 from __future__ import annotations
 
+import logging
 import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -35,6 +36,18 @@ from .schemas import (
 )
 
 router = APIRouter(prefix="/api/android/auth", tags=["android-auth"])
+logger = logging.getLogger(__name__)
+
+
+def _issue_access_token(user_id: int) -> tuple[str, security.AccessClaims]:
+    try:
+        return security.issue_access_token(user_id)
+    except security.JWTError:
+        logger.exception("Android JWT signing is unavailable")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": "auth_unavailable"},
+        )
 
 
 def _user_summary(user: repo.UserRow) -> UserSummary:
@@ -52,6 +65,7 @@ async def _issue_pair(
 ) -> TokenPair:
     fam = family_id or security.new_family_id()
     raw_refresh, refresh_hash = security.issue_refresh_token(fam)
+    access, claims = _issue_access_token(user_id)
     ua, ip = deps.client_meta(request)
     await repo.store_refresh_token(
         user_id=user_id,
@@ -60,7 +74,6 @@ async def _issue_pair(
         user_agent=ua,
         ip=ip,
     )
-    access, claims = security.issue_access_token(user_id)
     return TokenPair(
         access_token=access,
         refresh_token=raw_refresh,
@@ -150,6 +163,9 @@ async def refresh(req: RefreshRequest, request: Request) -> TokenPair:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail={"code": "user_unavailable"})
 
     new_raw, new_hash = security.issue_refresh_token(family)
+    # Sign before rotating the refresh token. If runtime configuration is
+    # temporarily unavailable, the client keeps its still-valid old token.
+    access, claims = _issue_access_token(row.user_id)
     ua, ip = deps.client_meta(request)
     await repo.rotate_refresh_token(
         old_id=row.id,
@@ -159,7 +175,6 @@ async def refresh(req: RefreshRequest, request: Request) -> TokenPair:
         user_agent=ua,
         ip=ip,
     )
-    access, claims = security.issue_access_token(row.user_id)
     return TokenPair(
         access_token=access,
         refresh_token=new_raw,

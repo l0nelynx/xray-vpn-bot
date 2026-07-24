@@ -25,6 +25,7 @@ from .keys import (
     PAYMENT_PROVIDER_FIELDS,
     RUNTIME_KEYS,
 )
+from .validation import android_jwt_secret_error
 
 logger = logging.getLogger(__name__)
 
@@ -220,14 +221,41 @@ async def refresh_from_session(session: AsyncSession, *, force: bool = False) ->
             continue
         int_en[integ.provider] = bool(integ.enabled)
         try:
-            int_map[integ.provider] = decrypt_json(integ.encrypted_config, key)
+            payload = decrypt_json(integ.encrypted_config, key)
         except Exception as exc:
             logger.error(
                 "Failed to decrypt app_integrations[%s]: %s",
                 integ.provider,
                 exc,
             )
-            int_map[integ.provider] = {}
+            payload = {}
+
+        if integ.provider == "android" and int_en[integ.provider]:
+            validation_error = android_jwt_secret_error(
+                payload.get("android_jwt_secret")
+            )
+            if validation_error:
+                # A bad live update must not take authentication down. Keep the
+                # last known-good provider overlay, or fall back to YAML during
+                # the initial bootstrap. Dashboard validation prevents new bad
+                # values; this also protects against old/corrupt/direct DB rows.
+                logger.error(
+                    "Ignoring invalid app_integrations[android]: %s",
+                    validation_error,
+                )
+                if integ.provider in _integration_overlay:
+                    previous = _integration_overlay[integ.provider]
+                    int_map[integ.provider] = (
+                        dict(previous) if previous is not None else None
+                    )
+                    int_en[integ.provider] = _integration_enabled.get(
+                        integ.provider, False
+                    )
+                else:
+                    int_map[integ.provider] = None
+                continue
+
+        int_map[integ.provider] = payload
 
     _overlay = flat
     _payment_overlay = pay_map

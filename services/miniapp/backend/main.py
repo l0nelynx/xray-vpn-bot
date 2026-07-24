@@ -61,7 +61,6 @@ def _run_migrations() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    validate_security_config()
     _run_migrations()
     from .database.session import async_session
     from common_db.runtime_config import bootstrap_runtime_overlay, runtime_overlay_poll_loop
@@ -72,6 +71,10 @@ async def lifespan(app: FastAPI):
         yaml_cfg.get("payments_secrets_key") or yaml_cfg.get("dashboard_secret") or ""
     )
     await bootstrap_runtime_overlay(async_session, yaml_cfg, crypto_secret=crypto_secret)
+    # Validate the effective config after the DB overlay has been loaded.
+    # Validating earlier only checked YAML and let an invalid Dashboard value
+    # replace it a moment later.
+    validate_security_config()
     poll_task = asyncio.create_task(runtime_overlay_poll_loop(async_session))
     try:
         yield

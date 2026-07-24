@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime, timezone
 from typing import Any, Mapping
 
@@ -18,7 +19,10 @@ from ..runtime_config.keys import (
     RUNTIME_KEYS,
 )
 from ..runtime_config.overlay import parse_runtime_json
+from ..runtime_config.validation import android_jwt_secret_error
 from .system import bump_cache_version, get_or_create_singleton
+
+logger = logging.getLogger(__name__)
 
 
 def _now_iso() -> str:
@@ -210,8 +214,18 @@ async def upsert_app_integration(
         except Exception:
             existing = {}
         for field in INTEGRATION_SECRET_FIELDS:
-            if field in clean and clean[field] in ("", None) and field in existing:
+            if (
+                field in allowed
+                and (field not in clean or clean[field] in ("", None))
+                and field in existing
+            ):
                 clean[field] = existing[field]
+    if provider == "android" and enabled:
+        validation_error = android_jwt_secret_error(
+            clean.get("android_jwt_secret")
+        )
+        if validation_error:
+            raise ValueError(validation_error)
     row.enabled = enabled
     row.managed = True
     row.encrypted_config = encrypt_json(dict(clean), crypto_key)
@@ -241,6 +255,16 @@ async def import_integrations_from_yaml(
                 has_any = True
         if not has_any:
             continue
+        if provider == "android":
+            validation_error = android_jwt_secret_error(
+                payload.get("android_jwt_secret")
+            )
+            if validation_error:
+                logger.warning(
+                    "Skipping invalid Android JWT secret during YAML import: %s",
+                    validation_error,
+                )
+                continue
         row = AppIntegration(
             provider=provider,
             enabled=True,

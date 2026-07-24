@@ -7,36 +7,26 @@ still at documented placeholder values.
 
 from __future__ import annotations
 
+from common_db.runtime_config import (
+    MIN_ANDROID_JWT_SECRET_BYTES,
+    android_jwt_secret_error,
+)
+
 from .config import (
     get_android_jwt_secret,
     get_google_play_package_name,
     get_google_play_rtdn_token,
 )
 
-MIN_SECRET_BYTES = 32
-
-INSECURE_ANDROID_JWT_SECRETS = frozenset({
-    "",
-    "change-me-android-jwt-secret",
-})
-
 
 def validate_security_config() -> None:
     secret = get_android_jwt_secret()
-    if not secret:
+    validation_error = android_jwt_secret_error(secret)
+    if validation_error:
         raise RuntimeError(
-            "android_jwt_secret is not set — add a strong random value "
-            f"(>= {MIN_SECRET_BYTES} bytes) to config.yml "
-            "(or set env ANDROID_JWT_SECRET)"
-        )
-    if secret in INSECURE_ANDROID_JWT_SECRETS:
-        raise RuntimeError(
-            "android_jwt_secret still uses the built-in insecure placeholder — "
-            "change it in config.yml (e.g. `openssl rand -hex 32`)"
-        )
-    if len(secret.encode("utf-8")) < MIN_SECRET_BYTES:
-        raise RuntimeError(
-            f"android_jwt_secret must be at least {MIN_SECRET_BYTES} bytes (HS256)"
+            f"{validation_error}; configure a strong random value "
+            f"(>= {MIN_ANDROID_JWT_SECRET_BYTES} bytes, e.g. `openssl rand -hex 32`) "
+            "in Dashboard or config.yml"
         )
 
     if get_google_play_package_name() and not get_google_play_rtdn_token():

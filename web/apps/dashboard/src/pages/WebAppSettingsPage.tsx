@@ -9,7 +9,7 @@ import { Badge } from "@xray/ui/components/badge";
 import { Switch } from "@xray/ui/components/switch";
 import { Spinner } from "@xray/ui/components/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@xray/ui/components/tabs";
-import { api } from "../api/client";
+import { ApiError, api } from "../api/client";
 
 interface FeatureFlags {
   legacy_bot_constructor: boolean;
@@ -429,6 +429,16 @@ export default function WebAppSettingsPage() {
   async function saveIntegration(provider: ProviderState) {
     const pf = integrationForms[provider.provider];
     if (!pf) return;
+    const androidSecret = pf.fields.android_jwt_secret ?? "";
+    if (
+      provider.provider === "android" &&
+      pf.enabled &&
+      androidSecret &&
+      new TextEncoder().encode(androidSecret).length < 32
+    ) {
+      toast.error("android_jwt_secret must be at least 32 bytes");
+      return;
+    }
     setSaving(true);
     try {
       const updated = await api.put<ProviderState>(
@@ -450,8 +460,12 @@ export default function WebAppSettingsPage() {
         return { ...prev, [updated.provider]: { enabled: updated.enabled, fields } };
       });
       toast.success(`${provider.provider}: saved (Dashboard is now source of truth)`);
-    } catch {
-      toast.error(`Failed to save ${provider.provider}`);
+    } catch (error) {
+      toast.error(
+        error instanceof ApiError
+          ? error.detail
+          : `Failed to save ${provider.provider}`,
+      );
     } finally {
       setSaving(false);
     }

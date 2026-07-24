@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from common_db.repo.runtime import (
+    get_app_integration,
     list_app_integrations,
     upsert_app_integration,
 )
@@ -16,6 +17,8 @@ from common_db.runtime_config import (
     decrypt_json,
     derive_key,
     invalidate_local,
+    android_jwt_secret_error,
+    resolve_android_jwt_secret,
 )
 
 from ..auth import get_current_user
@@ -146,8 +149,39 @@ async def update_provider(
         for k, v in body.fields.items()
         if k in INTEGRATION_PROVIDER_FIELDS[provider] and v != _MASK
     }
+    # Empty secret inputs mean "keep current value"; do not persist an empty
+    # override that would hide a valid YAML fallback.
+    for field in INTEGRATION_SECRET_FIELDS:
+        if clean_fields.get(field) in ("", None):
+            clean_fields.pop(field, None)
+
     key = _crypto_key()
     async with async_session() as session:
+        current = await get_app_integration(session, provider)
+        existing_fields: dict[str, Any] = {}
+        if current and current.encrypted_config:
+            try:
+                existing_fields = decrypt_json(current.encrypted_config, key)
+            except Exception:
+                existing_fields = {}
+
+        if provider == "android" and body.enabled:
+            # Invalid/corrupt values from the original migration fall back to
+            # YAML and are repaired on Save. An explicit new value still wins
+            # so the validator can reject it rather than silently hiding it.
+            effective_secret = resolve_android_jwt_secret(
+                submitted=clean_fields.get("android_jwt_secret"),
+                existing=existing_fields.get("android_jwt_secret"),
+                yaml_fallback=get_yaml_config().get("android_jwt_secret"),
+            )
+            validation_error = android_jwt_secret_error(effective_secret)
+            if validation_error:
+                raise HTTPException(status_code=422, detail=validation_error)
+            # Persist the effective value even when the password input was
+            # intentionally left blank. This completes the YAML → Dashboard
+            # migration instead of leaving a hidden per-field YAML fallback.
+            clean_fields["android_jwt_secret"] = effective_secret
+
         row = await upsert_app_integration(
             session,
             provider=provider,
