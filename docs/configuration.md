@@ -171,7 +171,7 @@ Preferred: **Dashboard → Settings → Push / Play** (paste SA JSON; path is fa
 |-----|-------------|
 | `google_play_package_name` | Play Console package name |
 | `google_play_service_account_path` | Bootstrap fallback path to SA JSON inside container |
-| `google_play_rtdn_token` | RTDN webhook shared secret — required when package name is set |
+| `google_play_rtdn_token` | RTDN webhook shared secret; optional until IAP is enabled |
 
 ## FCM push (optional)
 
@@ -293,7 +293,10 @@ The services **refuse to start** with insecure defaults:
 | Dashboard | `dashboard_secret` must be ≥32 bytes and not the built-in placeholder |
 | Dashboard | `dashboard_password` must not be `admin` |
 | Miniapp | `android_jwt_secret` must not be missing/placeholder/short |
-| Miniapp | `google_play_rtdn_token` required when `google_play_package_name` is set |
+
+Google Play IAP settings are optional and do not block Miniapp startup. Until
+`google_play_rtdn_token` is configured, the RTDN endpoint stays disabled and
+returns `503 iap_not_configured`.
 
 ## Config file locations in containers
 

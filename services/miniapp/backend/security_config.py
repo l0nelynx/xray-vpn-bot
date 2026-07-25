@@ -1,8 +1,7 @@
 """Fail-closed startup checks for the miniapp service.
 
-Mirrors the dashboard's ``validate_security_config()`` pattern: refuse to boot
-when credentials that protect JWT issuance or Google Play RTDN are missing or
-still at documented placeholder values.
+IAP is optional and may be configured later through Dashboard. Startup only
+requires credentials used by the active Android authentication flow.
 """
 
 from __future__ import annotations
@@ -12,11 +11,7 @@ from common_db.runtime_config import (
     android_jwt_secret_error,
 )
 
-from .config import (
-    get_android_jwt_secret,
-    get_google_play_package_name,
-    get_google_play_rtdn_token,
-)
+from .config import get_android_jwt_secret
 
 
 def validate_security_config() -> None:
@@ -27,11 +22,4 @@ def validate_security_config() -> None:
             f"{validation_error}; configure a strong random value "
             f"(>= {MIN_ANDROID_JWT_SECRET_BYTES} bytes, e.g. `openssl rand -hex 32`) "
             "in Dashboard or config.yml"
-        )
-
-    if get_google_play_package_name() and not get_google_play_rtdn_token():
-        raise RuntimeError(
-            "google_play_package_name is set but google_play_rtdn_token is empty — "
-            "configure a shared secret for the RTDN push endpoint or disable IAP "
-            "by clearing google_play_package_name"
         )

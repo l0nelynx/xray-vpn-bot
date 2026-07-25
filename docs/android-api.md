@@ -489,7 +489,10 @@ amount/currency/method/days и delivery squad сервер достаёт сам
 ### POST /rtdn
 
 Принимает Pub/Sub-payload. Аутентификация — `?token=<google_play_rtdn_token>`
-из `config.yml`. Всегда возвращает 200, чтобы Pub/Sub не повторял пуши.
+из `config.yml`. Если секрет не настроен, endpoint отключён и возвращает
+**503 `iap_not_configured`**. После настройки корректные, но незначимые или
+повреждённые Pub/Sub payload возвращают 200, чтобы Google не повторял их
+бесконечно.
 
 ---
 
