@@ -458,6 +458,9 @@ PURPOSE_SETUP_EMAIL = "setup_email"       # set email+password for users who hav
 PURPOSE_SETUP_PASSWORD = "setup_password"  # set password for users who have email but not pwd
 PURPOSE_CLAIM = "claim"                    # subscription claim flow (shortID onboarding)
 PURPOSE_APP_LOGIN = "app_login"            # one-time web→app login handoff token
+APP_LOGIN_PENDING = "pending"
+APP_LOGIN_EXCHANGED = "exchanged"
+APP_LOGIN_SUPERSEDED = "superseded"
 
 
 async def invalidate_pending_codes(user_id: int, purpose: str) -> None:
@@ -471,6 +474,26 @@ async def invalidate_pending_codes(user_id: int, purpose: str) -> None:
                 "WHERE user_id = :u AND purpose = :p AND used_at IS NULL"
             ),
             {"n": now, "u": user_id, "p": purpose},
+        )
+        await s.commit()
+
+
+async def supersede_pending_app_login_codes(user_id: int) -> None:
+    """Invalidate older app-login handoffs without making them look exchanged."""
+    now = _utcnow_iso()
+    async with async_session() as s:
+        await s.execute(
+            text(
+                "UPDATE email_verifications "
+                "SET used_at = :n, payload = :state "
+                "WHERE user_id = :u AND purpose = :p AND used_at IS NULL"
+            ),
+            {
+                "n": now,
+                "state": APP_LOGIN_SUPERSEDED,
+                "u": user_id,
+                "p": PURPOSE_APP_LOGIN,
+            },
         )
         await s.commit()
 
@@ -594,6 +617,103 @@ async def find_active_code_by_purpose_and_hash(
         used_at=row[6],
         attempts=row[7] or 0,
     )
+
+
+async def find_code_by_purpose_and_hash(
+    purpose: str, code_hash: str
+) -> VerificationRow | None:
+    """Find a code even after consumption so the creator can poll its state."""
+    async with async_session() as s:
+        row = (
+            await s.execute(
+                text(
+                    "SELECT id, user_id, purpose, code_hash, payload, expires_at, "
+                    "used_at, attempts FROM email_verifications "
+                    "WHERE purpose = :p AND code_hash = :h "
+                    "ORDER BY id DESC LIMIT 1"
+                ),
+                {"p": purpose, "h": code_hash},
+            )
+        ).first()
+    if row is None:
+        return None
+    return VerificationRow(
+        id=row[0],
+        user_id=row[1],
+        purpose=row[2],
+        code_hash=row[3],
+        payload=row[4],
+        expires_at=row[5],
+        used_at=row[6],
+        attempts=row[7] or 0,
+    )
+
+
+async def consume_app_login_code(code_hash: str) -> VerificationRow | None:
+    """Atomically consume one non-expired app-login code.
+
+    The conditional UPDATE is the single-use gate: concurrent exchangers may
+    both observe the row, but only one can change ``used_at`` from NULL.
+    """
+    now = _utcnow_iso()
+    async with async_session() as s:
+        row = (
+            await s.execute(
+                text(
+                    "SELECT id, user_id, purpose, code_hash, payload, expires_at, "
+                    "used_at, attempts FROM email_verifications "
+                    "WHERE purpose = :p AND code_hash = :h "
+                    "ORDER BY id DESC LIMIT 1"
+                ),
+                {"p": PURPOSE_APP_LOGIN, "h": code_hash},
+            )
+        ).first()
+        if row is None or row[6] is not None or row[5] <= now:
+            return None
+
+        result = await s.execute(
+            text(
+                "UPDATE email_verifications "
+                "SET used_at = :n "
+                "WHERE id = :i AND used_at IS NULL AND expires_at > :n"
+            ),
+            {
+                "n": now,
+                "i": row[0],
+            },
+        )
+        if result.rowcount != 1:
+            await s.rollback()
+            return None
+        await s.commit()
+
+    return VerificationRow(
+        id=row[0],
+        user_id=row[1],
+        purpose=row[2],
+        code_hash=row[3],
+        payload=row[4],
+        expires_at=row[5],
+        used_at=now,
+        attempts=row[7] or 0,
+    )
+
+
+async def mark_app_login_exchanged(code_id: int) -> None:
+    """Publish successful exchange only after the session pair was issued."""
+    async with async_session() as s:
+        await s.execute(
+            text(
+                "UPDATE email_verifications SET payload = :state "
+                "WHERE id = :i AND purpose = :p"
+            ),
+            {
+                "state": APP_LOGIN_EXCHANGED,
+                "i": code_id,
+                "p": PURPOSE_APP_LOGIN,
+            },
+        )
+        await s.commit()
 
 
 async def find_user_by_tg_id(tg_id: int) -> UserRow | None:

@@ -77,7 +77,8 @@ Public SPA route that turns a Remnawave subscription link into a full portal
 account (and optionally signs the desktop/mobile app in).
 
 1. Catalog / Remnawave subscription page links to
-   `https://cheezyvpn.uk/claim?url={{SUBSCRIPTION_LINK}}` (query — Remnawave
+   `https://cheezyvpn.uk/claim?client=desktop&url={{SUBSCRIPTION_LINK}}`
+   (query — Remnawave
    substitutes placeholders in the query string; `#fragment` often stays
    literal `{{SUBSCRIPTION_LINK}}`). The SPA also still accepts legacy
    `/claim#url=…`.
@@ -89,10 +90,14 @@ account (and optionally signs the desktop/mobile app in).
    - `needs_password` → OTP + `/android/claim/complete` (set password)
    - `rw_only` → registration + bind (`acc_email` + password); OTP only when
      resolve returned a deliverable `email_hint`
-3. After auth, **Open in app** mints
-   `POST /android/auth/app-login/create` and navigates to
-   `cheezy://login/<token>`. Fallback: `cheezy://add/<url>` (import without
-   account).
+3. After auth, **Open in app** mints exactly one token via
+   `POST /android/auth/app-login/create`, navigates Desktop to
+   `cheezyvpn://login/<token>` and polls authenticated
+   `POST /android/auth/app-login/status` for up to 90 seconds. The page shows a
+   confirmed success or an expired/superseded/timeout state with an explicit
+   Retry. After a short delay it also offers install/manual-import fallbacks and
+   an opt-in legacy `cheezy://login/<same token>` link for old CheezyVPN
+   versions. Android continues to use `cheezy://`.
 4. Forgot-password UI lives at `/forgot-password` (request + confirm against
    existing `/android/auth/password/reset-*`).
 

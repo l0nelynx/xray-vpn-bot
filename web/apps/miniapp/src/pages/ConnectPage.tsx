@@ -249,6 +249,18 @@ export default function ConnectPage() {
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {apps.map((app) => {
           const isOpen = openApp === app.name;
+          const blocks =
+            app.name === "CheezyVPN" && platform !== "android"
+              ? [...app.blocks].sort((a, b) => {
+                  const aBrowser = a.buttons.some((button) =>
+                    button.link.includes("/claim?client=desktop"),
+                  );
+                  const bBrowser = b.buttons.some((button) =>
+                    button.link.includes("/claim?client=desktop"),
+                  );
+                  return Number(bBrowser) - Number(aBrowser);
+                })
+              : app.blocks;
           return (
             <div
               key={app.name}
@@ -305,7 +317,7 @@ export default function ConnectPage() {
 
               {isOpen && (
                 <div style={{ padding: "0 16px 16px", display: "flex", flexDirection: "column", gap: 18 }}>
-                  {app.blocks.map((block, bi) => {
+                  {blocks.map((block, bi) => {
                     const color = resolveColor(block.svgIconColor);
                     return (
                       <div key={bi}>
@@ -358,7 +370,12 @@ export default function ConnectPage() {
                             {block.buttons.map((btn, qi) => (
                               <Button
                                 key={qi}
-                                variant={btn.type === "subscriptionLink" ? "default" : "outline"}
+                                variant={
+                                  btn.type === "subscriptionLink" ||
+                                  btn.link.includes("/claim?client=desktop")
+                                    ? "default"
+                                    : "outline"
+                                }
                                 onClick={() => onButton(btn)}
                               >
                                 <LibIcon

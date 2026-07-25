@@ -221,12 +221,18 @@ acc_email_required`, `429 code_exhausted`,
 
 Хендофф web → приложение: авторизованная web-сессия чеканит короткоживущий
 одноразовый токен, приложение получает его через deeplink
-`cheezy://login/<token>` и обменивает на обычную пару токенов.
+`cheezyvpn://login/<token>` (Desktop) или `cheezy://login/<token>` (Android /
+legacy Desktop) и обменивает на обычную пару токенов.
 
 - `POST /auth/app-login/create` (Bearer) → `{"token": "...", "expires_in": 90}`.
-  В БД хранится только sha256 токена; активен один токен на пользователя.
+  В БД хранится только sha256 токена; новый token помечает предыдущий pending
+  token того же пользователя как `superseded`.
 - `POST /auth/app-login/exchange` — `{"token": "..."}` → `AuthResponse`.
-  Consume-on-use: повторный обмен → `401 bad_app_login_token`.
+  Атомарный consume-on-use: повторный или параллельный обмен →
+  `401 bad_app_login_token`.
+- `POST /auth/app-login/status` (Bearer) — `{"token": "..."}` →
+  `{"status": "pending" | "exchanged" | "expired" | "superseded"}`.
+  Проверять состояние может только владелец токена.
 
 ### POST /register
 

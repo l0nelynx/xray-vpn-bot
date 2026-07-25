@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex">
-  <title>Открытие приложения…</title>
+  <title>Переход…</title>
   <style>
     html, body {
       margin: 0;
@@ -42,25 +42,91 @@
 </head>
 <body>
   <div class="wrap">
-    <h1>Открываем приложение…</h1>
+    <h1 id="title">Проверяем ссылку…</h1>
     <!-- href is set from the URL fragment below; tapping is a user gesture,
          which iOS requires to launch custom-scheme links reliably. -->
-    <a id="go" class="btn">Открыть приложение</a>
-    <p>Если приложение не открылось автоматически — нажмите кнопку выше.</p>
-    <p class="muted">Не установлено? Вернитесь и установите приложение из списка.</p>
+    <a id="go" class="btn" hidden>Продолжить</a>
+    <p id="hint">Подождите несколько секунд.</p>
+    <p id="fallback" class="muted"></p>
   </div>
   <script>
-    // The deep-link arrives in the URL #fragment, which is never sent to the
-    // server (keeps the user's subscription link out of access logs). We only
-    // ever put it into an anchor href / location.replace — never innerHTML —
-    // so there is no XSS surface even though this page is public.
+    // The target arrives in the URL fragment and is never sent to the server.
+    // Only explicitly supported destinations may be opened.
     (function () {
+      var strings = navigator.language && navigator.language.toLowerCase().indexOf("ru") === 0
+        ? {
+            browserTitle: "Открываем страницу подключения…",
+            browserButton: "Продолжить в браузере",
+            browserHint: "Если переход не произошёл автоматически — нажмите кнопку выше.",
+            browserFallback: "После входа браузер предложит открыть CheezyVPN.",
+            appTitle: "Открываем приложение…",
+            appButton: "Открыть приложение",
+            appHint: "Если приложение не открылось автоматически — нажмите кнопку выше.",
+            appFallback: "Не установлено? Вернитесь и установите приложение из списка.",
+            invalidTitle: "Ссылка заблокирована",
+            invalidHint: "Вернитесь в MiniApp и повторите действие."
+          }
+        : {
+            browserTitle: "Opening the connection page…",
+            browserButton: "Continue in browser",
+            browserHint: "If the page did not open automatically, use the button above.",
+            browserFallback: "After sign-in, the browser will offer to open CheezyVPN.",
+            appTitle: "Opening the app…",
+            appButton: "Open app",
+            appHint: "If the app did not open automatically, use the button above.",
+            appFallback: "Not installed? Return and install the app from the list.",
+            invalidTitle: "Link blocked",
+            invalidHint: "Return to MiniApp and try the action again."
+          };
+      var customSchemes = {
+        cheezy: true,
+        cheezyvpn: true,
+        cheezyclash: true,
+        clashmi: true,
+        flclashx: true,
+        happ: true,
+        "koala-clash": true,
+        "prizrak-box": true,
+        rabbithole: true,
+        shadowrocket: true
+      };
+      var webHosts = {
+        "cheezyvpn.uk": true,
+        "www.cheezyvpn.uk": true,
+        "web-portal-cheezy.vercel.app": true
+      };
       var raw = location.hash ? location.hash.slice(1) : "";
-      if (!raw) return;
-      var url;
-      try { url = decodeURIComponent(raw); } catch (e) { url = raw; }
       var go = document.getElementById("go");
+      var title = document.getElementById("title");
+      var hint = document.getElementById("hint");
+      var fallback = document.getElementById("fallback");
+      var target;
+      try {
+        target = new URL(decodeURIComponent(raw));
+      } catch (e) {
+        target = null;
+      }
+      var scheme = target ? target.protocol.replace(/:$/, "").toLowerCase() : "";
+      var isBrowser = target && target.protocol === "https:" && webHosts[target.hostname.toLowerCase()];
+      var isApp = target && customSchemes[scheme];
+      if (!target || (!isBrowser && !isApp)) {
+        document.title = strings.invalidTitle;
+        title.textContent = strings.invalidTitle;
+        hint.textContent = strings.invalidHint;
+        fallback.textContent = "";
+        return;
+      }
+      var url = target.href;
+      document.title = isBrowser ? strings.browserTitle : strings.appTitle;
+      title.textContent = isBrowser ? strings.browserTitle : strings.appTitle;
+      go.textContent = isBrowser ? strings.browserButton : strings.appButton;
+      hint.textContent = isBrowser ? strings.browserHint : strings.appHint;
+      fallback.textContent = isBrowser ? strings.browserFallback : strings.appFallback;
+      go.hidden = false;
       go.setAttribute("href", url);
+      if (isBrowser) {
+        go.setAttribute("target", "_self");
+      }
       // Auto-attempt (works on Android and most browsers); the button covers
       // iOS where an automatic scheme navigation without a gesture is blocked.
       try { location.replace(url); } catch (e) {}
