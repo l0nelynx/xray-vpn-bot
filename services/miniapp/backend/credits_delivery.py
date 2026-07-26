@@ -58,7 +58,7 @@ async def pay_and_deliver(
 
     tx_id = purchase.transaction_id
 
-    if android_user_id and not tg_id:
+    if android_user_id and (target_rw_id is not None or not tg_id):
         result = await deliver_android_paid(
             transaction_id=tx_id,
             android_user_id=android_user_id,

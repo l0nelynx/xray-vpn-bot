@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import User, UserSubscription
@@ -51,6 +51,17 @@ async def get_primary(
             UserSubscription.user_id == user_id,
             UserSubscription.is_primary.is_(True),
         )
+    )
+
+
+async def count_for_user(session: AsyncSession, user_id: int) -> int:
+    return int(
+        await session.scalar(
+            select(func.count())
+            .select_from(UserSubscription)
+            .where(UserSubscription.user_id == user_id)
+        )
+        or 0
     )
 
 
@@ -144,11 +155,59 @@ async def set_primary(
     return target
 
 
+async def rename_label(
+    session: AsyncSession,
+    *,
+    user_id: int,
+    subscription_id: int,
+    label: str | None,
+) -> UserSubscription | None:
+    target = await get_for_user(
+        session, user_id=user_id, subscription_id=subscription_id
+    )
+    if target is None:
+        return None
+    target.label = label
+    target.updated_at = _now_iso()
+    await session.flush()
+    return target
+
+
+async def detach(
+    session: AsyncSession, *, user_id: int, subscription_id: int
+) -> UserSubscription | None:
+    """Remove only the local ownership link, never the Remnawave user."""
+    target = await get_for_user(
+        session, user_id=user_id, subscription_id=subscription_id
+    )
+    if target is None:
+        return None
+
+    total = await count_for_user(session, user_id)
+    if target.is_primary and total > 1:
+        raise ValueError("primary_change_required")
+
+    await session.execute(
+        delete(UserSubscription).where(UserSubscription.id == target.id)
+    )
+    if total == 1:
+        user = await session.get(User, user_id)
+        if user is None:
+            raise ValueError("user_not_found")
+        user.rw_id = None
+        user.vless_uuid = None
+    await session.flush()
+    return target
+
+
 __all__ = [
     "attach",
+    "count_for_user",
+    "detach",
     "get_by_rw_id",
     "get_for_user",
     "get_primary",
     "list_for_user",
+    "rename_label",
     "set_primary",
 ]

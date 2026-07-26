@@ -1,4 +1,5 @@
 import { http, HttpResponse, type HttpHandler } from "msw";
+import type { ManagedSubscription } from "../api/types";
 
 const API = "/bot/dashboard/api";
 
@@ -31,6 +32,7 @@ const users = [
     vip: false,
     email: "alice@example.com",
     language: "ru",
+    subscriptions_count: 2,
   },
   {
     id: 2,
@@ -44,6 +46,7 @@ const users = [
     vip: true,
     email: null,
     language: "en",
+    subscriptions_count: 0,
   },
   {
     id: 3,
@@ -57,6 +60,7 @@ const users = [
     vip: false,
     email: "carol@example.com",
     language: "ru",
+    subscriptions_count: 1,
   },
 ];
 
@@ -84,6 +88,41 @@ const transactions = [
     days_ordered: 90,
     created_at: "2026-07-20T09:30:00Z",
     expire_date: null,
+  },
+];
+
+let mockUserSubscriptions: ManagedSubscription[] = [
+  {
+    id: 1,
+    rw_id: 10,
+    label: "Main",
+    product_key: null,
+    source: "telegram",
+    is_primary: true,
+    tariff: "Premium",
+    status: "active",
+    days_left: 18,
+    expire_iso: "2026-08-13T00:00:00Z",
+    data_limit_gb: 200,
+    traffic_used_gb: 42.5,
+    devices_count: 2,
+    subscription_url: "https://example.com/sub/main",
+  },
+  {
+    id: 2,
+    rw_id: 12,
+    label: "Marketplace",
+    product_key: "marketplace",
+    source: "marketplace",
+    is_primary: false,
+    tariff: "Premium",
+    status: "active",
+    days_left: 61,
+    expire_iso: "2026-09-25T00:00:00Z",
+    data_limit_gb: null,
+    traffic_used_gb: 9.2,
+    devices_count: 1,
+    subscription_url: "https://example.com/sub/marketplace",
   },
 ];
 
@@ -205,6 +244,42 @@ export const handlers: HttpHandler[] = [
   }),
 
   http.get(`${API}/users/:id/transactions`, () => HttpResponse.json(transactions)),
+  http.get(`${API}/users/:id/subscriptions`, ({ params }) =>
+    HttpResponse.json({ subscriptions: Number(params.id) === 1 ? mockUserSubscriptions : [] }),
+  ),
+  http.post(`${API}/users/:id/subscriptions`, async ({ request }) => {
+    const body = (await request.json()) as { rw_id: number; label?: string; make_primary?: boolean };
+    const next = {
+      ...mockUserSubscriptions[0],
+      id: Math.max(0, ...mockUserSubscriptions.map((item) => item.id)) + 1,
+      rw_id: body.rw_id,
+      label: body.label || null,
+      source: "dashboard",
+      is_primary: Boolean(body.make_primary),
+    };
+    if (next.is_primary) {
+      mockUserSubscriptions = mockUserSubscriptions.map((item) => ({ ...item, is_primary: false }));
+    }
+    mockUserSubscriptions.push(next);
+    return HttpResponse.json(next);
+  }),
+  http.patch(`${API}/users/:id/subscriptions/:subscriptionId`, async ({ params, request }) => {
+    const body = (await request.json()) as { label?: string | null };
+    const id = Number(params.subscriptionId);
+    mockUserSubscriptions = mockUserSubscriptions.map((item) =>
+      item.id === id ? { ...item, label: body.label || null } : item,
+    );
+    return HttpResponse.json(mockUserSubscriptions.find((item) => item.id === id));
+  }),
+  http.post(`${API}/users/:id/subscriptions/:subscriptionId/primary`, ({ params }) => {
+    const id = Number(params.subscriptionId);
+    mockUserSubscriptions = mockUserSubscriptions.map((item) => ({ ...item, is_primary: item.id === id }));
+    return HttpResponse.json(mockUserSubscriptions.find((item) => item.id === id));
+  }),
+  http.delete(`${API}/users/:id/subscriptions/:subscriptionId`, ({ params }) => {
+    mockUserSubscriptions = mockUserSubscriptions.filter((item) => item.id !== Number(params.subscriptionId));
+    return HttpResponse.json({ ok: true });
+  }),
 
   http.post(`${API}/users/:id/ban`, () => HttpResponse.json({ ok: true })),
   http.post(`${API}/users/:id/unban`, () => HttpResponse.json({ ok: true })),

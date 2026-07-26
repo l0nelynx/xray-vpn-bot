@@ -32,6 +32,7 @@ export const ru: Messages = {
   "subscription.status.expired": "Истекла",
   "subscription.status.disabled": "Отключена",
   "subscription.status.limited": "Ограничена",
+  "subscription.status.unavailable": "Недоступна",
   "subscription.daysLeft": "дней осталось",
   "subscription.devices": "Устройства",
   "subscription.traffic": "Трафик",
@@ -53,6 +54,21 @@ export const ru: Messages = {
   "home.emptyTitle": "Нет активной подписки",
   "home.emptyBody": "Выберите тариф или активируйте пробный доступ",
   "home.tryFree": "Попробовать бесплатно",
+  "home.allSubscriptions": "Все подписки · {count}",
+
+  // subscriptions
+  "subscriptions.title": "Мои подписки",
+  "subscriptions.subtitle": "Выберите подписку для подключения или продления",
+  "subscriptions.loadError": "Не удалось загрузить подписки",
+  "subscriptions.empty": "У аккаунта пока нет привязанных подписок",
+  "subscriptions.primary": "Основная",
+  "subscriptions.makePrimary": "Сделать основной",
+  "subscriptions.primaryChanged": "Основная подписка изменена",
+  "subscriptions.connect": "Подключить",
+  "subscriptions.renew": "Продлить",
+  "subscriptions.unavailable": "Remnawave временно недоступен. Привязка сохранена.",
+  "subscriptions.notFound": "Подписка не найдена или больше не привязана к аккаунту",
+  "subscriptions.fallbackLabel": "Подписка #{id}",
 
   // devices
   "devices.title": "Мои устройства",

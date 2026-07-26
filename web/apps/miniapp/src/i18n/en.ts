@@ -32,6 +32,7 @@ export const en: Messages = {
   "subscription.status.expired": "Expired",
   "subscription.status.disabled": "Disabled",
   "subscription.status.limited": "Limited",
+  "subscription.status.unavailable": "Unavailable",
   "subscription.daysLeft": "days left",
   "subscription.devices": "Devices",
   "subscription.traffic": "Traffic",
@@ -53,6 +54,21 @@ export const en: Messages = {
   "home.emptyTitle": "No active subscription",
   "home.emptyBody": "Choose a plan or activate a free trial",
   "home.tryFree": "Try for free",
+  "home.allSubscriptions": "All subscriptions · {count}",
+
+  // subscriptions
+  "subscriptions.title": "My subscriptions",
+  "subscriptions.subtitle": "Choose a subscription to connect or renew",
+  "subscriptions.loadError": "Failed to load subscriptions",
+  "subscriptions.empty": "No subscriptions are linked to this account yet",
+  "subscriptions.primary": "Primary",
+  "subscriptions.makePrimary": "Make primary",
+  "subscriptions.primaryChanged": "Primary subscription changed",
+  "subscriptions.connect": "Connect",
+  "subscriptions.renew": "Renew",
+  "subscriptions.unavailable": "Remnawave is temporarily unavailable. The link is preserved.",
+  "subscriptions.notFound": "Subscription was not found or is no longer linked to this account",
+  "subscriptions.fallbackLabel": "Subscription #{id}",
 
   // devices
   "devices.title": "My devices",

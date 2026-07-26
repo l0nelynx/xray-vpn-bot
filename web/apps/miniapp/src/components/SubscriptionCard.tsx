@@ -13,6 +13,7 @@ const STATUS_KEYS: Record<string, string> = {
   expired: "subscription.status.expired",
   disabled: "subscription.status.disabled",
   limited: "subscription.status.limited",
+  unavailable: "subscription.status.unavailable",
 };
 
 const STATUS_BADGE_VARIANT: Record<string, "success" | "destructive" | "secondary" | "warning"> = {
@@ -20,6 +21,7 @@ const STATUS_BADGE_VARIANT: Record<string, "success" | "destructive" | "secondar
   expired: "destructive",
   disabled: "secondary",
   limited: "warning",
+  unavailable: "destructive",
 };
 
 export default function SubscriptionCard({ sub }: Props) {

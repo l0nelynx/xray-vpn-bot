@@ -10,6 +10,24 @@ export interface UserItem {
   vip: boolean;
   email: string | null;
   language: string | null;
+  subscriptions_count: number;
+}
+
+export interface ManagedSubscription {
+  id: number;
+  rw_id: number;
+  label: string | null;
+  product_key: string | null;
+  source: string;
+  is_primary: boolean;
+  tariff: string;
+  status: string | null;
+  days_left: number;
+  expire_iso: string | null;
+  data_limit_gb: number | null;
+  traffic_used_gb: number;
+  devices_count: number;
+  subscription_url: string | null;
 }
 
 export interface UserDetail extends UserItem {

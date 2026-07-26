@@ -17,6 +17,7 @@ from . import api
 from .api import set_config_provider
 from .client import RemnawaveClient, configure, get_default_client
 from .operations import apply_extend, apply_new_user, apply_update
+from .managed_subscriptions import serialize_managed_subscription
 from .perks import apply_crm_bonus_days, apply_crm_bonus_traffic, is_free_tier_user
 from .scenarios import SubscriptionScenario, SubscriptionType, resolve_scenario
 from .segmentation import (
@@ -69,6 +70,7 @@ __all__ = [
     "apply_new_user",
     "apply_extend",
     "apply_update",
+    "serialize_managed_subscription",
     "apply_crm_bonus_days",
     "apply_crm_bonus_traffic",
     "is_free_tier_user",

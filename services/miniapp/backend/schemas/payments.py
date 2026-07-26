@@ -7,10 +7,12 @@ class InvoiceCreateRequest(BaseModel):
 
     node_id: int = Field(..., ge=1)
     description: str | None = None
+    subscription_id: int | None = Field(default=None, ge=1)
 
 
 class PayCreditsRequest(BaseModel):
     node_id: int = Field(..., ge=1)
+    subscription_id: int | None = Field(default=None, ge=1)
 
 
 class PayCreditsResponse(BaseModel):

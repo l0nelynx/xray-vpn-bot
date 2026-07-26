@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Copy, Gift, IdCard, Pencil, Send, Wallet } from "lucide-react";
+import { Copy, ExternalLink, Gift, IdCard, Link2, Pencil, Send, Star, Unlink, Wallet } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@xray/ui/components/sheet";
 import { Button } from "@xray/ui/components/button";
 import { Input } from "@xray/ui/components/input";
@@ -8,8 +8,9 @@ import { Textarea } from "@xray/ui/components/textarea";
 import { Badge } from "@xray/ui/components/badge";
 import { Separator } from "@xray/ui/components/separator";
 import { Spinner } from "@xray/ui/components/spinner";
+import ConfirmButton from "./ConfirmButton";
 import { api } from "../api/client";
-import type { TransactionItem, UserDetail } from "../api/types";
+import type { ManagedSubscription, TransactionItem, UserDetail } from "../api/types";
 import { formatPoints, POINTS_ICON } from "../points";
 import useIsMobile from "../hooks/useIsMobile";
 
@@ -57,12 +58,12 @@ export default function UserDrawer({ userId, open, onClose, onChanged }: Props) 
 
   const [user, setUser] = useState<UserDetail | null>(null);
   const [tx, setTx] = useState<TransactionItem[]>([]);
+  const [subscriptions, setSubscriptions] = useState<ManagedSubscription[]>([]);
   const [loading, setLoading] = useState(false);
 
   const [editTgId, setEditTgId] = useState("");
   const [editUsername, setEditUsername] = useState("");
   const [editUuid, setEditUuid] = useState("");
-  const [editRwId, setEditRwId] = useState("");
   const [idSaving, setIdSaving] = useState(false);
 
   const [emailInput, setEmailInput] = useState("");
@@ -73,21 +74,31 @@ export default function UserDrawer({ userId, open, onClose, onChanged }: Props) 
 
   const [creditsDelta, setCreditsDelta] = useState<string>("");
   const [creditsSaving, setCreditsSaving] = useState(false);
+  const [addRwId, setAddRwId] = useState("");
+  const [addLabel, setAddLabel] = useState("");
+  const [addPrimary, setAddPrimary] = useState(false);
+  const [subscriptionSaving, setSubscriptionSaving] = useState(false);
 
   const load = async (id: number) => {
     setLoading(true);
     try {
-      const u = await api.get<UserDetail>(`/users/${id}`);
-      const t = await api.get<TransactionItem[]>(`/users/${id}/transactions`);
+      const [u, t, s] = await Promise.all([
+        api.get<UserDetail>(`/users/${id}`),
+        api.get<TransactionItem[]>(`/users/${id}/transactions`),
+        api.get<{ subscriptions: ManagedSubscription[] }>(`/users/${id}/subscriptions`),
+      ]);
       setUser(u);
       setTx(t);
+      setSubscriptions(s.subscriptions);
       setEditTgId(u.tg_id != null ? String(u.tg_id) : "");
       setEditUsername(u.username || "");
       setEditUuid(u.vless_uuid || "");
-      setEditRwId(u.rw_id != null ? String(u.rw_id) : "");
       setEmailInput(u.email || "");
       setMsgText("");
       setCreditsDelta("");
+      setAddRwId("");
+      setAddLabel("");
+      setAddPrimary(false);
     } catch {
       toast.error("Failed to load user");
     } finally {
@@ -107,18 +118,12 @@ export default function UserDrawer({ userId, open, onClose, onChanged }: Props) 
       toast.error("TG ID must be a number");
       return;
     }
-    const rwIdTrimmed = editRwId.trim();
-    if (rwIdTrimmed && !/^\d+$/.test(rwIdTrimmed)) {
-      toast.error("rw_id must be a number");
-      return;
-    }
     setIdSaving(true);
     try {
       await api.patch(`/users/${user.id}/identifiers`, {
         tg_id: newTgId ? Number(newTgId) : null,
         username: editUsername,
         vless_uuid: editUuid,
-        rw_id: rwIdTrimmed ? Number(rwIdTrimmed) : null,
       });
       toast.success("Saved");
       await load(user.id);
@@ -128,6 +133,79 @@ export default function UserDrawer({ userId, open, onClose, onChanged }: Props) 
       toast.error(status === 409 ? "This TG ID is already in use" : "Failed to save");
     } finally {
       setIdSaving(false);
+    }
+  };
+
+  const subscriptionError = (error: unknown, fallback: string) => {
+    const detail = (error as { detail?: string | { code?: string } })?.detail;
+    const code = typeof detail === "object" ? detail?.code : detail;
+    const messages: Record<string, string> = {
+      subscription_already_linked: "This subscription belongs to another account",
+      subscription_not_found: "Subscription was not found",
+      primary_change_required: "Choose another primary subscription first",
+      remnawave_unavailable: "Remnawave is temporarily unavailable",
+    };
+    return (code && messages[code]) || fallback;
+  };
+
+  const handleAttachSubscription = async () => {
+    if (!user || !/^\d+$/.test(addRwId.trim())) {
+      toast.error("rw_id must be a positive number");
+      return;
+    }
+    setSubscriptionSaving(true);
+    try {
+      await api.post(`/users/${user.id}/subscriptions`, {
+        rw_id: Number(addRwId),
+        label: addLabel.trim() || null,
+        make_primary: addPrimary,
+      });
+      toast.success("Subscription linked");
+      await load(user.id);
+      onChanged?.();
+    } catch (error) {
+      toast.error(subscriptionError(error, "Failed to link subscription"));
+    } finally {
+      setSubscriptionSaving(false);
+    }
+  };
+
+  const handleRenameSubscription = async (subscription: ManagedSubscription) => {
+    if (!user) return;
+    const label = window.prompt("Subscription label", subscription.label || "");
+    if (label === null) return;
+    try {
+      await api.patch(`/users/${user.id}/subscriptions/${subscription.id}`, {
+        label: label.trim() || null,
+      });
+      await load(user.id);
+      toast.success("Label saved");
+    } catch (error) {
+      toast.error(subscriptionError(error, "Failed to rename subscription"));
+    }
+  };
+
+  const handlePrimarySubscription = async (subscriptionId: number) => {
+    if (!user) return;
+    try {
+      await api.post(`/users/${user.id}/subscriptions/${subscriptionId}/primary`);
+      await load(user.id);
+      onChanged?.();
+      toast.success("Primary subscription changed");
+    } catch (error) {
+      toast.error(subscriptionError(error, "Failed to change primary subscription"));
+    }
+  };
+
+  const handleDetachSubscription = async (subscriptionId: number) => {
+    if (!user) return;
+    try {
+      await api.delete(`/users/${user.id}/subscriptions/${subscriptionId}`);
+      await load(user.id);
+      onChanged?.();
+      toast.success("Subscription unlinked; Remnawave user was not deleted");
+    } catch (error) {
+      toast.error(subscriptionError(error, "Failed to unlink subscription"));
     }
   };
 
@@ -262,6 +340,86 @@ export default function UserDrawer({ userId, open, onClose, onChanged }: Props) 
                 <Row label="Language">{user.language || "—"}</Row>
                 <Row label="Total Spent">{user.total_spent}</Row>
                 <Row label="Transactions">{user.transactions_count}</Row>
+                <Row label="Subscriptions">{user.subscriptions_count}</Row>
+              </div>
+
+              <Separator />
+
+              <div>
+                <div className="mb-2 flex items-center gap-1.5 text-sm font-semibold">
+                  <Link2 className="h-4 w-4" />
+                  Subscriptions
+                </div>
+                <div className="space-y-2">
+                  {subscriptions.length === 0 ? (
+                    <div className="rounded-lg border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
+                      No linked subscriptions
+                    </div>
+                  ) : (
+                    subscriptions.map((subscription) => (
+                      <div key={subscription.id} className="rounded-lg border border-border p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="font-medium">{subscription.label || `Subscription ${subscription.rw_id}`}</span>
+                              {subscription.is_primary && <Badge variant="secondary">Primary</Badge>}
+                              <Badge variant={subscription.status === "unavailable" ? "destructive" : "outline"}>
+                                {subscription.status || "unknown"}
+                              </Badge>
+                            </div>
+                            <div className="mt-1 text-xs text-muted-foreground">
+                              rw_id {subscription.rw_id} · {subscription.tariff} · {subscription.days_left}d · {subscription.devices_count} devices
+                            </div>
+                            <div className="mt-1 text-xs text-muted-foreground">
+                              Traffic {subscription.traffic_used_gb} / {subscription.data_limit_gb ?? "∞"} GB · source {subscription.source}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-1.5">
+                          {!subscription.is_primary && (
+                            <Button size="sm" variant="outline" onClick={() => handlePrimarySubscription(subscription.id)}>
+                              <Star className="h-3.5 w-3.5" /> Primary
+                            </Button>
+                          )}
+                          <Button size="sm" variant="outline" onClick={() => handleRenameSubscription(subscription)}>
+                            <Pencil className="h-3.5 w-3.5" /> Rename
+                          </Button>
+                          {subscription.subscription_url && (
+                            <>
+                              <Button size="sm" variant="outline" onClick={() => copyText(subscription.subscription_url!)}>
+                                <Copy className="h-3.5 w-3.5" /> Copy URL
+                              </Button>
+                              <Button size="sm" variant="outline" asChild>
+                                <a href={subscription.subscription_url} target="_blank" rel="noreferrer">
+                                  <ExternalLink className="h-3.5 w-3.5" /> Open
+                                </a>
+                              </Button>
+                            </>
+                          )}
+                          <ConfirmButton
+                            title="Unlink this subscription? The Remnawave user will not be deleted."
+                            confirmText="Unlink"
+                            destructive
+                            onConfirm={() => handleDetachSubscription(subscription.id)}
+                          >
+                            <Button size="sm" variant="destructive">
+                              <Unlink className="h-3.5 w-3.5" /> Unlink
+                            </Button>
+                          </ConfirmButton>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+                <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+                  <Input value={addRwId} onChange={(e) => setAddRwId(e.target.value)} inputMode="numeric" placeholder="Remnawave rw_id" />
+                  <Input value={addLabel} onChange={(e) => setAddLabel(e.target.value)} placeholder="Label (optional)" />
+                  <Button onClick={handleAttachSubscription} disabled={subscriptionSaving}>Link</Button>
+                </div>
+                <label className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                  <input type="checkbox" checked={addPrimary} onChange={(e) => setAddPrimary(e.target.checked)} />
+                  Make primary after linking
+                </label>
               </div>
 
               <Separator />
@@ -289,12 +447,6 @@ export default function UserDrawer({ userId, open, onClose, onChanged }: Props) 
                     value={editUuid}
                     onChange={(e) => setEditUuid(e.target.value)}
                     placeholder="vless_uuid"
-                  />
-                  <LabeledInput
-                    label="rw_id"
-                    value={editRwId}
-                    onChange={(e) => setEditRwId(e.target.value)}
-                    placeholder="Remnawave panel user id"
                   />
                   <Button onClick={handleSaveIdentifiers} disabled={idSaving}>
                     <Pencil className="h-4 w-4" />

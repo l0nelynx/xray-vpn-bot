@@ -12,6 +12,7 @@ from payments import (
 )
 from common_db.repo import balance as _repo_balance
 from common_db.repo import users as _repo_users
+from common_db.repo import subscriptions as _repo_subscriptions
 
 from ..bonus_points import resolve_points_cost
 from ..credits_delivery import pay_and_deliver
@@ -36,6 +37,24 @@ logger = logging.getLogger(__name__)
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+async def _purchase_target_rw_id(
+    *, user_id: int, subscription_id: int | None
+) -> int | None:
+    async with async_session() as session:
+        if subscription_id is not None:
+            target = await _repo_subscriptions.get_for_user(
+                session, user_id=user_id, subscription_id=subscription_id
+            )
+            if target is None:
+                raise HTTPException(
+                    status.HTTP_404_NOT_FOUND,
+                    detail={"code": "subscription_not_found"},
+                )
+        else:
+            target = await _repo_subscriptions.get_primary(session, user_id)
+    return target.rw_id if target is not None else None
 
 
 @router.get("/providers", response_model=ProvidersResponse)
@@ -77,6 +96,10 @@ async def pay_with_credits(
     if user.is_banned:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "user is banned")
 
+    target_rw_id = await _purchase_target_rw_id(
+        user_id=user.id, subscription_id=body.subscription_id
+    )
+
     node = await load_menu_node(body.node_id)
     if node is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "menu node not found")
@@ -111,6 +134,9 @@ async def pay_with_credits(
         days=days,
         tariff_slug=invoice_data["tariff_slug"],
         delivery_target=invoice_data,
+        android_user_id=user.id if target_rw_id is not None else None,
+        email=user.email,
+        target_rw_id=target_rw_id,
     )
 
     if result.get("status") != "success":
@@ -143,6 +169,10 @@ async def create_payment_invoice(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "user not registered")
     if user.is_banned:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "user is banned")
+
+    target_rw_id = await _purchase_target_rw_id(
+        user_id=user.id, subscription_id=body.subscription_id
+    )
 
     node = await load_menu_node(body.node_id)
     if node is None:
@@ -214,6 +244,8 @@ async def create_payment_invoice(
                 traffic_limit_strategy=invoice_data["traffic_limit_strategy"],
                 remnawave_description=invoice_data["remnawave_description"],
                 remnawave_tag=invoice_data["remnawave_tag"],
+                android_user_id=user.id if target_rw_id is not None else None,
+                target_rw_id=target_rw_id,
             )
         )
         await session.commit()

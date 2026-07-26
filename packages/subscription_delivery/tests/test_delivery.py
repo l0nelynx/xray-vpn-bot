@@ -63,6 +63,38 @@ def test_missing_email_returns_error(monkeypatch):
     assert res["message"] == "android_user_missing_email"
 
 
+def test_existing_target_can_be_extended_without_local_email(monkeypatch):
+    captured = {}
+
+    async def get_by_id(rw_id):
+        assert rw_id == 777
+        return {"uuid": "target-uuid", "username": "marketplace_user", "expire": None}
+
+    async def extend(**values):
+        captured.update(values)
+        return {"uuid": "target-uuid", "subscription_url": "https://sub/target"}
+
+    monkeypatch.setattr(d.rem, "get_user_from_id", get_by_id)
+    monkeypatch.setattr(d, "resolve_scenario", lambda *_: SubscriptionScenario.EXTEND)
+    monkeypatch.setattr(d, "apply_extend", extend)
+
+    result = asyncio.run(
+        d.deliver_android_paid(
+            transaction_id="tx-no-email",
+            android_user_id=12,
+            email=None,
+            days=30,
+            tariff_slug="sid:S1:esid:E1",
+            target_rw_id=777,
+            session_factory=_make_session_factory([]),
+            notifier=lambda text: _noop(),
+        )
+    )
+
+    assert result["status"] == "success"
+    assert captured["username"] == "marketplace_user"
+
+
 def test_bad_slug_without_resolver_returns_error(monkeypatch):
     res = asyncio.run(d.deliver_android_paid(
         transaction_id="tx1", android_user_id=1, email="a@b.io", days=30,

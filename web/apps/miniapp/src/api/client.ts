@@ -18,6 +18,8 @@ export interface UserInfo {
 }
 
 export interface SubscriptionInfo {
+  subscription_id: number | null;
+  label: string | null;
   tariff: string;
   status: string | null;
   days_left: number;
@@ -41,6 +43,7 @@ export interface MeResponse {
   registered: boolean;
   user?: UserInfo;
   subscription?: SubscriptionInfo;
+  subscriptions_count: number;
   links: LinksInfo;
 }
 
@@ -135,6 +138,7 @@ export interface ProvidersResponse {
 export interface InvoiceCreateRequest {
   node_id: number;
   description?: string;
+  subscription_id?: number;
 }
 
 export interface InvoiceResponse {
@@ -152,8 +156,33 @@ export const payments = {
   getBalance: () => api.get<{ balance: number }>("/payments/balance"),
   createInvoice: (body: InvoiceCreateRequest) =>
     api.post<InvoiceResponse>("/payments/invoice", body),
-  payWithCredits: (body: { node_id: number }) =>
+  payWithCredits: (body: { node_id: number; subscription_id?: number }) =>
     api.post<PayCreditsResponse>("/payments/pay-credits", body),
+};
+
+export interface ManagedSubscription {
+  id: number;
+  rw_id: number;
+  label: string | null;
+  product_key: string | null;
+  source: string;
+  is_primary: boolean;
+  tariff: string;
+  status: string | null;
+  days_left: number;
+  expire_iso: string | null;
+  data_limit_gb: number | null;
+  traffic_used_gb: number;
+  devices_count: number;
+  subscription_url: string | null;
+}
+
+export const subscriptions = {
+  list: () => api.get<{ subscriptions: ManagedSubscription[] }>("/subscriptions"),
+  makePrimary: (subscriptionId: number) =>
+    api.post<{ status: string; subscription_id: number }>(
+      `/subscriptions/${subscriptionId}/primary`,
+    ),
 };
 
 export type MenuNodeAction = "buttons" | "invoice";

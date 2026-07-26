@@ -19,6 +19,7 @@ import InvitePage from "./pages/InvitePage";
 import PolicyPage from "./pages/PolicyPage";
 import ReferralRulesPage from "./pages/ReferralRulesPage";
 import SettingsPage from "./pages/SettingsPage";
+import SubscriptionsPage from "./pages/SubscriptionsPage";
 import SupportCreatePage from "./pages/SupportCreatePage";
 import SupportPage from "./pages/SupportPage";
 import SupportTicketPage from "./pages/SupportTicketPage";
@@ -87,6 +88,7 @@ function AppRoutes({
         <Route path="/buy" element={<BuyMenuPage />} />
         <Route path="/buy/success" element={<BuySuccessPage />} />
         <Route path="/connect" element={<ConnectPage />} />
+        <Route path="/subscriptions" element={<SubscriptionsPage refresh={refresh} />} />
         <Route path="/devices" element={<DevicesPage />} />
         <Route path="/free/:mode" element={<FreeTrialPage />} />
         <Route path="/support" element={<SupportPage />} />

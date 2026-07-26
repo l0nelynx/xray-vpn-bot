@@ -31,6 +31,7 @@ const SORT_OPTIONS = [
   { value: "username", label: "Username" },
   { value: "api_provider", label: "Provider" },
   { value: "is_paid", label: "Paid status" },
+  { value: "subscriptions_count", label: "Subscriptions" },
 ];
 
 function StatusBadges({ user }: { user: UserItem }) {
@@ -142,6 +143,12 @@ export default function UsersTable() {
       meta: { sortKey: "rw_id", width: 90 },
       cell: ({ row }) => row.original.rw_id ?? "—",
     },
+    {
+      id: "subscriptions_count",
+      header: "Subs",
+      accessorKey: "subscriptions_count",
+      meta: { sortKey: "subscriptions_count", width: 70 },
+    },
     { id: "username", header: "Username", accessorKey: "username", meta: { sortKey: "username", width: 140 } },
     {
       id: "email",
@@ -252,7 +259,7 @@ export default function UsersTable() {
             <div className="mb-1 font-semibold text-foreground">{user.username || "—"}</div>
             <div className="mb-1 text-xs text-muted-foreground">
               TG: {user.tg_id ?? "—"}
-              {user.rw_id != null ? ` · RW: ${user.rw_id}` : ""} · {user.api_provider}
+              {user.rw_id != null ? ` · RW: ${user.rw_id}` : ""} · {user.subscriptions_count} subs · {user.api_provider}
             </div>
             {user.email && (
               <div className="mb-1.5 break-all text-[11px] text-muted-foreground">{user.email}</div>
@@ -322,7 +329,7 @@ export default function UsersTable() {
             setPage(1);
           }}
         >
-          <SelectTrigger className="w-full md:w-[120px]">
+          <SelectTrigger className="w-full md:w-[180px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -331,6 +338,7 @@ export default function UsersTable() {
             <SelectItem value="free">Free</SelectItem>
             <SelectItem value="vip">VIP</SelectItem>
             <SelectItem value="banned">Banned</SelectItem>
+            <SelectItem value="multiple_subscriptions">2+ subscriptions</SelectItem>
           </SelectContent>
         </Select>
       </div>

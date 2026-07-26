@@ -15,7 +15,9 @@ from ..config import (
 from ..database.session import async_session
 
 from common_db.repo import users as _repo_users
+from common_db.repo import subscriptions as _repo_subscriptions
 from remnawave_client.api import get_user_devices_count_by_id, resolve_remnawave_user
+from ..android.managed_subscriptions_router import _serialize
 from ..schemas.me import LanguageUpdate, LinksInfo, MeResponse, SubscriptionInfo, UserInfo
 from ..tg_auth import TgUser, get_tg_user
 
@@ -64,6 +66,9 @@ async def get_me(tg: TgUser = Depends(get_tg_user)) -> MeResponse:
 
     async with async_session() as session:
         user = await _repo_users.get_user_by_tg_id(session, tg.tg_id)
+        subscription_rows = (
+            await _repo_subscriptions.list_for_user(session, user.id) if user else []
+        )
 
     if not user:
         return MeResponse(registered=False, links=links)
@@ -77,7 +82,31 @@ async def get_me(tg: TgUser = Depends(get_tg_user)) -> MeResponse:
     if user.is_banned:
         return MeResponse(registered=True, user=user_info, links=links)
 
-    # Pass the trusted Telegram id so a username-only match (the weakest path)
+    primary_row = next((row for row in subscription_rows if row.is_primary), None)
+    if primary_row is not None:
+        managed = await _serialize(primary_row)
+        subscription = SubscriptionInfo(
+            subscription_id=managed.id,
+            label=managed.label,
+            tariff=managed.tariff,
+            status=managed.status,
+            days_left=managed.days_left,
+            expire_iso=managed.expire_iso,
+            data_limit_gb=managed.data_limit_gb,
+            traffic_used_gb=managed.traffic_used_gb,
+            devices_count=managed.devices_count,
+            subscription_url=managed.subscription_url,
+        )
+        return MeResponse(
+            registered=True,
+            user=user_info,
+            subscription=subscription,
+            subscriptions_count=len(subscription_rows),
+            links=links,
+        )
+
+    # Legacy fallback until every users.rw_id row has been backfilled into
+    # user_subscriptions. Pass the trusted Telegram id so a username-only match
     # is accepted only when the panel account is actually owned by this user —
     # otherwise a coincidental @username collision would expose a foreign
     # subscription_url.
@@ -90,7 +119,12 @@ async def get_me(tg: TgUser = Depends(get_tg_user)) -> MeResponse:
     )
 
     if not rem_user:
-        return MeResponse(registered=True, user=user_info, links=links)
+        return MeResponse(
+            registered=True,
+            user=user_info,
+            subscriptions_count=len(subscription_rows),
+            links=links,
+        )
 
     resolved_rw_id = rem_user.get("rw_id")
     devices_count = (
@@ -99,6 +133,8 @@ async def get_me(tg: TgUser = Depends(get_tg_user)) -> MeResponse:
     )
 
     subscription = SubscriptionInfo(
+        subscription_id=None,
+        label=None,
         tariff=_resolve_tariff(rem_user.get("active_squads", [])),
         status=rem_user.get("status"),
         days_left=_days_left(rem_user.get("expire")),
@@ -113,6 +149,7 @@ async def get_me(tg: TgUser = Depends(get_tg_user)) -> MeResponse:
         registered=True,
         user=user_info,
         subscription=subscription,
+        subscriptions_count=len(subscription_rows),
         links=links,
     )
 

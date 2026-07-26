@@ -6,11 +6,18 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select, func, delete, exists, or_
+from sqlalchemy.exc import IntegrityError
 
 logger = logging.getLogger(__name__)
 
 from ..auth import get_current_user
-from ..config import get_bot_token, get_remnawave_url, get_remnawave_token
+from ..config import (
+    get_bot_token,
+    get_remnawave_url,
+    get_remnawave_token,
+    get_rw_free_id,
+    get_rw_pro_id,
+)
 from ..database.models import User, Transaction, SupportTicket, Promo
 from ..database.session import async_session
 
@@ -20,7 +27,11 @@ from ..database.session import async_session
 # and app can never disagree on what "paid" means.
 from common_db.repo import balance as _repo_balance
 from common_db.repo import users as _repo_users
+from common_db.repo import subscriptions as _repo_subscriptions
+from common_db.models import UserSubscription
 from common_db.models.credit_ledger import SOURCE_ADMIN
+from remnawave_client import configure, serialize_managed_subscription
+from remnawave_client.api import get_user_from_id
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -71,7 +82,13 @@ async def list_users(
             )
         ).correlate(User).label("is_paid")
 
-        base = select(User, has_tx)
+        subscriptions_count = (
+            select(func.count(UserSubscription.id))
+            .where(UserSubscription.user_id == User.id)
+            .correlate(User)
+            .scalar_subquery()
+        ).label("subscriptions_count")
+        base = select(User, has_tx, subscriptions_count)
 
         if search:
             like = f"%{search}%"
@@ -95,12 +112,16 @@ async def list_users(
             base = base.where(User.is_banned == True)
         elif filter == "vip":
             base = base.where(User.vip == 1)
+        elif filter == "multiple_subscriptions":
+            base = base.where(subscriptions_count >= 2)
 
         count_q = select(func.count()).select_from(base.subquery())
         total = await session.scalar(count_q) or 0
 
         if sort == "is_paid":
             sort_col = has_tx
+        elif sort == "subscriptions_count":
+            sort_col = subscriptions_count
         else:
             sort_col = _USER_SORT_COLUMNS.get(sort, User.id)
         base = base.order_by(
@@ -112,7 +133,7 @@ async def list_users(
         rows = result.all()
 
         users = []
-        for user, is_paid in rows:
+        for user, is_paid, subscription_count in rows:
             users.append({
                 "id": user.id,
                 "tg_id": user.tg_id,
@@ -125,6 +146,7 @@ async def list_users(
                 "email": user.email,
                 "language": user.language,
                 "vip": bool(user.vip),
+                "subscriptions_count": int(subscription_count or 0),
             })
 
     return {"items": users, "total": total, "page": page, "per_page": per_page}
@@ -227,6 +249,9 @@ async def get_user(user_id: int, _: str = Depends(get_current_user)):
         tickets_count = await session.scalar(
             select(func.count()).select_from(SupportTicket).where(SupportTicket.user_id == user.id)
         ) or 0
+        subscriptions_count = await _repo_subscriptions.count_for_user(
+            session, user.id
+        )
 
         return {
             "id": user.id,
@@ -244,7 +269,148 @@ async def get_user(user_id: int, _: str = Depends(get_current_user)):
             "total_spent": float(total_spent),
             "promo_code": promo_code,
             "tickets_count": tickets_count,
+            "subscriptions_count": subscriptions_count,
         }
+
+
+class AttachSubscriptionRequest(BaseModel):
+    rw_id: int = Field(..., ge=1)
+    label: str | None = Field(default=None, max_length=100)
+    make_primary: bool = False
+
+
+class RenameSubscriptionRequest(BaseModel):
+    label: str | None = Field(default=None, max_length=100)
+
+
+async def _dashboard_subscription(row: UserSubscription) -> dict:
+    _configure_dashboard_remnawave()
+    return await serialize_managed_subscription(
+        row,
+        free_squad_id=get_rw_free_id(),
+        pro_squad_id=get_rw_pro_id(),
+    )
+
+
+def _configure_dashboard_remnawave() -> None:
+    rw_url = get_remnawave_url()
+    rw_token = get_remnawave_token()
+    if rw_url and rw_token:
+        configure(base_url=rw_url, token=rw_token, free_squad_id=get_rw_free_id())
+
+
+@router.get("/{user_id}/subscriptions")
+async def get_user_subscriptions(
+    user_id: int, _: str = Depends(get_current_user)
+):
+    async with async_session() as session:
+        user = await _repo_users.get_user_by_id(session, user_id)
+        if user is None:
+            raise HTTPException(404, detail={"code": "user_not_found"})
+        rows = await _repo_subscriptions.list_for_user(session, user_id)
+    _configure_dashboard_remnawave()
+    import asyncio
+
+    return {
+        "subscriptions": list(
+            await asyncio.gather(*(_dashboard_subscription(row) for row in rows))
+        )
+    }
+
+
+@router.post("/{user_id}/subscriptions")
+async def attach_user_subscription(
+    user_id: int,
+    body: AttachSubscriptionRequest,
+    _: str = Depends(get_current_user),
+):
+    _configure_dashboard_remnawave()
+    try:
+        rem_user = await get_user_from_id(body.rw_id)
+    except Exception as exc:
+        logger.warning("Remnawave lookup failed for rw_id=%s: %s", body.rw_id, exc)
+        raise HTTPException(502, detail={"code": "remnawave_unavailable"}) from exc
+    if rem_user is None:
+        raise HTTPException(404, detail={"code": "subscription_not_found"})
+
+    async with async_session() as session:
+        user = await _repo_users.get_user_by_id(session, user_id)
+        if user is None:
+            raise HTTPException(404, detail={"code": "user_not_found"})
+        try:
+            row = await _repo_subscriptions.attach(
+                session,
+                user_id=user_id,
+                rw_id=body.rw_id,
+                source="dashboard",
+                label=body.label.strip() if body.label else None,
+                make_primary=body.make_primary,
+            )
+        except ValueError as exc:
+            raise HTTPException(409, detail={"code": str(exc)}) from exc
+        except IntegrityError as exc:
+            await session.rollback()
+            raise HTTPException(
+                409, detail={"code": "subscription_already_linked"}
+            ) from exc
+        await session.commit()
+    return await _dashboard_subscription(row)
+
+
+@router.patch("/{user_id}/subscriptions/{subscription_id}")
+async def rename_user_subscription(
+    user_id: int,
+    subscription_id: int,
+    body: RenameSubscriptionRequest,
+    _: str = Depends(get_current_user),
+):
+    label = body.label.strip() if body.label else None
+    async with async_session() as session:
+        row = await _repo_subscriptions.rename_label(
+            session,
+            user_id=user_id,
+            subscription_id=subscription_id,
+            label=label,
+        )
+        if row is None:
+            raise HTTPException(404, detail={"code": "subscription_not_found"})
+        await session.commit()
+    return await _dashboard_subscription(row)
+
+
+@router.post("/{user_id}/subscriptions/{subscription_id}/primary")
+async def make_user_subscription_primary(
+    user_id: int,
+    subscription_id: int,
+    _: str = Depends(get_current_user),
+):
+    async with async_session() as session:
+        row = await _repo_subscriptions.set_primary(
+            session, user_id=user_id, subscription_id=subscription_id
+        )
+        if row is None:
+            raise HTTPException(404, detail={"code": "subscription_not_found"})
+        await session.commit()
+    return await _dashboard_subscription(row)
+
+
+@router.delete("/{user_id}/subscriptions/{subscription_id}")
+async def detach_user_subscription(
+    user_id: int,
+    subscription_id: int,
+    _: str = Depends(get_current_user),
+):
+    async with async_session() as session:
+        try:
+            row = await _repo_subscriptions.detach(
+                session, user_id=user_id, subscription_id=subscription_id
+            )
+        except ValueError as exc:
+            raise HTTPException(409, detail={"code": str(exc)}) from exc
+        if row is None:
+            raise HTTPException(404, detail={"code": "subscription_not_found"})
+        await session.commit()
+    return {"ok": True, "subscription_id": subscription_id}
 
 
 class UpdateIdentifiersRequest(BaseModel):
@@ -272,7 +438,11 @@ async def update_identifiers(
         if body.vless_uuid is not None:
             user.vless_uuid = body.vless_uuid.strip() or None
         if "rw_id" in body.model_fields_set:
-            user.rw_id = body.rw_id
+            if body.rw_id != user.rw_id:
+                raise HTTPException(
+                    status_code=409,
+                    detail={"code": "manage_subscription_bindings"},
+                )
         if "tg_id" in body.model_fields_set:
             if body.tg_id is not None and body.tg_id != user.tg_id:
                 clash = await _repo_users.get_user_by_tg_id(session, body.tg_id)

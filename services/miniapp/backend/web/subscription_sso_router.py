@@ -266,9 +266,7 @@ async def subscription_session_subscriptions(
     async with async_session() as session:
         rows = await subscription_repo.list_for_user(session, user.id)
     resolved = await asyncio.gather(*(_serialize(row) for row in rows))
-    return ManagedSubscriptionsResponse(
-        subscriptions=[item for item in resolved if item is not None]
-    )
+    return ManagedSubscriptionsResponse(subscriptions=list(resolved))
 
 
 @router.post(
@@ -299,6 +297,12 @@ async def attach_subscription(
             code = str(exc)
             raise HTTPException(
                 status.HTTP_409_CONFLICT, detail={"code": code}
+            ) from exc
+        except IntegrityError as exc:
+            await session.rollback()
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                detail={"code": "subscription_already_linked"},
             ) from exc
         await session.commit()
     return AttachSubscriptionResponse(

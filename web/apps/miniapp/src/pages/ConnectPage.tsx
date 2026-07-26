@@ -1,6 +1,6 @@
 import { ArrowLeft, ChevronDown, Copy, Star } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { Button } from "@xray/ui/components/button";
 import { Badge } from "@xray/ui/components/badge";
@@ -13,6 +13,7 @@ import {
   ConnectButton,
   LocalizedText,
   MeResponse,
+  subscriptions as subscriptionsApi,
 } from "../api/client";
 import { useT } from "../i18n/LocaleContext";
 import { copyToClipboard, hapticImpact, openLink, tg } from "../tg/webapp";
@@ -80,6 +81,7 @@ function fillLink(link: string, subUrl: string, username: string): string {
 
 export default function ConnectPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { t, locale } = useT();
 
   const [cfg, setCfg] = useState<AppConfig | null>(null);
@@ -94,13 +96,22 @@ export default function ConnectPage() {
     let alive = true;
     (async () => {
       try {
-        const [config, meResp] = await Promise.all([
+        const requestedId = Number(searchParams.get("subscription_id") || 0) || null;
+        const [config, meResp, subscriptionResp] = await Promise.all([
           connect.getAppConfig(),
           api.get<MeResponse>("/me"),
+          requestedId ? subscriptionsApi.list() : Promise.resolve(null),
         ]);
         if (!alive) return;
+        const selected = requestedId
+          ? subscriptionResp?.subscriptions.find((item) => item.id === requestedId)
+          : null;
+        if (requestedId && !selected) {
+          setError(t("subscriptions.notFound"));
+          return;
+        }
         setCfg(config);
-        setSubUrl(meResp.subscription?.subscription_url || "");
+        setSubUrl(selected?.subscription_url || meResp.subscription?.subscription_url || "");
         setUsername(meResp.user?.username || "");
         const available = Object.keys(config.platforms);
         setPlatform(detectPlatform(available));
@@ -113,7 +124,7 @@ export default function ConnectPage() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [searchParams, t]);
 
   const platforms = useMemo(() => {
     if (!cfg) return [];

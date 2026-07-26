@@ -1,6 +1,6 @@
 import { Check, ChevronLeft } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { Alert, AlertTitle } from "@xray/ui/components/alert";
 import { Badge } from "@xray/ui/components/badge";
 import { Button } from "@xray/ui/components/button";
@@ -48,6 +48,8 @@ function buildView(
 
 export default function BuyMenuPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const subscriptionId = Number(searchParams.get("subscription_id") || 0) || undefined;
   const { t } = useT();
   const [tree, setTree] = useState<MenuNode[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -108,6 +110,7 @@ export default function BuyMenuPage() {
       const res = await payments.createInvoice({
         node_id: selectedInvoice.id,
         description: selectedInvoice.text,
+        subscription_id: subscriptionId,
       });
       openLink(res.url);
       navigate("/buy/success", { state: { paymentUrl: res.url } });
@@ -122,7 +125,10 @@ export default function BuyMenuPage() {
     if (!selectedInvoice?.invoice || !canPayCredits) return;
     setBusyId(selectedInvoice.id);
     try {
-      const res = await payments.payWithCredits({ node_id: selectedInvoice.id });
+      const res = await payments.payWithCredits({
+        node_id: selectedInvoice.id,
+        subscription_id: subscriptionId,
+      });
       if (res.ok) {
         setPromoState((prev) =>
           prev ? { ...prev, balance: res.balance_after ?? prev.balance } : prev

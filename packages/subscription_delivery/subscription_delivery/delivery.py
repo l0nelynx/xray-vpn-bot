@@ -146,7 +146,7 @@ async def deliver_android_paid(
     Returns {"status": "success", "scenario", "uuid", "subscription_url"} on
     success, or {"status": "error", "message"} on failure. Never raises.
     """
-    if not email:
+    if not email and target_rw_id is None:
         await _notify(
             notifier, ok=False, transaction_id=transaction_id,
             android_user_id=android_user_id, email=email, days=days,
@@ -175,8 +175,7 @@ async def deliver_android_paid(
         )
         return {"status": "error", "message": f"bad tariff_slug: {tariff_slug!r}"}
 
-    username = email_to_username(email)
-
+    username = email_to_username(email or "") if target_rw_id is None else ""
     info = (
         await rem.get_user_from_id(target_rw_id)
         if target_rw_id is not None
@@ -189,6 +188,11 @@ async def deliver_android_paid(
             tariff_slug=tariff_slug, reason="target_subscription_not_found",
         )
         return {"status": "error", "message": "target_subscription_not_found"}
+    username = (
+        str((info or {}).get("username") or f"rw_{target_rw_id}")
+        if target_rw_id is not None
+        else email_to_username(email or "")
+    )
     scenario = resolve_scenario(info, SubscriptionType.PAID)
 
     try:

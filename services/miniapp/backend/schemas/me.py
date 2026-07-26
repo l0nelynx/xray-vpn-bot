@@ -14,6 +14,8 @@ class LanguageUpdate(BaseModel):
 
 
 class SubscriptionInfo(BaseModel):
+    subscription_id: int | None = None
+    label: str | None = None
     tariff: str
     status: str | None
     days_left: int
@@ -37,4 +39,5 @@ class MeResponse(BaseModel):
     registered: bool
     user: UserInfo | None = None
     subscription: SubscriptionInfo | None = None
+    subscriptions_count: int = 0
     links: LinksInfo

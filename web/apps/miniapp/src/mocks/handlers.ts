@@ -58,6 +58,40 @@ const menuTree = {
 
 let ticketSeq = 2;
 let mockLanguage = "en";
+let mockSubscriptions = [
+  {
+    id: 1,
+    rw_id: 1031,
+    label: "Main",
+    product_key: null,
+    source: "telegram",
+    is_primary: true,
+    tariff: "Premium",
+    status: "active",
+    days_left: 18,
+    expire_iso: new Date(Date.now() + 18 * 86400000).toISOString(),
+    data_limit_gb: 200,
+    traffic_used_gb: 42.5,
+    devices_count: 2,
+    subscription_url: "https://example.com/sub/mock-main",
+  },
+  {
+    id: 2,
+    rw_id: 2048,
+    label: "Marketplace order",
+    product_key: "marketplace",
+    source: "marketplace",
+    is_primary: false,
+    tariff: "Premium",
+    status: "active",
+    days_left: 61,
+    expire_iso: new Date(Date.now() + 61 * 86400000).toISOString(),
+    data_limit_gb: null,
+    traffic_used_gb: 9.2,
+    devices_count: 1,
+    subscription_url: "https://example.com/sub/mock-marketplace",
+  },
+];
 const tickets = [
   {
     id: 1,
@@ -90,19 +124,32 @@ export const handlers: HttpHandler[] = [
     HttpResponse.json({
       registered: true,
       user: { tg_id: 424242, username: "mock_user", language: mockLanguage },
-      subscription: {
-        tariff: "1 month",
-        status: "active",
-        days_left: 18,
-        expire_iso: new Date(Date.now() + 18 * 86400000).toISOString(),
-        data_limit_gb: 200,
-        traffic_used_gb: 42.5,
-        devices_count: 2,
-        subscription_url: "https://example.com/sub/mock",
-      },
+      subscription: (() => {
+        const primary = mockSubscriptions.find((item) => item.is_primary)!;
+        return { ...primary, subscription_id: primary.id };
+      })(),
+      subscriptions_count: mockSubscriptions.length,
       links,
     }),
   ),
+
+  http.get(`${API}/subscriptions`, () =>
+    HttpResponse.json({ subscriptions: mockSubscriptions }),
+  ),
+  http.post(`${API}/subscriptions/:id/primary`, ({ params }) => {
+    const id = Number(params.id);
+    if (!mockSubscriptions.some((item) => item.id === id)) {
+      return HttpResponse.json(
+        { detail: { code: "subscription_not_found" } },
+        { status: 404 },
+      );
+    }
+    mockSubscriptions = mockSubscriptions.map((item) => ({
+      ...item,
+      is_primary: item.id === id,
+    }));
+    return HttpResponse.json({ status: "ok", subscription_id: id });
+  }),
 
   http.patch(`${API}/me/language`, async ({ request }) => {
     const body = (await request.json()) as { language: string };

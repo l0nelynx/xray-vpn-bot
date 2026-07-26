@@ -1,4 +1,4 @@
-import { ArrowRight, Link as LinkIcon, RefreshCw, Wifi } from "lucide-react";
+import { ArrowRight, ChevronRight, Link as LinkIcon, RefreshCw, Wifi } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { Button } from "@xray/ui/components/button";
@@ -19,6 +19,7 @@ export default function HomePage({ me, reload, refresh }: Props) {
   const { t } = useT();
   const sub = me.subscription;
   const username = me.user?.username;
+  const targetQuery = sub?.subscription_id ? `?subscription_id=${sub.subscription_id}` : "";
 
   const lastReloadKey = useRef<string>("");
   useEffect(() => {
@@ -56,14 +57,23 @@ export default function HomePage({ me, reload, refresh }: Props) {
         <div className="flex flex-col gap-2.5 w-full">
           <SubscriptionCard sub={sub} />
 
+          <Button
+            variant="ghost"
+            className="w-full justify-between"
+            onClick={() => navigate("/subscriptions")}
+          >
+            <span>{t("home.allSubscriptions", { count: me.subscriptions_count })}</span>
+            <ChevronRight />
+          </Button>
+
           {sub.status === "active" && sub.subscription_url && (
-            <Button size="lg" className="w-full" onClick={() => navigate("/connect")}>
+            <Button size="lg" className="w-full" onClick={() => navigate(`/connect${targetQuery}`)}>
               <LinkIcon />
               {t("home.connect")}
             </Button>
           )}
 
-          <Button size="lg" variant="outline" className="w-full" onClick={() => navigate("/buy")}>
+          <Button size="lg" variant="outline" className="w-full" onClick={() => navigate(`/buy${targetQuery}`)}>
             <ArrowRight />
             {sub.status === "active" ? t("home.extend") : t("home.buy")}
           </Button>
