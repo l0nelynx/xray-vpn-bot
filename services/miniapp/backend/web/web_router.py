@@ -69,6 +69,8 @@ from . import brute_force
 from common_db.repo import balance as _repo_balance
 from common_db.repo import promos as _repo_promos
 from common_db.repo import system as _repo_system
+from common_db.repo import subscriptions as _repo_subscriptions
+from common_db.models import User
 
 logger = logging.getLogger(__name__)
 
@@ -145,7 +147,8 @@ class ValidateInviteResponse(BaseModel):
 class WebRegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
-    invite_code: str = Field(min_length=1, max_length=20)
+    invite_code: str | None = Field(default=None, min_length=1, max_length=20)
+    subscription_context: str | None = Field(default=None, min_length=20, max_length=4096)
 
 
 class PartnershipInquiryRequest(BaseModel):
@@ -186,6 +189,7 @@ class WebMenuResponse(BaseModel):
 class WebInvoiceRequest(BaseModel):
     node_id: int = Field(..., ge=1)
     description: str | None = None
+    subscription_id: int | None = Field(default=None, ge=1)
 
 
 class TelegramExchangeRequest(BaseModel):
@@ -206,6 +210,7 @@ class WebInvoiceResponse(BaseModel):
 
 class WebPayCreditsRequest(BaseModel):
     node_id: int = Field(..., ge=1)
+    subscription_id: int | None = Field(default=None, ge=1)
 
 
 class WebPayCreditsResponse(BaseModel):
@@ -222,6 +227,24 @@ class WebPayCreditsResponse(BaseModel):
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
+
+
+async def _purchase_target_rw_id(
+    *, user_id: int, subscription_id: int | None
+) -> int | None:
+    async with async_session() as session:
+        if subscription_id is not None:
+            target = await _repo_subscriptions.get_for_user(
+                session, user_id=user_id, subscription_id=subscription_id
+            )
+            if target is None:
+                raise HTTPException(
+                    status.HTTP_404_NOT_FOUND,
+                    detail={"code": "subscription_not_found"},
+                )
+        else:
+            target = await _repo_subscriptions.get_primary(session, user_id)
+    return target.rw_id if target is not None else None
 
 @router.post("/validate-invite", response_model=ValidateInviteResponse)
 @limiter.limit("5/minute")
@@ -301,42 +324,117 @@ async def web_register(
     ip = _client_ip(request)
     brute_force.check(ip)
 
-    code = body.invite_code.strip().upper()
-
-    async with async_session() as session:
-        promo = await _repo_promos.get_promo_by_code(session, code)
-        if promo is None:
+    code = body.invite_code.strip().upper() if body.invite_code else None
+    claim_rw_id: int | None = None
+    if body.subscription_context:
+        try:
+            claim_rw_id, _ = android_security.decode_subscription_context(
+                body.subscription_context
+            )
+        except android_security.JWTError as exc:
             brute_force.record_fail(ip)
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST,
-                detail={"code": "invalid_invite"},
+                detail={"code": "invalid_subscription_context"},
+            ) from exc
+
+        from common_db.repo import subscriptions as _repo_subscriptions
+
+        async with async_session() as session:
+            owner = await _repo_subscriptions.get_by_rw_id(session, claim_rw_id)
+        if owner is not None:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                detail={"code": "subscription_already_linked"},
             )
-        grant = await _resolve_credit_grant_for_promo(promo)
+        grant = 0
+    elif code:
+        async with async_session() as session:
+            promo = await _repo_promos.get_promo_by_code(session, code)
+            if promo is None:
+                brute_force.record_fail(ip)
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    detail={"code": "invalid_invite"},
+                )
+            grant = await _resolve_credit_grant_for_promo(promo)
+    else:
+        brute_force.record_fail(ip)
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail={"code": "invite_or_subscription_required"},
+        )
 
     brute_force.clear(ip)
 
     pwd_hash = await android_security.hash_password(body.password)
-    try:
-        user_id = await android_repo.create_user_with_password(str(body.email), pwd_hash)
-    except IntegrityError:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            detail={"code": "email_taken"},
-        )
+    if claim_rw_id is not None:
+        # Create the account and claim ownership in one transaction. The public
+        # pre-check above is UX only; this re-check is the race-safe boundary.
+        try:
+            async with async_session() as session:
+                owner = await _repo_subscriptions.get_by_rw_id(session, claim_rw_id)
+                if owner is not None:
+                    raise HTTPException(
+                        status.HTTP_409_CONFLICT,
+                        detail={"code": "subscription_already_linked"},
+                    )
+                db_user = User(
+                    tg_id=None,
+                    email=str(body.email).strip().lower(),
+                    password_hash=pwd_hash,
+                    password_updated_at=_now_iso(),
+                    api_provider="remnawave",
+                )
+                session.add(db_user)
+                await session.flush()
+                user_id = int(db_user.id)
+                await _repo_subscriptions.attach(
+                    session,
+                    user_id=user_id,
+                    rw_id=claim_rw_id,
+                    source="subscription_page_registration",
+                    make_primary=True,
+                )
+                await session.commit()
+        except IntegrityError:
+            async with async_session() as session:
+                owner = await _repo_subscriptions.get_by_rw_id(session, claim_rw_id)
+            if owner is not None:
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    detail={"code": "subscription_already_linked"},
+                )
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                detail={"code": "email_taken"},
+            )
+    else:
+        try:
+            user_id = await android_repo.create_user_with_password(
+                str(body.email), pwd_hash
+            )
+        except IntegrityError:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                detail={"code": "email_taken"},
+            )
 
     user = await android_repo.find_user_by_id(user_id)
     assert user is not None
 
-    fake_tg = _fake_tg_id(user_id)
-    async with async_session() as session:
-        redeem_result = await _repo_promos.redeem_promo(session, fake_tg, code)
-        if not redeem_result.ok:
-            await session.rollback()
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST,
-                detail={"code": "invalid_invite"},
-            )
-        await session.commit()
+    if claim_rw_id is None:
+        assert code is not None
+        fake_tg = _fake_tg_id(user_id)
+        async with async_session() as session:
+            redeem_result = await _repo_promos.redeem_promo(session, fake_tg, code)
+            if not redeem_result.ok:
+                await session.rollback()
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    detail={"code": "invalid_invite"},
+                )
+            await session.commit()
 
     tokens = await _issue_pair(user_id, request)
     _, ip_log = deps.client_meta(request)
@@ -344,7 +442,8 @@ async def web_register(
         f"🌐 <b>Web registration</b>\n"
         f"ID: <code>{user_id}</code>\n"
         f"email: <code>{esc(user.email)}</code>\n"
-        f"invite: <code>{esc(code)}</code> (+{grant} credits)\n"
+        f"source: <code>{'subscription' if claim_rw_id is not None else 'invite'}</code>\n"
+        f"credits: <code>{grant}</code>\n"
         f"IP: <code>{esc(ip_log or '—')}</code>"
     )
     return AuthResponse(tokens=tokens, user=_user_summary(user))
@@ -424,6 +523,9 @@ async def web_invoice(
     user: android_repo.UserRow = Depends(deps.require_verified_email),
 ) -> WebInvoiceResponse:
     """Create a payment invoice at full price (no promo discount)."""
+    target_rw_id = await _purchase_target_rw_id(
+        user_id=user.id, subscription_id=body.subscription_id
+    )
     node = await _load_node(body.node_id)
     if node is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail={"code": "node_not_found"})
@@ -492,6 +594,7 @@ async def web_invoice(
                 remnawave_tag=invoice_data["remnawave_tag"],
                 user_id=user.id,
                 android_user_id=user.id,
+                target_rw_id=target_rw_id,
             )
         )
         await session.commit()
@@ -525,6 +628,9 @@ async def web_pay_credits(
 ) -> WebPayCreditsResponse:
     from ..credits_delivery import pay_and_deliver
 
+    target_rw_id = await _purchase_target_rw_id(
+        user_id=user.id, subscription_id=body.subscription_id
+    )
     node = await _load_node(body.node_id)
     if node is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail={"code": "node_not_found"})
@@ -555,6 +661,7 @@ async def web_pay_credits(
         android_user_id=user.id if user.tg_id is None else None,
         email=user.email,
         referral_tg_id=_promo_tg_id(user),
+        target_rw_id=target_rw_id,
     )
     if result.get("status") != "success":
         raise HTTPException(

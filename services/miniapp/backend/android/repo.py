@@ -38,6 +38,7 @@ class UserRow:
     is_banned: bool
     language: str | None
     vless_uuid: str | None
+    rw_id: int | None
 
 
 def _row_to_user(row) -> UserRow | None:
@@ -52,10 +53,14 @@ def _row_to_user(row) -> UserRow | None:
         is_banned=bool(row[5]) if row[5] is not None else False,
         language=row[6],
         vless_uuid=row[7],
+        rw_id=int(row[8]) if row[8] is not None else None,
     )
 
 
-_USER_COLS = "id, email, password_hash, email_verified_at, tg_id, is_banned, language, vless_uuid"
+_USER_COLS = (
+    "id, email, password_hash, email_verified_at, tg_id, is_banned, "
+    "language, vless_uuid, rw_id"
+)
 
 
 async def find_user_by_email(email: str) -> UserRow | None:
@@ -82,6 +87,15 @@ async def find_user_by_vless_uuid(vless_uuid: str) -> UserRow | None:
         row = (await s.execute(
             text(f"SELECT {_USER_COLS} FROM users WHERE vless_uuid = :u LIMIT 1"),
             {"u": vless_uuid},
+        )).first()
+    return _row_to_user(row)
+
+
+async def find_user_by_rw_id(rw_id: int) -> UserRow | None:
+    async with async_session() as s:
+        row = (await s.execute(
+            text(f"SELECT {_USER_COLS} FROM users WHERE rw_id = :r LIMIT 1"),
+            {"r": int(rw_id)},
         )).first()
     return _row_to_user(row)
 
@@ -435,9 +449,18 @@ async def set_user_vless_uuid(
 ) -> None:
     async with async_session() as s:
         if rw_id is not None:
+            from common_db.repo import subscriptions as subscription_repo
+
+            await subscription_repo.attach(
+                s,
+                user_id=user_id,
+                rw_id=int(rw_id),
+                source="provisioned",
+                make_primary=True,
+            )
             await s.execute(
-                text("UPDATE users SET vless_uuid = :u, rw_id = :r WHERE id = :i"),
-                {"u": uuid, "r": rw_id, "i": user_id},
+                text("UPDATE users SET vless_uuid = :u WHERE id = :i"),
+                {"u": uuid, "i": user_id},
             )
         else:
             await s.execute(

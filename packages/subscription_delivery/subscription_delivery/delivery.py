@@ -139,6 +139,7 @@ async def deliver_android_paid(
     notifier: Notifier,
     delivery_target: Optional[dict] = None,
     squad_resolver: Optional[SquadResolver] = None,
+    target_rw_id: int | None = None,
 ) -> dict:
     """Provision/extend a PAID Remnawave subscription for an Android user.
 
@@ -176,7 +177,18 @@ async def deliver_android_paid(
 
     username = email_to_username(email)
 
-    info = await rem.get_user_from_username(username)
+    info = (
+        await rem.get_user_from_id(target_rw_id)
+        if target_rw_id is not None
+        else await rem.get_user_from_username(username)
+    )
+    if target_rw_id is not None and info is None:
+        await _notify(
+            notifier, ok=False, transaction_id=transaction_id,
+            android_user_id=android_user_id, email=email, days=days,
+            tariff_slug=tariff_slug, reason="target_subscription_not_found",
+        )
+        return {"status": "error", "message": "target_subscription_not_found"}
     scenario = resolve_scenario(info, SubscriptionType.PAID)
 
     try:

@@ -64,7 +64,11 @@ async def payment_process_background(order_id: str):
 
         # Android API: paid transaction created via miniapp/backend/android/payments_router.
         # No tg_id ⇒ skip the Telegram-bound delivery path entirely.
-        if android_user_id and not usrid:
+        # A transaction with an explicit Remnawave target must use the
+        # account-delivery path even when Telegram is linked; the legacy
+        # Telegram path resolves a single profile by tg_id and cannot honor
+        # a selected subscription.
+        if android_user_id and (userdata.get("target_rw_id") is not None or not usrid):
             await _process_android_payment(order_id, userdata, android_user_id, tariff_days)
             return
 
@@ -237,6 +241,7 @@ async def _process_android_payment(order_id: str, userdata: dict, android_user_i
             "remnawave_description": userdata.get("remnawave_description"),
             "remnawave_tag": userdata.get("remnawave_tag"),
         },
+        target_rw_id=userdata.get("target_rw_id"),
     )
 
     if result["status"] != "success":

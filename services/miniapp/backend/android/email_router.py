@@ -182,7 +182,7 @@ async def email_verify(
     # Skip when the user already owns a Remnawave subscription (the
     # `/migrate` flow pre-fills `vless_uuid`) so we don't overwrite a
     # paid plan with the free tier.
-    if not user.vless_uuid:
+    if user.rw_id is None and not user.vless_uuid:
         try:
             await provisioning.ensure_free_subscription(user.id, user.email)
         except Exception as exc:

@@ -15,7 +15,7 @@ from ..config import (
 from ..database.session import async_session
 
 from common_db.repo import users as _repo_users
-from remnawave_client.api import get_user_devices_count, resolve_remnawave_user
+from remnawave_client.api import get_user_devices_count_by_id, resolve_remnawave_user
 from ..schemas.me import LanguageUpdate, LinksInfo, MeResponse, SubscriptionInfo, UserInfo
 from ..tg_auth import TgUser, get_tg_user
 
@@ -82,6 +82,7 @@ async def get_me(tg: TgUser = Depends(get_tg_user)) -> MeResponse:
     # otherwise a coincidental @username collision would expose a foreign
     # subscription_url.
     rem_user = await resolve_remnawave_user(
+        rw_id=user.rw_id,
         vless_uuid=user.vless_uuid,
         email=user.email,
         username=user.username,
@@ -91,8 +92,10 @@ async def get_me(tg: TgUser = Depends(get_tg_user)) -> MeResponse:
     if not rem_user:
         return MeResponse(registered=True, user=user_info, links=links)
 
+    resolved_rw_id = rem_user.get("rw_id")
     devices_count = (
-        await get_user_devices_count(rem_user["uuid"]) if rem_user.get("uuid") else 0
+        await get_user_devices_count_by_id(resolved_rw_id)
+        if resolved_rw_id is not None else 0
     )
 
     subscription = SubscriptionInfo(

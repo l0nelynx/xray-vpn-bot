@@ -59,3 +59,24 @@ class TelegramLinkCode(Base):
     used_by_tg_id: Mapped[int] = mapped_column(BigInteger, nullable=True)
 
     __table_args__ = (Index("ix_telegram_link_codes_user_id", "user_id"),)
+
+
+class WebAuthorizationCode(Base):
+    """Single-use authorization code for the subscription-page BFF."""
+
+    __tablename__ = "web_authorization_codes"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    code_hash: Mapped[str] = mapped_column(String(128), unique=True)
+    client_id: Mapped[str] = mapped_column(String(64))
+    redirect_uri: Mapped[str] = mapped_column(String(500))
+    code_challenge: Mapped[str] = mapped_column(String(128))
+    created_at: Mapped[str] = mapped_column(String(30))
+    expires_at: Mapped[str] = mapped_column(String(30))
+    used_at: Mapped[str] = mapped_column(String(30), nullable=True)
+
+    __table_args__ = (
+        Index("ix_web_authorization_codes_user_id", "user_id"),
+        Index("ix_web_authorization_codes_expires_at", "expires_at"),
+    )

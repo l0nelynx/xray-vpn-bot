@@ -50,9 +50,13 @@ class Transaction(Base):
     # Android API: equals users.id when the invoice was created via the
     # Android API (user has no tg_id). NULL for Telegram-bot invoices.
     android_user_id: Mapped[int] = mapped_column(Integer, nullable=True)
+    # Explicit renewal target. NULL preserves legacy "resolve primary user"
+    # delivery for transactions created before multi-subscription support.
+    target_rw_id: Mapped[int] = mapped_column(BigInteger, nullable=True)
 
     __table_args__ = (
         Index("ix_transaction_user_id", "user_id"),
         Index("ix_transactions_android_user_id", "android_user_id"),
         Index("ix_transactions_provider_invoice_id", "provider_invoice_id"),
+        Index("ix_transactions_target_rw_id", "target_rw_id"),
     )

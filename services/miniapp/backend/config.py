@@ -21,7 +21,11 @@ _config: DualSourceConfig | None = None
 
 
 def _load_yaml() -> dict:
-    with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+    # Tests and local launchers may set CONFIG_PATH after this module was first
+    # imported by a router. Resolve the environment at load time rather than
+    # freezing `/app/config.yml` at import time.
+    path = os.environ.get("CONFIG_PATH", CONFIG_PATH)
+    with open(path, "r", encoding="utf-8") as f:
         return yaml.safe_load(f) or {}
 
 
@@ -356,6 +360,26 @@ def get_web_allowed_origins() -> list[str]:
     if isinstance(raw, str):
         return [o.strip() for o in raw.split(",") if o.strip()]
     return [str(o).strip() for o in raw if o]
+
+
+def get_subscription_page_oauth_redirect_uris() -> list[str]:
+    """Exact OAuth callback allowlist for the subscription-page BFF."""
+    raw = (
+        get_config().get("subscription_page_oauth_redirect_uris")
+        or os.environ.get("SUBSCRIPTION_PAGE_OAUTH_REDIRECT_URIS")
+        or []
+    )
+    if isinstance(raw, str):
+        return [value.strip() for value in raw.split(",") if value.strip()]
+    return [str(value).strip() for value in raw if value]
+
+
+def get_web_portal_url() -> str:
+    return (
+        get_config().get("web_portal_url")
+        or os.environ.get("WEB_PORTAL_URL")
+        or ""
+    ).rstrip("/")
 
 
 def get_web_id() -> int | None:

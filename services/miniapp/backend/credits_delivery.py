@@ -29,6 +29,7 @@ async def pay_and_deliver(
     android_user_id: int | None = None,
     email: str | None = None,
     referral_tg_id: int | None = None,
+    target_rw_id: int | None = None,
 ) -> dict:
     """Debit RUB points, create transaction, deliver subscription."""
     async with async_session() as session:
@@ -41,6 +42,7 @@ async def pay_and_deliver(
             days=days,
             tariff_slug=tariff_slug,
             android_user_id=android_user_id,
+            target_rw_id=target_rw_id,
         )
         if purchase is None:
             await session.rollback()
@@ -67,6 +69,7 @@ async def pay_and_deliver(
             notifier=notify_log,
             delivery_target=delivery_target,
             squad_resolver=_noop_squad_resolver,
+            target_rw_id=target_rw_id,
         )
     elif tg_id:
         result = await deliver_telegram_paid(

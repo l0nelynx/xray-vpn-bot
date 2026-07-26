@@ -315,6 +315,26 @@ class RemnawaveClient:
             logger.error("Remnawave get_user_by_uuid(%s) failed: %s", user_uuid, e)
             return None
 
+    async def get_user_by_id(self, rw_id: int) -> dict | None:
+        """Fetch a Remnawave user by its stable numeric panel id."""
+        try:
+            response = await self.sdk.users.get_user_by_id(str(int(rw_id)))
+            if not response:
+                return None
+            return _normalize_user(response)
+        except (TypeError, ValueError):
+            return None
+        except Exception as e:
+            logger.error("Remnawave get_user_by_id(%s) failed: %s", rw_id, e)
+            return None
+
+    async def _uuid_for_id(self, rw_id: int) -> str | None:
+        user = await self.get_user_by_id(rw_id)
+        if not user:
+            return None
+        value = user.get("uuid")
+        return str(value) if value else None
+
     async def get_user_by_short_uuid_raw(self, short_uuid: str) -> dict | None:
         """Lookup user by Remnawave short_uuid and return the SDK DTO
         serialized as-is (no normalization). Used by the Android
@@ -336,6 +356,13 @@ class RemnawaveClient:
         except Exception as e:
             logger.error("Remnawave get_subscription_link(%s) failed: %s", user_uuid, e)
             return None
+
+    async def get_subscription_link_by_id(self, rw_id: int) -> str | None:
+        user = await self.get_user_by_id(rw_id)
+        if not user:
+            return None
+        value = user.get("subscription_url")
+        return str(value) if value else None
 
     # ----- write -----
 
@@ -504,6 +531,13 @@ class RemnawaveClient:
             logger.error("Remnawave update_user(%s) failed: %s", user_uuid, e)
             return None
 
+    async def update_user_by_id(self, rw_id: int, **changes) -> dict | None:
+        """ID-first update while the upstream SDK still mutates by UUID."""
+        user_uuid = await self._uuid_for_id(rw_id)
+        if not user_uuid:
+            return None
+        return await self.update_user(user_uuid, **changes)
+
     async def reset_user_traffic(self, user_uuid: str) -> bool:
         try:
             await self.sdk.users.reset_user_traffic(user_uuid)
@@ -512,6 +546,10 @@ class RemnawaveClient:
             logger.error("Remnawave reset_user_traffic(%s) failed: %s", user_uuid, e)
             return False
 
+    async def reset_user_traffic_by_id(self, rw_id: int) -> bool:
+        user_uuid = await self._uuid_for_id(rw_id)
+        return bool(user_uuid) and await self.reset_user_traffic(user_uuid)
+
     async def delete_user(self, user_uuid: str) -> bool:
         try:
             await self.sdk.users.delete_user(user_uuid)
@@ -519,6 +557,10 @@ class RemnawaveClient:
         except Exception as e:
             logger.error("Remnawave delete_user(%s) failed: %s", user_uuid, e)
             return False
+
+    async def delete_user_by_id(self, rw_id: int) -> bool:
+        user_uuid = await self._uuid_for_id(rw_id)
+        return bool(user_uuid) and await self.delete_user(user_uuid)
 
     # ----- HWID devices -----
 
@@ -539,6 +581,14 @@ class RemnawaveClient:
             logger.error("Remnawave get_user_hwid_devices(%s) failed: %s", user_uuid, e)
             return None
 
+    async def get_user_hwid_devices_by_id(
+        self, rw_id: int
+    ) -> HwidDevicesCompat | None:
+        user_uuid = await self._uuid_for_id(rw_id)
+        if not user_uuid:
+            return None
+        return await self.get_user_hwid_devices(user_uuid)
+
     async def delete_user_hwid_device(
         self, user_uuid: str, hwid: str
     ) -> HwidDevicesCompat | None:
@@ -558,6 +608,14 @@ class RemnawaveClient:
                 "Remnawave delete_user_hwid_device(%s, %s) failed: %s", user_uuid, hwid, e
             )
             return None
+
+    async def delete_user_hwid_device_by_id(
+        self, rw_id: int, hwid: str
+    ) -> HwidDevicesCompat | None:
+        user_uuid = await self._uuid_for_id(rw_id)
+        if not user_uuid:
+            return None
+        return await self.delete_user_hwid_device(user_uuid, hwid)
 
 
 # ============================================================================

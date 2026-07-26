@@ -159,6 +159,11 @@ fcm_service_account_path: "/app/fcm-sa.json"       # bootstrap fallback path (co
 # web_allowed_origins:
 #   - https://web.yourdomain.com
 
+# Exact callback allowlist for the Remnawave subscription-page account BFF.
+# subscription_page_oauth_redirect_uris:
+#   - https://sub.yourdomain.com/_account/callback
+# web_portal_url: "https://web.yourdomain.com"
+
 tg_client_secret: ""                               # preferred: Dashboard Web (encrypted)
 
 
