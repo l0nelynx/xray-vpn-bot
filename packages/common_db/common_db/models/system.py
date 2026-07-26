@@ -31,9 +31,9 @@ class TelmtFreeParams(Base):
 class BotFeatureFlags(Base):
     """Single-row feature-flag table (id=1).
 
-    legacy_bot_constructor: when True, the in-bot tariff menus and inline
-    payment flow (app/bot_constructor/) are registered on the aiogram dispatcher
-    at bot startup. Requires a bot restart to take effect after toggling.
+    legacy_bot_constructor: when True, the always-registered bot constructor
+    serves the shared tariff tree. The bot re-reads it through a short,
+    versioned cache, so no restart is required.
     """
 
     __tablename__ = "bot_feature_flags"

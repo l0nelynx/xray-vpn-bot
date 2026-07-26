@@ -9,8 +9,9 @@ Two paths exist:
 
 2. **Server-driven RTDN** (`POST /rtdn`) — Google's Pub/Sub push delivers
    real-time renewal/cancel/expiry events. Auth is via a shared `?token=`
-   query param matching `get_google_play_rtdn_token()`. We always return
-   200 OK on benign errors so Pub/Sub doesn't retry indefinitely.
+   query param matching `get_google_play_rtdn_token()`. When IAP/RTDN is not
+   configured, the endpoint stays fail-closed. We return 200 OK on benign
+   payload errors so Pub/Sub doesn't retry indefinitely.
 
 Owner reassignment (a token previously bound to user A appearing under user
 B) is rejected — that's almost certainly account abuse. Replays of the same
@@ -276,7 +277,13 @@ async def real_time_developer_notification(
     on non-2xx, which is bad for transient malformed payloads.
     """
     expected = get_google_play_rtdn_token()
-    if expected and token != expected:
+    if not expected:
+        # IAP is optional, but an unconfigured webhook must never become an
+        # unauthenticated public endpoint.
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, "iap_not_configured"
+        )
+    if token != expected:
         # Wrong shared secret — return 401 so the operator notices in logs;
         # Pub/Sub will retry, but if the secret really is wrong that's the
         # right signal.

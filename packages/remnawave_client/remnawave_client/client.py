@@ -183,19 +183,26 @@ class RemnawaveClient:
         logger.info("Remnawave total users: %s", response.total)
         return response
 
-    async def get_internal_squads(self) -> list[dict]:
-        """List internal squads from Remnawave panel."""
+    async def _get_squads(self, kind: str, *, strict: bool = False) -> list[dict]:
+        """List internal/external squads through the SDK-authenticated client."""
         from .segmentation import _get_attr
 
         try:
-            response = await self.sdk.users.client.get("/internal-squads")
+            endpoint = f"/{kind}-squads"
+            response = await self.sdk.users.client.get(endpoint)
             response.raise_for_status()
             data = _unwrap_response_envelope(response.json())
             items: list = []
             if isinstance(data, list):
                 items = data
             elif isinstance(data, dict):
-                for key in ("internalSquads", "internal_squads", "squads", "root"):
+                keys = (
+                    f"{kind}Squads",
+                    f"{kind}_squads",
+                    "squads",
+                    "root",
+                )
+                for key in keys:
                     raw = data.get(key)
                     if isinstance(raw, list):
                         items = raw
@@ -211,8 +218,18 @@ class RemnawaveClient:
                 })
             return squads
         except Exception as e:
-            logger.error("Remnawave get_internal_squads failed: %s", e)
+            logger.error("Remnawave get_%s_squads failed: %s", kind, e)
+            if strict:
+                raise
             return []
+
+    async def get_internal_squads(self, *, strict: bool = False) -> list[dict]:
+        """List internal squads from Remnawave panel."""
+        return await self._get_squads("internal", strict=strict)
+
+    async def get_external_squads(self, *, strict: bool = False) -> list[dict]:
+        """List external squads from Remnawave panel."""
+        return await self._get_squads("external", strict=strict)
 
     async def get_users_by_tag(self, tag: str) -> list[dict]:
         """Fetch panel users with the given tag (uppercase, no spaces)."""
@@ -332,14 +349,30 @@ class RemnawaveClient:
         telegram_id: Optional[int] = None,
         tag: Optional[str] = None,
         squad_id: Optional[str] = None,
+        internal_squad_ids: Optional[list[str]] = None,
         external_squad_id: Optional[str] = None,
+        traffic_limit_bytes: Optional[int] = None,
+        traffic_limit_strategy: Optional[str] = None,
     ) -> dict | None:
         try:
             if email is None:
                 email = f"{username}@bot.local"
 
             effective_squad = squad_id or self.free_squad_id
-            active_squads = [effective_squad] if effective_squad else []
+            active_squads = (
+                list(dict.fromkeys(internal_squad_ids))
+                if internal_squad_ids is not None
+                else ([effective_squad] if effective_squad else [])
+            )
+            effective_limit = (
+                int(traffic_limit_bytes)
+                if traffic_limit_bytes is not None
+                else (limit_gb * 1024 * 1024 * 1024 if limit_gb > 0 else 0)
+            )
+            strategy_name = (
+                traffic_limit_strategy
+                or ("MONTH" if effective_limit > 0 else "NO_RESET")
+            ).upper()
 
             new_user = CreateUserRequestDto(
                 expire_at=datetime.datetime.now() + datetime.timedelta(days=days),
@@ -347,10 +380,8 @@ class RemnawaveClient:
                 created_at=datetime.datetime.now(),
                 status=UserStatus.ACTIVE,
                 vless_uuid=f"{_uuid.uuid4()}",
-                traffic_limit_bytes=limit_gb * 1024 * 1024 * 1024 if limit_gb > 0 else 0,
-                traffic_limit_strategy=(
-                    TrafficLimitStrategy.MONTH if limit_gb > 0 else TrafficLimitStrategy.NO_RESET
-                ),
+                traffic_limit_bytes=effective_limit,
+                traffic_limit_strategy=TrafficLimitStrategy(strategy_name),
                 description=descr,
                 email=email,
                 active_internal_squads=active_squads,
@@ -387,7 +418,10 @@ class RemnawaveClient:
         tag: Optional[str] = None,
         status: Optional[str] = None,
         squad_id: Optional[str] = None,
+        internal_squad_ids: Optional[list[str]] = None,
         external_squad_id: Optional[str] = None,
+        traffic_limit_bytes: Optional[int] = None,
+        traffic_limit_strategy: Optional[str] = None,
     ) -> dict | None:
         try:
             update_data: dict = {"uuid": _uuid.UUID(user_uuid)}
@@ -405,9 +439,19 @@ class RemnawaveClient:
                 update_data["expire_at"] = (
                     datetime.datetime.now() + datetime.timedelta(days=days)
                 )
-            if limit_gb is not None:
-                update_data["traffic_limit_bytes"] = (
-                    limit_gb * 1024 * 1024 * 1024 if limit_gb > 0 else 0
+            if traffic_limit_bytes is not None:
+                update_data["traffic_limit_bytes"] = int(traffic_limit_bytes)
+            elif limit_gb is not None:
+                update_data["traffic_limit_bytes"] = limit_gb * 1024 * 1024 * 1024 if limit_gb > 0 else 0
+            if traffic_limit_strategy is not None:
+                update_data["traffic_limit_strategy"] = TrafficLimitStrategy(
+                    traffic_limit_strategy.upper()
+                )
+            elif "traffic_limit_bytes" in update_data:
+                update_data["traffic_limit_strategy"] = (
+                    TrafficLimitStrategy.MONTH
+                    if update_data["traffic_limit_bytes"] > 0
+                    else TrafficLimitStrategy.NO_RESET
                 )
             if descr:
                 update_data["description"] = descr
@@ -415,7 +459,11 @@ class RemnawaveClient:
                 update_data["email"] = email
             if tag:
                 update_data["tag"] = tag
-            if squad_id:
+            if internal_squad_ids is not None:
+                update_data["active_internal_squads"] = list(
+                    dict.fromkeys(internal_squad_ids)
+                )
+            elif squad_id:
                 update_data["active_internal_squads"] = [squad_id]
             if external_squad_id:
                 update_data["external_squad_uuid"] = external_squad_id

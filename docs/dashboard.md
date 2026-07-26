@@ -30,12 +30,11 @@ The sidebar is grouped into four sections:
 | Section | Pages | Visible when |
 |---------|-------|--------------|
 | **Overview** | Dashboard, Users, Transactions, Statistics, Promocodes, CRM, Support, TG Admin | Always |
-| **Bot Constructor** | Tariffs, Menus, Squads | `legacy_bot_constructor = true` |
+| **Telegram Bot** | Menus | Always |
 | **Services** | Telemt, Store | Always (503 if not configured) |
 | **WebApp** | Tariff Constructor, Settings | Always |
 
-Toggle **Bot Constructor** visibility in **WebApp → Settings** (requires bot
-restart after change).
+The feature flag changes only purchase runtime; it never hides the menu editor.
 
 ---
 
@@ -197,47 +196,19 @@ see results (disabled/deleted/notified/errors).
 
 ---
 
-## Bot Constructor (legacy)
-
-!!! note "Legacy mode"
-    Disabled by default. Users are directed to the MiniApp for purchases.
-    Enable in **WebApp → Settings** → `legacy_bot_constructor`, then restart bot.
-
-When enabled, three additional pages appear:
-
-### Tariffs
-
-**Route:** `/tariffs`
-
-Drag-and-drop tariff plan editor:
-
-- Slug, names (RU/EN), duration days, discount %
-- Squad profile binding
-- Price matrix per payment method (Stars, Crypto, SBP, Crystal)
-- Live Telegram preview by language and payment method
-
-Changes bump `cache_version` — bot reloads tariffs automatically.
-
-### Menus
+## Telegram Bot → Menus
 
 **Route:** `/menus`
 
 Inline Telegram menu builder:
 
 - Screens with RU/EN message text
-- Buttons: callbacks, URLs, visibility conditions
+- Typed buttons: callback, URL, WebApp or Tariff Constructor
 - Drag-and-drop button reorder
 - Live Telegram preview panel
+- Runtime status badge for the live purchase feature flag
 
-### Squads
-
-**Route:** `/squads`
-
-CRUD for Remnawave squad profiles:
-
-- Name, `squad_id`, `external_squad_id`
-- Referenced by legacy tariffs and WebApp invoice nodes
-- Cannot delete if referenced (409)
+The old `/tariffs` and `/squads` Dashboard URLs redirect to Tariff Constructor.
 
 ---
 
@@ -245,8 +216,8 @@ CRUD for Remnawave squad profiles:
 
 **Route:** `/webapp/tariffs`
 
-**This is the primary way to configure purchases** for MiniApp, web portal, and
-Android.
+**This is the only way to configure purchases** for Telegram Bot, MiniApp, web
+portal and Android.
 
 Build a **tree of menu nodes**:
 
@@ -259,22 +230,30 @@ Build a **tree of menu nodes**:
 
 | Field | Description |
 |-------|-------------|
-| Provider | Payment gateway (`apay`, `crystal`, `crypto`, `platega`, `paritypay`) |
+| RU / EN labels | Separate localized customer-facing labels |
+| Provider | Registry gateway, including `stars` |
 | Amount | Price |
 | Currency | `RUB`, `USDT`, etc. |
 | Method | Sub-method (Platega: `2`=SBP; ParityPay: `sbp`/`card`) |
 | Days | Subscription duration |
-| Tariff slug | Encodes squad binding |
+| Internal squads | One or more Remnawave internal squads, loaded from the panel API |
+| External squad | One Remnawave external squad, loaded from the panel API |
+| Traffic limit / reset strategy | Whole GiB (`0` = unlimited) and Remnawave reset policy |
+| Description / tag | Optional Remnawave user profile metadata |
 
-Provider list comes from `GET /api/webapp-menu/providers` — must match
-`packages/payments` registry.
+Provider list comes from `GET /api/webapp-menu/providers` and is generated from
+the live `packages/payments` registry, including methods, currencies, surfaces
+and webhook correlation metadata. Stars are visible only to Bot and MiniApp.
 
 **Operations:**
 
 - Create / edit / delete nodes
-- Drag to reorder and reparent
+- Reorder siblings and move Payment Options through the category selector
+- Clone a Payment Option into a local inactive draft
 - Toggle active/inactive
 - Expand/collapse tree branches
+- Fix migrated `Needs attention` nodes before activation
+- Switch RU/EN preview
 
 Changes are live immediately — clients read `webapp_menu_nodes` on each request.
 
@@ -289,8 +268,10 @@ Tabs:
 | Tab | Effect |
 |-----|--------|
 | **Runtime** | Maintenance mode; branding / links / free plan / log chat IDs. Saved values override `config.yml` without restart. |
+| **Remnawave** | Squad UUIDs + subscription base URL (panel URL/token stay in YAML). |
+| **Email / Android / Store / Web / Push·Play** | Non-secret scalars + encrypted credentials (`app_integrations`). |
 | **Payments** | Enable gateways and edit credentials (encrypted in DB). After Save, Dashboard is the source of truth for that provider. |
-| **Feature flags** | `legacy_bot_constructor` — show/hide Bot Constructor nav; requires bot restart |
+| **Feature flags** | `legacy_bot_constructor` — switch Bot purchase runtime live (≤5 seconds); Menus stays visible |
 
 See [Configuration → Dual-source](configuration.md#dual-source-configuration-yaml--dashboard).
 
@@ -300,7 +281,9 @@ See [Configuration → Dual-source](configuration.md#dual-source-configuration-y
 
 **Route:** `/telemt`
 
-Proxy to external Telemt server (`telemt_server` + `telemt_header`). Returns
+Proxy to external Telemt server. Connection credentials
+(`telemt_server` + `telemt_header`) are edited under **Telemt → Connection**
+(dual-source with `config.yml`). Returns
 503 if not configured.
 
 Three tabs:
@@ -339,9 +322,7 @@ All endpoints require `Authorization: Bearer <JWT>` unless noted.
 | Stats | `/api/stats` | summary, revenue, user-growth, payment-methods |
 | Promos | `/api/promos` | CRUD, settings (credits / points) |
 | CRM | `/api/crm` | segments, campaigns, events, evaluate |
-| Tariffs | `/api/tariffs` | legacy plan CRUD + reorder |
-| Menus | `/api/menus` | legacy screen/button CRUD |
-| Squads | `/api/squads` | squad profile CRUD |
+| Menus | `/api/menus` | Telegram screen/button CRUD |
 | Telemt | `/api/telemt` | proxy to Telemt API |
 | Store | `/api/store` | proxy to Store API |
 | Support | `/api/support` | tickets, reply, attachments |

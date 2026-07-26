@@ -22,6 +22,7 @@ import { Input } from "@xray/ui/components/input";
 import { Textarea } from "@xray/ui/components/textarea";
 import { Label } from "@xray/ui/components/label";
 import { Switch } from "@xray/ui/components/switch";
+import { Badge } from "@xray/ui/components/badge";
 import {
   Select,
   SelectContent,
@@ -68,7 +69,6 @@ function SortableButtonItem({
         <div className="truncate text-[13px] text-foreground/85">{btn.text_ru}</div>
         <div className="text-[11px] text-muted-foreground">
           {btn.button_type} · {btn.callback_data || btn.url || "—"}
-          {btn.visibility_condition !== "always" && ` · ${btn.visibility_condition}`}
         </div>
       </div>
       <div className="flex gap-1">
@@ -94,6 +94,7 @@ export default function MenuEditorPage() {
   const [btnEditorOpen, setBtnEditorOpen] = useState(false);
   const [previewLang, setPreviewLang] = useState<"ru" | "en">("ru");
   const [isDirty, setIsDirty] = useState(false);
+  const [runtimeEnabled, setRuntimeEnabled] = useState<boolean | null>(null);
   const snapshotRef = useRef("");
 
   useUnsavedWarning(isDirty);
@@ -121,6 +122,10 @@ export default function MenuEditorPage() {
 
   useEffect(() => {
     load();
+    api
+      .get<{ legacy_bot_constructor: boolean }>("/settings/features")
+      .then((value) => setRuntimeEnabled(value.legacy_bot_constructor))
+      .catch(() => setRuntimeEnabled(null));
   }, [load]);
 
   const updateScreen = (field: string, value: unknown) => {
@@ -195,7 +200,6 @@ export default function MenuEditorPage() {
       callback_data: "",
       button_type: "callback",
       is_active: true,
-      visibility_condition: "always",
       row: selected?.buttons.length || 0,
       col: 0,
       sort_order: selected?.buttons.length || 0,
@@ -276,9 +280,12 @@ export default function MenuEditorPage() {
 
   const previewButtons = sortedButtons
     .filter((b) => b.is_active)
-    .map((b, i) => ({
+    .map((b) => ({
       text: previewLang === "en" ? b.text_en : b.text_ru,
-      row: i,
+      row: b.row,
+      col: b.col,
+      destination:
+        b.button_type === "tariff" ? "Tariff Constructor" : undefined,
     }));
 
   const previewMessage = selected
@@ -288,7 +295,12 @@ export default function MenuEditorPage() {
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-lg font-semibold text-foreground md:text-xl">Bot Menu Editor</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-lg font-semibold text-foreground md:text-xl">Telegram Bot Menus</h1>
+          <Badge variant={runtimeEnabled ? "default" : "secondary"}>
+            {runtimeEnabled == null ? "Runtime unknown" : runtimeEnabled ? "Live" : "MiniApp mode"}
+          </Badge>
+        </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={handleAddScreen}>
             <Plus className="h-4 w-4" />
@@ -444,7 +456,7 @@ export default function MenuEditorPage() {
           )}
         </div>
 
-        <Card>
+        <Card className="h-fit lg:sticky lg:top-4">
           <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm text-foreground/85">Live Preview</CardTitle>
             <Select value={previewLang} onValueChange={(v: string) => setPreviewLang(v as "ru" | "en")}>
@@ -457,7 +469,7 @@ export default function MenuEditorPage() {
               </SelectContent>
             </Select>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-3 pb-3">
             <TelegramPreview messageText={previewMessage} buttons={previewButtons} />
           </CardContent>
         </Card>

@@ -1,14 +1,11 @@
 import logging
-import uuid
 
-from aiogram.types import CallbackQuery
 from fastapi import BackgroundTasks, Request
 from pydantic import BaseModel
 
-import app.database.requests as rq
 from app.api.handlers import payment_process_background
 from app.settings import secrets
-from payments import InvoiceRequest, PaymentError, create_invoice, signatures
+from payments import signatures
 
 logger = logging.getLogger(__name__)
 
@@ -20,38 +17,6 @@ class PlategaWebhookData(BaseModel):
     status: str
     paymentMethod: int | None = None
     payload: str | None = None
-
-
-async def create_platega_link(callback: CallbackQuery, amount: float, days: int,
-                              currency: str = "RUB"):
-    """Create a Platega payment link from a bot callback context."""
-    if await rq.is_user_banned(callback.from_user.id):
-        await callback.answer("Ваш аккаунт заблокирован.", show_alert=True)
-        return None
-
-    try:
-        invoice = await create_invoice("platega", InvoiceRequest(
-            transaction_id=str(uuid.uuid4()),
-            amount=float(amount),
-            currency=currency,
-            days=days,
-            user_tg_id=callback.from_user.id,
-            username=callback.from_user.username,
-        ))
-    except PaymentError as e:
-        logger.error("Platega invoice creation failed: %s", e)
-        return None
-
-    # Platega's own transactionId is the key the webhook reports back.
-    await rq.create_transaction(
-        user_tg_id=callback.from_user.id,
-        user_transaction=invoice.invoice_id,
-        username=callback.from_user.username,
-        days=days,
-        payment_method="PLATEGA",
-        amount=float(amount),
-    )
-    return invoice.url
 
 
 async def payment_webhook_handler(request: Request, background_tasks: BackgroundTasks):

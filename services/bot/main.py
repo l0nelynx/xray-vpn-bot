@@ -22,7 +22,8 @@ from app.handlers.giveaways import giveaway_router
 from app.handlers.devices import router as router_devices
 from app.handlers.events import start_bot, stop_bot
 from app.middlewares import MaintenanceMiddleware
-from app.settings import bot, admin_bot, cp, run_webserver, app_uvi, limiter, secrets, _yaml_secrets
+from app.settings import bot, admin_bot, run_webserver, app_uvi, limiter, secrets, _yaml_secrets
+from app.bot_constructor import get_router as get_bot_constructor_router
 
 app_uvi.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -55,6 +56,7 @@ dp.callback_query.middleware(UsernameRequiredMiddleware())
 dp.include_router(router_base)
 dp.include_router(giveaway_router)
 dp.include_router(router_devices)
+dp.include_router(get_bot_constructor_router())
 dp.startup.register(start_bot)
 dp.shutdown.register(stop_bot)
 
@@ -116,12 +118,8 @@ async def remnawave_webhook(request: Request, background_tasks: BackgroundTasks)
 
 async def on_startup(dispatcher, **kwargs):
     asyncio.create_task(run_webserver())
-    # Conditionally load legacy in-bot constructor based on DB feature flag.
-    # Requires a bot restart to take effect after toggling in Dashboard.
     from app.database.models import async_session
-    from common_db.repo.system import get_bot_feature_flags
     from common_db.runtime_config import bootstrap_runtime_overlay, runtime_overlay_poll_loop
-    from app.handlers import events as _events
     from app.admin.backup import scheduled_backup_loop
     from app.settings import _yaml_secrets
 
@@ -133,16 +131,6 @@ async def on_startup(dispatcher, **kwargs):
     await bootstrap_runtime_overlay(async_session, _yaml_secrets, crypto_secret=crypto_secret)
     asyncio.create_task(runtime_overlay_poll_loop(async_session))
 
-    async with async_session() as session:
-        flags = await get_bot_feature_flags(session)
-        _events._legacy_constructor_enabled = flags.legacy_bot_constructor
-        if flags.legacy_bot_constructor:
-            from app.bot_constructor import get_router
-            dispatcher.include_router(get_router())
-            logging.info("bot_constructor: legacy in-bot menus ENABLED")
-        else:
-            logging.info("bot_constructor: legacy in-bot menus disabled (miniapp mode)")
-
     admin_id = secrets.get("admin_id")
     if admin_id:
         asyncio.create_task(scheduled_backup_loop(bot, int(admin_id)))
@@ -152,17 +140,7 @@ async def on_startup(dispatcher, **kwargs):
 async def main():
     dp.startup.register(on_startup)
 
-    # Check feature flag before building task list so cp.start_polling() is only
-    # started when the in-bot payment flow (bot_constructor) is active.
-    from app.database.models import async_session
-    from common_db.repo.system import get_bot_feature_flags
-    async with async_session() as _sess:
-        _flags = await get_bot_feature_flags(_sess)
-        _legacy_enabled = _flags.legacy_bot_constructor
-
     tasks = [dp.start_polling(bot)]
-    if _legacy_enabled:
-        tasks.append(cp.start_polling())
     if admin_bot:
         tasks.append(admin_dp.start_polling(admin_bot))
     await asyncio.gather(*tasks)
@@ -173,6 +151,11 @@ if __name__ == "__main__":
         level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
+    # Quiet noisy libraries — every Telegram update at INFO fills Docker
+    # json-file logs (and host page cache) on small VPSes.
+    logging.getLogger("aiogram").setLevel(logging.WARNING)
+    logging.getLogger("aiohttp").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     from app.log_buffer import init_error_log_handler
     init_error_log_handler(maxlen=secrets.get('admin_logs_length', 20))
     asyncio.run(main())

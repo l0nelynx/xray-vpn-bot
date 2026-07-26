@@ -1,5 +1,7 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Literal, Optional
+
+ButtonType = Literal["callback", "url", "webapp", "tariff"]
 
 
 class MenuButtonSchema(BaseModel):
@@ -12,9 +14,8 @@ class MenuButtonSchema(BaseModel):
     row: int = 0
     col: int = 0
     sort_order: int = 0
-    button_type: str = "callback"
+    button_type: ButtonType = "callback"
     is_active: bool = True
-    visibility_condition: str = "always"
 
     class Config:
         from_attributes = True
@@ -28,9 +29,8 @@ class MenuButtonCreate(BaseModel):
     row: int = 0
     col: int = 0
     sort_order: int = 0
-    button_type: str = "callback"
+    button_type: ButtonType = "callback"
     is_active: bool = True
-    visibility_condition: str = "always"
 
 
 class MenuButtonUpdate(BaseModel):
@@ -41,9 +41,8 @@ class MenuButtonUpdate(BaseModel):
     row: Optional[int] = None
     col: Optional[int] = None
     sort_order: Optional[int] = None
-    button_type: Optional[str] = None
+    button_type: Optional[ButtonType] = None
     is_active: Optional[bool] = None
-    visibility_condition: Optional[str] = None
 
 
 class MenuScreenSchema(BaseModel):

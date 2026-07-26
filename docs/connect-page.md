@@ -110,13 +110,15 @@ The override path is configurable via `connect_app_config_path` in `config.yml`
 > schemes (`happ://…`) directly — `tg.openLink` only opens `http(s)`. Telegram's
 > `openLink` also **strips URL fragments** on external https, and Remnawave
 > often does **not** substitute `{{SUBSCRIPTION_LINK}}` inside a `#fragment`.
-> Desktop claim buttons therefore use a **query** param
-> (`https://cheezyvpn.uk/claim?url={{SUBSCRIPTION_LINK}}`). Custom-scheme
+> Desktop claim buttons therefore use **query** params
+> (`https://cheezyvpn.uk/claim?client=desktop&url={{SUBSCRIPTION_LINK}}`). Custom-scheme
 > buttons and any https URL that still carries `?`/`#` with the subscription
 > open a static redirector, `web/apps/miniapp/public/connect-open.html`
 > (served at `/bot/miniapp/connect-open.html`); the real target rides in the
 > redirector's own `#fragment` (same-origin) and `connect-open.html` then
-> `location.replace`s. Plain `external` buttons without query/fragment
+> validates the destination against known HTTPS hosts and custom schemes before
+> calling `location.replace`. It uses distinct browser/app copy. Plain
+> `external` buttons without query/fragment
 > (App Store / Google Play / GitHub) still open directly. Adding the
 > redirector file needs a `frontend` image rebuild (it's a build-time asset).
 
@@ -133,21 +135,25 @@ The bundled default ships our own clients as `featured` on four platforms:
 | Platform | App | Key buttons |
 |---|---|---|
 | `android` | CheezyVPN | APK download + `cheezy://add/{{SUBSCRIPTION_LINK}}` (subscriptionLink) |
-| `windows` / `macos` / `linux` | CheezyClash | GitHub Releases + browser claim page (`external`) + copy-link fallback |
+| `windows` / `macos` / `linux` | CheezyVPN | GitHub Releases + browser claim page (`external`) + copy-link fallback |
 
 Notes:
 
+- For CheezyVPN on desktop, MiniApp renders the browser claim block first and
+  styles it as the primary action. Installation and copy/manual import remain
+  explicit fallback blocks.
 - `cheezy://add/…` expects the **raw** subscription URL after the host segment.
   The client's deep-link parser percent-decodes `%XX` only when present, so the
   raw substitution `fillLink` performs is parsed correctly. Senders that build
   the link by hand may percent-encode; both forms work.
 - The desktop "Connect via browser" button points at the web portal `/claim`
   with the subscription in a **query** param
-  (`https://cheezyvpn.uk/claim?url={{SUBSCRIPTION_LINK}}`) so Remnawave
+  (`https://cheezyvpn.uk/claim?client=desktop&url={{SUBSCRIPTION_LINK}}`) so Remnawave
   substitutes the placeholder (it often skips `#fragment`s). The portal
   resolves the claim status via `POST /api/android/claim/resolve`
   (see [android-api.md](android-api.md)) and, after auth, hands the session to
-  the installed app via `cheezy://login/<one-time token>`.
+  CheezyVPN via `cheezyvpn://login/<one-time token>`. Android keeps
+  `cheezy://`; CheezyClash Desktop uses `cheezyclash://add` for import only.
 
 ## Using the catalog on the Remnawave subscription page
 

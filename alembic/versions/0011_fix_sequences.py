@@ -16,6 +16,8 @@ branch_labels = None
 depends_on = None
 
 def upgrade() -> None:
+    if op.get_bind().dialect.name != "postgresql":
+        return
     # Изменяем тип последовательностей на BIGINT
     op.execute("ALTER SEQUENCE support_users_user_id_seq AS BIGINT")
     # Если у таблицы users тоже были большие ID
@@ -23,4 +25,5 @@ def upgrade() -> None:
     op.execute("ALTER SEQUENCE support_tickets_id_seq AS BIGINT")
 
 def downgrade() -> None:
-    op.execute("ALTER SEQUENCE support_users_user_id_seq AS INTEGER")
+    if op.get_bind().dialect.name == "postgresql":
+        op.execute("ALTER SEQUENCE support_users_user_id_seq AS INTEGER")

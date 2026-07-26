@@ -39,3 +39,20 @@ class PaymentIntegration(Base):
     encrypted_config: Mapped[str] = mapped_column(Text, default="", server_default="")
     updated_at: Mapped[str | None] = mapped_column(String(30), nullable=True)
     updated_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+
+class AppIntegration(Base):
+    """Encrypted service credentials (SMTP, Android JWT, Telemt, Store, FCM, …).
+
+    Same dual-source semantics as :class:`PaymentIntegration`: YAML until
+    ``managed=True`` after the first Dashboard save.
+    """
+
+    __tablename__ = "app_integrations"
+
+    provider: Mapped[str] = mapped_column(String(32), primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    managed: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    encrypted_config: Mapped[str] = mapped_column(Text, default="", server_default="")
+    updated_at: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    updated_by: Mapped[str | None] = mapped_column(String(100), nullable=True)

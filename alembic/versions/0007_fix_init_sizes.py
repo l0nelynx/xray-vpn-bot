@@ -18,38 +18,40 @@ depends_on = None
 
 def upgrade() -> None:
     # 1. Таблица users: переводим PK и поле vip (на случай больших значений)
-    op.alter_column("users", "id",
-                    existing_type=sa.Integer(),
-                    type_=sa.BigInteger(),
-                    existing_nullable=False,
-                    autoincrement=True)
-    op.alter_column("users", "vip",
-                    existing_type=sa.Integer(),
-                    type_=sa.BigInteger(),
-                    existing_nullable=True)
+    with op.batch_alter_table("users") as batch:
+        batch.alter_column("id",
+                           existing_type=sa.Integer(),
+                           type_=sa.BigInteger(),
+                           existing_nullable=False)
+        batch.alter_column("vip",
+                           existing_type=sa.Integer(),
+                           type_=sa.BigInteger(),
+                           existing_nullable=True)
 
     # 2. Таблица support_tickets: переводим PK и FK на пользователя
-    op.alter_column("support_tickets", "id",
-                    existing_type=sa.Integer(),
-                    type_=sa.BigInteger(),
-                    existing_nullable=False,
-                    autoincrement=True)
-    op.alter_column("support_tickets", "user_id",
-                    existing_type=sa.Integer(),
-                    type_=sa.BigInteger(),
-                    existing_nullable=False)
+    with op.batch_alter_table("support_tickets") as batch:
+        batch.alter_column("id",
+                           existing_type=sa.Integer(),
+                           type_=sa.BigInteger(),
+                           existing_nullable=False)
+        batch.alter_column("user_id",
+                           existing_type=sa.Integer(),
+                           type_=sa.BigInteger(),
+                           existing_nullable=False)
 
     # 3. Таблица support_messages: переводим FK на тикет
     # (id там уже BigInteger по версии 0006)
-    op.alter_column("support_messages", "ticket_id",
-                    existing_type=sa.Integer(),
-                    type_=sa.BigInteger(),
-                    existing_nullable=False)
+    with op.batch_alter_table("support_messages") as batch:
+        batch.alter_column("ticket_id",
+                           existing_type=sa.Integer(),
+                           type_=sa.BigInteger(),
+                           existing_nullable=False)
 
-    op.alter_column("support_users", "user_id",
-                    existing_type=sa.Integer(),
-                    type_=sa.BigInteger(),
-                    existing_nullable=False)
+    with op.batch_alter_table("support_users") as batch:
+        batch.alter_column("user_id",
+                           existing_type=sa.Integer(),
+                           type_=sa.BigInteger(),
+                           existing_nullable=False)
 
     # 4. Таблица tariff_plans: если есть FK на внешние профили
     # Проверяем наличие колонки перед изменением (согласно вашему стилю)
@@ -58,40 +60,43 @@ def upgrade() -> None:
     columns = [c["name"] for c in insp.get_columns("tariff_plans")]
 
     if "squad_profile_id" in columns:
-        op.alter_column("tariff_plans", "squad_profile_id",
-                        existing_type=sa.Integer(),
-                        type_=sa.BigInteger(),
-                        existing_nullable=True)
+        with op.batch_alter_table("tariff_plans") as batch:
+            batch.alter_column("squad_profile_id",
+                               existing_type=sa.Integer(),
+                               type_=sa.BigInteger(),
+                               existing_nullable=True)
 
 
 
 def downgrade() -> None:
     # Возврат к Integer (может вызвать ошибку, если данные уже превышают лимит)
-    op.alter_column("support_messages", "ticket_id",
-                    existing_type=sa.BigInteger(),
-                    type_=sa.Integer(),
-                    existing_nullable=False)
+    with op.batch_alter_table("support_messages") as batch:
+        batch.alter_column("ticket_id",
+                           existing_type=sa.BigInteger(),
+                           type_=sa.Integer(),
+                           existing_nullable=False)
 
-    op.alter_column("support_tickets", "user_id",
-                    existing_type=sa.BigInteger(),
-                    type_=sa.Integer(),
-                    existing_nullable=False)
-    op.alter_column("support_tickets", "id",
-                    existing_type=sa.BigInteger(),
-                    type_=sa.Integer(),
-                    existing_nullable=False,
-                    autoincrement=True)
+    with op.batch_alter_table("support_tickets") as batch:
+        batch.alter_column("user_id",
+                           existing_type=sa.BigInteger(),
+                           type_=sa.Integer(),
+                           existing_nullable=False)
+        batch.alter_column("id",
+                           existing_type=sa.BigInteger(),
+                           type_=sa.Integer(),
+                           existing_nullable=False)
 
-    op.alter_column("users", "vip",
-                    existing_type=sa.BigInteger(),
-                    type_=sa.Integer(),
-                    existing_nullable=True)
-    op.alter_column("users", "id",
-                    existing_type=sa.BigInteger(),
-                    type_=sa.Integer(),
-                    existing_nullable=False,
-                    autoincrement=True)
-    op.alter_column("support_users", "user_id",
-                    existing_type=sa.BigInteger(),
-                    type_=sa.Integer(),
-                    existing_nullable=False)
+    with op.batch_alter_table("users") as batch:
+        batch.alter_column("vip",
+                           existing_type=sa.BigInteger(),
+                           type_=sa.Integer(),
+                           existing_nullable=True)
+        batch.alter_column("id",
+                           existing_type=sa.BigInteger(),
+                           type_=sa.Integer(),
+                           existing_nullable=False)
+    with op.batch_alter_table("support_users") as batch:
+        batch.alter_column("user_id",
+                           existing_type=sa.BigInteger(),
+                           type_=sa.Integer(),
+                           existing_nullable=False)

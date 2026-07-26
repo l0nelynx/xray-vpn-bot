@@ -15,14 +15,17 @@ from typing import Any, Mapping
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models.runtime import AppRuntimeSettings, PaymentIntegration
+from ..models.runtime import AppIntegration, AppRuntimeSettings, PaymentIntegration
 from .crypto import decrypt_json, derive_key
 from .keys import (
     DEFAULT_MAINTENANCE,
     DEFAULT_RUNTIME_CONFIG,
+    INTEGRATION_EMPTY_DEFAULTS,
+    INTEGRATION_PROVIDER_FIELDS,
     PAYMENT_PROVIDER_FIELDS,
     RUNTIME_KEYS,
 )
+from .validation import android_jwt_secret_error
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +36,8 @@ _overlay: dict[str, Any] = {}
 # provider -> decrypted field dict when managed; None means unmanaged / YAML.
 _payment_overlay: dict[str, dict[str, Any] | None] = {}
 _payment_enabled: dict[str, bool] = {}
+_integration_overlay: dict[str, dict[str, Any] | None] = {}
+_integration_enabled: dict[str, bool] = {}
 _known_version: int = -1
 _last_refresh: float = 0.0
 _crypto_key: bytes | None = None
@@ -94,9 +99,27 @@ def apply_payments_to_mapping(target: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def apply_integrations_to_mapping(target: dict[str, Any]) -> dict[str, Any]:
+    """Overlay managed app_integrations secrets onto a flat config mapping."""
+    out = dict(target)
+    for provider, fields in INTEGRATION_PROVIDER_FIELDS.items():
+        payload = _integration_overlay.get(provider)
+        if payload is None:
+            continue
+        if not _integration_enabled.get(provider, False):
+            for field in fields:
+                out[field] = INTEGRATION_EMPTY_DEFAULTS.get(field, "")
+            continue
+        for field in fields:
+            if field in payload:
+                out[field] = payload[field]
+    return out
+
+
 def payments_config_kwargs(yaml_config: Mapping[str, Any]) -> dict[str, Any]:
     """Build kwargs for ``payments.PaymentsConfig`` with dual-source precedence."""
     base = {
+        "bot_token": yaml_config.get("token", "") or "",
         "apay_id": yaml_config.get("apay_id", ""),
         "apay_secret": yaml_config.get("apay_secret", "") or "",
         "apay_api_url": yaml_config.get("apay_api_url", "") or "",
@@ -146,7 +169,8 @@ def parse_runtime_json(raw: str | None) -> dict[str, Any]:
 
 async def refresh_from_session(session: AsyncSession, *, force: bool = False) -> None:
     """Reload overlay from DB. Optionally skip if cache_version unchanged."""
-    global _overlay, _payment_overlay, _payment_enabled, _known_version, _last_refresh
+    global _overlay, _payment_overlay, _payment_enabled
+    global _integration_overlay, _integration_enabled, _known_version, _last_refresh
 
     now = time.monotonic()
     if not force and (now - _last_refresh) < _POLL_INTERVAL and _known_version >= 0:
@@ -168,10 +192,11 @@ async def refresh_from_session(session: AsyncSession, *, force: bool = False) ->
         if key in config:
             flat[key] = config[key]
 
+    key = _ensure_key()
+
     pay_map: dict[str, dict[str, Any] | None] = {}
     pay_en: dict[str, bool] = {}
     result = await session.execute(select(PaymentIntegration))
-    key = _ensure_key()
     for integ in result.scalars().all():
         if not integ.managed:
             pay_map[integ.provider] = None
@@ -187,9 +212,56 @@ async def refresh_from_session(session: AsyncSession, *, force: bool = False) ->
             )
             pay_map[integ.provider] = {}
 
+    int_map: dict[str, dict[str, Any] | None] = {}
+    int_en: dict[str, bool] = {}
+    result = await session.execute(select(AppIntegration))
+    for integ in result.scalars().all():
+        if not integ.managed:
+            int_map[integ.provider] = None
+            continue
+        int_en[integ.provider] = bool(integ.enabled)
+        try:
+            payload = decrypt_json(integ.encrypted_config, key)
+        except Exception as exc:
+            logger.error(
+                "Failed to decrypt app_integrations[%s]: %s",
+                integ.provider,
+                exc,
+            )
+            payload = {}
+
+        if integ.provider == "android" and int_en[integ.provider]:
+            validation_error = android_jwt_secret_error(
+                payload.get("android_jwt_secret")
+            )
+            if validation_error:
+                # A bad live update must not take authentication down. Keep the
+                # last known-good provider overlay, or fall back to YAML during
+                # the initial bootstrap. Dashboard validation prevents new bad
+                # values; this also protects against old/corrupt/direct DB rows.
+                logger.error(
+                    "Ignoring invalid app_integrations[android]: %s",
+                    validation_error,
+                )
+                if integ.provider in _integration_overlay:
+                    previous = _integration_overlay[integ.provider]
+                    int_map[integ.provider] = (
+                        dict(previous) if previous is not None else None
+                    )
+                    int_en[integ.provider] = _integration_enabled.get(
+                        integ.provider, False
+                    )
+                else:
+                    int_map[integ.provider] = None
+                continue
+
+        int_map[integ.provider] = payload
+
     _overlay = flat
     _payment_overlay = pay_map
     _payment_enabled = pay_en
+    _integration_overlay = int_map
+    _integration_enabled = int_en
     _known_version = version
     _last_refresh = now
 

@@ -5,7 +5,6 @@ import time
 import app.database.requests as rq
 import app.locale.lang_ru as ru
 from app.handlers.subscription_service import deliver_subscription, SubscriptionType
-from app.database.tariff_repository import get_tariff_slug_by_days
 from app.settings import bot, admin_bot, secrets
 
 _notify = admin_bot or bot
@@ -54,6 +53,7 @@ async def payment_process_background(order_id: str):
             return
 
         usrid = userdata.get("user_tg_id")
+        local_transaction_id = userdata.get("transaction_id") or order_id
         android_user_id = userdata.get("android_user_id")
         # Пытаемся получить username из разных возможных полей
         usrname = userdata.get("username") or userdata.get("user_username") or f"user_{usrid}"
@@ -74,7 +74,7 @@ async def payment_process_background(order_id: str):
 
         if userdata.get('status') == 'created':
             # Атомарно захватываем заказ: только один обработчик пройдёт дальше
-            claimed = await rq.claim_order_for_processing(order_id)
+            claimed = await rq.claim_order_for_processing(local_transaction_id)
             if not claimed:
                 logging.warning(f'Order {order_id} already claimed by another handler, skipping')
                 return
@@ -84,16 +84,28 @@ async def payment_process_background(order_id: str):
 
             # Отправляем уведомление с disable_notification=True для FREE транзакций
             await send_alert(
-                order_id, usrname, usrid, tariff_days,
+                local_transaction_id, usrname, usrid, tariff_days,
                 disable_notification=is_free_transaction,
                 payment_method=payment_method_name,
                 amount=tx_amount,
-                transaction_id=order_id,
+                transaction_id=local_transaction_id,
             )
 
             # Prefer tariff_slug stored on the transaction (set by miniapp /
             # tariff constructor); fall back to bot-side resolution by days.
-            tariff_slug = userdata.get("tariff_slug") or await get_tariff_slug_by_days(payment_method_name, tariff_days)
+            tariff_slug = userdata.get("tariff_slug")
+            if not tariff_slug:
+                logging.error("Transaction %s has no delivery squad snapshot", local_transaction_id)
+                await rq.update_order_status(local_transaction_id, "pending")
+                return
+            delivery_target = {
+                "internal_squad_ids": userdata.get("internal_squad_ids") or [],
+                "external_squad_id": userdata.get("external_squad_id"),
+                "traffic_limit_bytes": userdata.get("traffic_limit_bytes") or 0,
+                "traffic_limit_strategy": userdata.get("traffic_limit_strategy") or "NO_RESET",
+                "remnawave_description": userdata.get("remnawave_description"),
+                "remnawave_tag": userdata.get("remnawave_tag"),
+            }
 
             # Используем новую унифицированную систему доставки подписок
             # message=None для фоновых задач, пользователь получит сообщение напрямую
@@ -106,9 +118,10 @@ async def payment_process_background(order_id: str):
                 payment_method=payment_method_name,
                 data_limit_gb=None,
                 reset_strategy="no_reset",
-                transaction_id=order_id,
+                transaction_id=local_transaction_id,
                 amount=tx_amount,
                 tariff_slug=tariff_slug,
+                delivery_target=delivery_target,
             )
 
             # Проверяем результат доставки
@@ -133,9 +146,10 @@ async def payment_process_background(order_id: str):
                         payment_method=payment_method_name,
                         data_limit_gb=None,
                         reset_strategy="no_reset",
-                        transaction_id=order_id,
+                        transaction_id=local_transaction_id,
                         amount=tx_amount,
                         tariff_slug=tariff_slug,
+                        delivery_target=delivery_target,
                     )
 
                     if delivery_result["status"] == "success":
@@ -147,7 +161,7 @@ async def payment_process_background(order_id: str):
 
                 if delivery_result["status"] != "success":
                     # Оплачено, но не доставлено — ставим pending
-                    await rq.update_order_status(order_id, 'pending')
+                    await rq.update_order_status(local_transaction_id, 'pending')
                     # Уведомляем администратора об ошибке
                     error_msg = f"""❌ Ошибка доставки подписки для заказа {order_id}
 Пользователь: @{usrname} ({usrid})
@@ -189,7 +203,8 @@ async def _process_android_payment(order_id: str, userdata: dict, android_user_i
             f"Android payment {order_id} ignored — status={userdata.get('status')}"
         )
         return
-    claimed = await rq.claim_order_for_processing(order_id)
+    local_transaction_id = userdata.get("transaction_id") or order_id
+    claimed = await rq.claim_order_for_processing(local_transaction_id)
     if not claimed:
         logging.warning(f"Android payment {order_id} already claimed; skipping")
         return
@@ -199,25 +214,33 @@ async def _process_android_payment(order_id: str, userdata: dict, android_user_i
     email = userdata.get("user_email")
 
     await send_alert(
-        order_id,
+        local_transaction_id,
         usrname=email or f"android_{android_user_id}",
         usrid=-int(android_user_id),
         tariff_days=tariff_days,
         payment_method=payment_method_name,
         amount=tx_amount,
-        transaction_id=order_id,
+        transaction_id=local_transaction_id,
     )
 
     result = await deliver_android_paid(
-        transaction_id=order_id,
+        transaction_id=local_transaction_id,
         android_user_id=android_user_id,
         email=email,
         days=tariff_days,
         tariff_slug=userdata.get("tariff_slug"),
+        delivery_target={
+            "internal_squad_ids": userdata.get("internal_squad_ids") or [],
+            "external_squad_id": userdata.get("external_squad_id"),
+            "traffic_limit_bytes": userdata.get("traffic_limit_bytes") or 0,
+            "traffic_limit_strategy": userdata.get("traffic_limit_strategy") or "NO_RESET",
+            "remnawave_description": userdata.get("remnawave_description"),
+            "remnawave_tag": userdata.get("remnawave_tag"),
+        },
     )
 
     if result["status"] != "success":
-        await rq.update_order_status(order_id, 'pending')
+        await rq.update_order_status(local_transaction_id, 'pending')
         logging.error(
             f"Android delivery failed for {order_id}: {result.get('message')}"
         )

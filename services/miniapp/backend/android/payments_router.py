@@ -20,7 +20,9 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import text
+from common_db.repo.webapp_menu import get_active_node, invoice_target, list_nodes
 
+from ..database.models import Transaction
 from ..database.session import async_session
 from ..notify_log import esc, notify_log
 from payments import (
@@ -28,6 +30,7 @@ from payments import (
     PaymentError,
     create_invoice,
     get_provider,
+    validate_provider_invoice,
 )
 from . import deps, repo
 from .auth_router import limiter
@@ -107,38 +110,85 @@ async def _load_menu_rows() -> list[dict]:
     """Прочитать активные узлы меню из общей таблицы Tariff Constructor.
     Та же таблица, что используется miniapp `/api/menu/tree`."""
     async with async_session() as session:
-        result = await session.execute(text(
-            "SELECT id, parent_id, text, action, sort_order, "
-            "invoice_provider, invoice_amount, invoice_currency, "
-            "invoice_method, invoice_days, invoice_tariff_slug "
-            "FROM webapp_menu_nodes WHERE is_active = TRUE"
-        ))
-        return [dict(r._mapping) for r in result.all()]
+        nodes = await list_nodes(session)
+        return [_node_as_dict(node) for node in nodes if node.is_active]
 
 
-def _node_payload(row: dict) -> dict | None:
+def _node_as_dict(node) -> dict:
+    return {
+        "id": node.id,
+        "parent_id": node.parent_id,
+        "text_ru": node.text_ru,
+        "text_en": node.text_en,
+        "action": node.action,
+        "sort_order": node.sort_order,
+        "invoice_provider": node.invoice_provider,
+        "invoice_amount": node.invoice_amount,
+        "invoice_currency": node.invoice_currency,
+        "invoice_method": node.invoice_method,
+        "invoice_days": node.invoice_days,
+        "invoice_internal_squad_ids": node.invoice_internal_squad_ids,
+        "invoice_external_squad_id": node.invoice_external_squad_id,
+        "invoice_traffic_limit_bytes": node.invoice_traffic_limit_bytes,
+        "invoice_traffic_limit_strategy": node.invoice_traffic_limit_strategy,
+        "invoice_remnawave_description": node.invoice_remnawave_description,
+        "invoice_remnawave_tag": node.invoice_remnawave_tag,
+    }
+
+
+def _node_payload(row: dict, *, surface: str = "android") -> dict | None:
     """Превращает row из БД в AndroidMenuInvoice-словарь.
     Возвращает None, если у узла нет валидного invoice (не invoice action,
     или провайдер не разрешён для Android, или нет slug-а)."""
     if row["action"] != "invoice":
         return None
     provider = (row["invoice_provider"] or "").lower()
-    if provider not in _ANDROID_PROVIDERS:
+    if surface == "android" and provider not in _ANDROID_PROVIDERS:
         return None
-    slug = row["invoice_tariff_slug"]
-    if not slug:
+    class _Node:
+        pass
+
+    node = _Node()
+    for key, value in row.items():
+        setattr(node, key, value)
+    target = invoice_target(node)
+    if target is None:
         return None
-    return {
+    payload = {
         "provider": provider,
-        "amount": float(row["invoice_amount"] or 0),
-        "currency": (row["invoice_currency"] or "RUB").upper(),
-        "method": row["invoice_method"],
-        "days": int(row["invoice_days"] or 0),
-        "tariff_slug": slug,
+        "amount": target.amount,
+        "currency": target.currency,
+        "method": target.method,
+        "days": target.days,
+        "squad_id": target.squad_id,
+        "internal_squad_ids": list(target.internal_squad_ids),
+        "external_squad_id": target.external_squad_id,
+        "traffic_limit_bytes": target.traffic_limit_bytes,
+        "traffic_limit_strategy": target.traffic_limit_strategy,
+        "remnawave_description": target.remnawave_description,
+        "remnawave_tag": target.remnawave_tag,
+        "tariff_slug": f"sid:{target.squad_id}:esid:{target.external_squad_id}",
     }
+    if payload["amount"] <= 0 or payload["days"] <= 0:
+        return None
+    try:
+        validate_provider_invoice(
+            provider,
+            currency=payload["currency"],
+            method=payload["method"],
+            surface=surface,
+        )
+    except PaymentError:
+        return None
+    return payload
 
 
-def _build_tree(rows: list[dict], parent_id: int | None) -> list[dict]:
+def _build_tree(
+    rows: list[dict],
+    parent_id: int | None,
+    *,
+    lang: str = "ru",
+) -> list[dict]:
     """Рекурсивный билд дерева. Узлы с action=invoice оставляем только если
     провайдер разрешён. Не-invoice узлы оставляем, только если у них есть
     хотя бы один валидный потомок (иначе пустые группы засоряли бы UI)."""
@@ -149,7 +199,7 @@ def _build_tree(rows: list[dict], parent_id: int | None) -> list[dict]:
     out: list[dict] = []
     for r in items:
         invoice = _node_payload(r)
-        children = _build_tree(rows, r["id"])
+        children = _build_tree(rows, r["id"], lang=lang)
         if r["action"] == "invoice" and invoice is None:
             continue  # инвойс с не-Android провайдером — режем целиком
         if r["action"] != "invoice" and not children and invoice is None:
@@ -157,7 +207,11 @@ def _build_tree(rows: list[dict], parent_id: int | None) -> list[dict]:
         out.append({
             "id": r["id"],
             "parent_id": r["parent_id"],
-            "text": r["text"],
+            "text": (
+                (r["text_en"] or r["text_ru"])
+                if lang == "en"
+                else (r["text_ru"] or r["text_en"])
+            ),
             "action": r["action"],
             "invoice": invoice,
             "children": children,
@@ -168,17 +222,10 @@ def _build_tree(rows: list[dict], parent_id: int | None) -> list[dict]:
 async def _load_node(node_id: int) -> dict | None:
     """Прочитать один активный узел меню по id."""
     async with async_session() as session:
-        result = await session.execute(
-            text(
-                "SELECT id, parent_id, text, action, sort_order, "
-                "invoice_provider, invoice_amount, invoice_currency, "
-                "invoice_method, invoice_days, invoice_tariff_slug "
-                "FROM webapp_menu_nodes WHERE id = :id AND is_active = TRUE"
-            ),
-            {"id": node_id},
-        )
-        row = result.first()
-    return dict(row._mapping) if row is not None else None
+        node = await get_active_node(session, node_id)
+        if node is None:
+            return None
+        return _node_as_dict(node)
 
 
 # --- Endpoints -------------------------------------------------------------
@@ -196,7 +243,7 @@ async def get_payments_menu(
     Bearer (без verified-email-гейта, чтобы клиент мог показать тарифы
     до подтверждения email)."""
     rows = await _load_menu_rows()
-    tree = _build_tree(rows, None)
+    tree = _build_tree(rows, None, lang=user.language or "ru")
     return AndroidMenuResponse(tree=[AndroidMenuNode(**n) for n in tree])
 
 
@@ -240,17 +287,16 @@ async def create_payment_invoice(
         )
 
     try:
-        provider = get_provider(invoice_data["provider"])
+        provider = validate_provider_invoice(
+            invoice_data["provider"],
+            currency=invoice_data["currency"],
+            method=invoice_data["method"],
+            surface="android",
+        )
     except PaymentError as exc:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, detail={"code": "provider_unavailable"}
         ) from exc
-
-    if not provider.supports(invoice_data["currency"]):
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            detail={"code": "currency_unsupported"},
-        )
 
     if invoice_data["amount"] <= 0 or invoice_data["days"] <= 0:
         # Tariff Constructor может временно содержать незаполненные узлы
@@ -291,37 +337,29 @@ async def create_payment_invoice(
             status.HTTP_502_BAD_GATEWAY, detail={"code": "invoice_failed"}
         ) from exc
 
-    # Платежные провайдеры используют разные ключи в вебхуках:
-    #  • Platega → transactionId, выданный самим Platega → используем его.
-    #  • APay → отправляет мерчанту наш transaction_id обратно → наш uuid.
-    persisted_id = invoice.invoice_id if provider.name == "platega" else transaction_id
-
     async with async_session() as session:
-        await session.execute(
-            text(
-                "INSERT INTO transactions ("
-                "transaction_id, vless_uuid, username, order_status, "
-                "delivery_status, payment_method, amount, created_at, "
-                "days_ordered, tariff_slug, user_id, android_user_id"
-                ") VALUES ("
-                ":tid, :vu, :uname, 'created', 0, :pm, :amt, :ts, "
-                ":days, :slug, :uid, :aid"
-                ")"
-            ),
-            {
-                "tid": persisted_id,
-                "vu": "None",
-                "uname": user.email or f"android_{user.id}",
-                "pm": provider.payment_method,
-                "amt": float(invoice_data["amount"]),
-                "ts": _now_iso(),
-                "days": invoice_data["days"],
-                # Кладём настоящий slug из узла Tariff Constructor — Android-
-                # доставка резолвит squad через get_squad_for_tariff_slug.
-                "slug": invoice_data["tariff_slug"],
-                "uid": user.id,
-                "aid": user.id,
-            },
+        session.add(
+            Transaction(
+                transaction_id=transaction_id,
+                provider_invoice_id=invoice.invoice_id,
+                vless_uuid="None",
+                username=user.email or f"android_{user.id}",
+                order_status="created",
+                delivery_status=0,
+                payment_method=provider.payment_method,
+                amount=float(invoice_data["amount"]),
+                created_at=_now_iso(),
+                days_ordered=invoice_data["days"],
+                squad_id=invoice_data["squad_id"],
+                internal_squad_ids=invoice_data["internal_squad_ids"],
+                external_squad_id=invoice_data["external_squad_id"],
+                traffic_limit_bytes=invoice_data["traffic_limit_bytes"],
+                traffic_limit_strategy=invoice_data["traffic_limit_strategy"],
+                remnawave_description=invoice_data["remnawave_description"],
+                remnawave_tag=invoice_data["remnawave_tag"],
+                user_id=user.id,
+                android_user_id=user.id,
+            )
         )
         await session.commit()
 
@@ -332,7 +370,7 @@ async def create_payment_invoice(
         f"amount: <code>{invoice_data['amount']} {esc(invoice_data['currency'])}</code>\n"
         f"days: <code>{invoice_data['days']}</code>\n"
         f"slug: <code>{esc(invoice_data['tariff_slug'])}</code>\n"
-        f"tx: <code>{esc(persisted_id)}</code>"
+        f"tx: <code>{esc(transaction_id)}</code>"
     )
 
     return AndroidInvoiceResponse(
@@ -341,7 +379,7 @@ async def create_payment_invoice(
         url=invoice.url,
         amount=invoice.amount,
         currency=invoice.currency,
-        transaction_id=persisted_id,
+        transaction_id=transaction_id,
         payment_method=provider.payment_method,
     )
 
@@ -425,7 +463,7 @@ async def get_user_transaction(
 async def android_pay_credits(
     body: AndroidInvoiceRequest,
     request: Request,
-    user: android_repo.UserRow = Depends(deps.require_verified_email),
+    user: repo.UserRow = Depends(deps.require_verified_email),
 ):
     from ..bonus_points import resolve_points_cost
     from ..credits_delivery import pay_and_deliver
@@ -456,6 +494,7 @@ async def android_pay_credits(
         points_cost=points_cost,
         days=days,
         tariff_slug=invoice_data["tariff_slug"],
+        delivery_target=invoice_data,
         android_user_id=user.id if user.tg_id is None else None,
         email=user.email,
         referral_tg_id=promo_tg,

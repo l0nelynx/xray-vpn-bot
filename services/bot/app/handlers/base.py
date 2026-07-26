@@ -8,7 +8,7 @@ from app.keyboards.localized import (
     get_language_select_keyboard, get_others_localized, get_subcheck_free_localized,
     get_agreement_menu_localized, get_policy_menu_localized, get_to_main_localized,
     # get_migration_confirm_localized, get_connect_localized,  # DISABLED: Marzban migration removed
-    get_connect_localized, get_pay_methods_localized,
+    get_connect_localized,
     get_settings_menu_localized, get_language_change_keyboard,
     get_subcheck_telemt_localized,
 )
@@ -132,8 +132,8 @@ async def cmd_start(message: Message, command: CommandObject = None):
             return
         # buy / extend — when bot constructor is disabled, open the MiniApp directly
         # instead of showing inline payment method buttons (those callbacks have no handler)
-        from app.handlers.events import _legacy_constructor_enabled
-        if not _legacy_constructor_enabled:
+        from app.bot_constructor.feature import is_enabled
+        if not await is_enabled():
             miniapp_url = secrets.get('miniapp_url')
             if miniapp_url:
                 from aiogram.types import WebAppInfo
@@ -146,13 +146,13 @@ async def cmd_start(message: Message, command: CommandObject = None):
                     ]),
                 )
                 return
-        show_promo = await rq.can_use_promo(message.from_user.id)
-        balance = await rq.get_user_bonus_credits(message.from_user.id)
-        text = lang.text_extend_pay_method if payload == "extend" else lang.text_pay_method
         await message.answer(
-            text=text, parse_mode='HTML',
+            text=lang.text_extend_pay_method if payload == "extend" else lang.text_pay_method,
+            parse_mode='HTML',
             disable_web_page_preview=True,
-            reply_markup=get_pay_methods_localized(lang, show_promo=show_promo, bonus_credits=balance),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(text=lang.btn_buy_premium, callback_data="tariff:root")
+            ]]),
         )
         return
 
@@ -221,11 +221,16 @@ async def privacy_policy(callback: CallbackQuery):
 @router.callback_query(F.data == 'Settings')
 async def settings_menu(callback: CallbackQuery):
     lang = await get_user_lang(callback.from_user.id)
+    lang_code = await rq.get_user_language(callback.from_user.id) or "ru"
+    from app.bot_constructor.keyboards.dynamic import get_dynamic_keyboard
+    from app.database.tariff_repository import get_screen_text
+    text = await get_screen_text("settings", lang_code) or lang.msg_settings
+    keyboard = await get_dynamic_keyboard("settings", lang_code)
     await callback.message.edit_text(
-        text=lang.msg_settings,
+        text=text,
         parse_mode='HTML',
         disable_web_page_preview=True,
-        reply_markup=get_settings_menu_localized(lang)
+        reply_markup=keyboard or get_settings_menu_localized(lang)
     )
 
 

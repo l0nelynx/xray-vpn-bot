@@ -3,14 +3,14 @@
 # Shared by all backends: bot, support-bot, dashboard, miniapp.
 #
 # Required keys are marked [REQUIRED]. Keys with defaults are marked [optional].
-# Only fill in the payment gateway blocks you actually use.
+# Operator-facing settings are preferred in Dashboard (dual-source: DB wins after Save).
 
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
 # ║  CORE BOT IDENTITY                                                          ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
 
-branding_name: "YourVPN"                           # [REQUIRED] preferred: Dashboard → Settings → Runtime
+branding_name: "YourVPN"                           # preferred: Dashboard → Settings → Runtime
 token: "yourbottoken"                              # [REQUIRED] Main user-facing Telegram bot token (bootstrap — stays in YAML)
 bot_url: "https://t.me/YourBot"                   # [REQUIRED] Direct t.me link to your bot (used in notifications)
 miniapp_url: "https://example.com/bot/miniapp"    # [REQUIRED] Direct HTTPS URL of the MiniApp web page — used inside WebApp button (must be HTTPS, reachable by Telegram)
@@ -63,17 +63,17 @@ uvicorn_port: 5000                                 # [optional] Uvicorn bind por
 # ║  REMNAWAVE VPN PANEL                                                        ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
 
-remnawave_url: "https://panel.example.com"         # [REQUIRED] Remnawave panel base URL
-remnawave_token: "your-remnawave-api-token"        # [REQUIRED] Remnawave API token (long-lived JWT from panel settings)
-remnawave_webhook_secret: "your-webhook-secret-here"  # [optional] HMAC secret for inbound panel webhooks; must match panel WEBHOOK_SECRET_HEADER (a-z, A-Z, 0-9 only). Generate: python -c "import secrets; print(secrets.token_hex(32))"
+remnawave_url: "https://panel.example.com"         # [REQUIRED] Remnawave panel base URL (bootstrap)
+remnawave_token: "your-remnawave-api-token"        # [REQUIRED] Remnawave API token (bootstrap)
+remnawave_webhook_secret: "your-webhook-secret-here"  # [optional] HMAC secret for inbound panel webhooks (bootstrap)
 
-# Squad UUIDs — find in Remnawave panel → Squads
-rw_free_id: "uuid-of-free-squad"                   # [REQUIRED] Internal squad for FREE plan users
-rw_pro_id: "uuid-of-pro-squad"                     # [REQUIRED] Internal squad for PRO plan users
-rw_ext_free_id: "uuid-of-ext-free-squad"           # [optional] External squad for FREE users (use if you have external routing)
-rw_ext_pro_id: "uuid-of-ext-pro-squad"             # [optional] External squad for PRO users
+# Squad UUIDs — preferred: Dashboard → Settings → Remnawave
+rw_free_id: "uuid-of-free-squad"                   # preferred: Dashboard Remnawave — Internal squad for FREE plan users
+rw_pro_id: "uuid-of-pro-squad"                     # preferred: Dashboard Remnawave — Internal squad for PRO plan users
+rw_ext_free_id: "uuid-of-ext-free-squad"           # preferred: Dashboard Remnawave — External squad for FREE users
+rw_ext_pro_id: "uuid-of-ext-pro-squad"             # preferred: Dashboard Remnawave — External squad for PRO users
 
-subscription_url: "https://sub.example.com"        # [optional] Base URL for Remnawave subscription links (used to validate android deep-links)
+subscription_url: "https://sub.example.com"        # preferred: Dashboard Remnawave — Base URL for subscription links (Android deep-links)
 
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
@@ -87,7 +87,7 @@ dashboard_password: change-me                      # [REQUIRED] Admin password �
 # can forge admin tokens. Generate one with:  openssl rand -hex 32
 dashboard_secret: change-me-to-a-random-string-of-at-least-32-bytes
 
-# Encrypts payment_integrations credentials stored in Postgres (Dashboard → Settings → Payments).
+# Encrypts payment_integrations / app_integrations credentials stored in Postgres.
 # Optional: if unset, dashboard_secret is used as a fallback during the dual-source period.
 # Generate: openssl rand -hex 32
 # payments_secrets_key: change-me-payments-encryption-key-at-least-32-bytes
@@ -99,11 +99,11 @@ expose_api_docs: false
 
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  TELEMT (external server management)                                        ║
+# ║  TELEMT (preferred: Dashboard → Telemt → Connection)                        ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
 
-telemt_server: "https://telemt.example.com"        # [optional] Telemt API base URL; omit to disable Telemt features
-telemt_header: "your-telemt-auth-header"           # [optional] Authorization header value sent to Telemt
+telemt_server: "https://telemt.example.com"        # preferred: Dashboard Telemt Connection
+telemt_header: "your-telemt-auth-header"           # preferred: Dashboard Telemt Connection (encrypted)
 
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
@@ -115,62 +115,51 @@ free_traffic: 10                                   # preferred: Dashboard Runtim
 
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  ANDROID / MOBILE APP                                                       ║
+# ║  ANDROID / MOBILE APP  (preferred: Dashboard → Settings → Android)          ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
 
-android_jwt_secret: "change-me-android-jwt-secret" # [REQUIRED for Android API] HS256 signing key for mobile JWTs
-# android_access_ttl: 900                          # [optional] Access token TTL in seconds (default: 900 = 15 min)
-# android_refresh_ttl: 5184000                     # [optional] Refresh token TTL in seconds (default: 5184000 = 60 days)
-# android_jwt_issuer: "xray-vpn-bot"               # [optional] JWT `iss` claim (default: xray-vpn-bot)
+android_jwt_secret: "change-me-android-jwt-secret" # preferred: Dashboard Android (encrypted)
+# android_access_ttl: 900                          # preferred: Dashboard Android (default: 900)
+# android_refresh_ttl: 5184000                     # preferred: Dashboard Android (default: 5184000)
+# android_jwt_issuer: "xray-vpn-bot"               # preferred: Dashboard Android
 
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  EMAIL (SMTP for verification codes)                                        ║
+# ║  EMAIL (preferred: Dashboard → Settings → Email)                            ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
 
-smtp_host: "smtp.example.com"                      # [REQUIRED for email] SMTP server host
-smtp_port: 587                                     # [optional] SMTP port (default: 587 / STARTTLS; use 465 for implicit TLS)
-smtp_user: "noreply@example.com"                   # [REQUIRED for email] SMTP login
-smtp_password: "your-smtp-password"                # [REQUIRED for email] SMTP password
-# smtp_from: "YourVPN <noreply@example.com>"       # [optional] Sender display name + address; defaults to smtp_user
-# smtp_use_tls: false                              # [optional] true = implicit TLS on port 465; false = STARTTLS (auto-detected from port)
-# email_code_ttl: 900                              # [optional] Verification code TTL in seconds (default: 900 = 15 min)
-# email_code_max_attempts: 5                       # [optional] Max failed attempts before code is invalidated (default: 5)
+smtp_host: "smtp.example.com"                      # preferred: Dashboard Email
+smtp_port: 587                                     # preferred: Dashboard Email
+smtp_user: "noreply@example.com"                   # preferred: Dashboard Email
+smtp_password: "your-smtp-password"                # preferred: Dashboard Email (encrypted)
+# smtp_from: "YourVPN <noreply@example.com>"       # preferred: Dashboard Email
+# smtp_use_tls: false                              # preferred: Dashboard Email
+# email_code_ttl: 900                              # preferred: Dashboard Email
+# email_code_max_attempts: 5                       # preferred: Dashboard Email
 
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  GOOGLE PLAY (in-app purchases — Android only)                              ║
+# ║  GOOGLE PLAY / FCM  (preferred: Dashboard → Settings → Push / Play)         ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
 
-# Leave all three blank to disable Google Play IAP entirely.
-google_play_package_name: ""                       # e.g. com.example.xrayvpn — must match Play Console
-google_play_service_account_path: ""               # Container-side path to the service-account JSON file
-google_play_rtdn_token: ""                         # Shared secret for Play RTDN push endpoint (strongly recommended)
+# Leave blank / omit to disable. Prefer pasting SA JSON in Dashboard (encrypted).
+# Paths below remain a bootstrap fallback when Dashboard JSON is empty.
+google_play_package_name: ""                       # preferred: Dashboard Push/Play
+google_play_service_account_path: ""               # bootstrap fallback path to SA JSON file
+google_play_rtdn_token: ""                         # preferred: Dashboard Push/Play (encrypted)
 
-# FCM push (Dashboard → Android). Leave blank to disable sending; token
-# registration via /api/android/fcm still works. Place the SA JSON at repo
-# root as fcm-sa.json (mounted into dashboard + crm-worker as /app/fcm-sa.json).
-fcm_project_id: ""                                 # Firebase / GCP project id
-fcm_service_account_path: "/app/fcm-sa.json"       # Container path (see docker-compose volumes)
+fcm_project_id: ""                                 # preferred: Dashboard Push/Play
+fcm_service_account_path: "/app/fcm-sa.json"       # bootstrap fallback path (compose volume)
 
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  WEB PORTAL (CORS)                                                          ║
+# ║  WEB PORTAL (preferred: Dashboard → Settings → Web)                         ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
 
-# Allowed origins for the external web portal frontend (miniapp service CORS).
-# Required in production when the portal is hosted on a separate domain
-# (e.g. Vercel — see docs/web-portal.md). Omit → no CORS middleware (browser
-# cross-origin requests blocked; fine for Telegram MiniApp-only deploys).
 # web_allowed_origins:
 #   - https://web.yourdomain.com
 
-# Telegram OpenID Connect (Login 2.0) — enables "Sign in with Telegram" on the web portal.
-# 1. In BotFather: /mybots → your bot → Bot Settings → Web Login → Set Domain → yourdomain.com
-# 2. BotFather → the same menu → Client Secret → copy the value here.
-# 3. Set VITE_TG_BOT_ID in GitHub Actions Variables to your bot's numeric ID.
-# Leave empty to hide the Telegram login button on the portal.
-tg_client_secret: ""
+tg_client_secret: ""                               # preferred: Dashboard Web (encrypted)
 
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
@@ -184,7 +173,6 @@ support_token: "yoursupportbottoken"               # [optional] Token for the le
 # ║  PAYMENT GATEWAYS  (preferred: Dashboard → Settings → Payments)             ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
 # YAML remains a fallback until you save a provider in the Dashboard (then DB wins).
-# After Save, leave these blocks as-is or blank — Dashboard is the source of truth.
 
 # --- TELEGRAM STARS + CRYPTOBOT ---
 crypto_bot_token: "your_cryptobot_api_token"       # preferred: Dashboard Payments → crypto
@@ -216,35 +204,11 @@ paritypay_service: "sbp"
 
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  CURRENCY RATES (dashboard — optional overrides)                            ║
+# ║  STORE (preferred: Dashboard → Settings → Store)                            ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
 
-# The dashboard fetches USD/RUB from the CBR API automatically.
-# Set these to override the live rate (e.g. in air-gapped environments).
-# star_rub_rate: 1.3                               # Telegram Stars → RUB (default: 1.3)
-# usd_rub_rate: 90.0                               # USD → RUB fallback when CBR is unreachable
-
-
-# ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  STORE (external product store — dashboard)                                 ║
-# ╚══════════════════════════════════════════════════════════════════════════════╝
-
-# Omit both keys to disable the Store section in the dashboard.
 # store_url: "https://store.example.com"
-# store_api_token: "your-store-api-token"
-
-
-# ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  LEGACY BOT CONSTRUCTOR PRICES                                              ║
-# ╚══════════════════════════════════════════════════════════════════════════════╝
-# Only used when legacy_bot_constructor = true in Dashboard → WebApp → Settings.
-# When disabled, users are directed to the MiniApp and these values are ignored.
-# After enabling, restart the bot for prices to take effect.
-
-stars_price: 150                                   # 1-month base price in Telegram Stars
-crypto_price: 2                                    # 1-month base price in USDT
-sbp_price: 150                                     # 1-month base price in RUB (SBP / Crystal / A-Pays)
-discount: 5                                        # Extra discount (%) applied to 3+ month plans
+# store_api_token: "your-store-api-token"          # encrypted in Dashboard
 
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
@@ -257,22 +221,21 @@ discount: 5                                        # Extra discount (%) applied 
 # auth_pass: "password"
 
 # --- Promo settings (moved to DB — manage in Dashboard → Promocodes → Settings) ---
-# promo_discount: 20                               # → promo_settings.default_discount_percent
-# promo_days_reward: 3                             # → promo_settings.days_reward_per_30
+# promo_discount: 20
+# promo_days_reward: 3
 
-# --- Web portal branding (superseded by `branding_name`; injected from DB config) ---
+# --- Legacy bot constructor base prices (removed — use Dashboard tariff prices) ---
+# stars_price / crypto_price / sbp_price / discount
+
+# --- FX rate overrides (removed — hardcoded defaults + CBR live USD) ---
+# star_rub_rate / usd_rub_rate
+
+# --- Web portal branding (superseded by `branding_name`) ---
 # web_brand_name: "Cheeze Networks"
 # web_base_path: /bot/web
 
 # --- Connect page (app catalog) ---
-# Path to an operator override for the /connect-page app catalog. If the file
-# exists it is served instead of the bundled default. Mount it like config.yml
-# (see docker-compose.yml + docs/connect-page.md). Default /app/app-config.json.
 # connect_app_config_path: /app/app-config.json
 
 # --- Support-ticket image attachments ---
-# Directory for uploaded ticket images. Shared, read-write bind mount between
-# the miniapp and dashboard containers (see docker-compose.yml +
-# docs/deployment.md — the host ./support_uploads directory must be writable
-# by uid 10001). Default /app/support_uploads.
 # support_uploads_dir: /app/support_uploads

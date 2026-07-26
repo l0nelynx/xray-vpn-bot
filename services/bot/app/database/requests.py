@@ -16,6 +16,7 @@ from common_db.repo import balance as _repo_balance
 from common_db.repo import users as _repo_users
 from common_db.repo import promos as _repo_promos
 from common_db.repo import system as _repo_system
+from common_db.repo import transactions as _repo_transactions
 
 
 async def set_user(tg_id, username=None):
@@ -250,7 +251,15 @@ async def get_user_full_context(tg_id: int) -> dict | None:
 
 # Пример создания новой транзакции
 async def create_transaction(user_tg_id: int, user_transaction: str, username: str, days: int,
-                             uuid: str = 'None', payment_method: str = None, amount: float = None):
+                             uuid: str = 'None', payment_method: str = None, amount: float = None,
+                             provider_invoice_id: str | None = None,
+                             squad_id: str | None = None,
+                             internal_squad_ids: list[str] | None = None,
+                             external_squad_id: str | None = None,
+                             traffic_limit_bytes: int = 0,
+                             traffic_limit_strategy: str = "NO_RESET",
+                             remnawave_description: str | None = None,
+                             remnawave_tag: str | None = None):
     async with async_session() as session:
         # Находим пользователя по tg_id
         user = await _repo_users.get_user_by_tg_id(session, user_tg_id)
@@ -268,6 +277,14 @@ async def create_transaction(user_tg_id: int, user_transaction: str, username: s
                 payment_method=payment_method,
                 amount=amount,
                 created_at=datetime.now().isoformat(timespec='seconds'),
+                provider_invoice_id=provider_invoice_id,
+                squad_id=squad_id,
+                internal_squad_ids=internal_squad_ids or ([squad_id] if squad_id else None),
+                external_squad_id=external_squad_id,
+                traffic_limit_bytes=traffic_limit_bytes,
+                traffic_limit_strategy=traffic_limit_strategy,
+                remnawave_description=remnawave_description,
+                remnawave_tag=remnawave_tag,
             )
 
             session.add(new_transaction)
@@ -298,14 +315,12 @@ async def get_full_transaction_info(transaction_id: str):
         dict: Словарь с информацией о транзакции и пользователе или None
     """
     async with async_session() as session:
-        query = (
-            select(Transaction, User)
-            .join(User, User.id == Transaction.user_id)
-            .where(Transaction.transaction_id == transaction_id)
-        )
-
-        result = await session.execute(query)
-        row = result.first()
+        transaction = await _repo_transactions.get_by_payment_key(session, transaction_id)
+        row = None
+        if transaction is not None:
+            user = await session.get(User, transaction.user_id)
+            if user is not None:
+                row = (transaction, user)
 
         if row:
             transaction, user = row
@@ -322,7 +337,22 @@ async def get_full_transaction_info(transaction_id: str):
                 "payment_method": transaction.payment_method,
                 "amount": transaction.amount,
                 "created_at": transaction.created_at,
-                "tariff_slug": transaction.tariff_slug,
+                "provider_invoice_id": transaction.provider_invoice_id,
+                "squad_id": transaction.squad_id,
+                "internal_squad_ids": (
+                    transaction.internal_squad_ids
+                    or ([transaction.squad_id] if transaction.squad_id else [])
+                ),
+                "external_squad_id": transaction.external_squad_id,
+                "traffic_limit_bytes": int(transaction.traffic_limit_bytes or 0),
+                "traffic_limit_strategy": transaction.traffic_limit_strategy or "NO_RESET",
+                "remnawave_description": transaction.remnawave_description,
+                "remnawave_tag": transaction.remnawave_tag,
+                "tariff_slug": (
+                    f"sid:{transaction.squad_id}:esid:{transaction.external_squad_id}"
+                    if transaction.squad_id and transaction.external_squad_id
+                    else None
+                ),
             }
         else:
             return None

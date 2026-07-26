@@ -18,6 +18,8 @@ class CrystalPayProvider(PaymentProvider):
     name = "crystal"
     payment_method = "CRYSTAL_PAY"
     supported_currencies = ("RUB", "USD", "EUR")
+    surfaces = frozenset({"bot", "miniapp", "web"})
+    webhook_key = "provider"
 
     _session: aiohttp.ClientSession | None = None
 

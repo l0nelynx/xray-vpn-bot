@@ -15,6 +15,8 @@ from .base import PaymentError
 
 @dataclass(frozen=True)
 class PaymentsConfig:
+    # Telegram Bot API (Stars invoice links)
+    bot_token: str = ""
     # APay (SBP)
     apay_id: object = ""          # int or str depending on the host config
     apay_secret: str = ""

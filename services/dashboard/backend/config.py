@@ -136,3 +136,8 @@ def get_fcm_project_id() -> str:
 
 def get_fcm_service_account_path() -> str:
     return (get_config().get("fcm_service_account_path") or "").strip()
+
+
+def get_fcm_sa_json() -> str:
+    """Service-account JSON content from Dashboard integrations (preferred)."""
+    return (get_config().get("fcm_sa_json") or "").strip()

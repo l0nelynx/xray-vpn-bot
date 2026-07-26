@@ -7,7 +7,10 @@ rotated token revokes the entire family (assumed compromise).
 """
 from __future__ import annotations
 
+import logging
 import secrets
+from datetime import datetime, timezone
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
@@ -35,6 +38,18 @@ from .schemas import (
 )
 
 router = APIRouter(prefix="/api/android/auth", tags=["android-auth"])
+logger = logging.getLogger(__name__)
+
+
+def _issue_access_token(user_id: int) -> tuple[str, security.AccessClaims]:
+    try:
+        return security.issue_access_token(user_id)
+    except security.JWTError:
+        logger.exception("Android JWT signing is unavailable")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": "auth_unavailable"},
+        )
 
 
 def _user_summary(user: repo.UserRow) -> UserSummary:
@@ -52,6 +67,7 @@ async def _issue_pair(
 ) -> TokenPair:
     fam = family_id or security.new_family_id()
     raw_refresh, refresh_hash = security.issue_refresh_token(fam)
+    access, claims = _issue_access_token(user_id)
     ua, ip = deps.client_meta(request)
     await repo.store_refresh_token(
         user_id=user_id,
@@ -60,7 +76,6 @@ async def _issue_pair(
         user_agent=ua,
         ip=ip,
     )
-    access, claims = security.issue_access_token(user_id)
     return TokenPair(
         access_token=access,
         refresh_token=raw_refresh,
@@ -150,6 +165,9 @@ async def refresh(req: RefreshRequest, request: Request) -> TokenPair:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail={"code": "user_unavailable"})
 
     new_raw, new_hash = security.issue_refresh_token(family)
+    # Sign before rotating the refresh token. If runtime configuration is
+    # temporarily unavailable, the client keeps its still-valid old token.
+    access, claims = _issue_access_token(row.user_id)
     ua, ip = deps.client_meta(request)
     await repo.rotate_refresh_token(
         old_id=row.id,
@@ -159,7 +177,6 @@ async def refresh(req: RefreshRequest, request: Request) -> TokenPair:
         user_agent=ua,
         ip=ip,
     )
-    access, claims = security.issue_access_token(row.user_id)
     return TokenPair(
         access_token=access,
         refresh_token=new_raw,
@@ -187,7 +204,7 @@ async def logout_all(
 # --- One-time app login (web → desktop/app handoff) -------------------------
 #
 # An authenticated web session mints a short-lived single-use token; the app
-# receives it via the `cheezy://login/<token>` deeplink and exchanges it for
+# receives it via the flavor-specific `...://login/<token>` deeplink and exchanges it for
 # a normal token pair. Only the sha256 of the token is stored (reusing the
 # email_verifications table, purpose=app_login), TTL is tight and the token
 # is consumed on first exchange, so an intercepted deeplink is useless after
@@ -205,6 +222,10 @@ class AppLoginExchangeRequest(BaseModel):
     token: str = Field(min_length=10, max_length=128)
 
 
+class AppLoginStatusResponse(BaseModel):
+    status: Literal["pending", "exchanged", "expired", "superseded"]
+
+
 @router.post("/app-login/create", response_model=AppLoginCreateResponse)
 @limiter.limit("5/minute")
 async def app_login_create(
@@ -212,15 +233,40 @@ async def app_login_create(
     user: repo.UserRow = Depends(deps.get_current_user),
 ) -> AppLoginCreateResponse:
     raw = secrets.token_urlsafe(32)
-    await repo.invalidate_pending_codes(user.id, repo.PURPOSE_APP_LOGIN)
+    await repo.supersede_pending_app_login_codes(user.id)
     await repo.store_verification_code(
         user_id=user.id,
         purpose=repo.PURPOSE_APP_LOGIN,
         code_hash=security.hash_email_code(raw),
-        payload=None,
+        payload=repo.APP_LOGIN_PENDING,
         ttl_seconds=_APP_LOGIN_TTL_SECONDS,
     )
     return AppLoginCreateResponse(token=raw, expires_in=_APP_LOGIN_TTL_SECONDS)
+
+
+@router.post("/app-login/status", response_model=AppLoginStatusResponse)
+@limiter.limit("90/minute")
+async def app_login_status(
+    req: AppLoginExchangeRequest,
+    request: Request,
+    user: repo.UserRow = Depends(deps.get_current_user),
+) -> AppLoginStatusResponse:
+    row = await repo.find_code_by_purpose_and_hash(
+        repo.PURPOSE_APP_LOGIN, security.hash_email_code(req.token)
+    )
+    if row is None or row.user_id != user.id:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, detail={"code": "bad_app_login_token"}
+        )
+    if row.payload == repo.APP_LOGIN_EXCHANGED:
+        state = repo.APP_LOGIN_EXCHANGED
+    elif row.payload == repo.APP_LOGIN_SUPERSEDED:
+        state = repo.APP_LOGIN_SUPERSEDED
+    elif row.expires_at <= datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S"):
+        state = "expired"
+    else:
+        state = repo.APP_LOGIN_PENDING
+    return AppLoginStatusResponse(status=state)
 
 
 @router.post("/app-login/exchange", response_model=AuthResponse)
@@ -228,27 +274,18 @@ async def app_login_create(
 async def app_login_exchange(
     req: AppLoginExchangeRequest, request: Request
 ) -> AuthResponse:
-    from datetime import datetime, timezone
-
-    row = await repo.find_active_code_by_purpose_and_hash(
-        repo.PURPOSE_APP_LOGIN, security.hash_email_code(req.token)
-    )
+    row = await repo.consume_app_login_code(security.hash_email_code(req.token))
     if row is None:
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED, detail={"code": "bad_app_login_token"}
         )
-    if row.expires_at <= datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S"):
-        await repo.mark_code_used(row.id)
-        raise HTTPException(
-            status.HTTP_401_UNAUTHORIZED, detail={"code": "bad_app_login_token"}
-        )
-    await repo.mark_code_used(row.id)
     user = await repo.find_user_by_id(row.user_id)
     if user is None or user.is_banned:
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED, detail={"code": "user_unavailable"}
         )
     tokens = await _issue_pair(user.id, request)
+    await repo.mark_app_login_exchanged(row.id)
     ua, ip = deps.client_meta(request)
     await notify_log(
         f"🔑 <b>App-login exchange</b>\n"

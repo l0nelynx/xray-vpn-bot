@@ -1,22 +1,28 @@
-"""Helpers for app_runtime_settings + payment_integrations."""
+"""Helpers for app_runtime_settings + payment_integrations + app_integrations."""
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime, timezone
 from typing import Any, Mapping
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models.runtime import AppRuntimeSettings, PaymentIntegration
+from ..models.runtime import AppIntegration, AppRuntimeSettings, PaymentIntegration
 from ..runtime_config.crypto import decrypt_json, encrypt_json
 from ..runtime_config.keys import (
     DEFAULT_RUNTIME_CONFIG,
+    INTEGRATION_PROVIDER_FIELDS,
+    INTEGRATION_SECRET_FIELDS,
     PAYMENT_PROVIDER_FIELDS,
     RUNTIME_KEYS,
 )
 from ..runtime_config.overlay import parse_runtime_json
+from ..runtime_config.validation import android_jwt_secret_error
 from .system import bump_cache_version, get_or_create_singleton
+
+logger = logging.getLogger(__name__)
 
 
 def _now_iso() -> str:
@@ -47,7 +53,6 @@ async def save_runtime_config(
 ) -> dict[str, Any]:
     """Replace the runtime JSON (caller supplies full document)."""
     row = await get_runtime_settings(session)
-    # Preserve unknown keys; normalize maintenance + known runtime keys.
     current = parse_runtime_json(row.config_json)
     incoming = dict(config)
     if "maintenance" in incoming and isinstance(incoming["maintenance"], dict):
@@ -68,17 +73,16 @@ async def import_runtime_from_yaml(
     session: AsyncSession,
     yaml_config: Mapping[str, Any],
 ) -> bool:
-    """One-shot: if runtime JSON has no operator keys yet, copy from YAML.
+    """Import any RUNTIME_KEYS missing from DB from YAML (does not overwrite).
 
     Returns True if an import happened.
     """
     row = await get_runtime_settings(session)
     current = parse_runtime_json(row.config_json)
-    # Consider "empty of operator keys" if no RUNTIME_KEYS present.
-    if any(k in current for k in RUNTIME_KEYS):
-        return False
     imported = False
     for key in RUNTIME_KEYS:
+        if key in current:
+            continue
         if key in yaml_config and yaml_config[key] is not None:
             current[key] = yaml_config[key]
             imported = True
@@ -122,7 +126,6 @@ async def upsert_payment_integration(
         row = PaymentIntegration(provider=provider)
         session.add(row)
     else:
-        # Merge with existing secrets when UI sends empty secret fields as "".
         try:
             existing = decrypt_json(row.encrypted_config, crypto_key) if row.encrypted_config else {}
         except Exception:
@@ -147,10 +150,7 @@ async def import_payments_from_yaml(
     yaml_config: Mapping[str, Any],
     crypto_key: bytes,
 ) -> int:
-    """Create unmanaged placeholder rows from YAML when table is empty.
-
-    Returns number of rows inserted.
-    """
+    """Create unmanaged placeholder rows from YAML when table is empty."""
     existing = await list_payment_integrations(session)
     if existing:
         return 0
@@ -165,6 +165,107 @@ async def import_payments_from_yaml(
         if not has_any:
             continue
         row = PaymentIntegration(
+            provider=provider,
+            enabled=True,
+            managed=False,
+            encrypted_config=encrypt_json(payload, crypto_key),
+            updated_at=_now_iso(),
+            updated_by="yaml-import",
+        )
+        session.add(row)
+        inserted += 1
+    if inserted:
+        await bump_cache_version(session)
+        await session.flush()
+    return inserted
+
+
+async def list_app_integrations(session: AsyncSession) -> list[AppIntegration]:
+    result = await session.execute(select(AppIntegration).order_by(AppIntegration.provider))
+    return list(result.scalars().all())
+
+
+async def get_app_integration(session: AsyncSession, provider: str) -> AppIntegration | None:
+    return await session.scalar(
+        select(AppIntegration).where(AppIntegration.provider == provider)
+    )
+
+
+async def upsert_app_integration(
+    session: AsyncSession,
+    *,
+    provider: str,
+    enabled: bool,
+    config: Mapping[str, Any],
+    crypto_key: bytes,
+    updated_by: str | None = None,
+) -> AppIntegration:
+    if provider not in INTEGRATION_PROVIDER_FIELDS:
+        raise ValueError(f"unknown integration provider: {provider}")
+    allowed = set(INTEGRATION_PROVIDER_FIELDS[provider])
+    clean = {k: config[k] for k in allowed if k in config}
+    row = await get_app_integration(session, provider)
+    if row is None:
+        row = AppIntegration(provider=provider)
+        session.add(row)
+    else:
+        try:
+            existing = decrypt_json(row.encrypted_config, crypto_key) if row.encrypted_config else {}
+        except Exception:
+            existing = {}
+        for field in INTEGRATION_SECRET_FIELDS:
+            if (
+                field in allowed
+                and (field not in clean or clean[field] in ("", None))
+                and field in existing
+            ):
+                clean[field] = existing[field]
+    if provider == "android" and enabled:
+        validation_error = android_jwt_secret_error(
+            clean.get("android_jwt_secret")
+        )
+        if validation_error:
+            raise ValueError(validation_error)
+    row.enabled = enabled
+    row.managed = True
+    row.encrypted_config = encrypt_json(dict(clean), crypto_key)
+    row.updated_at = _now_iso()
+    row.updated_by = updated_by
+    await bump_cache_version(session)
+    await session.flush()
+    return row
+
+
+async def import_integrations_from_yaml(
+    session: AsyncSession,
+    yaml_config: Mapping[str, Any],
+    crypto_key: bytes,
+) -> int:
+    """Create unmanaged placeholder rows for missing integration providers."""
+    existing = {r.provider for r in await list_app_integrations(session)}
+    inserted = 0
+    for provider, fields in INTEGRATION_PROVIDER_FIELDS.items():
+        if provider in existing:
+            continue
+        payload = {}
+        has_any = False
+        for field in fields:
+            if field in yaml_config and yaml_config[field] not in (None, ""):
+                payload[field] = yaml_config[field]
+                has_any = True
+        if not has_any:
+            continue
+        if provider == "android":
+            validation_error = android_jwt_secret_error(
+                payload.get("android_jwt_secret")
+            )
+            if validation_error:
+                logger.warning(
+                    "Skipping invalid Android JWT secret during YAML import: %s",
+                    validation_error,
+                )
+                continue
+        row = AppIntegration(
             provider=provider,
             enabled=True,
             managed=False,

@@ -2,25 +2,20 @@
 import logging
 
 from aiogram import F, Router
-from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
 
 from app.locale.utils import get_user_lang
 from app.bot_constructor.keyboards.dynamic import get_dynamic_keyboard
 from app.keyboards.localized import get_to_main_localized
 from app.database.tariff_repository import get_screen_text
-from app.bot_constructor.handlers.payments import PaymentState
 import app.database.requests as rq
 
 logger = logging.getLogger(__name__)
 
 router = Router()
 
-PAYMENT_SCREEN_SLUGS = {"pay_methods"}
-
-
 @router.callback_query(F.data.startswith("screen:"))
-async def dynamic_screen_handler(callback: CallbackQuery, state: FSMContext):
+async def dynamic_screen_handler(callback: CallbackQuery):
     """Render any screen stored in menu_screens by its slug."""
     slug = callback.data.removeprefix("screen:")
     tg_id = callback.from_user.id
@@ -49,8 +44,5 @@ async def dynamic_screen_handler(callback: CallbackQuery, state: FSMContext):
             text="Error loading screen",
             reply_markup=get_to_main_localized(lang),
         )
-
-    if slug in PAYMENT_SCREEN_SLUGS:
-        await state.set_state(PaymentState.PaymentMethod)
 
     await callback.answer()

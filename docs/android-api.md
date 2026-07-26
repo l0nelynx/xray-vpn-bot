@@ -221,12 +221,18 @@ acc_email_required`, `429 code_exhausted`,
 
 Хендофф web → приложение: авторизованная web-сессия чеканит короткоживущий
 одноразовый токен, приложение получает его через deeplink
-`cheezy://login/<token>` и обменивает на обычную пару токенов.
+`cheezyvpn://login/<token>` (Desktop) или `cheezy://login/<token>` (Android /
+legacy Desktop) и обменивает на обычную пару токенов.
 
 - `POST /auth/app-login/create` (Bearer) → `{"token": "...", "expires_in": 90}`.
-  В БД хранится только sha256 токена; активен один токен на пользователя.
+  В БД хранится только sha256 токена; новый token помечает предыдущий pending
+  token того же пользователя как `superseded`.
 - `POST /auth/app-login/exchange` — `{"token": "..."}` → `AuthResponse`.
-  Consume-on-use: повторный обмен → `401 bad_app_login_token`.
+  Атомарный consume-on-use: повторный или параллельный обмен →
+  `401 bad_app_login_token`.
+- `POST /auth/app-login/status` (Bearer) — `{"token": "..."}` →
+  `{"status": "pending" | "exchanged" | "expired" | "superseded"}`.
+  Проверять состояние может только владелец токена.
 
 ### POST /register
 
@@ -348,14 +354,15 @@ Remnawave (`provisioning.ensure_free_subscription`) — клиент сразу 
 Источник тарифов — **Tariff Constructor** в дашборде (таблица `webapp_menu_nodes`,
 тот же источник, что у miniapp `/api/menu/tree`). Клиент получает дерево через
 `/menu` и передаёт в `/invoice` только `node_id` выбранного узла. Provider/
-amount/currency/method/days/tariff_slug сервер достаёт сам — клиент **не
+amount/currency/method/days и delivery squad сервер достаёт сам — клиент **не
 передаёт** никаких ценовых параметров (на мобильном клиенте всё подменяемо).
-Для Android фильтруем только узлы с провайдерами `apay` и `platega`.
+Для Android фильтруем только узлы с провайдерами `apay`, `platega` и
+`paritypay`; Telegram Stars отсекаются.
 
 | Метод | Путь | Auth | Rate | Назначение |
 |---|---|---|---|---|
 | GET | `/menu` | Bearer | — | Дерево тарифов из Tariff Constructor (Android-фильтр) |
-| GET | `/providers` | — | — | Список доступных провайдеров (apay, platega) |
+| GET | `/providers` | — | — | Список доступных провайдеров (apay, platega, paritypay) |
 | POST | `/invoice` | Bearer + verified | 10/min | Создать счёт по `node_id`, получить URL |
 | GET | `/transactions` | Bearer | — | Последние 50 транзакций пользователя |
 | GET | `/transactions/{id}` | Bearer | — | Состояние конкретной транзакции |
@@ -394,7 +401,7 @@ amount/currency/method/days/tariff_slug сервер достаёт сам — �
 }
 ```
 
-Узлы с invoice-провайдерами не из `(apay, platega)` отрезаются на сервере, как
+Узлы с invoice-провайдерами не из `(apay, platega, paritypay)` отрезаются на сервере, как
 и пустые ветки после фильтрации. Клиент рендерит дерево как есть; для покупки
 ему нужен только `node.id`.
 
@@ -407,7 +414,7 @@ amount/currency/method/days/tariff_slug сервер достаёт сам — �
 }
 ```
 
-Сервер берёт provider/amount/currency/method/days/tariff_slug из узла. Никаких
+Сервер берёт provider/amount/currency/method/days и delivery squad из узла. Никаких
 тарифных параметров от клиента не принимается — это защита от подмены цены и
 сквада на стороне приложения.
 
@@ -482,7 +489,10 @@ amount/currency/method/days/tariff_slug сервер достаёт сам — �
 ### POST /rtdn
 
 Принимает Pub/Sub-payload. Аутентификация — `?token=<google_play_rtdn_token>`
-из `config.yml`. Всегда возвращает 200, чтобы Pub/Sub не повторял пуши.
+из `config.yml`. Если секрет не настроен, endpoint отключён и возвращает
+**503 `iap_not_configured`**. После настройки корректные, но незначимые или
+повреждённые Pub/Sub payload возвращают 200, чтобы Google не повторял их
+бесконечно.
 
 ---
 
@@ -652,7 +662,10 @@ UX: открыть `deep_link` системным интентом → бот в
 
 ## Что нужно для запуска
 
-В `config.yml`:
+Предпочтительно: **Dashboard → Settings → Android / Email / Push·Play**
+(секреты шифруются в `app_integrations`). YAML остаётся fallback до Save.
+
+В `config.yml` (или Dashboard):
 
 ```yaml
 # обязательно
@@ -670,14 +683,14 @@ android_jwt_issuer: "xray-vpn-bot"
 email_code_ttl: 900
 email_code_max_attempts: 5
 
-# нужно только для Google Play IAP
+# Google Play IAP — package/rtdn в Dashboard; SA JSON предпочтительно вставить в UI
 google_play_package_name: "com.example.app"
-google_play_service_account_path: "/run/secrets/play-sa.json"
+google_play_service_account_path: "/run/secrets/play-sa.json"  # fallback path
 google_play_rtdn_token: "<random>"
 
-# нужно только для FCM push из Dashboard (регистрация токенов работает и без этого)
+# FCM push — project id + SA JSON в Dashboard → Push/Play (path = fallback)
 fcm_project_id: "your-firebase-project-id"
-fcm_service_account_path: "/app/fcm-sa.json"       # host: ./fcm-sa.json (compose mount)
+fcm_service_account_path: "/app/fcm-sa.json"
 ```
 
 Без Android-секции `/api/android/*` отвечает 500 на auth-ручках. Без SMTP —

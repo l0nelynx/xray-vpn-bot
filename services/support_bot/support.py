@@ -12,7 +12,14 @@ from support_db import init_support_tables, add_support_user, add_support_messag
 import logging
 import asyncio
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
+# aiogram/aiohttp INFO spam (every update/poll) fills Docker json logs and
+# host page cache on a small VPS; keep our own logger at INFO.
+logging.getLogger("aiogram").setLevel(logging.WARNING)
+logging.getLogger("aiohttp").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 

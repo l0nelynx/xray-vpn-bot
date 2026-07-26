@@ -99,38 +99,66 @@ const menuTree = [
   {
     id: 1,
     parent_id: null,
-    text: "Plans",
+    text_ru: "Тарифы",
+    text_en: "Plans",
     action: "buttons",
-    invoice: null,
+    sort_order: 0,
+    is_active: true,
+    invoice_provider: null,
+    invoice_amount: null,
+    invoice_currency: null,
+    invoice_method: null,
+    invoice_days: null,
+    invoice_internal_squad_ids: null,
+    invoice_external_squad_id: null,
+    invoice_traffic_limit_bytes: null,
+    invoice_traffic_limit_strategy: null,
+    invoice_remnawave_description: null,
+    invoice_remnawave_tag: null,
+    needs_attention: false,
     children: [
       {
         id: 2,
         parent_id: 1,
-        text: "1 month",
+        text_ru: "1 месяц",
+        text_en: "1 month",
         action: "invoice",
-        invoice: {
-          provider: "crypto",
-          amount: 299,
-          currency: "RUB",
-          days: 30,
-          tariff_slug: "month",
-          method: "crypto",
-        },
+        sort_order: 0,
+        is_active: true,
+        invoice_provider: "crypto",
+        invoice_amount: 10,
+        invoice_currency: "USDT",
+        invoice_method: "default",
+        invoice_days: 30,
+        invoice_internal_squad_ids: ["11111111-1111-4111-8111-111111111111"],
+        invoice_external_squad_id: "22222222-2222-4222-8222-222222222222",
+        invoice_traffic_limit_bytes: 107374182400,
+        invoice_traffic_limit_strategy: "MONTH",
+        invoice_remnawave_description: "Premium subscription",
+        invoice_remnawave_tag: "PREMIUM",
+        needs_attention: false,
         children: [],
       },
       {
         id: 3,
         parent_id: 1,
-        text: "3 months",
+        text_ru: "100 звёзд",
+        text_en: "100 Stars",
         action: "invoice",
-        invoice: {
-          provider: "crypto",
-          amount: 799,
-          currency: "RUB",
-          days: 90,
-          tariff_slug: "quarter",
-          method: "crypto",
-        },
+        sort_order: 1,
+        is_active: true,
+        invoice_provider: "stars",
+        invoice_amount: 100,
+        invoice_currency: "XTR",
+        invoice_method: "default",
+        invoice_days: 30,
+        invoice_internal_squad_ids: ["11111111-1111-4111-8111-111111111111"],
+        invoice_external_squad_id: "22222222-2222-4222-8222-222222222222",
+        invoice_traffic_limit_bytes: 0,
+        invoice_traffic_limit_strategy: "NO_RESET",
+        invoice_remnawave_description: null,
+        invoice_remnawave_tag: null,
+        needs_attention: false,
         children: [],
       },
     ],
@@ -232,42 +260,35 @@ export const handlers: HttpHandler[] = [
     ]),
   ),
 
-  // ── Tariffs / squads / menus ──────────────────────────
-  http.get(`${API}/tariffs/plans`, () =>
+  // ── Telegram menus ─────────────────────────────────────
+  http.get(`${API}/menus/screens`, () =>
     HttpResponse.json([
       {
         id: 1,
-        slug: "month",
-        name_ru: "1 месяц",
-        name_en: "1 month",
-        days: 30,
-        sort_order: 1,
+        slug: "main_new",
+        name: "Main · New user",
+        message_text_ru: "Выберите подходящий тариф",
+        message_text_en: "Choose a subscription plan",
+        is_system: true,
         is_active: true,
-        discount_percent: 0,
-        created_at: "2026-01-01T00:00:00Z",
-        squad_profile_id: 1,
-        prices: [
-          { id: 1, payment_method: "crypto", price: 299, currency: "RUB", is_active: true },
+        buttons: [
+          {
+            id: 1,
+            screen_id: 1,
+            text_ru: "Купить Premium",
+            text_en: "Buy Premium",
+            callback_data: null,
+            url: null,
+            row: 0,
+            col: 0,
+            sort_order: 0,
+            button_type: "tariff",
+            is_active: true,
+          },
         ],
       },
     ]),
   ),
-  http.post(`${API}/tariffs/plans`, async ({ request }) => {
-    const body = await request.json();
-    return HttpResponse.json({ id: 99, ...(body as object), prices: [] });
-  }),
-  http.put(`${API}/tariffs/plans/reorder`, () => HttpResponse.json({ ok: true })),
-  http.put(`${API}/tariffs/plans/:id`, () => HttpResponse.json({ ok: true })),
-  http.delete(`${API}/tariffs/plans/:id`, () => new HttpResponse(null, { status: 204 })),
-
-  http.get(`${API}/squads`, () =>
-    HttpResponse.json([{ id: 1, name: "Default", squad_id: "sq-1", external_squad_id: "ext-1" }]),
-  ),
-  http.post(`${API}/squads`, () => HttpResponse.json({ ok: true })),
-  http.put(`${API}/squads/:id`, () => HttpResponse.json({ ok: true })),
-  http.delete(`${API}/squads/:id`, () => new HttpResponse(null, { status: 204 })),
-
-  http.get(`${API}/menus/screens`, () => HttpResponse.json([])),
   http.post(`${API}/menus/screens`, async ({ request }) => {
     const body = await request.json();
     return HttpResponse.json({ id: 1, ...(body as object), buttons: [] });
@@ -275,11 +296,35 @@ export const handlers: HttpHandler[] = [
 
   // ── Webapp menu / settings ────────────────────────────
   http.get(`${API}/webapp-menu/tree`, () => HttpResponse.json(menuTree)),
+  http.get(`${API}/webapp-menu/remnawave-squads`, () =>
+    HttpResponse.json({
+      internal: [
+        { uuid: "11111111-1111-4111-8111-111111111111", name: "Premium" },
+      ],
+      external: [
+        { uuid: "22222222-2222-4222-8222-222222222222", name: "Default external" },
+      ],
+    }),
+  ),
   http.get(`${API}/webapp-menu/providers`, () =>
     HttpResponse.json({
       providers: [
-        { name: "crypto", payment_method: "crypto", currencies: ["USDT", "TON"] },
-        { name: "platega", payment_method: "platega", currencies: ["RUB"] },
+        {
+          name: "crypto",
+          payment_method: "CRYPTOPAY",
+          currencies: ["USDT", "TON"],
+          methods: [{ value: "default", label: "Default" }],
+          surfaces: ["bot", "miniapp", "web"],
+          webhook_key: "provider",
+        },
+        {
+          name: "stars",
+          payment_method: "TG_STARS",
+          currencies: ["XTR"],
+          methods: [{ value: "default", label: "Default" }],
+          surfaces: ["bot", "miniapp"],
+          webhook_key: "merchant",
+        },
       ],
     }),
   ),
@@ -319,7 +364,92 @@ export const handlers: HttpHandler[] = [
   ),
   http.put(`${API}/settings/payments/:provider`, async ({ request, params }) => {
     const body = (await request.json()) as object;
-    return HttpResponse.json({ name: params.provider, ...body });
+    return HttpResponse.json({
+      provider: params.provider,
+      managed: true,
+      source: "dashboard",
+      field_meta: [],
+      fields: {},
+      enabled: true,
+      ...body,
+    });
+  }),
+  http.get(`${API}/settings/integrations`, () =>
+    HttpResponse.json({
+      providers: [
+        {
+          provider: "smtp",
+          enabled: true,
+          managed: false,
+          source: "yaml",
+          fields: {},
+          field_meta: [{ name: "smtp_password", secret: true }],
+        },
+        {
+          provider: "android",
+          enabled: true,
+          managed: false,
+          source: "none",
+          fields: {},
+          field_meta: [{ name: "android_jwt_secret", secret: true }],
+        },
+        {
+          provider: "telemt",
+          enabled: true,
+          managed: false,
+          source: "yaml",
+          fields: {},
+          field_meta: [{ name: "telemt_header", secret: true }],
+        },
+        {
+          provider: "store",
+          enabled: false,
+          managed: false,
+          source: "none",
+          fields: {},
+          field_meta: [{ name: "store_api_token", secret: true }],
+        },
+        {
+          provider: "fcm",
+          enabled: false,
+          managed: false,
+          source: "none",
+          fields: {},
+          field_meta: [{ name: "fcm_sa_json", secret: true }],
+        },
+        {
+          provider: "google_play",
+          enabled: false,
+          managed: false,
+          source: "none",
+          fields: {},
+          field_meta: [
+            { name: "google_play_rtdn_token", secret: true },
+            { name: "google_play_sa_json", secret: true },
+          ],
+        },
+        {
+          provider: "web",
+          enabled: false,
+          managed: false,
+          source: "none",
+          fields: {},
+          field_meta: [{ name: "tg_client_secret", secret: true }],
+        },
+      ],
+    }),
+  ),
+  http.put(`${API}/settings/integrations/:provider`, async ({ request, params }) => {
+    const body = (await request.json()) as object;
+    return HttpResponse.json({
+      provider: params.provider,
+      managed: true,
+      source: "dashboard",
+      field_meta: [],
+      fields: {},
+      enabled: true,
+      ...body,
+    });
   }),
 
   // ── Promos / giveaways / store ────────────────────────

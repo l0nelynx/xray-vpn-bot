@@ -36,6 +36,7 @@ class ParityPayProvider(PaymentProvider):
     name = "paritypay"
     payment_method = "PARITYPAY"
     supported_currencies = ("RUB",)
+    methods = (("sbp", "SBP"), ("card", "Card"))
 
     _session: aiohttp.ClientSession | None = None
 

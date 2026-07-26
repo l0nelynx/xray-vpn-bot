@@ -11,11 +11,8 @@ from sqlalchemy.orm import configure_mappers
 from common_db.models import (
     MenuButton,
     MenuScreen,
-    SquadProfile,
     SupportMessage,
     SupportTicket,
-    TariffPlan,
-    TariffPrice,
     Transaction,
     User,
     WebAppMenuNode,
@@ -52,27 +49,6 @@ class TestSupportThread:
         rel = SupportMessage.__mapper__.relationships["ticket"]
         assert rel.mapper.class_ is SupportTicket
         assert rel.back_populates == "messages"
-
-
-class TestTariffGraph:
-    def test_squad_to_tariffs(self) -> None:
-        rel = SquadProfile.__mapper__.relationships["tariffs"]
-        assert rel.mapper.class_ is TariffPlan
-        assert rel.back_populates == "squad_profile"
-
-    def test_tariff_to_squad(self) -> None:
-        rel = TariffPlan.__mapper__.relationships["squad_profile"]
-        assert rel.mapper.class_ is SquadProfile
-        assert rel.back_populates == "tariffs"
-
-    def test_tariff_has_prices_cascade(self) -> None:
-        rel = TariffPlan.__mapper__.relationships["prices"]
-        assert rel.mapper.class_ is TariffPrice
-        assert "delete-orphan" in rel.cascade
-
-    def test_price_has_tariff(self) -> None:
-        rel = TariffPrice.__mapper__.relationships["tariff"]
-        assert rel.mapper.class_ is TariffPlan
 
 
 class TestMenuGraph:

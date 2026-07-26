@@ -8,7 +8,7 @@ from payments import (
     PaymentError,
     available_providers,
     create_invoice,
-    get_provider,
+    validate_provider_invoice,
 )
 from common_db.repo import balance as _repo_balance
 from common_db.repo import users as _repo_users
@@ -48,6 +48,7 @@ async def list_providers() -> ProvidersResponse:
                 currencies=list(p.supported_currencies),
             )
             for p in available_providers()
+            if "miniapp" in p.surfaces
         ]
     )
 
@@ -109,6 +110,7 @@ async def pay_with_credits(
         points_cost=points_cost,
         days=days,
         tariff_slug=invoice_data["tariff_slug"],
+        delivery_target=invoice_data,
     )
 
     if result.get("status") != "success":
@@ -154,16 +156,14 @@ async def create_payment_invoice(
         )
 
     try:
-        provider = get_provider(invoice_data["provider"])
+        provider = validate_provider_invoice(
+            invoice_data["provider"],
+            currency=invoice_data["currency"],
+            method=invoice_data["method"],
+            surface="miniapp",
+        )
     except PaymentError as e:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
-
-    if not provider.supports(invoice_data["currency"]):
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            f"provider '{provider.name}' does not support currency "
-            f"'{invoice_data['currency']}'",
-        )
 
     invoice_amount = invoice_data["amount"]
 
@@ -193,16 +193,11 @@ async def create_payment_invoice(
         logger.exception("unexpected invoice failure")
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"invoice failed: {e}")
 
-    persisted_id = (
-        invoice.invoice_id
-        if provider.name in {"crystal", "crypto", "platega"}
-        else transaction_id
-    )
-
     async with async_session() as session:
         session.add(
             Transaction(
-                transaction_id=persisted_id,
+                transaction_id=transaction_id,
+                provider_invoice_id=invoice.invoice_id,
                 vless_uuid="None",
                 username=tg.username or f"id_{tg.tg_id}",
                 order_status="created",
@@ -212,7 +207,13 @@ async def create_payment_invoice(
                 payment_method=provider.payment_method,
                 amount=float(invoice_amount),
                 created_at=_now_iso(),
-                tariff_slug=invoice_data["tariff_slug"],
+                squad_id=invoice_data["squad_id"],
+                internal_squad_ids=invoice_data["internal_squad_ids"],
+                external_squad_id=invoice_data["external_squad_id"],
+                traffic_limit_bytes=invoice_data["traffic_limit_bytes"],
+                traffic_limit_strategy=invoice_data["traffic_limit_strategy"],
+                remnawave_description=invoice_data["remnawave_description"],
+                remnawave_tag=invoice_data["remnawave_tag"],
             )
         )
         await session.commit()
@@ -224,7 +225,7 @@ async def create_payment_invoice(
         f"amount: <code>{invoice_amount} {esc(invoice_data['currency'])}</code>\n"
         f"days: <code>{invoice_data['days']}</code>\n"
         f"slug: <code>{esc(invoice_data['tariff_slug'])}</code>\n"
-        f"tx: <code>{esc(persisted_id)}</code>"
+        f"tx: <code>{esc(transaction_id)}</code>"
     )
 
     return InvoiceResponse(
@@ -233,6 +234,6 @@ async def create_payment_invoice(
         url=invoice.url,
         amount=invoice.amount,
         currency=invoice.currency,
-        transaction_id=persisted_id,
+        transaction_id=transaction_id,
         payment_method=provider.payment_method,
     )

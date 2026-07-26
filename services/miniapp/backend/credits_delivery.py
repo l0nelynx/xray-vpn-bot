@@ -25,6 +25,7 @@ async def pay_and_deliver(
     points_cost: int,
     days: int,
     tariff_slug: str,
+    delivery_target: dict | None = None,
     android_user_id: int | None = None,
     email: str | None = None,
     referral_tg_id: int | None = None,
@@ -64,6 +65,7 @@ async def pay_and_deliver(
             tariff_slug=tariff_slug,
             session_factory=async_session,
             notifier=notify_log,
+            delivery_target=delivery_target,
             squad_resolver=_noop_squad_resolver,
         )
     elif tg_id:
@@ -75,6 +77,7 @@ async def pay_and_deliver(
             tariff_slug=tariff_slug,
             session_factory=async_session,
             notifier=notify_log,
+            delivery_target=delivery_target,
             squad_resolver=_noop_squad_resolver,
         )
     else:

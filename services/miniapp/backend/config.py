@@ -425,6 +425,11 @@ def get_google_play_service_account_path() -> str:
     )
 
 
+def get_google_play_sa_json() -> str:
+    """Service-account JSON content from Dashboard integrations (preferred)."""
+    return (get_config().get("google_play_sa_json") or "").strip()
+
+
 def get_google_play_rtdn_token() -> str:
     """Shared secret appended as a query string `?token=...` on the Pub/Sub
     push subscription, so the RTDN endpoint can refuse unauthenticated

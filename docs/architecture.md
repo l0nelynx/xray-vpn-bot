@@ -87,8 +87,10 @@ One FastAPI service (`miniapp`) backs three clients, all under `/bot/miniapp/api
 - **Android app** — JWT-authenticated native client, incl. Google Play IAP.
   See [android-api.md](android-api.md).
 
-All payment invoice endpoints accept **`node_id` only** — tariff price/days are
-read from `webapp_menu_nodes`, never from the client.
+All payment invoice endpoints accept **`node_id` only** — localized labels,
+price, days, provider and delivery squads are read from `webapp_menu_nodes`,
+never from the client. Telegram Bot renders the same tree through stateless
+callbacks.
 
 Full MiniApp guide: **[miniapp.md](miniapp.md)**.
 

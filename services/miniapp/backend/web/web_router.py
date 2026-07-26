@@ -54,11 +54,17 @@ from ..android.payments_router import _load_menu_rows, _load_node, _node_payload
 from ..bonus_points import enrich_invoice_dict, resolve_points_cost
 from ..android.schemas import AuthResponse, UserSummary
 from ..database.session import async_session
+from ..database.models import Transaction
 from ..config import get_bot_token, get_config, get_tg_client_secret
 from payments.rub_pricing import get_rub_rates_for_currencies
 from ..notify_log import esc, notify_log, notify_web
 from remnawave_client.api import get_user_from_username as _rw_get_by_username
-from payments import InvoiceRequest, PaymentError, create_invoice, get_provider
+from payments import (
+    InvoiceRequest,
+    PaymentError,
+    create_invoice,
+    validate_provider_invoice,
+)
 from . import brute_force
 from common_db.repo import balance as _repo_balance
 from common_db.repo import promos as _repo_promos
@@ -368,7 +374,7 @@ async def web_payments_menu(
         out: list[dict] = []
         for r in items:
             children = await _build(r["id"])
-            inv_raw = _node_payload(r)
+            inv_raw = _node_payload(r, surface="web")
             if r["action"] == "invoice" and inv_raw is None:
                 continue
             if r["action"] != "invoice" and not children and inv_raw is None:
@@ -391,7 +397,11 @@ async def web_payments_menu(
                 {
                     "id": r["id"],
                     "parent_id": r["parent_id"],
-                    "text": r["text"],
+                    "text": (
+                        (r["text_en"] or r["text_ru"])
+                        if user.language == "en"
+                        else (r["text_ru"] or r["text_en"])
+                    ),
                     "action": r["action"],
                     "invoice": inv,
                     "children": children,
@@ -418,12 +428,17 @@ async def web_invoice(
     if node is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail={"code": "node_not_found"})
 
-    invoice_data = _node_payload(node)
+    invoice_data = _node_payload(node, surface="web")
     if invoice_data is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail={"code": "node_not_invoice"})
 
     try:
-        provider = get_provider(invoice_data["provider"])
+        provider = validate_provider_invoice(
+            invoice_data["provider"],
+            currency=invoice_data["currency"],
+            method=invoice_data["method"],
+            surface="web",
+        )
     except PaymentError as exc:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, detail={"code": "provider_unavailable"}
@@ -455,32 +470,29 @@ async def web_invoice(
         )
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, detail={"code": "invoice_failed"}) from exc
 
-    persisted_id = invoice.invoice_id if provider.name == "platega" else transaction_id
-
     async with async_session() as session:
-        await session.execute(
-            text(
-                "INSERT INTO transactions ("
-                "transaction_id, vless_uuid, username, order_status, "
-                "delivery_status, payment_method, amount, created_at, "
-                "days_ordered, tariff_slug, user_id, android_user_id"
-                ") VALUES ("
-                ":tid, :vu, :uname, 'created', 0, :pm, :amt, :ts, "
-                ":days, :slug, :uid, :aid"
-                ")"
-            ),
-            {
-                "tid": persisted_id,
-                "vu": "None",
-                "uname": user.email or f"webuser_{user.id}",
-                "pm": provider.payment_method,
-                "amt": final_amount,
-                "ts": _now_iso(),
-                "days": invoice_data["days"],
-                "slug": invoice_data["tariff_slug"],
-                "uid": user.id,
-                "aid": user.id,
-            },
+        session.add(
+            Transaction(
+                transaction_id=transaction_id,
+                provider_invoice_id=invoice.invoice_id,
+                vless_uuid="None",
+                username=user.email or f"webuser_{user.id}",
+                order_status="created",
+                delivery_status=0,
+                payment_method=provider.payment_method,
+                amount=final_amount,
+                created_at=_now_iso(),
+                days_ordered=invoice_data["days"],
+                squad_id=invoice_data["squad_id"],
+                internal_squad_ids=invoice_data["internal_squad_ids"],
+                external_squad_id=invoice_data["external_squad_id"],
+                traffic_limit_bytes=invoice_data["traffic_limit_bytes"],
+                traffic_limit_strategy=invoice_data["traffic_limit_strategy"],
+                remnawave_description=invoice_data["remnawave_description"],
+                remnawave_tag=invoice_data["remnawave_tag"],
+                user_id=user.id,
+                android_user_id=user.id,
+            )
         )
         await session.commit()
 
@@ -489,7 +501,7 @@ async def web_invoice(
         f"user: <code>{user.id}</code> {esc(user.email or '')}\n"
         f"amount: <code>{final_amount} {esc(invoice_data['currency'])}</code>\n"
         f"days: <code>{invoice_data['days']}</code>\n"
-        f"tx: <code>{esc(persisted_id)}</code>"
+        f"tx: <code>{esc(transaction_id)}</code>"
     )
 
     return WebInvoiceResponse(
@@ -499,7 +511,7 @@ async def web_invoice(
         amount=final_amount,
         original_amount=original_amount,
         currency=invoice.currency,
-        transaction_id=persisted_id,
+        transaction_id=transaction_id,
         payment_method=provider.payment_method,
     )
 
@@ -517,7 +529,7 @@ async def web_pay_credits(
     if node is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail={"code": "node_not_found"})
 
-    invoice_data = _node_payload(node)
+    invoice_data = _node_payload(node, surface="web")
     if invoice_data is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail={"code": "node_not_invoice"})
 
@@ -539,6 +551,7 @@ async def web_pay_credits(
         points_cost=points_cost,
         days=days,
         tariff_slug=invoice_data["tariff_slug"],
+        delivery_target=invoice_data,
         android_user_id=user.id if user.tg_id is None else None,
         email=user.email,
         referral_tg_id=_promo_tg_id(user),

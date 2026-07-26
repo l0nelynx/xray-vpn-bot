@@ -14,7 +14,6 @@ from typing import Optional
 from subscription_delivery import deliver_android_paid as _deliver
 
 from app.database.models import async_session
-from app.database.tariff_repository import get_squad_for_tariff_slug
 from app.notify_log import notify_log
 
 
@@ -25,6 +24,7 @@ async def deliver_android_paid(
     email: Optional[str],
     days: int,
     tariff_slug: Optional[str],
+    delivery_target: Optional[dict] = None,
 ) -> dict:
     return await _deliver(
         transaction_id=transaction_id,
@@ -32,7 +32,8 @@ async def deliver_android_paid(
         email=email,
         days=days,
         tariff_slug=tariff_slug,
+        delivery_target=delivery_target,
         session_factory=async_session,
         notifier=notify_log,
-        squad_resolver=get_squad_for_tariff_slug,
+        squad_resolver=None,
     )

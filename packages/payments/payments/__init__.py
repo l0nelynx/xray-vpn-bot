@@ -11,7 +11,6 @@ from .base import (
     InvoiceRequest,
     PaymentError,
     PaymentProvider,
-    SupportedCurrencies,
 )
 from .config import PaymentsConfig, get_config, set_config_provider
 from .registry import (
@@ -19,6 +18,7 @@ from .registry import (
     create_invoice,
     get_provider,
     register_provider,
+    validate_provider_invoice,
 )
 from . import signatures
 
@@ -27,7 +27,6 @@ __all__ = [
     "InvoiceRequest",
     "PaymentError",
     "PaymentProvider",
-    "SupportedCurrencies",
     "PaymentsConfig",
     "get_config",
     "set_config_provider",
@@ -35,5 +34,6 @@ __all__ = [
     "create_invoice",
     "get_provider",
     "register_provider",
+    "validate_provider_invoice",
     "signatures",
 ]

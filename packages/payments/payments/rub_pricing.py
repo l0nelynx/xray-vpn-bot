@@ -36,22 +36,16 @@ _CURRENCY_TO_RATE_KEY: dict[str, str] = {
 }
 
 
-def star_rub_rate_from_config(config: Mapping[str, object] | None) -> float:
-    if not config:
-        return _STAR_RUB_DEFAULT
-    try:
-        return float(config.get("star_rub_rate", _STAR_RUB_DEFAULT))
-    except (TypeError, ValueError):
-        return _STAR_RUB_DEFAULT
+def star_rub_rate_from_config(config: Mapping[str, object] | None = None) -> float:
+    """Stars → RUB multiplier (fixed; config overrides removed)."""
+    del config  # kept for call-site compatibility
+    return _STAR_RUB_DEFAULT
 
 
-def usd_rub_fallback_from_config(config: Mapping[str, object] | None) -> float:
-    if not config:
-        return _USD_RUB_FALLBACK
-    try:
-        return float(config.get("usd_rub_rate", _USD_RUB_FALLBACK))
-    except (TypeError, ValueError):
-        return _USD_RUB_FALLBACK
+def usd_rub_fallback_from_config(config: Mapping[str, object] | None = None) -> float:
+    """USD → RUB fallback when CBR is unreachable (fixed; config overrides removed)."""
+    del config
+    return _USD_RUB_FALLBACK
 
 
 def _cached_usd(now: float) -> float | None:
@@ -89,7 +83,8 @@ async def _fetch_usd_rub_uncached(config: Mapping[str, object] | None) -> float:
 
 
 async def fetch_usd_rub_rate(config: Mapping[str, object] | None = None) -> float:
-    """Live USD→RUB from CBR, cached. Falls back to config or constant."""
+    """Live USD→RUB from CBR, cached. Falls back to a constant."""
+    del config  # call-site compatibility; overrides removed
     now = time.time()
     cached = _cached_usd(now)
     if cached is not None:
@@ -99,7 +94,7 @@ async def fetch_usd_rub_rate(config: Mapping[str, object] | None = None) -> floa
         cached = _cached_usd(time.time())
         if cached is not None:
             return cached
-        return await _fetch_usd_rub_uncached(config)
+        return await _fetch_usd_rub_uncached(None)
 
 
 def currency_needs_live_usd(currency: str | None) -> bool:

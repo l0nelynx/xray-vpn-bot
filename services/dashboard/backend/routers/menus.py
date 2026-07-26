@@ -15,6 +15,22 @@ from ..cache_utils import bump_cache_version
 router = APIRouter(prefix="/api/menus", tags=["menus"])
 
 
+def _validate_button(button: MenuButton) -> None:
+    if button.button_type not in {"callback", "url", "webapp", "tariff"}:
+        raise HTTPException(400, "Unsupported button type")
+    if not button.text_ru.strip() or not button.text_en.strip():
+        raise HTTPException(400, "RU and EN text are required")
+    if button.button_type == "tariff":
+        button.callback_data = None
+        button.url = None
+    elif button.button_type in {"url", "webapp"}:
+        if not (button.url or "").strip():
+            raise HTTPException(400, "URL is required")
+        button.callback_data = None
+    elif not (button.callback_data or "").strip():
+        raise HTTPException(400, "Callback data is required")
+
+
 @router.get("/screens", response_model=list[MenuScreenSchema])
 async def list_screens(_: str = Depends(get_current_user)):
     async with async_session() as session:
@@ -128,8 +144,8 @@ async def create_button(screen_id: int, body: MenuButtonCreate, _: str = Depends
             sort_order=body.sort_order,
             button_type=body.button_type,
             is_active=body.is_active,
-            visibility_condition=body.visibility_condition,
         )
+        _validate_button(button)
         session.add(button)
         await session.commit()
         await session.refresh(button)
@@ -147,11 +163,9 @@ async def update_button(button_id: int, body: MenuButtonUpdate, _: str = Depends
         if not button:
             raise HTTPException(404, "Button not found")
 
-        for field in ("text_ru", "text_en", "callback_data", "url", "row", "col",
-                       "sort_order", "button_type", "is_active", "visibility_condition"):
-            val = getattr(body, field, None)
-            if val is not None:
-                setattr(button, field, val)
+        for field, val in body.model_dump(exclude_unset=True).items():
+            setattr(button, field, val)
+        _validate_button(button)
 
         await session.commit()
         await session.refresh(button)
@@ -177,7 +191,22 @@ async def delete_button(button_id: int, _: str = Depends(get_current_user)):
 
 @router.put("/screens/{screen_id}/buttons/reorder")
 async def reorder_buttons(screen_id: int, body: ButtonReorderRequest, _: str = Depends(get_current_user)):
+    ids = [item.id for item in body.items]
+    if len(ids) != len(set(ids)):
+        raise HTTPException(400, "Duplicate button in reorder request")
     async with async_session() as session:
+        existing = set(
+            (
+                await session.execute(
+                    select(MenuButton.id).where(
+                        MenuButton.screen_id == screen_id,
+                        MenuButton.id.in_(ids),
+                    )
+                )
+            ).scalars().all()
+        )
+        if existing != set(ids):
+            raise HTTPException(404, "Button not found on this screen")
         for item in body.items:
             await session.execute(
                 update(MenuButton)
