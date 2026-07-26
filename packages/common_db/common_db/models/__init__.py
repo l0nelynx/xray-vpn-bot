@@ -6,7 +6,7 @@ All classes are registered on common_db.base.Base.metadata.
 Import any class you need from here:
     from common_db.models import User, SupportTicket, SupportMessage
 """
-from .auth import EmailVerification, RefreshToken, TelegramLinkCode
+from .auth import EmailVerification, RefreshToken, TelegramLinkCode, WebAuthorizationCode
 from .credit_ledger import CreditLedger
 from .crm import (
     CrmCampaign,
@@ -32,11 +32,13 @@ from .support import SupportAttachment, SupportMessage, SupportTicket
 from .runtime import AppRuntimeSettings, AppIntegration, PaymentIntegration
 from .system import BotFeatureFlags, CacheVersion, TelmtFreeParams
 from .transactions import Transaction
-from .users import DisabledUser, User
+from .users import DisabledUser, SubscriptionTransfer, User, UserSubscription
 
 __all__ = [
     # users
     "User",
+    "UserSubscription",
+    "SubscriptionTransfer",
     "DisabledUser",
     # promos
     "Promo",
@@ -68,6 +70,7 @@ __all__ = [
     "RefreshToken",
     "EmailVerification",
     "TelegramLinkCode",
+    "WebAuthorizationCode",
     # credits
     "CreditLedger",
     # google play

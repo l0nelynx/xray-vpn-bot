@@ -155,6 +155,10 @@ async def get_user_from_uuid(user_uuid: str) -> dict | None:
     return await _client().get_user_by_uuid(user_uuid)
 
 
+async def get_user_from_id(rw_id: int) -> dict | None:
+    return await _client().get_user_by_id(rw_id)
+
+
 async def get_user_by_short_uuid_raw(short_uuid: str) -> dict | None:
     """Return the raw Remnawave SDK DTO for the user owning ``short_uuid``.
 
@@ -166,6 +170,7 @@ async def get_user_by_short_uuid_raw(short_uuid: str) -> dict | None:
 
 async def resolve_remnawave_user(
     *,
+    rw_id: int | None = None,
     vless_uuid: str | None = None,
     email: str | None = None,
     username: str | None = None,
@@ -174,11 +179,9 @@ async def resolve_remnawave_user(
     """Look up a Remnawave user via the strongest identifier available,
     falling back to weaker ones.
 
-    Priority: vless_uuid → email → username. The cached ``vless_uuid`` in our
-    local ``users`` row is authoritative — Remnawave can't rename a user's UUID
-    — so try it first. Only fall back when it's missing or the upstream record
-    was deleted/recreated out of band. Returns the normalized user dict, or
-    None when every identifier we were given missed.
+    Priority: rw_id → legacy Remnawave UUID → email → username. ``rw_id`` is
+    the canonical identifier; UUID lookup remains only for records awaiting
+    backfill and compatibility with older callers.
 
     ``username`` is the weakest match: a Telegram @username can coincide with a
     *different* person's panel account, which would leak their subscription URL.
@@ -194,10 +197,11 @@ async def resolve_remnawave_user(
     through it), so coalescing repeat/concurrent reads within a short window
     meaningfully cuts load on the panel.
     """
-    cache_key = (vless_uuid, email, username, expected_telegram_id)
+    cache_key = (rw_id, vless_uuid, email, username, expected_telegram_id)
     return await _user_cache.get_or_compute(
         cache_key,
         lambda: _resolve_remnawave_user_uncached(
+            rw_id=rw_id,
             vless_uuid=vless_uuid,
             email=email,
             username=username,
@@ -208,11 +212,16 @@ async def resolve_remnawave_user(
 
 async def _resolve_remnawave_user_uncached(
     *,
+    rw_id: int | None,
     vless_uuid: str | None,
     email: str | None,
     username: str | None,
     expected_telegram_id: int | None,
 ) -> dict | None:
+    if rw_id is not None:
+        user = await get_user_from_id(rw_id)
+        if user:
+            return user
     if vless_uuid:
         user = await get_user_from_uuid(vless_uuid)
         if user:
@@ -300,16 +309,32 @@ async def update_user(
     )
 
 
+async def update_user_by_id(rw_id: int, **changes) -> dict | None:
+    return await _client().update_user_by_id(rw_id, **changes)
+
+
 async def reset_user_traffic(user_uuid: str) -> bool:
     return await _client().reset_user_traffic(user_uuid)
+
+
+async def reset_user_traffic_by_id(rw_id: int) -> bool:
+    return await _client().reset_user_traffic_by_id(rw_id)
 
 
 async def delete_user(user_uuid: str) -> bool:
     return await _client().delete_user(user_uuid)
 
 
+async def delete_user_by_id(rw_id: int) -> bool:
+    return await _client().delete_user_by_id(rw_id)
+
+
 async def get_user_subscription_link(user_uuid: str) -> str | None:
     return await _client().get_subscription_link(user_uuid)
+
+
+async def get_user_subscription_link_by_id(rw_id: int) -> str | None:
+    return await _client().get_subscription_link_by_id(rw_id)
 
 
 # ---------------------------------------------------------------------------
@@ -346,6 +371,13 @@ async def list_user_hwid_devices(user_uuid: str) -> list[dict]:
     return [_normalize_device(d) for d in response.devices]
 
 
+async def list_user_hwid_devices_by_id(rw_id: int) -> list[dict]:
+    response = await _client().get_user_hwid_devices_by_id(rw_id)
+    if not response or not response.devices:
+        return []
+    return [_normalize_device(d) for d in response.devices]
+
+
 async def get_user_devices_count(user_uuid: str) -> int:
     """Cached for _DEVICES_COUNT_CACHE_TTL seconds, with single-flight
     de-duplication — this is display-only data (used in /me summaries),
@@ -363,7 +395,23 @@ async def get_user_devices_count(user_uuid: str) -> int:
     return await _devices_count_cache.get_or_compute(user_uuid, _fetch)
 
 
+async def get_user_devices_count_by_id(rw_id: int) -> int:
+    async def _fetch() -> int:
+        response = await _client().get_user_hwid_devices_by_id(rw_id)
+        if not response:
+            return 0
+        return int(response.total) if response.total else len(response.devices or [])
+
+    return await _devices_count_cache.get_or_compute(("rw_id", int(rw_id)), _fetch)
+
+
 async def delete_user_hwid_device(
     user_uuid: str, hwid: str
 ) -> HwidDevicesCompat | None:
     return await _client().delete_user_hwid_device(user_uuid, hwid)
+
+
+async def delete_user_hwid_device_by_id(
+    rw_id: int, hwid: str
+) -> HwidDevicesCompat | None:
+    return await _client().delete_user_hwid_device_by_id(rw_id, hwid)

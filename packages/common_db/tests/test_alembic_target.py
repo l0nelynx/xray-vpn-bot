@@ -54,11 +54,14 @@ CANONICAL_TABLES = frozenset({
     "support_attachments",
     "support_messages",
     "support_tickets",
+    "subscription_transfers",
     "telegram_link_codes",
     "telemt_free_params",
     "transactions",
     "users",
+    "user_subscriptions",
     "webapp_menu_nodes",
+    "web_authorization_codes",
 })
 
 # Tables created by alembic but intentionally NOT modelled in common_db.

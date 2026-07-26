@@ -333,6 +333,7 @@ async def get_full_transaction_info(transaction_id: str):
                 "user_db_id": user.id,
                 "user_email": user.email,
                 "android_user_id": transaction.android_user_id,
+                "target_rw_id": transaction.target_rw_id,
                 "days_ordered": transaction.days_ordered,
                 "payment_method": transaction.payment_method,
                 "amount": transaction.amount,

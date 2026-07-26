@@ -15,6 +15,7 @@ from common_db.models import (
     SupportTicket,
     Transaction,
     User,
+    UserSubscription,
     WebAppMenuNode,
 )
 
@@ -35,6 +36,19 @@ class TestUserTransactions:
         rel = Transaction.__mapper__.relationships["user"]
         assert rel.mapper.class_ is User
         assert rel.back_populates == "transactions"
+
+
+class TestUserSubscriptions:
+    def test_user_has_subscriptions(self) -> None:
+        rel = User.__mapper__.relationships["subscriptions"]
+        assert rel.mapper.class_ is UserSubscription
+        assert rel.back_populates == "user"
+        assert "delete-orphan" in rel.cascade
+
+    def test_subscription_has_user(self) -> None:
+        rel = UserSubscription.__mapper__.relationships["user"]
+        assert rel.mapper.class_ is User
+        assert rel.back_populates == "subscriptions"
 
 
 class TestSupportThread:

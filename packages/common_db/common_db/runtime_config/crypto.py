@@ -8,6 +8,7 @@ MAC = HMAC-SHA256(key, salt || nonce || ciphertext).
 from __future__ import annotations
 
 import base64
+import binascii
 import hashlib
 import hmac
 import json
@@ -33,7 +34,16 @@ def _b64e(data: bytes) -> str:
 
 def _b64d(data: str) -> bytes:
     pad = "=" * (-len(data) % 4)
-    return base64.urlsafe_b64decode(data + pad)
+    try:
+        decoded = base64.b64decode(data + pad, altchars=b"-_", validate=True)
+    except (ValueError, binascii.Error) as exc:
+        raise ValueError("invalid payment secret base64") from exc
+    # Python's decoder accepts alternate non-zero padding bits that decode to
+    # the same bytes. Reject non-canonical encodings so any textual mutation of
+    # the authenticated blob is detected deterministically.
+    if _b64e(decoded) != data:
+        raise ValueError("non-canonical payment secret base64")
+    return decoded
 
 
 def _keystream(key: bytes, nonce: bytes, length: int) -> bytes:

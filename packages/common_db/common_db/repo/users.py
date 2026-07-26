@@ -93,6 +93,15 @@ async def get_user_by_vless_uuid(
     )
 
 
+async def get_user_by_rw_id(
+    session: AsyncSession, rw_id: int
+) -> User | None:
+    """Reverse lookup by the canonical Remnawave numeric user id."""
+    if rw_id is None:
+        return None
+    return await session.scalar(select(User).where(User.rw_id == int(rw_id)))
+
+
 # --- "is paid" predicates -------------------------------------------------
 
 
@@ -238,7 +247,9 @@ __all__ = [
     "get_all_tg_ids",
     "get_user_by_email",
     "get_user_by_id",
+    "get_user_by_rw_id",
     "get_user_by_tg_id",
+    "get_user_by_vless_uuid",
     "get_user_by_username",
     "get_users_by_tg_ids",
     "persist_remnawave_uuid",

@@ -148,6 +148,11 @@ def decode_access_token(token: str) -> AccessClaims:
 # is purely a "resolve was called recently for this slug" gate.
 
 CLAIM_TOKEN_TTL_SECONDS = 15 * 60
+SUBSCRIPTION_CONTEXT_TTL_SECONDS = 15 * 60
+# Long enough to manage/renew a subscription without an unexpected logout,
+# while remaining an intentionally short-lived session scoped to the public
+# subscription page (not a replacement for the portal refresh-token session).
+SUBSCRIPTION_SESSION_TTL_SECONDS = 30 * 60
 
 
 def issue_claim_token(short_uuid: str) -> str:
@@ -183,6 +188,79 @@ def decode_claim_token(token: str) -> str:
     if not isinstance(sub, str) or not sub:
         raise JWTError("malformed claim token")
     return sub
+
+
+def issue_subscription_context(*, rw_id: int, short_uuid: str) -> str:
+    now = int(time.time())
+    payload = {
+        "iss": get_android_jwt_issuer(),
+        "sub": str(int(rw_id)),
+        "short_uuid": short_uuid,
+        "iat": now,
+        "exp": now + SUBSCRIPTION_CONTEXT_TTL_SECONDS,
+        "jti": uuid.uuid4().hex,
+        "typ": "subscription_context",
+        "aud": "subscription-page",
+    }
+    return jwt.encode(payload, _require_secret(), algorithm="HS256")
+
+
+def decode_subscription_context(token: str) -> tuple[int, str]:
+    try:
+        payload = jwt.decode(
+            token,
+            _require_secret(),
+            algorithms=["HS256"],
+            issuer=get_android_jwt_issuer(),
+            audience="subscription-page",
+            options={"require": ["exp", "iat", "sub", "short_uuid"]},
+        )
+    except jwt.ExpiredSignatureError as exc:
+        raise JWTError("subscription context expired") from exc
+    except jwt.InvalidTokenError as exc:
+        raise JWTError("invalid subscription context") from exc
+    if payload.get("typ") != "subscription_context":
+        raise JWTError("wrong token type")
+    try:
+        return int(payload["sub"]), str(payload["short_uuid"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise JWTError("malformed subscription context") from exc
+
+
+def issue_subscription_session_token(user_id: int) -> tuple[str, int]:
+    now = int(time.time())
+    payload = {
+        "iss": get_android_jwt_issuer(),
+        "sub": str(user_id),
+        "iat": now,
+        "exp": now + SUBSCRIPTION_SESSION_TTL_SECONDS,
+        "jti": uuid.uuid4().hex,
+        "typ": "subscription_session",
+        "aud": "subscription-page",
+    }
+    return jwt.encode(payload, _require_secret(), algorithm="HS256"), SUBSCRIPTION_SESSION_TTL_SECONDS
+
+
+def decode_subscription_session_token(token: str) -> int:
+    try:
+        payload = jwt.decode(
+            token,
+            _require_secret(),
+            algorithms=["HS256"],
+            issuer=get_android_jwt_issuer(),
+            audience="subscription-page",
+            options={"require": ["exp", "iat", "sub", "jti"]},
+        )
+    except jwt.ExpiredSignatureError as exc:
+        raise JWTError("subscription session expired") from exc
+    except jwt.InvalidTokenError as exc:
+        raise JWTError("invalid subscription session") from exc
+    if payload.get("typ") != "subscription_session":
+        raise JWTError("wrong token type")
+    try:
+        return int(payload["sub"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise JWTError("malformed subscription session") from exc
 
 
 # --- Refresh tokens ---

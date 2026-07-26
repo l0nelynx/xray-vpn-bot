@@ -21,6 +21,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from common_db.repo.webapp_menu import get_active_node, invoice_target, list_nodes
+from common_db.repo import subscriptions as subscription_repo
 
 from ..database.models import Transaction
 from ..database.session import async_session
@@ -65,6 +66,7 @@ class AndroidInvoiceRequest(BaseModel):
     хранится у клиента, подменяемо."""
     node_id: int = Field(..., ge=1)
     description: str | None = None
+    subscription_id: int | None = Field(default=None, ge=1)
 
 
 class AndroidMenuInvoice(BaseModel):
@@ -228,6 +230,24 @@ async def _load_node(node_id: int) -> dict | None:
         return _node_as_dict(node)
 
 
+async def _purchase_target_rw_id(
+    *, user_id: int, subscription_id: int | None
+) -> int | None:
+    async with async_session() as session:
+        if subscription_id is not None:
+            target = await subscription_repo.get_for_user(
+                session, user_id=user_id, subscription_id=subscription_id
+            )
+            if target is None:
+                raise HTTPException(
+                    status.HTTP_404_NOT_FOUND,
+                    detail={"code": "subscription_not_found"},
+                )
+        else:
+            target = await subscription_repo.get_primary(session, user_id)
+    return target.rw_id if target is not None else None
+
+
 # --- Endpoints -------------------------------------------------------------
 
 
@@ -272,6 +292,9 @@ async def create_payment_invoice(
     request: Request,
     user: repo.UserRow = Depends(deps.require_verified_email),
 ) -> AndroidInvoiceResponse:
+    target_rw_id = await _purchase_target_rw_id(
+        user_id=user.id, subscription_id=body.subscription_id
+    )
     node = await _load_node(body.node_id)
     if node is None:
         raise HTTPException(
@@ -359,6 +382,7 @@ async def create_payment_invoice(
                 remnawave_tag=invoice_data["remnawave_tag"],
                 user_id=user.id,
                 android_user_id=user.id,
+                target_rw_id=target_rw_id,
             )
         )
         await session.commit()
@@ -469,6 +493,9 @@ async def android_pay_credits(
     from ..credits_delivery import pay_and_deliver
     from common_db.repo import balance as _repo_balance
 
+    target_rw_id = await _purchase_target_rw_id(
+        user_id=user.id, subscription_id=body.subscription_id
+    )
     node = await _load_node(body.node_id)
     if node is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail={"code": "node_not_found"})
@@ -498,6 +525,7 @@ async def android_pay_credits(
         android_user_id=user.id if user.tg_id is None else None,
         email=user.email,
         referral_tg_id=promo_tg,
+        target_rw_id=target_rw_id,
     )
     if result.get("status") != "success":
         raise HTTPException(
