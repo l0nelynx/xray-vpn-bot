@@ -1,6 +1,6 @@
 """Add transaction purchase source and delivery error.
 
-Revision ID: 0035_transaction_delivery_metadata
+Revision ID: 0035_tx_delivery_metadata
 Revises: 0034_subscription_transfers
 Create Date: 2026-07-29
 """
@@ -11,7 +11,7 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0035_transaction_delivery_metadata"
+revision: str = "0035_tx_delivery_metadata"
 down_revision: Union[str, None] = "0034_subscription_transfers"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
