@@ -34,6 +34,7 @@ async def _resolve_user_rw_id(tg: TgUser) -> int:
         vless_uuid=user.vless_uuid,
         email=user.email,
         username=user.username,
+        expected_telegram_id=tg.tg_id,
     )
     if not rem_user or rem_user.get("rw_id") is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "user not found")

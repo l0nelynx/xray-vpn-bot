@@ -478,6 +478,7 @@ async def get_user_transactions(user_id: int, _: str = Depends(get_current_user)
         return [
             {
                 "transaction_id": t.transaction_id,
+                "username": t.username,
                 "payment_method": t.payment_method,
                 "amount": t.amount,
                 "created_at": t.created_at,
@@ -485,6 +486,8 @@ async def get_user_transactions(user_id: int, _: str = Depends(get_current_user)
                 "delivery_status": t.delivery_status,
                 "days_ordered": t.days_ordered,
                 "expire_date": t.expire_date,
+                "purchase_source": t.purchase_source,
+                "delivery_error": t.delivery_error,
             }
             for t in transactions
         ]

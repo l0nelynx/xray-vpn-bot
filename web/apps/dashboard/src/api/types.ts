@@ -49,6 +49,8 @@ export interface TransactionItem {
   days_ordered: number;
   created_at: string | null;
   expire_date: string | null;
+  purchase_source: "bot" | "miniapp" | "android" | "web" | "legacy_unknown";
+  delivery_error: string | null;
 }
 
 export interface PaginatedResponse<T> {

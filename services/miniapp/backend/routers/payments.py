@@ -134,7 +134,8 @@ async def pay_with_credits(
         days=days,
         tariff_slug=invoice_data["tariff_slug"],
         delivery_target=invoice_data,
-        android_user_id=user.id if target_rw_id is not None else None,
+        android_user_id=None,
+        purchase_source="miniapp",
         email=user.email,
         target_rw_id=target_rw_id,
     )
@@ -244,8 +245,9 @@ async def create_payment_invoice(
                 traffic_limit_strategy=invoice_data["traffic_limit_strategy"],
                 remnawave_description=invoice_data["remnawave_description"],
                 remnawave_tag=invoice_data["remnawave_tag"],
-                android_user_id=user.id if target_rw_id is not None else None,
+                android_user_id=None,
                 target_rw_id=target_rw_id,
+                purchase_source="miniapp",
             )
         )
         await session.commit()

@@ -9,8 +9,16 @@ from ..database.models import TelmtFreeParams, User
 from ..database.session import async_session
 
 from common_db.repo import system as _repo_system
+from common_db.repo import subscriptions as _repo_subscriptions
 from common_db.repo import users as _repo_users
-from remnawave_client.api import create_user, get_user_from_username, update_user
+from remnawave_client.api import (
+    create_user,
+    get_user_from_username,
+    resolve_remnawave_user,
+    update_user,
+)
+from subscription_delivery import build_remnawave_username
+from ..notify_log import notify_log
 from ..telemt_client import create_telemt_user, first_link, get_telemt_user
 from ..tg_auth import TgUser, get_tg_user
 from ..tg_channel import is_user_subscribed_to_news
@@ -20,17 +28,54 @@ logger = logging.getLogger(__name__)
 
 
 async def _persist_rw_uuid(user: User, rw_user: dict | None) -> None:
-    if not rw_user or not rw_user.get("uuid"):
+    if not rw_user or not rw_user.get("uuid") or rw_user.get("rw_id") is None:
         return
     async with async_session() as session:
-        await _repo_users.persist_remnawave_uuid(
-            session,
-            tg_id=user.tg_id,
-            vless_uuid=str(rw_user["uuid"]),
-            username=user.username,
-            rw_id=rw_user.get("rw_id"),
-        )
+        try:
+            link = await _repo_subscriptions.attach(
+                session, user_id=user.id, rw_id=int(rw_user["rw_id"]), source="miniapp_free"
+            )
+        except ValueError as exc:
+            await session.rollback()
+            await notify_log(
+                "🚨 <b>FREE delivery ownership conflict</b>\n"
+                f"DB user: <code>{user.id}</code>\n"
+                f"rw_id: <code>{rw_user.get('rw_id')}</code>"
+            )
+            raise HTTPException(
+                status.HTTP_409_CONFLICT, "target_owner_conflict"
+            ) from exc
+        if link.is_primary:
+            await _repo_users.persist_remnawave_uuid(
+                session,
+                tg_id=user.tg_id,
+                vless_uuid=str(rw_user["uuid"]),
+                username=user.username,
+                rw_id=rw_user.get("rw_id"),
+            )
         await session.commit()
+
+
+async def _resolve_existing(user: User, tg: TgUser) -> dict | None:
+    async with async_session() as session:
+        primary = await _repo_subscriptions.get_primary(session, user.id)
+    existing = await resolve_remnawave_user(
+        rw_id=primary.rw_id if primary else user.rw_id,
+        vless_uuid=user.vless_uuid,
+        email=user.email,
+        username=user.username,
+        expected_telegram_id=tg.tg_id,
+    )
+    if existing is None and user.username:
+        collision = await get_user_from_username(user.username)
+        if collision:
+            await notify_log(
+                "⚠️ <b>legacy_username_collision</b>\n"
+                f"DB user: <code>{user.id}</code>\n"
+                f"TG: <code>{tg.tg_id}</code> @{user.username}\n"
+                f"matched rw_id: <code>{collision.get('rw_id') or '—'}</code>"
+            )
+    return existing
 
 
 class SubscribeStateResponse(BaseModel):
@@ -64,8 +109,6 @@ async def _ensure_user(tg: TgUser) -> User:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "user not registered")
     if user.is_banned:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "user is banned")
-    if not user.username:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "username required")
     return user
 
 
@@ -80,7 +123,7 @@ async def free_check(tg: TgUser = Depends(get_tg_user)) -> SubscribeStateRespons
 async def free_vpn_status(tg: TgUser = Depends(get_tg_user)) -> FreeStatusResponse:
     user = await _ensure_user(tg)
     free_squad = get_rw_free_id() or None
-    existing = await get_user_from_username(user.username)
+    existing = await _resolve_existing(user, tg)
     if existing and existing.get("uuid"):
         await _persist_rw_uuid(user, existing)
         squads = {s.lower() for s in existing.get("active_squads", [])}
@@ -99,7 +142,7 @@ async def free_vpn_status(tg: TgUser = Depends(get_tg_user)) -> FreeStatusRespon
 async def free_telemt_status(tg: TgUser = Depends(get_tg_user)) -> FreeStatusResponse:
     user = await _ensure_user(tg)
     try:
-        existing = await get_telemt_user(user.username)
+        existing = await get_telemt_user(user.username or f"user_{user.id}")
     except RuntimeError:
         existing = None
     if existing:
@@ -123,7 +166,7 @@ async def free_claim(tg: TgUser = Depends(get_tg_user)) -> ClaimResponse:
     limit_gb = get_free_traffic()
     free_squad = get_rw_free_id() or None
 
-    existing = await get_user_from_username(user.username)
+    existing = await _resolve_existing(user, tg)
     if existing and existing.get("uuid"):
         squads = {s.lower() for s in existing.get("active_squads", [])}
         is_free = bool(free_squad and free_squad.lower() in squads)
@@ -153,17 +196,52 @@ async def free_claim(tg: TgUser = Depends(get_tg_user)) -> ClaimResponse:
             days=days,
         )
 
-    created = await create_user(
-        username=user.username,
-        days=days,
-        limit_gb=limit_gb,
-        descr="Free trial via miniapp",
-        email=f"{user.username}@miniapp.xyz",
-        telegram_id=tg.tg_id,
-        squad_id=free_squad,
-    )
+    async with async_session() as session:
+        start = await _repo_subscriptions.count_for_user(session, user.id)
+    marker = f"provisioning:free:{user.id}"
+    created = None
+    for ordinal in range(start, start + 100):
+        candidate = build_remnawave_username(user.username, user.id, ordinal)
+        occupied = await get_user_from_username(candidate)
+        if occupied:
+            if marker in str(occupied.get("description") or ""):
+                created = occupied
+                break
+            continue
+        try:
+            created = await create_user(
+                username=candidate,
+                days=days,
+                limit_gb=limit_gb,
+                descr=(
+                    f"{marker}; db_user_id:{user.id}; tg_id:{tg.tg_id}; "
+                    f"source:miniapp; tg_username:{user.username or 'none'}; "
+                    "Free trial via miniapp"
+                ),
+                email=f"{candidate}@miniapp.xyz",
+                telegram_id=tg.tg_id,
+                squad_id=free_squad,
+            )
+        except Exception:
+            appeared = await get_user_from_username(candidate)
+            if appeared and marker in str(appeared.get("description") or ""):
+                created = appeared
+            elif appeared:
+                continue
+            else:
+                raise
+        appeared = await get_user_from_username(candidate)
+        if appeared:
+            if marker in str(appeared.get("description") or ""):
+                created = appeared
+                break
+            created = None
+            continue
+        if not created:
+            return ClaimResponse(ok=False, detail="create_failed")
+        break
     if not created:
-        return ClaimResponse(ok=False, detail="create_failed")
+        return ClaimResponse(ok=False, detail="rw_username_allocation_failed")
     await _persist_rw_uuid(user, created)
     return ClaimResponse(
         ok=True,
@@ -180,7 +258,8 @@ async def telemt_claim(tg: TgUser = Depends(get_tg_user)) -> TelemtClaimResponse
     if not subscribed:
         return TelemtClaimResponse(ok=False, detail="not subscribed")
 
-    existing = await get_telemt_user(user.username)
+    telemt_username = user.username or f"user_{user.id}"
+    existing = await get_telemt_user(telemt_username)
     if existing:
         link = first_link(existing.get("links"))
         return TelemtClaimResponse(ok=True, link=link, detail="already_active")
@@ -200,7 +279,7 @@ async def telemt_claim(tg: TgUser = Depends(get_tg_user)) -> TelemtClaimResponse
 
     try:
         created = await create_telemt_user(
-            username=user.username,
+            username=telemt_username,
             expire_days=expire_days,
             max_tcp_conns=max_tcp,
             max_unique_ips=max_ips,

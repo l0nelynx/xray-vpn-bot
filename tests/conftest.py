@@ -61,15 +61,24 @@ class FakeRemnawave:
                  data_limit=None, email: str | None = None,
                  username: str | None = None,
                  subscription_url: str | None = None,
-                 short_uuid: str | None = None) -> None:
+                 short_uuid: str | None = None,
+                 rw_id: int | None = None,
+                 telegram_id: int | None = None,
+                 description: str | None = None,
+                 tag: str | None = None) -> None:
+        rw_id = rw_id if rw_id is not None else len(self.by_uuid) + 1
         rec = {
             "uuid": uuid,
+            "rw_id": rw_id,
             "status": status,
             "data_limit": data_limit,
             "email": email,
             "username": username,
             "subscription_url": subscription_url,
             "short_uuid": short_uuid,
+            "telegram_id": telegram_id,
+            "description": description,
+            "tag": tag,
         }
         self.by_uuid[uuid] = rec
         if email:
@@ -89,6 +98,12 @@ class FakeRemnawave:
 
     async def get_user_from_uuid(self, uuid: str):
         return self.by_uuid.get(uuid)
+
+    async def get_user_from_id(self, rw_id: int):
+        return next(
+            (record for record in self.by_uuid.values() if record.get("rw_id") == rw_id),
+            None,
+        )
 
     async def get_user_by_short_uuid_raw(self, short_uuid: str):
         uuid = self.by_short_uuid.get(short_uuid)
@@ -118,6 +133,7 @@ def fake_remnawave(monkeypatch) -> FakeRemnawave:
     monkeypatch.setattr(rem, "get_user_from_email", fake.get_user_from_email)
     monkeypatch.setattr(rem, "get_user_from_username", fake.get_user_from_username)
     monkeypatch.setattr(rem, "get_user_from_uuid", fake.get_user_from_uuid)
+    monkeypatch.setattr(rem, "get_user_from_id", fake.get_user_from_id)
     monkeypatch.setattr(rem, "get_user_by_short_uuid_raw",
                         fake.get_user_by_short_uuid_raw)
     monkeypatch.setattr(rem, "update_user", fake.update_user)

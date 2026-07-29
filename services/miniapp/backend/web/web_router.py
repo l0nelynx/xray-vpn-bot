@@ -58,7 +58,6 @@ from ..database.models import Transaction
 from ..config import get_bot_token, get_config, get_tg_client_secret
 from payments.rub_pricing import get_rub_rates_for_currencies
 from ..notify_log import esc, notify_log, notify_web
-from remnawave_client.api import get_user_from_username as _rw_get_by_username
 from payments import (
     InvoiceRequest,
     PaymentError,
@@ -593,8 +592,9 @@ async def web_invoice(
                 remnawave_description=invoice_data["remnawave_description"],
                 remnawave_tag=invoice_data["remnawave_tag"],
                 user_id=user.id,
-                android_user_id=user.id,
+                android_user_id=None,
                 target_rw_id=target_rw_id,
+                purchase_source="web",
             )
         )
         await session.commit()
@@ -658,7 +658,8 @@ async def web_pay_credits(
         days=days,
         tariff_slug=invoice_data["tariff_slug"],
         delivery_target=invoice_data,
-        android_user_id=user.id if user.tg_id is None else None,
+        android_user_id=None,
+        purchase_source="web",
         email=user.email,
         referral_tg_id=_promo_tg_id(user),
         target_rw_id=target_rw_id,
@@ -818,31 +819,6 @@ async def telegram_auth_exchange(
         if user:
             logger.info("Telegram OIDC: found user_id=%s by tg_id=%s", user.id, tg_id)
 
-    # ── 2. Fallback: Telegram @username (case-insensitive) in users.username.
-    #       Covers web-portal users whose tg_id column is still NULL.
-    if user is None and tg_username:
-        user = await android_repo.find_user_by_username_ci(tg_username)
-        if user:
-            logger.info(
-                "Telegram OIDC: found user_id=%s by @username=%s", user.id, tg_username
-            )
-
-    # ── 3. Last resort: Remnawave lookup by @username → vless_uuid → users row.
-    if user is None and tg_username:
-        try:
-            _rw = await _rw_get_by_username(tg_username)
-        except Exception:
-            _rw = None
-        if _rw:
-            _uuid = _rw.get("uuid")
-            if _uuid:
-                user = await android_repo.find_user_by_vless_uuid(_uuid)
-                if user:
-                    logger.info(
-                        "Telegram OIDC: found user_id=%s via Remnawave uuid=%s",
-                        user.id, _uuid,
-                    )
-
     if user is None:
         logger.warning(
             "Telegram OIDC: no user found — tg_id=%s username=%s",
@@ -858,14 +834,6 @@ async def telegram_auth_exchange(
             status.HTTP_403_FORBIDDEN,
             detail={"code": "banned"},
         )
-
-    # Fallback paths 2/3 find the user by username/Remnawave-uuid without
-    # tg_id being set on the row yet — persist the link now. Telegram's own
-    # OIDC signature already proves ownership of this tg_id, so this is safe;
-    # never overwrite an existing link (path 1 already handles that case).
-    if tg_id is not None and user.tg_id is None:
-        await android_repo.set_user_tg_id(user.id, tg_id)
-        user.tg_id = tg_id
 
     if user.email_verified_at is None:
         await android_repo.mark_email_verified(user.id)

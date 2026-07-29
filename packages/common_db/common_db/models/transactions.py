@@ -42,6 +42,13 @@ class Transaction(Base):
     remnawave_description: Mapped[str] = mapped_column(Text, nullable=True)
     remnawave_tag: Mapped[str] = mapped_column(String(16), nullable=True)
     provider_invoice_id: Mapped[str] = mapped_column(String(100), nullable=True)
+    purchase_source: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="legacy_unknown",
+        server_default="legacy_unknown",
+    )
+    delivery_error: Mapped[str] = mapped_column(String(255), nullable=True)
 
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
 
@@ -59,4 +66,5 @@ class Transaction(Base):
         Index("ix_transactions_android_user_id", "android_user_id"),
         Index("ix_transactions_provider_invoice_id", "provider_invoice_id"),
         Index("ix_transactions_target_rw_id", "target_rw_id"),
+        Index("ix_transactions_purchase_source", "purchase_source"),
     )

@@ -179,6 +179,7 @@ async def deliver_subscription(
             result = await _handle_new_user(
                 message, username, user_id, days, data_limit, reset_strategy, subscription_type, lang,
                 tariff_squad=tariff_squad, delivery_target=delivery_target,
+                transaction_id=transaction_id,
             )
         elif scenario == SubscriptionScenario.EXTEND:
             result = await _handle_extend_subscription(
@@ -191,6 +192,7 @@ async def deliver_subscription(
                 message, username, user_id, days, data_limit, reset_strategy, subscription_type, lang,
                 tariff_squad=tariff_squad, account_uuid=account_uuid,
                 delivery_target=delivery_target,
+                user_info=user_info,
             )
         elif scenario == SubscriptionScenario.LIMITED:
             result = await _handle_limited(message, username, subscription_type, lang, user_info=user_info)
@@ -263,11 +265,17 @@ async def _handle_new_user(
     lang=None,
     tariff_squad: Optional[dict] = None,
     delivery_target: Optional[dict] = None,
+    transaction_id: str | None = None,
 ) -> dict:
     """Handle new user subscription creation"""
     # Lazy import to avoid circular dependency
     from app.handlers.tools import get_user_days
     import app.database.requests as rq
+    from app.database.models import async_session
+    from common_db.repo import subscriptions as repo_subscriptions
+    from common_db.repo import users as repo_users
+    from remnawave_client import api as rem_api
+    from subscription_delivery import build_remnawave_username
     if subscription_type == SubscriptionType.FREE:
         squad_id = secrets.get("rw_free_id")
         external_squad_id = secrets.get("rw_ext_free_id")
@@ -275,22 +283,75 @@ async def _handle_new_user(
         squad_id = tariff_squad["squad_id"] if tariff_squad else secrets.get("rw_pro_id")
         external_squad_id = tariff_squad["external_squad_id"] if tariff_squad else secrets.get("rw_ext_pro_id")
     paid_target = delivery_target if subscription_type == SubscriptionType.PAID else None
-    buyer_info = await apply_new_user(
-        username=username,
-        telegram_id=user_id,
-        days=days,
-        limit_gb=data_limit,
-        email=f"{username}@marzban.ru",
-        description=(paid_target or {}).get("remnawave_description") or "Telegram subscription",
-        squad_id=squad_id,
-        internal_squad_ids=(paid_target or {}).get("internal_squad_ids"),
-        external_squad_id=external_squad_id,
-        traffic_limit_bytes=(paid_target or {}).get("traffic_limit_bytes"),
-        traffic_limit_strategy=(paid_target or {}).get("traffic_limit_strategy"),
-        tag=(paid_target or {}).get("remnawave_tag"),
-    )
+    async with async_session() as session:
+        local_user = await repo_users.get_user_by_tg_id(session, user_id)
+        if local_user is None:
+            raise ValueError("local_user_not_found")
+        start = await repo_subscriptions.count_for_user(session, local_user.id)
+        db_user_id = local_user.id
+    marker_value = transaction_id or f"free:{db_user_id}"
+    marker = f"provisioning:{marker_value}"
+    buyer_info = None
+    for ordinal in range(start, start + 100):
+        candidate = build_remnawave_username(username, db_user_id, ordinal)
+        occupied = await rem_api.get_user_from_username(candidate)
+        if occupied:
+            if marker in str(occupied.get("description") or ""):
+                buyer_info = occupied
+                break
+            continue
+        description = (
+            f"{marker}; db_user_id:{db_user_id}; tg_id:{user_id}; source:bot; "
+            f"tg_username:{username or 'none'}; "
+            f"{(paid_target or {}).get('remnawave_description') or 'Telegram subscription'}"
+        )
+        try:
+            buyer_info = await apply_new_user(
+                username=candidate,
+                telegram_id=user_id,
+                days=days,
+                limit_gb=data_limit,
+                email=f"{candidate}@telegram.user",
+                description=description,
+                squad_id=squad_id,
+                internal_squad_ids=(paid_target or {}).get("internal_squad_ids"),
+                external_squad_id=external_squad_id,
+                traffic_limit_bytes=(paid_target or {}).get("traffic_limit_bytes"),
+                traffic_limit_strategy=(paid_target or {}).get("traffic_limit_strategy"),
+                tag=(paid_target or {}).get("remnawave_tag"),
+            )
+        except Exception:
+            appeared = await rem_api.get_user_from_username(candidate)
+            if appeared and marker in str(appeared.get("description") or ""):
+                buyer_info = appeared
+            elif appeared:
+                continue
+            else:
+                raise
+        appeared = await rem_api.get_user_from_username(candidate)
+        if appeared:
+            if marker in str(appeared.get("description") or ""):
+                buyer_info = appeared
+                break
+            buyer_info = None
+            continue
+        if not buyer_info:
+            raise RuntimeError("remnawave_create_failed")
+        break
 
-    if buyer_info and buyer_info.get("uuid"):
+    if not buyer_info or buyer_info.get("rw_id") is None:
+        raise RuntimeError("rw_username_allocation_failed")
+
+    async with async_session() as session:
+        link = await repo_subscriptions.attach(
+            session,
+            user_id=db_user_id,
+            rw_id=int(buyer_info["rw_id"]),
+            source=f"{subscription_type.value.lower()}_bot",
+        )
+        await session.commit()
+
+    if buyer_info and buyer_info.get("uuid") and link.is_primary:
         await rq.update_user_api_info(
             tg_id=user_id,
             username=username,
@@ -321,10 +382,10 @@ async def _handle_extend_subscription(
     days: int,
     subscription_type: SubscriptionType,
     lang=None,
-    user_info: dict = None,
     tariff_squad: Optional[dict] = None,
     account_uuid: Optional[str] = None,
     delivery_target: Optional[dict] = None,
+    user_info: dict | None = None,
 ) -> dict:
     """Handle existing subscription extension"""
     # Lazy import to avoid circular dependency
@@ -369,7 +430,7 @@ async def _handle_extend_subscription(
     if subscription_type == SubscriptionType.FREE:
         buyer_info = await apply_update(
             user_uuid=target_uuid,
-            username=username,
+            username=user_info.get("username") or username,
             days=new_expire_days,
             limit_gb=0,
             squad_id=squad_id,
@@ -379,7 +440,7 @@ async def _handle_extend_subscription(
     else:
         buyer_info = await apply_extend(
             user_uuid=target_uuid,
-            username=username,
+            username=user_info.get("username") or username,
             days=days_for_apply,
             current_days_left=current_days_left,
             squad_id=squad_id,
@@ -453,9 +514,9 @@ async def _handle_update_subscription(
         target_uuid = (db_user or {}).get("vless_uuid")
     if not target_uuid:
         from app.handlers.tools import get_user_info
-        rw_info = await get_user_info(username)
-        if rw_info != 404:
-            target_uuid = rw_info.get("uuid")
+        user_info = await get_user_info(username)
+        if user_info != 404:
+            target_uuid = user_info.get("uuid")
     if not target_uuid:
         logging.warning(f"User {username} not found in DB for update")
         return {"days": 0, "link": None}
@@ -470,7 +531,7 @@ async def _handle_update_subscription(
 
     buyer_info = await apply_update(
         user_uuid=target_uuid,
-        username=username,
+        username=(user_info or {}).get("username") or username,
         days=days,
         limit_gb=data_limit,
         squad_id=squad_id,

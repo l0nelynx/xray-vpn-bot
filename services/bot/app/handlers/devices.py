@@ -4,7 +4,6 @@ from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 
-import app.database.requests as rq
 from remnawave_client import api as rem
 from app.locale.utils import get_user_lang
 
@@ -16,31 +15,11 @@ DEVICES_PER_PAGE = 5
 
 
 async def _get_user_uuid(tg_id: int, username: str) -> str | None:
-    """Получает vless_uuid пользователя из БД, при отсутствии пытается найти по email в RemnaWave."""
-    user_info = await rq.get_full_username_info(username)
-    if user_info and user_info.get("vless_uuid"):
-        return user_info["vless_uuid"]
+    """Resolve through stable local ownership; never trust username alone."""
+    from app.handlers.tools import resolve_remnawave_account
 
-    # uuid нет — пробуем найти пользователя в RemnaWave по email, затем по username
-    rw_user = None
-    email = await rq.get_user_email(tg_id)
-    if email:
-        rw_user = await rem.get_user_from_email(email)
-    if not rw_user:
-        rw_user = await rem.get_user_from_username(username)
-
-    if rw_user and rw_user.get("uuid"):
-        await rq.update_user_api_info(
-            tg_id=tg_id,
-            username=username,
-            vless_uuid=rw_user["uuid"],
-            api_provider="remnawave",
-            rw_id=rw_user.get("rw_id"),
-        )
-        logger.info("Resolved and saved uuid for user %s (tg_id=%s)", username, tg_id)
-        return rw_user["uuid"]
-
-    return None
+    rw_uuid, _ = await resolve_remnawave_account(tg_id, username)
+    return rw_uuid
 
 
 def _build_devices_keyboard(devices: list, lang, page: int = 0) -> InlineKeyboardMarkup:

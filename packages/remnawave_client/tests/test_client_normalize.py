@@ -32,7 +32,13 @@ def test_normalize_user_includes_rw_id() -> None:
         active_internal_squads=None,
         email="u@example.com",
         telegram_id=123,
+        username="user01_42",
+        description="provisioning:tx-1",
+        tag="PAID",
     )
     normalized = _normalize_user(user)
     assert normalized["uuid"] == "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
     assert normalized["rw_id"] == 777
+    assert normalized["username"] == "user01_42"
+    assert normalized["description"] == "provisioning:tx-1"
+    assert normalized["tag"] == "PAID"

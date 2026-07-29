@@ -259,7 +259,8 @@ async def create_transaction(user_tg_id: int, user_transaction: str, username: s
                              traffic_limit_bytes: int = 0,
                              traffic_limit_strategy: str = "NO_RESET",
                              remnawave_description: str | None = None,
-                             remnawave_tag: str | None = None):
+                             remnawave_tag: str | None = None,
+                             purchase_source: str = "bot"):
     async with async_session() as session:
         # Находим пользователя по tg_id
         user = await _repo_users.get_user_by_tg_id(session, user_tg_id)
@@ -278,6 +279,7 @@ async def create_transaction(user_tg_id: int, user_transaction: str, username: s
                 amount=amount,
                 created_at=datetime.now().isoformat(timespec='seconds'),
                 provider_invoice_id=provider_invoice_id,
+                purchase_source=purchase_source,
                 squad_id=squad_id,
                 internal_squad_ids=internal_squad_ids or ([squad_id] if squad_id else None),
                 external_squad_id=external_squad_id,
@@ -328,12 +330,15 @@ async def get_full_transaction_info(transaction_id: str):
                 "transaction_id": transaction.transaction_id,
                 "vless_uuid": transaction.vless_uuid,
                 "username": transaction.username,
+                "user_username": user.username,
                 "status": transaction.order_status,
                 "user_tg_id": user.tg_id,
                 "user_db_id": user.id,
                 "user_email": user.email,
                 "android_user_id": transaction.android_user_id,
                 "target_rw_id": transaction.target_rw_id,
+                "purchase_source": transaction.purchase_source,
+                "delivery_error": transaction.delivery_error,
                 "days_ordered": transaction.days_ordered,
                 "payment_method": transaction.payment_method,
                 "amount": transaction.amount,
@@ -918,6 +923,8 @@ async def get_free_non_vip_remnawave_users() -> list[dict]:
                 "tg_id": u.tg_id,
                 "username": u.username,
                 "vless_uuid": u.vless_uuid,
+                "rw_id": u.rw_id,
+                "email": u.email,
             }
             for u in users
         ]

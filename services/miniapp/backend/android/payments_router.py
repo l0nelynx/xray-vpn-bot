@@ -383,6 +383,7 @@ async def create_payment_invoice(
                 user_id=user.id,
                 android_user_id=user.id,
                 target_rw_id=target_rw_id,
+                purchase_source="android",
             )
         )
         await session.commit()
@@ -522,7 +523,8 @@ async def android_pay_credits(
         days=days,
         tariff_slug=invoice_data["tariff_slug"],
         delivery_target=invoice_data,
-        android_user_id=user.id if user.tg_id is None else None,
+        android_user_id=user.id,
+        purchase_source="android",
         email=user.email,
         referral_tg_id=promo_tg,
         target_rw_id=target_rw_id,

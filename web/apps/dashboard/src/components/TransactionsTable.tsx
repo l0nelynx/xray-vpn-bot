@@ -30,6 +30,7 @@ const SORT_OPTIONS = [
   { value: "username", label: "Username" },
   { value: "user_tg_id", label: "TG ID" },
   { value: "payment_method", label: "Method" },
+  { value: "purchase_source", label: "Source" },
   { value: "order_status", label: "Status" },
   { value: "days_ordered", label: "Days" },
   { value: "expire_date", label: "Expires" },
@@ -45,6 +46,7 @@ export default function TransactionsTable() {
   const [perPage] = useState(20);
   const [status, setStatus] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("");
+  const [source, setSource] = useState("");
   const [dateRange, setDateRange] = useState<[string, string]>(["", ""]);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("created_at");
@@ -65,6 +67,7 @@ export default function TransactionsTable() {
       let url = `/transactions?page=${page}&per_page=${perPage}&sort=${sort}&order=${order}`;
       if (status) url += `&status=${status}`;
       if (paymentMethod) url += `&payment_method=${encodeURIComponent(paymentMethod)}`;
+      if (source) url += `&source=${encodeURIComponent(source)}`;
       if (dateRange[0]) url += `&date_from=${dateRange[0]}`;
       if (dateRange[1]) url += `&date_to=${dateRange[1]}`;
       if (debouncedSearch) url += `&search=${encodeURIComponent(debouncedSearch)}`;
@@ -78,7 +81,7 @@ export default function TransactionsTable() {
     } finally {
       setLoading(false);
     }
-  }, [page, perPage, status, paymentMethod, dateRange, debouncedSearch, sort, order]);
+  }, [page, perPage, status, paymentMethod, source, dateRange, debouncedSearch, sort, order]);
 
   useEffect(() => {
     fetchData();
@@ -137,10 +140,26 @@ export default function TransactionsTable() {
       cell: ({ row }) => row.original.payment_method || "—",
     },
     {
+      id: "purchase_source",
+      header: "Source",
+      accessorKey: "purchase_source",
+      meta: { sortKey: "purchase_source", width: 100 },
+    },
+    {
       id: "amount",
       header: "Amount",
       meta: { sortKey: "amount", width: 90 },
       cell: ({ row }) => row.original.amount ?? "—",
+    },
+    {
+      id: "delivery_error",
+      header: "Delivery error",
+      meta: { width: 160 },
+      cell: ({ row }) => (
+        <span className="block max-w-[160px] truncate" title={row.original.delivery_error || ""}>
+          {row.original.delivery_error || "—"}
+        </span>
+      ),
     },
     {
       id: "order_status",
@@ -177,13 +196,16 @@ export default function TransactionsTable() {
           </span>
         </div>
         <div className="mb-0.5 text-xs text-muted-foreground">
-          {tx.username || "—"} · {tx.payment_method || "—"}
+          {tx.username || "—"} · {tx.payment_method || "—"} · {tx.purchase_source}
         </div>
         <div className="mb-0.5 text-[11px] text-muted-foreground/70">
           {tx.days_ordered}d · {tx.created_at || "—"}
         </div>
         {tx.expire_date && (
           <div className="text-[11px] text-muted-foreground/70">Expires: {tx.expire_date}</div>
+        )}
+        {tx.delivery_error && (
+          <div className="text-[11px] text-destructive">Error: {tx.delivery_error}</div>
         )}
         <div className="mt-1 truncate text-[10px] text-muted-foreground/50">{tx.transaction_id}</div>
       </CardContent>
@@ -221,6 +243,25 @@ export default function TransactionsTable() {
             <SelectItem value="confirmed">Confirmed</SelectItem>
             <SelectItem value="delivered">Delivered</SelectItem>
             <SelectItem value="failed">Failed</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select
+          value={source || ALL}
+          onValueChange={(v: string) => {
+            setSource(v === ALL ? "" : v);
+            setPage(1);
+          }}
+        >
+          <SelectTrigger className="w-[calc(50%-4px)] md:w-[140px]">
+            <SelectValue placeholder="Source" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>All sources</SelectItem>
+            <SelectItem value="bot">Bot</SelectItem>
+            <SelectItem value="miniapp">MiniApp</SelectItem>
+            <SelectItem value="android">Android</SelectItem>
+            <SelectItem value="web">Web</SelectItem>
+            <SelectItem value="legacy_unknown">Legacy</SelectItem>
           </SelectContent>
         </Select>
         <Select
@@ -302,7 +343,7 @@ export default function TransactionsTable() {
             sort={sort}
             order={order}
             onSortChange={onSortChange}
-            minWidth={1060}
+            minWidth={1320}
           />
           <TablePagination page={page} perPage={perPage} total={total} onPageChange={setPage} />
         </>

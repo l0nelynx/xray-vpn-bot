@@ -120,6 +120,9 @@ def _normalize_user(user: UserResponseDto) -> dict:
         "active_squads": active_squads,
         "email": getattr(user, "email", None),
         "telegram_id": getattr(user, "telegram_id", None),
+        "username": getattr(user, "username", None),
+        "description": getattr(user, "description", None),
+        "tag": getattr(user, "tag", None),
     }
 
 
@@ -429,6 +432,10 @@ class RemnawaveClient:
                 "subscription_url": response.subscription_url,
                 "status": "active",
                 "email": response.email,
+                "telegram_id": getattr(response, "telegram_id", None),
+                "username": getattr(response, "username", username),
+                "description": getattr(response, "description", descr),
+                "tag": getattr(response, "tag", tag),
             }
         except Exception as e:
             logger.error("Remnawave create_user(%s) failed: %s", username, e)

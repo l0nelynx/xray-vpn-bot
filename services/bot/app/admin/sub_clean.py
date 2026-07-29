@@ -50,14 +50,18 @@ async def admin_sub_clean_scan(message: Message):
             )
             if not is_subscribed:
                 # Get current status from RemnaWave
-                rw_user = None
-                if user.get("username"):
-                    rw_user = await rem.get_user_from_username(user["username"])
+                rw_user = await rem.resolve_remnawave_user(
+                    rw_id=user.get("rw_id"),
+                    vless_uuid=user.get("vless_uuid"),
+                    email=user.get("email"),
+                    username=user.get("username"),
+                    expected_telegram_id=user.get("tg_id"),
+                )
                 if rw_user and rw_user.get("status") != "disabled":
                     to_disable.append({
                         "tg_id": user["tg_id"],
                         "username": user["username"],
-                        "vless_uuid": user["vless_uuid"],
+                        "vless_uuid": rw_user.get("uuid"),
                         "current_status": rw_user["status"],
                     })
         except Exception as e:

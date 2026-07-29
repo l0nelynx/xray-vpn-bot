@@ -139,14 +139,15 @@ class TestDecide:
             android_id=self.A_ID, tg_user_id=self.T_ID,
         )
 
-    def test_pro_vs_pro_blocks(self):
-        with pytest.raises(MergeBlocked):
-            self._call("pro", "pro")
+    def test_pro_vs_pro_keeps_tg_and_both_profiles(self):
+        assert self._call("pro", "pro") == (
+            self.T_ID, self.A_ID, self.T_UUID, "merged_pro",
+        )
 
     def test_pro_vs_free_keeps_android(self):
         survivor, loser, uuid, code = self._call("pro", "free")
         assert (survivor, loser, uuid, code) == (
-            self.A_ID, self.T_ID, self.A_UUID, "merged_pro",
+            self.T_ID, self.A_ID, self.A_UUID, "merged_pro",
         )
 
     def test_free_vs_pro_keeps_tg(self):
@@ -172,7 +173,7 @@ class TestDecide:
     def test_pro_vs_none_keeps_android(self):
         survivor, loser, uuid, code = self._call("pro", "none", t_uuid=None)
         assert (survivor, loser, uuid, code) == (
-            self.A_ID, self.T_ID, self.A_UUID, "ok",
+            self.T_ID, self.A_ID, self.A_UUID, "ok",
         )
 
     def test_none_vs_pro_keeps_tg(self):
@@ -192,7 +193,7 @@ class TestDecide:
 
 import asyncio as _asyncio
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from common_db.models import User
 from account_linking import _apply_merge_db
 
@@ -221,6 +222,62 @@ class TestApplyMergeDb:
                 assert survivor.vless_uuid == "kept-uuid"
 
         _asyncio.run(go())
+
+    @pytest.mark.parametrize(
+        ("survivor_primary", "loser_primary", "expected_rw_id"),
+        [(True, True, 22), (False, True, 11), (False, False, 11)],
+    )
+    def test_preserves_subscriptions_primary_and_sums_credits(
+        self, session_factory, survivor_primary, loser_primary, expected_rw_id,
+    ):
+        async def go():
+            from common_db.models import UserSubscription
+
+            async with session_factory() as s:
+                s.add(User(id=100, email="a@x.io", bonus_credits=7))
+                s.add(User(id=200, tg_id=55, bonus_credits=5))
+                s.add(UserSubscription(
+                    user_id=100, rw_id=11, source="android",
+                    is_primary=loser_primary, created_at="2026-01-01", updated_at="2026-01-01",
+                ))
+                s.add(UserSubscription(
+                    user_id=200, rw_id=22, source="telegram",
+                    is_primary=survivor_primary, created_at="2026-02-01", updated_at="2026-02-01",
+                ))
+                await s.flush()
+                await _apply_merge_db(
+                    session=s, survivor_id=200, loser_id=100,
+                    tg_id=55, chosen_uuid="fallback-uuid",
+                )
+                survivor = await s.get(User, 200)
+                rows = (await s.execute(text(
+                    "SELECT rw_id, is_primary FROM user_subscriptions "
+                    "WHERE user_id = 200 ORDER BY id"
+                ))).all()
+                return survivor, rows
+
+        survivor, rows = _asyncio.run(go())
+        assert survivor.bonus_credits == 12
+        assert survivor.rw_id == expected_rw_id
+        assert len(rows) == 2
+        assert sum(bool(row.is_primary) for row in rows) == 1
+
+    def test_user_owned_table_metadata_is_fully_covered(self):
+        from common_db import Base
+        from account_linking.merge import _all_user_owned_tables
+
+        modeled = {
+            table.name
+            for table in Base.metadata.tables.values()
+            if "user_id" in table.c
+            and any(fk.target_fullname == "users.id" for fk in table.c.user_id.foreign_keys)
+        }
+        covered = set(_all_user_owned_tables()) | {"user_subscriptions"}
+        assert modeled <= covered
+        assert {
+            "credit_ledger", "android_fcm_tokens", "push_campaign_deliveries",
+            "web_authorization_codes", "subscription_transfers",
+        } <= covered
 
     def test_reparents_transactions_and_email_verifications(self, session_factory):
         async def go():
@@ -286,13 +343,13 @@ class TestMergeAndroidAndTg:
 
         result = _asyncio.run(go())
         assert result["result"] == "merged_pro"
-        assert result["survivor_id"] == 100
-        assert result["loser_id"] == 200
-        assert result["loser_rw_uuid"] == "t-uuid"
+        assert result["survivor_id"] == 200
+        assert result["loser_id"] == 100
+        assert result["loser_rw_uuid"] is None
         assert result["a_tier"] == "pro"
         assert result["t_tier"] == "free"
 
-    def test_both_pro_raises_merge_blocked(
+    def test_both_pro_merges_and_preserves_both(
         self, session_factory, fake_remnawave,
     ):
         fake_remnawave.add_user(uuid="a-uuid", email="a@x.io",
@@ -304,12 +361,20 @@ class TestMergeAndroidAndTg:
             async with session_factory() as s:
                 self._seed(s)
                 await s.flush()
-                await merge_android_and_tg(
+                result = await merge_android_and_tg(
                     s, android_user_id=100, tg_user_id=200, tg_id=55,
                 )
+                await s.commit()
+                count = await s.scalar(text(
+                    "SELECT COUNT(*) FROM user_subscriptions WHERE user_id = 200"
+                ))
+                return result, count
 
-        with pytest.raises(MergeBlocked):
-            _asyncio.run(go())
+        result, count = _asyncio.run(go())
+        assert result["result"] == "merged_pro"
+        assert result["survivor_id"] == 200
+        assert result["loser_rw_uuid"] is None
+        assert count == 2
 
     def test_free_vs_free_keeps_tg(
         self, session_factory, fake_remnawave,
@@ -358,7 +423,7 @@ class TestMergeAndroidAndTg:
 
         result, vless_uuid, tg = _asyncio.run(go())
         assert result["result"] == "ok"
-        assert result["survivor_id"] == 100  # Android side
+        assert result["survivor_id"] == 200  # Telegram row always survives
         assert vless_uuid == "a-uuid"
         assert tg == 55
 
@@ -400,20 +465,20 @@ class TestConsumeCodeIntegration:
         result = _asyncio.run(consume_android_link_code(55, "plain-code"))
 
         assert result == "merged_pro"
-        assert "t-uuid" in fake_remnawave.disabled_calls
+        assert fake_remnawave.disabled_calls == []
         assert any("merged_pro" in m for m in notify_spy)
 
         async def verify():
             async with with_app_db() as s:
-                survivor = await s.get(User, 100)
-                loser = await s.get(User, 200)
+                survivor = await s.get(User, 200)
+                loser = await s.get(User, 100)
                 return survivor, loser
         survivor, loser = _asyncio.run(verify())
         assert loser is None
         assert survivor.tg_id == 55
-        assert survivor.vless_uuid == "a-uuid"
+        assert survivor.vless_uuid == "t-uuid"
 
-    def test_both_pro_blocked_no_db_changes(
+    def test_both_pro_merges_without_disabling_profiles(
         self, with_app_db, fake_remnawave, notify_spy,
     ):
         async def setup():
@@ -437,9 +502,9 @@ class TestConsumeCodeIntegration:
 
         result = _asyncio.run(consume_android_link_code(55, "plain-code"))
 
-        assert result == "both_pro_support_needed"
+        assert result == "merged_pro"
         assert fake_remnawave.disabled_calls == []
-        assert any("both_pro_support_needed" in m for m in notify_spy)
+        assert any("merged_pro" in m for m in notify_spy)
 
         async def verify():
             from common_db.models import EmailVerification
@@ -449,9 +514,8 @@ class TestConsumeCodeIntegration:
                 ev = await s.get(EmailVerification, 42)
                 return a, t, ev.used_at
         a, t, used_at = _asyncio.run(verify())
-        assert a is not None and t is not None
-        # NOT marked used — user can retry after support resolves it.
-        assert used_at is None
+        assert a is None and t is not None
+        assert used_at is not None
 
     def test_simple_link_no_conflict_notifies_ok(
         self, with_app_db, fake_remnawave, notify_spy,
@@ -519,7 +583,8 @@ class TestConsumeCodeIntegration:
 
         result = _asyncio.run(consume_android_link_code(55, "plain-code"))
         assert result == "merged_pro"
-        assert any("Failed to disable old RW user" in m for m in notify_spy)
+        assert fake_remnawave.disabled_calls == []
+        assert not any("Failed to disable old RW user" in m for m in notify_spy)
 
 
 class TestFakeRemnawaveShortUuid:
@@ -591,7 +656,7 @@ class TestImportSubscriptionByUuid:
         assert result["a_tier"] == "pro"
         assert result["b_tier"] == "free"
         assert result["chosen_uuid"] == "a-uuid"
-        assert result["loser_rw_uuid"] == "b-uuid"
+        assert result["loser_rw_uuid"] is None
         assert vless == "a-uuid"
 
     def test_free_a_pro_b_keeps_b_disables_a(
@@ -617,9 +682,9 @@ class TestImportSubscriptionByUuid:
         assert result["result"] == "merged_pro"
         assert result["a_tier"] == "free"
         assert result["b_tier"] == "pro"
-        assert result["chosen_uuid"] == "b-uuid"
-        assert result["loser_rw_uuid"] == "a-uuid"
-        assert vless == "b-uuid"
+        assert result["chosen_uuid"] == "a-uuid"
+        assert result["loser_rw_uuid"] is None
+        assert vless == "a-uuid"
 
     def test_free_a_free_b_keeps_b_disables_a(
         self, session_factory, fake_remnawave,
@@ -643,11 +708,11 @@ class TestImportSubscriptionByUuid:
             claimed_email="b@x.io",
         )
         assert result["result"] == "merged_free"
-        assert result["chosen_uuid"] == "b-uuid"
-        assert result["loser_rw_uuid"] == "a-uuid"
-        assert vless == "b-uuid"
+        assert result["chosen_uuid"] == "a-uuid"
+        assert result["loser_rw_uuid"] is None
+        assert vless == "a-uuid"
 
-    def test_pro_a_pro_b_raises_merge_blocked_no_writes(
+    def test_pro_a_pro_b_preserves_both_and_primary(
         self, session_factory, fake_remnawave,
     ):
         fake_remnawave.add_user(uuid="a-uuid", email="a@x.io",
@@ -664,17 +729,21 @@ class TestImportSubscriptionByUuid:
 
         async def go():
             async with session_factory() as s:
-                with pytest.raises(MergeBlocked):
-                    await import_subscription_by_uuid(
-                        s, current_user_id=100, b_rw_short_uuid=self.SHORT,
-                        claimed_email="b@x.io",
-                    )
-                # Verify nothing changed.
+                result = await import_subscription_by_uuid(
+                    s, current_user_id=100, b_rw_short_uuid=self.SHORT,
+                    claimed_email="b@x.io",
+                )
+                await s.commit()
                 survivor = await s.get(User, 100)
-                return survivor.vless_uuid
+                count = await s.scalar(text(
+                    "SELECT COUNT(*) FROM user_subscriptions WHERE user_id = 100"
+                ))
+                return result, survivor.vless_uuid, count
 
-        vless = _asyncio.run(go())
+        result, vless, count = _asyncio.run(go())
+        assert result["result"] == "merged_pro"
         assert vless == "a-uuid"
+        assert count == 2
         assert fake_remnawave.disabled_calls == []
 
     def test_a_none_b_free_simple_takeover(
@@ -801,7 +870,7 @@ class TestImportSubscriptionByUuid:
         )
         assert result["result"] == "merged_pro"
         assert result["chosen_uuid"] == "a-uuid"
-        assert result["loser_rw_uuid"] == "b-uuid"
+        assert result["loser_rw_uuid"] is None
         assert vless == "a-uuid"
 
     def test_email_mismatch_raises_lookup_not_found(

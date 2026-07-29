@@ -37,6 +37,7 @@ async def _lookup_rw(
     email: str | None,
     vless_uuid: str | None,
     username: str | None,
+    expected_telegram_id: int | None = None,
 ) -> tuple[dict | None, dict | None]:
     """Concurrently look up Android-side (by email) and TG-side
     (by uuid → fallback username) in Remnawave.
@@ -56,12 +57,19 @@ async def _lookup_rw(
             return None
 
     a_task = safe(rem.get_user_from_email(email)) if email else _none()
-    if vless_uuid:
-        t_task = safe(rem.get_user_from_uuid(vless_uuid))
-    elif username:
-        t_task = safe(rem.get_user_from_username(username))
-    else:
-        t_task = _none()
+    async def lookup_t():
+        if vless_uuid:
+            return await rem.get_user_from_uuid(vless_uuid)
+        if not username:
+            return None
+        match = await rem.get_user_from_username(username)
+        if match and expected_telegram_id is not None:
+            owner = match.get("telegram_id")
+            if owner is None or int(owner) != int(expected_telegram_id):
+                return None
+        return match
+
+    t_task = safe(lookup_t()) if (vless_uuid or username) else _none()
 
     a_info, t_info = await asyncio.gather(a_task, t_task)
     return a_info, t_info
@@ -114,9 +122,7 @@ async def _lookup_a_side_rw(
 
 
 class MergeBlocked(Exception):
-    """Raised when both sides hold an active PRO subscription — automatic
-    resolution would discard a paid subscription, so the caller must surface
-    a "contact support" message instead."""
+    """Legacy compatibility exception; safe multi-profile merge no longer raises it."""
 
     def __init__(self, details: dict[str, Any]):
         super().__init__("both_pro_support_needed")
@@ -135,17 +141,14 @@ def _decide(
     """Apply the resolution matrix.
 
     Returns (survivor_id, loser_id, chosen_uuid, result_code).
-    Raises MergeBlocked when both sides are PRO.
+    The Telegram row is always the survivor. Both PRO profiles are preserved.
     """
     if a_tier == "pro" and t_tier == "pro":
-        raise MergeBlocked({
-            "a_tier": "pro", "t_tier": "pro",
-            "a_rw_uuid": a_rw_uuid, "t_rw_uuid": t_rw_uuid,
-        })
+        return tg_user_id, android_id, t_rw_uuid or a_rw_uuid, "merged_pro"
 
     # PRO vs FREE — real merge: PRO wins, code = merged_pro
     if a_tier == "pro" and t_tier == "free":
-        return android_id, tg_user_id, a_rw_uuid, "merged_pro"
+        return tg_user_id, android_id, a_rw_uuid, "merged_pro"
     if t_tier == "pro" and a_tier == "free":
         return tg_user_id, android_id, t_rw_uuid, "merged_pro"
 
@@ -157,7 +160,7 @@ def _decide(
     # One side has an RW user (pro or free), the other is "none" → simple
     # link, survivor = the side with the RW user, code = ok
     if a_tier in ("pro", "free") and t_tier == "none":
-        return android_id, tg_user_id, a_rw_uuid, "ok"
+        return tg_user_id, android_id, a_rw_uuid, "ok"
     if t_tier in ("pro", "free") and a_tier == "none":
         return tg_user_id, android_id, t_rw_uuid, "ok"
 
@@ -172,7 +175,29 @@ _FK_TABLES_USER_ID = (
     "telegram_link_codes",
     "support_tickets",
     "google_play_purchases",
+    "web_authorization_codes",
+    "subscription_transfers",
+    "android_fcm_tokens",
+    "push_campaign_deliveries",
+    "credit_ledger",
 )
+
+
+def _all_user_owned_tables() -> tuple[str, ...]:
+    """Return every modeled users.id FK plus intentionally FK-less ledgers."""
+    from common_db import Base
+
+    tables = set(_FK_TABLES_USER_ID)
+    for table in Base.metadata.tables.values():
+        if "user_id" not in table.c:
+            continue
+        if any(
+            fk.target_fullname == "users.id"
+            for fk in table.c.user_id.foreign_keys
+        ):
+            tables.add(table.name)
+    tables.discard("user_subscriptions")  # handled with primary invariants
+    return tuple(sorted(tables))
 
 
 async def _apply_merge_db(
@@ -182,6 +207,7 @@ async def _apply_merge_db(
     loser_id: int,
     tg_id: int,
     chosen_uuid: str | None,
+    rw_uuid_by_id: dict[int, str] | None = None,
 ) -> None:
     """Copy loser fields onto survivor, reparent FK rows, then DELETE loser.
 
@@ -198,7 +224,11 @@ async def _apply_merge_db(
     loser_email = loser.email
     if loser_email:
         loser.email = None
-        await session.flush()
+    # users.rw_id is unique. Ownership is preserved in user_subscriptions,
+    # so release the loser's legacy projection before assigning the survivor.
+    loser.rw_id = None
+    loser.vless_uuid = None
+    await session.flush()
     if survivor.email in (None, "") and loser_email:
         survivor.email = loser_email
 
@@ -210,12 +240,63 @@ async def _apply_merge_db(
     _copy_if_empty(survivor, loser, "api_provider")
 
     survivor.vip = max(survivor.vip or 0, loser.vip or 0)
+    survivor.bonus_credits = int(survivor.bonus_credits or 0) + int(
+        loser.bonus_credits or 0
+    )
 
     survivor.tg_id = tg_id
-    if chosen_uuid is not None:
+    # Preserve all Remnawave profiles. Primary preference is survivor's
+    # existing primary, then loser's, then the oldest link.
+    subscriptions = (
+        await session.execute(
+            text(
+                "SELECT id, user_id, rw_id, is_primary, created_at "
+                "FROM user_subscriptions WHERE user_id IN (:s, :l) ORDER BY id"
+            ),
+            {"s": survivor_id, "l": loser_id},
+        )
+    ).mappings().all()
+    survivor_primary = next(
+        (row for row in subscriptions if row["user_id"] == survivor_id and row["is_primary"]),
+        None,
+    )
+    loser_primary = next(
+        (row for row in subscriptions if row["user_id"] == loser_id and row["is_primary"]),
+        None,
+    )
+    primary = survivor_primary or loser_primary or (subscriptions[0] if subscriptions else None)
+    if subscriptions:
+        await session.execute(
+            text(
+                "UPDATE user_subscriptions SET is_primary = false "
+                "WHERE user_id IN (:s, :l)"
+            ),
+            {"s": survivor_id, "l": loser_id},
+        )
+        await session.execute(
+            text("UPDATE user_subscriptions SET user_id = :s WHERE user_id = :l"),
+            {"s": survivor_id, "l": loser_id},
+        )
+        await session.execute(
+            text("UPDATE user_subscriptions SET is_primary = true WHERE id = :i"),
+            {"i": primary["id"]},
+        )
+        survivor.rw_id = int(primary["rw_id"])
+        primary_uuid = (rw_uuid_by_id or {}).get(survivor.rw_id)
+        if primary_uuid is None:
+            try:
+                from remnawave_client import api as rem
+
+                primary_info = await rem.get_user_from_id(survivor.rw_id)
+            except Exception as exc:
+                logger.warning("Failed to refresh primary UUID during merge: %s", exc)
+                primary_info = None
+            primary_uuid = (primary_info or {}).get("uuid")
+        survivor.vless_uuid = primary_uuid or chosen_uuid
+    elif chosen_uuid is not None:
         survivor.vless_uuid = chosen_uuid
 
-    for table in _FK_TABLES_USER_ID:
+    for table in _all_user_owned_tables():
         await session.execute(
             text(f"UPDATE {table} SET user_id = :s WHERE user_id = :l"),
             {"s": survivor_id, "l": loser_id},
@@ -245,8 +326,7 @@ async def merge_android_and_tg(
 ) -> dict[str, Any]:
     """Collapse the Android-side and Telegram-side ``users`` rows into one.
 
-    Caller owns the transaction — this function does NOT commit. On
-    :class:`MergeBlocked`, no DB writes have been made.
+    Caller owns the transaction — this function does NOT commit.
     """
     from common_db.models import User
 
@@ -260,11 +340,30 @@ async def merge_android_and_tg(
 
     a_info, t_info = await _lookup_rw(
         email=a.email, vless_uuid=t.vless_uuid, username=t.username,
+        expected_telegram_id=tg_id,
     )
     a_tier = _classify(a_info)
     t_tier = _classify(t_info)
     a_rw_uuid = (a_info or {}).get("uuid")
     t_rw_uuid = (t_info or {}).get("uuid")
+
+    # Backfill legacy single-profile ownership before collapsing the rows.
+    from common_db.repo import subscriptions as repo_subscriptions
+    for owner_id, info in ((android_user_id, a_info), (tg_user_id, t_info)):
+        rw_id = (info or {}).get("rw_id")
+        if rw_id is None:
+            continue
+        try:
+            await repo_subscriptions.attach(
+                session,
+                user_id=owner_id,
+                rw_id=int(rw_id),
+                source="account_merge_backfill",
+            )
+        except ValueError:
+            logger.warning(
+                "Merge backfill skipped rw_id=%s: already linked", rw_id
+            )
 
     survivor_id, loser_id, chosen_uuid, result_code = _decide(
         a_tier=a_tier, t_tier=t_tier,
@@ -272,12 +371,8 @@ async def merge_android_and_tg(
         android_id=android_user_id, tg_user_id=tg_user_id,
     )
 
-    # Loser's RW uuid is the one NOT chosen — caller deactivates it.
-    # None when we kept the loser-side uuid (FREE+FREE with T.uuid missing).
-    if survivor_id == android_user_id:
-        loser_rw_uuid = t_rw_uuid if chosen_uuid != t_rw_uuid else None
-    else:
-        loser_rw_uuid = a_rw_uuid if chosen_uuid != a_rw_uuid else None
+    # A merge never disables an external profile: every profile remains linked.
+    loser_rw_uuid = None
 
     await _apply_merge_db(
         session=session,
@@ -285,7 +380,14 @@ async def merge_android_and_tg(
         loser_id=loser_id,
         tg_id=tg_id,
         chosen_uuid=chosen_uuid,
+        rw_uuid_by_id={
+            int(info["rw_id"]): str(info["uuid"])
+            for info in (a_info, t_info)
+            if info and info.get("rw_id") is not None and info.get("uuid")
+        },
     )
+    survivor = await session.get(User, survivor_id)
+    primary_uuid = survivor.vless_uuid if survivor is not None else chosen_uuid
 
     logger.info(
         "merge_android_and_tg: survivor=%s loser=%s code=%s "
@@ -302,6 +404,7 @@ async def merge_android_and_tg(
         "t_tier": t_tier,
         "a_rw_uuid": a_rw_uuid,
         "t_rw_uuid": t_rw_uuid,
+        "chosen_uuid": primary_uuid,
     }
 
 
@@ -341,15 +444,13 @@ async def import_subscription_by_uuid(
       }
 
     Raises:
-      MergeBlocked    — both A and B are PRO. No writes performed.
       LookupNotFound  — RW returned no user for the short_uuid.
 
-    The caller commits the session. RW-side deactivation of the loser
-    uuid (if any) is the caller's responsibility too — this function
-    does not touch the Remnawave API beyond read lookups.
+    The caller commits the session. No Remnawave profile is disabled.
     """
     from remnawave_client import api as rem
     from common_db.models import User
+    from common_db.repo import subscriptions as repo_subscriptions
 
     a = await session.get(User, current_user_id)
     if a is None:
@@ -376,6 +477,13 @@ async def import_subscription_by_uuid(
 
     # Self-import: pasted own URL → no-op.
     if a.vless_uuid is not None and a.vless_uuid == b_rw_uuid:
+        if b_info.get("rw_id") is not None:
+            await repo_subscriptions.attach(
+                session,
+                user_id=current_user_id,
+                rw_id=int(b_info["rw_id"]),
+                source="import_self_backfill",
+            )
         tier = _classify(b_info)
         return {
             "result": "already_owned",
@@ -394,6 +502,19 @@ async def import_subscription_by_uuid(
     b_tier = _classify(b_info)
     a_rw_uuid = (a_info or {}).get("uuid")
 
+    # Preserve both subscriptions locally. Existing primary stays primary;
+    # when there is none, the first successfully attached profile becomes it.
+    for info, source in ((a_info, "import_existing"), (b_info, "import_by_url")):
+        rw_id = (info or {}).get("rw_id")
+        if rw_id is None:
+            continue
+        await repo_subscriptions.attach(
+            session,
+            user_id=current_user_id,
+            rw_id=int(rw_id),
+            source=source,
+        )
+
     # Map A → android-side, B → tg-side. survivor/loser ids are
     # meaningless (only one DB row); we use the caller's id for both
     # slots so _decide doesn't see None and stays consistent.
@@ -403,14 +524,20 @@ async def import_subscription_by_uuid(
         android_id=current_user_id, tg_user_id=current_user_id,
     )
 
-    if chosen_uuid == a_rw_uuid:
-        loser_rw_uuid = b_rw_uuid
-    elif chosen_uuid == b_rw_uuid:
-        loser_rw_uuid = a_rw_uuid  # may be None when A had no RW user
-    else:
-        loser_rw_uuid = None  # defensive — chosen should always match one
+    loser_rw_uuid = None
 
-    a.vless_uuid = chosen_uuid
+    primary = await repo_subscriptions.get_primary(session, current_user_id)
+    if primary is not None:
+        a.rw_id = primary.rw_id
+        if primary.rw_id == (a_info or {}).get("rw_id"):
+            a.vless_uuid = a_rw_uuid
+        elif primary.rw_id == b_info.get("rw_id"):
+            a.vless_uuid = b_rw_uuid
+        else:
+            a.vless_uuid = chosen_uuid
+        chosen_uuid = a.vless_uuid
+    else:
+        a.vless_uuid = chosen_uuid
     await session.flush()
 
     logger.info(

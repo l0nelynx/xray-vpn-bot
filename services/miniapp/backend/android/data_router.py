@@ -110,6 +110,7 @@ async def _resolve_remnawave_id(user: repo.UserRow) -> int | None:
         vless_uuid=user.vless_uuid,
         email=user.email,
         username=email_to_username(user.email) if user.email else None,
+        expected_telegram_id=user.tg_id,
     )
     if not rem_user:
         return None
@@ -139,6 +140,7 @@ async def get_me(
         vless_uuid=user.vless_uuid,
         email=user.email,
         username=email_to_username(user.email) if user.email else None,
+        expected_telegram_id=user.tg_id,
     )
 
     if not rem_user:

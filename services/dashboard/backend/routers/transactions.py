@@ -51,6 +51,8 @@ async def recent_transactions(
                 "days_ordered": t.days_ordered,
                 "created_at": t.created_at,
                 "expire_date": t.expire_date,
+                "purchase_source": t.purchase_source,
+                "delivery_error": t.delivery_error,
             }
             for t, tg_id, _ in rows
         ]
@@ -80,6 +82,8 @@ async def get_transaction(transaction_id: str, _: str = Depends(get_current_user
             "created_at": t.created_at,
             "days_ordered": t.days_ordered,
             "expire_date": t.expire_date,
+            "purchase_source": t.purchase_source,
+            "delivery_error": t.delivery_error,
         }
 
 
@@ -93,6 +97,7 @@ _TX_SORT_COLUMNS = {
     "days_ordered": Transaction.days_ordered,
     "created_at": Transaction.created_at,
     "expire_date": Transaction.expire_date,
+    "purchase_source": Transaction.purchase_source,
 }
 
 
@@ -102,6 +107,7 @@ async def list_transactions(
     per_page: int = Query(20, ge=1, le=100),
     status: str = Query(""),
     payment_method: str = Query(""),
+    source: str = Query(""),
     date_from: str = Query(""),
     date_to: str = Query(""),
     search: str = Query(""),
@@ -119,6 +125,8 @@ async def list_transactions(
             base = base.where(Transaction.order_status == status)
         if payment_method:
             base = base.where(Transaction.payment_method == payment_method)
+        if source:
+            base = base.where(Transaction.purchase_source == source)
         if date_from:
             base = base.where(Transaction.created_at >= date_from)
         if date_to:
@@ -159,6 +167,8 @@ async def list_transactions(
                 "days_ordered": t.days_ordered,
                 "created_at": t.created_at,
                 "expire_date": t.expire_date,
+                "purchase_source": t.purchase_source,
+                "delivery_error": t.delivery_error,
             }
             for t, tg_id in rows
         ]

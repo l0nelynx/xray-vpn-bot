@@ -39,6 +39,7 @@ class UserRow:
     language: str | None
     vless_uuid: str | None
     rw_id: int | None
+    username: str | None
 
 
 def _row_to_user(row) -> UserRow | None:
@@ -54,12 +55,14 @@ def _row_to_user(row) -> UserRow | None:
         language=row[6],
         vless_uuid=row[7],
         rw_id=int(row[8]) if row[8] is not None else None,
+        username=row[9],
     )
 
 
 _USER_COLS = (
     "id, email, password_hash, email_verified_at, tg_id, is_banned, "
     "language, vless_uuid, rw_id"
+    ", username"
 )
 
 
@@ -451,17 +454,17 @@ async def set_user_vless_uuid(
         if rw_id is not None:
             from common_db.repo import subscriptions as subscription_repo
 
-            await subscription_repo.attach(
+            link = await subscription_repo.attach(
                 s,
                 user_id=user_id,
                 rw_id=int(rw_id),
                 source="provisioned",
-                make_primary=True,
             )
-            await s.execute(
-                text("UPDATE users SET vless_uuid = :u WHERE id = :i"),
-                {"u": uuid, "i": user_id},
-            )
+            if link.is_primary:
+                await s.execute(
+                    text("UPDATE users SET vless_uuid = :u WHERE id = :i"),
+                    {"u": uuid, "i": user_id},
+                )
         else:
             await s.execute(
                 text("UPDATE users SET vless_uuid = :u WHERE id = :i"),

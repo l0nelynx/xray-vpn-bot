@@ -202,27 +202,6 @@ async def consume_android_link_code(tg_id: int, code: str) -> str:
                 "Android link merged: android=%s tg_user=%s tg_id=%s code=%s",
                 user_id, existing_row[0], tg_id, merge["result"],
             )
-            # Best-effort RW deactivate. Errors don't roll back the merge.
-            if merge["loser_rw_uuid"]:
-                try:
-                    from remnawave_client import api as rem
-                    await rem.update_user(
-                        user_uuid=merge["loser_rw_uuid"], status="disabled",
-                    )
-                except Exception as exc:
-                    logger.warning(
-                        "Failed to disable old RW user %s: %s",
-                        merge["loser_rw_uuid"], exc,
-                    )
-                    await notify_log(
-                        f"⚠️ <b>Failed to disable old RW user</b>\n"
-                        f"uuid: <code>{esc(merge['loser_rw_uuid'])}</code>\n"
-                        f"error: <code>{esc(str(exc)[:300])}</code>"
-                    )
-            kept_uuid = (
-                merge["a_rw_uuid"] if merge["survivor_id"] == user_id
-                else merge["t_rw_uuid"]
-            )
             await _notify_link_attempt(
                 result=merge["result"], tg_id=tg_id,
                 android_user_id=user_id, android_email=android_email,
@@ -230,8 +209,8 @@ async def consume_android_link_code(tg_id: int, code: str) -> str:
                 a_rw_uuid=merge["a_rw_uuid"], t_rw_uuid=merge["t_rw_uuid"],
                 a_tier=merge["a_tier"], t_tier=merge["t_tier"],
                 survivor_id=merge["survivor_id"], loser_id=merge["loser_id"],
-                kept_uuid=kept_uuid,
-                disabled_uuid=merge["loser_rw_uuid"],
+                kept_uuid=merge.get("chosen_uuid"),
+                disabled_uuid=None,
             )
             return merge["result"]
 
