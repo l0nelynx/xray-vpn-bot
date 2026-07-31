@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import random
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import func, select
@@ -28,8 +28,21 @@ from ..models.giveaways import (
 )
 
 
+def _now_naive_utc() -> datetime:
+    """Current UTC as naive datetime (matches stored starts_at/ends_at)."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 def _now_iso() -> str:
-    return datetime.now().isoformat(timespec="seconds")
+    return _now_naive_utc().isoformat(timespec="seconds")
+
+
+def _parse_window_dt(raw: str) -> datetime:
+    """Parse ISO window bound; normalize aware values to naive UTC."""
+    dt = datetime.fromisoformat(raw)
+    if dt.tzinfo is not None:
+        return dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
 
 
 def parse_config(raw: str | None) -> dict[str, Any]:
@@ -88,16 +101,19 @@ def normalize_config(data: dict[str, Any] | None) -> dict[str, Any]:
 
 
 def _is_in_window(giveaway: Giveaway, now: datetime | None = None) -> bool:
-    now = now or datetime.now()
+    """True if ``now`` (UTC naive) is within optional starts_at/ends_at bounds."""
+    now = now or _now_naive_utc()
+    if now.tzinfo is not None:
+        now = now.astimezone(timezone.utc).replace(tzinfo=None)
     if giveaway.starts_at:
         try:
-            if now < datetime.fromisoformat(giveaway.starts_at):
+            if now < _parse_window_dt(giveaway.starts_at):
                 return False
         except ValueError:
             pass
     if giveaway.ends_at:
         try:
-            if now > datetime.fromisoformat(giveaway.ends_at):
+            if now > _parse_window_dt(giveaway.ends_at):
                 return False
         except ValueError:
             pass
@@ -167,16 +183,23 @@ async def update_giveaway(
     clear_starts_at: bool = False,
     clear_ends_at: bool = False,
 ) -> Giveaway:
-    if giveaway.status != GIVEAWAY_STATUS_DRAFT:
-        raise ValueError("only draft giveaways can be edited")
-    if title is not None:
-        giveaway.title = title.strip()
-    if channel_text is not None:
-        giveaway.channel_text = channel_text
-    if config is not None:
-        giveaway.config_json = json.dumps(normalize_config(config))
-    if winner_count is not None:
-        giveaway.winner_count = max(1, winner_count)
+    is_draft = giveaway.status == GIVEAWAY_STATUS_DRAFT
+    is_active = giveaway.status == GIVEAWAY_STATUS_ACTIVE
+    if not is_draft and not is_active:
+        raise ValueError("only draft or active giveaways can be edited")
+    if not is_draft and any(
+        v is not None for v in (title, channel_text, config, winner_count)
+    ):
+        raise ValueError("active giveaways can only change starts_at/ends_at")
+    if is_draft:
+        if title is not None:
+            giveaway.title = title.strip()
+        if channel_text is not None:
+            giveaway.channel_text = channel_text
+        if config is not None:
+            giveaway.config_json = json.dumps(normalize_config(config))
+        if winner_count is not None:
+            giveaway.winner_count = max(1, winner_count)
     if clear_starts_at:
         giveaway.starts_at = None
     elif starts_at is not None:
@@ -209,7 +232,7 @@ async def list_active_giveaways(session: AsyncSession) -> list[Giveaway]:
     result = await session.execute(
         select(Giveaway).where(Giveaway.status == GIVEAWAY_STATUS_ACTIVE)
     )
-    now = datetime.now()
+    now = _now_naive_utc()
     return [g for g in result.scalars().all() if _is_in_window(g, now)]
 
 

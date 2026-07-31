@@ -98,11 +98,33 @@ function statusBadge(status: GiveawayStatus) {
   return <Badge variant={STATUS_VARIANT[status]}>{status}</Badge>;
 }
 
+/** Parse stored UTC-naive ISO as UTC for display. */
+function parseUtcIso(iso: string): Date {
+  const normalized = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(iso) ? iso : `${iso}Z`;
+  return new Date(normalized);
+}
+
 function formatShort(iso: string): string {
-  const d = new Date(iso);
+  const d = parseUtcIso(iso);
   if (Number.isNaN(d.getTime())) return iso;
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${pad(d.getDate())}.${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** datetime-local (browser local) → UTC-naive ISO `YYYY-MM-DDTHH:MM:SS`. */
+function localInputToUtcIso(local: string): string | null {
+  if (!local) return null;
+  const d = new Date(local);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString().slice(0, 19);
+}
+
+/** UTC-naive ISO → datetime-local value in browser local TZ. */
+function utcIsoToLocalInput(iso: string): string {
+  const d = parseUtcIso(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 interface GiveawayForm {
@@ -216,8 +238,8 @@ export default function GiveawaysPage() {
       distribution_channel: item.config.distribution.includes("channel"),
       ticket_ref: item.config.ticket_sources.includes("invitee_ref_activation"),
       ticket_purchase: item.config.ticket_sources.includes("invitee_purchase"),
-      starts_at: item.starts_at ? item.starts_at.slice(0, 16) : "",
-      ends_at: item.ends_at ? item.ends_at.slice(0, 16) : "",
+      starts_at: item.starts_at ? utcIsoToLocalInput(item.starts_at) : "",
+      ends_at: item.ends_at ? utcIsoToLocalInput(item.ends_at) : "",
     });
     setDrawerOpen(true);
   };
@@ -245,18 +267,28 @@ export default function GiveawaysPage() {
       toast.error("Title is required");
       return;
     }
-    const payload = {
-      title: form.title,
-      channel_text: form.channel_text || "",
-      winner_count: form.winner_count,
-      starts_at: form.starts_at ? `${form.starts_at}:00` : null,
-      ends_at: form.ends_at ? `${form.ends_at}:00` : null,
-      config: buildConfig(),
-    };
+    const scheduleOnly = editing?.status === "active";
+    const payload = scheduleOnly
+      ? {
+          starts_at: localInputToUtcIso(form.starts_at),
+          ends_at: localInputToUtcIso(form.ends_at),
+          clear_starts_at: !form.starts_at,
+          clear_ends_at: !form.ends_at,
+        }
+      : {
+          title: form.title,
+          channel_text: form.channel_text || "",
+          winner_count: form.winner_count,
+          starts_at: localInputToUtcIso(form.starts_at),
+          ends_at: localInputToUtcIso(form.ends_at),
+          clear_starts_at: !form.starts_at,
+          clear_ends_at: !form.ends_at,
+          config: buildConfig(),
+        };
     try {
       if (editing) {
         await api.patch(`/giveaways/${editing.id}`, payload);
-        toast.success("Giveaway updated");
+        toast.success(scheduleOnly ? "Schedule updated" : "Giveaway updated");
       } else {
         await api.post("/giveaways", payload);
         toast.success("Giveaway created");
@@ -336,7 +368,7 @@ export default function GiveawaysPage() {
           <Button size="sm" variant="outline" onClick={() => openDetail(row.original)}>
             Open
           </Button>
-          {row.original.status === "draft" && (
+          {(["draft", "active"] as GiveawayStatus[]).includes(row.original.status) && (
             <Button size="sm" variant="outline" onClick={() => openEdit(row.original)}>
               Edit
             </Button>
@@ -362,7 +394,7 @@ export default function GiveawaysPage() {
             {item.ends_at ? ` · Ends ${formatShort(item.ends_at)}` : ""}
           </div>
         </div>
-        {item.status === "draft" && (
+        {(["draft", "active"] as GiveawayStatus[]).includes(item.status) && (
           <Button
             size="sm"
             variant="outline"
@@ -440,19 +472,30 @@ export default function GiveawaysPage() {
       <Sheet open={drawerOpen} onOpenChange={(o: boolean) => setDrawerOpen(o)}>
         <SheetContent side="right" className="flex w-full flex-col overflow-y-auto sm:max-w-[520px]">
           <SheetHeader>
-            <SheetTitle>{editing ? `Edit #${editing.id}` : "New giveaway"}</SheetTitle>
+            <SheetTitle>
+              {editing
+                ? editing.status === "active"
+                  ? `Edit schedule #${editing.id}`
+                  : `Edit #${editing.id}`
+                : "New giveaway"}
+            </SheetTitle>
           </SheetHeader>
 
           <div className="flex-1 space-y-4 py-4">
             <div className="space-y-1.5">
               <Label>Title *</Label>
-              <Input value={form.title} onChange={(e) => patchForm({ title: e.target.value })} />
+              <Input
+                value={form.title}
+                disabled={editing?.status === "active"}
+                onChange={(e) => patchForm({ title: e.target.value })}
+              />
             </div>
             <div className="space-y-1.5">
               <Label>Post / broadcast text (HTML)</Label>
               <Textarea
                 rows={5}
                 value={form.channel_text}
+                disabled={editing?.status === "active"}
                 onChange={(e) => patchForm({ channel_text: e.target.value })}
               />
             </div>
@@ -463,11 +506,12 @@ export default function GiveawaysPage() {
                 min={1}
                 max={100}
                 value={form.winner_count}
+                disabled={editing?.status === "active"}
                 onChange={(e) => patchForm({ winner_count: Number(e.target.value) || 1 })}
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Starts at (optional)</Label>
+              <Label>Starts at (optional, your local time)</Label>
               <Input
                 type="datetime-local"
                 value={form.starts_at}
@@ -475,13 +519,21 @@ export default function GiveawaysPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Ends at (optional)</Label>
+              <Label>Ends at (optional, your local time)</Label>
               <Input
                 type="datetime-local"
                 value={form.ends_at}
                 onChange={(e) => patchForm({ ends_at: e.target.value })}
               />
             </div>
+            {editing?.status === "active" && (
+              <p className="text-xs text-muted-foreground">
+                Active giveaways can only change the schedule. Re-enter the intended local start/end
+                times (stored as UTC). Leave empty for no time limit.
+              </p>
+            )}
+            {editing?.status !== "active" && (
+              <>
             <div className="space-y-2">
               <Label>Distribution</Label>
               <label className="flex items-center gap-2 text-sm">
@@ -559,6 +611,8 @@ export default function GiveawaysPage() {
                 ]}
               />
             </div>
+              </>
+            )}
           </div>
 
           <SheetFooter>

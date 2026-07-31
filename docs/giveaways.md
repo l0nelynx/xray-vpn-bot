@@ -16,6 +16,13 @@ Rewards are **not** stored or issued by the system — admins distribute prizes 
 | **Ticket** | Lottery entry weight; one row per granted ticket |
 | **Winner** | Result row after admin runs draw |
 
+### Schedule window
+
+`starts_at` / `ends_at` are optional **UTC-naive** ISO timestamps (`YYYY-MM-DDTHH:MM:SS`).
+Dashboard datetime inputs use the admin’s **local time** and convert to/from UTC on save/load.
+Participation checks compare against `datetime.now(UTC)`. Empty bounds mean no limit.
+Active giveaways can still update the schedule (dates only).
+
 ### Entry requirements (participant)
 
 | Value | Behavior |
