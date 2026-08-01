@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from common_db import Base
 import common_db.models  # noqa: F401
-from common_db.models import User, UserSubscription
+from common_db.models import Transaction, User, UserSubscription
 from scripts.backfill_remnawave_ids import (
     _api_base_url,
     _page,
@@ -261,7 +261,7 @@ def test_non_uuid_legacy_sentinels_are_reported_but_do_not_block() -> None:
     _run(go())
 
 
-def test_missing_legacy_profile_is_ignored_only_below_user_id_cutoff() -> None:
+def test_missing_legacy_profile_blocks_only_for_active_paid_user() -> None:
     async def go() -> None:
         engine = create_async_engine("sqlite+aiosqlite:///:memory:")
         try:
@@ -271,7 +271,27 @@ def test_missing_legacy_profile_is_ignored_only_below_user_id_cutoff() -> None:
             async with Session() as session:
                 session.add_all([
                     User(id=999, tg_id=999, vless_uuid=LEGACY_A),
-                    User(id=1000, tg_id=1000, vless_uuid=LEGACY_B),
+                    User(id=2000, tg_id=2000, vless_uuid=LEGACY_B),
+                    Transaction(
+                        transaction_id="active-tx",
+                        vless_uuid=LEGACY_A,
+                        order_status="delivered",
+                        delivery_status=1,
+                        days_ordered=30,
+                        expire_date="2099-01-01T00:00:00",
+                        user_id=999,
+                        target_rw_id=11,
+                    ),
+                    Transaction(
+                        transaction_id="expired-tx",
+                        vless_uuid=LEGACY_B,
+                        order_status="delivered",
+                        delivery_status=1,
+                        days_ordered=30,
+                        expire_date="2020-01-01T00:00:00",
+                        user_id=2000,
+                        target_rw_id=22,
+                    ),
                 ])
                 await session.commit()
 
@@ -282,15 +302,26 @@ def test_missing_legacy_profile_is_ignored_only_below_user_id_cutoff() -> None:
             )
             assert code == 2
             assert report["policy"] == {
-                "ignore_missing_panel_profile_below_user_id": 1000,
+                "missing_panel_profile": "block_only_with_active_paid_transaction",
+                "active_paid_order_statuses": ["confirmed", "delivered"],
             }
-            assert report["blocker_samples"]["unresolved_user_ids"] == [1000]
+            assert report["blocker_samples"]["unresolved_user_ids"] == [999]
             assert report["ignored_counts"][
-                "missing_panel_legacy_profiles_below_cutoff"
+                "missing_panel_profiles_without_active_paid_transaction"
             ] == 1
             assert report["ignored_samples"][
-                "missing_panel_legacy_profiles_below_cutoff"
-            ] == [999]
+                "missing_panel_profiles_without_active_paid_transaction"
+            ] == [2000]
+            assert report["unresolved_active_paid_details"] == [{
+                "user_id": 999,
+                "transactions": [{
+                    "transaction_id": "active-tx",
+                    "order_status": "delivered",
+                    "delivery_status": 1,
+                    "expire_date": "2099-01-01T00:00:00",
+                    "target_rw_id": 11,
+                }],
+            }]
         finally:
             await engine.dispose()
 

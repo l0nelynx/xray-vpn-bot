@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 from dataclasses import dataclass
+from datetime import datetime
 import json
 import logging
 import os
@@ -30,16 +31,12 @@ import yaml
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from common_db.models import User, UserSubscription
+from common_db.models import Transaction, User, UserSubscription
 from common_db.repo import subscriptions
+from common_db.repo.users import PAID_ORDER_STATUSES
 from common_db.session import make_async_session
 
 logger = logging.getLogger("backfill_remnawave_ids")
-
-# Profiles belonging to the earliest local users may already have been deleted
-# from Remnawave after their subscriptions expired. Keep their legacy UUID for
-# audit, but do not require a numeric panel ID that no longer exists.
-MISSING_PANEL_PROFILE_IGNORE_BELOW_USER_ID = 1000
 
 
 @dataclass(frozen=True)
@@ -180,6 +177,30 @@ async def audit_database(
     links = list(
         (await session.scalars(select(UserSubscription).order_by(UserSubscription.id))).all()
     )
+    now_iso = datetime.now().isoformat(timespec="seconds")
+    active_transactions = list(
+        (await session.scalars(
+            select(Transaction)
+            .where(
+                Transaction.order_status.in_(PAID_ORDER_STATUSES),
+                Transaction.expire_date > now_iso,
+            )
+            .order_by(Transaction.user_id, Transaction.expire_date)
+        )).all()
+    )
+    active_transactions_by_user: dict[int, list[dict[str, Any]]] = {}
+    for transaction in active_transactions:
+        active_transactions_by_user.setdefault(int(transaction.user_id), []).append({
+            "transaction_id": transaction.transaction_id,
+            "order_status": transaction.order_status,
+            "delivery_status": transaction.delivery_status,
+            "expire_date": transaction.expire_date,
+            "target_rw_id": (
+                int(transaction.target_rw_id)
+                if transaction.target_rw_id is not None
+                else None
+            ),
+        })
 
     links_by_user: dict[int, list[UserSubscription]] = {}
     primary_by_user: dict[int, UserSubscription] = {}
@@ -211,7 +232,7 @@ async def audit_database(
         if user.rw_id is None and legacy_uuid:
             rw_id = panel.by_legacy_uuid.get(legacy_uuid)
             if rw_id is None:
-                if int(user.id) < MISSING_PANEL_PROFILE_IGNORE_BELOW_USER_ID:
+                if int(user.id) not in active_transactions_by_user:
                     ignored_missing_legacy_profiles.append(int(user.id))
                     continue
                 unresolved.append(int(user.id))
@@ -296,6 +317,13 @@ async def audit_database(
         {"legacy_uuid": key, "rw_ids": list(values)}
         for key, values in sorted(panel.duplicate_legacy_uuids.items())
     ]
+    unresolved_active_paid_details = [
+        {
+            "user_id": user_id,
+            "transactions": active_transactions_by_user[user_id],
+        }
+        for user_id in unresolved
+    ]
 
     blockers = {
         "unresolved_user_ids": unresolved,
@@ -324,22 +352,22 @@ async def audit_database(
             ),
         },
         "policy": {
-            "ignore_missing_panel_profile_below_user_id": (
-                MISSING_PANEL_PROFILE_IGNORE_BELOW_USER_ID
-            ),
+            "missing_panel_profile": "block_only_with_active_paid_transaction",
+            "active_paid_order_statuses": list(PAID_ORDER_STATUSES),
         },
         "ignored_counts": {
             "non_uuid_legacy_values": len(ignored_non_uuid_legacy),
-            "missing_panel_legacy_profiles_below_cutoff": len(
+            "missing_panel_profiles_without_active_paid_transaction": len(
                 ignored_missing_legacy_profiles
             ),
         },
         "ignored_samples": {
             "non_uuid_legacy_values": _sample(ignored_non_uuid_legacy),
-            "missing_panel_legacy_profiles_below_cutoff": _sample(
+            "missing_panel_profiles_without_active_paid_transaction": _sample(
                 ignored_missing_legacy_profiles
             ),
         },
+        "unresolved_active_paid_details": _sample(unresolved_active_paid_details),
         "primary_mismatch_details": _sample(primary_mismatch_details),
         "confirmed_primary_projection_repairs": confirmed_primary_repairs,
         "blocker_counts": {name: len(value) for name, value in blockers.items()},
