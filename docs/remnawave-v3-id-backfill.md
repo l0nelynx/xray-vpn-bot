@@ -39,6 +39,11 @@ Review the JSON report:
 - `planned.resolve_legacy` is the number of `users.rw_id` values to recover;
 - `planned.attach_existing` is the number of missing
   `user_subscriptions` rows to create;
+- `ignored_counts.non_uuid_legacy_values` contains historical sentinel or
+  malformed values (for example the literal string `None`); they are reported
+  for audit but are not panel identities and therefore do not block migration;
+- `primary_mismatch_details` shows both `users.rw_id` and the primary
+  subscription `rw_id` for every projection mismatch;
 - `ready` is expected to be `false` while safe changes are still planned.
 
 Exit code `2` means blockers were found and no write is permitted. Resolve the

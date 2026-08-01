@@ -23,6 +23,7 @@ import logging
 import os
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 import httpx
 import yaml
@@ -57,8 +58,15 @@ class AuditState:
     actions: tuple[BackfillAction, ...]
 
 
-def _normalize_uuid(value: object) -> str:
-    return str(value or "").strip().casefold()
+def _normalize_uuid(value: object) -> str | None:
+    """Return a canonical UUID, ignoring legacy sentinel/corrupt values."""
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        return str(UUID(raw))
+    except (AttributeError, TypeError, ValueError):
+        return None
 
 
 def build_panel_index(items: list[dict[str, Any]]) -> PanelIndex:
@@ -178,12 +186,19 @@ async def audit_database(
             owners.setdefault(int(user.rw_id), set()).add(int(user.id))
 
     unresolved: list[int] = []
+    ignored_non_uuid_legacy: list[dict[str, Any]] = []
     conflicts: list[dict[str, Any]] = []
     actions: list[BackfillAction] = []
     planned: dict[int, int] = {}
 
     for user in users:
+        raw_legacy_uuid = str(user.vless_uuid or "").strip()
         legacy_uuid = _normalize_uuid(user.vless_uuid)
+        if user.rw_id is None and raw_legacy_uuid and legacy_uuid is None:
+            ignored_non_uuid_legacy.append({
+                "user_id": int(user.id),
+                "value": raw_legacy_uuid,
+            })
         if user.rw_id is None and legacy_uuid:
             rw_id = panel.by_legacy_uuid.get(legacy_uuid)
             if rw_id is None:
@@ -224,8 +239,12 @@ async def audit_database(
         for rw_id, user_ids in sorted(owners.items())
         if len(user_ids) > 1
     ]
-    primary_mismatch = [
-        int(user.id)
+    primary_mismatch_details = [
+        {
+            "user_id": int(user.id),
+            "users_rw_id": int(user.rw_id),
+            "primary_rw_id": int(primary_by_user[int(user.id)].rw_id),
+        }
         for user in users
         if user.rw_id is not None
         and int(user.id) in primary_by_user
@@ -243,7 +262,9 @@ async def audit_database(
         "unresolved_user_ids": unresolved,
         "ownership_conflicts": conflicts,
         "multiple_local_owners": multiple_owners,
-        "primary_mismatch_user_ids": primary_mismatch,
+        "primary_mismatch_user_ids": [
+            item["user_id"] for item in primary_mismatch_details
+        ],
         "panel_missing_rw_ids": panel_missing_ids,
         "duplicate_panel_uuids": duplicate_panel_uuids,
     }
@@ -257,6 +278,13 @@ async def audit_database(
             "resolve_legacy": sum(a.kind == "resolve_legacy" for a in actions),
             "attach_existing": sum(a.kind == "attach_existing" for a in actions),
         },
+        "ignored_counts": {
+            "non_uuid_legacy_values": len(ignored_non_uuid_legacy),
+        },
+        "ignored_samples": {
+            "non_uuid_legacy_values": _sample(ignored_non_uuid_legacy),
+        },
+        "primary_mismatch_details": _sample(primary_mismatch_details),
         "blocker_counts": {name: len(value) for name, value in blockers.items()},
         "blocker_samples": {name: _sample(value) for name, value in blockers.items()},
     }

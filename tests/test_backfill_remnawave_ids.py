@@ -15,6 +15,10 @@ from scripts.backfill_remnawave_ids import (
     run_backfill,
 )
 
+LEGACY_A = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+LEGACY_B = "bbbbbbbb-cccc-dddd-eeee-ffffffffffff"
+LEGACY_PRIMARY = "cccccccc-dddd-eeee-ffff-000000000000"
+
 
 def _run(coro):
     return asyncio.run(coro)
@@ -26,12 +30,12 @@ def _panel(*items):
 
 def test_panel_index_detects_ambiguous_legacy_uuid() -> None:
     panel = _panel(
-        {"id": 11, "uuid": "LEGACY-A"},
-        {"id": 22, "uuid": "legacy-a"},
-        {"id": 33, "uuid": "legacy-b"},
+        {"id": 11, "uuid": LEGACY_A.upper()},
+        {"id": 22, "uuid": LEGACY_A},
+        {"id": 33, "uuid": LEGACY_B},
     )
-    assert panel.by_legacy_uuid == {"legacy-b": 33}
-    assert panel.duplicate_legacy_uuids == {"legacy-a": (11, 22)}
+    assert panel.by_legacy_uuid == {LEGACY_B: 33}
+    assert panel.duplicate_legacy_uuids == {LEGACY_A: (11, 22)}
 
 
 def test_page_unwraps_remnawave_envelope() -> None:
@@ -56,14 +60,14 @@ def test_dry_run_then_apply_resolves_and_attaches() -> None:
             Session = async_sessionmaker(engine, expire_on_commit=False)
             async with Session() as session:
                 session.add_all([
-                    User(id=1, tg_id=101, vless_uuid="legacy-a"),
-                    User(id=2, tg_id=202, rw_id=22, vless_uuid="legacy-b"),
+                    User(id=1, tg_id=101, vless_uuid=LEGACY_A),
+                    User(id=2, tg_id=202, rw_id=22, vless_uuid=LEGACY_B),
                 ])
                 await session.commit()
 
             panel = _panel(
-                {"id": 11, "uuid": "legacy-a"},
-                {"id": 22, "uuid": "legacy-b"},
+                {"id": 11, "uuid": LEGACY_A},
+                {"id": 22, "uuid": LEGACY_B},
             )
             code, report = await run_backfill(
                 panel=panel, session_factory=Session, apply=False
@@ -111,13 +115,13 @@ def test_conflicting_owner_blocks_all_writes() -> None:
             Session = async_sessionmaker(engine, expire_on_commit=False)
             async with Session() as session:
                 session.add_all([
-                    User(id=1, tg_id=101, vless_uuid="legacy-a"),
+                    User(id=1, tg_id=101, vless_uuid=LEGACY_A),
                     User(id=2, tg_id=202, rw_id=11),
                 ])
                 await session.commit()
 
             code, report = await run_backfill(
-                panel=_panel({"id": 11, "uuid": "legacy-a"}),
+                panel=_panel({"id": 11, "uuid": LEGACY_A}),
                 session_factory=Session,
                 apply=True,
             )
@@ -140,7 +144,7 @@ def test_existing_primary_is_preserved_when_legacy_profile_is_additional() -> No
                 await conn.run_sync(Base.metadata.create_all)
             Session = async_sessionmaker(engine, expire_on_commit=False)
             async with Session() as session:
-                session.add(User(id=1, tg_id=101, vless_uuid="legacy-a"))
+                session.add(User(id=1, tg_id=101, vless_uuid=LEGACY_A))
                 session.add(UserSubscription(
                     user_id=1,
                     rw_id=30,
@@ -153,8 +157,8 @@ def test_existing_primary_is_preserved_when_legacy_profile_is_additional() -> No
 
             code, report = await run_backfill(
                 panel=_panel(
-                    {"id": 11, "uuid": "legacy-a"},
-                    {"id": 30, "uuid": "legacy-primary"},
+                    {"id": 11, "uuid": LEGACY_A},
+                    {"id": 30, "uuid": LEGACY_PRIMARY},
                 ),
                 session_factory=Session,
                 apply=True,
@@ -186,7 +190,7 @@ def test_existing_projection_without_primary_is_repaired() -> None:
                 await conn.run_sync(Base.metadata.create_all)
             Session = async_sessionmaker(engine, expire_on_commit=False)
             async with Session() as session:
-                session.add(User(id=1, tg_id=101, rw_id=11, vless_uuid="legacy-a"))
+                session.add(User(id=1, tg_id=101, rw_id=11, vless_uuid=LEGACY_A))
                 session.add(UserSubscription(
                     user_id=1,
                     rw_id=11,
@@ -197,7 +201,7 @@ def test_existing_projection_without_primary_is_repaired() -> None:
                 ))
                 await session.commit()
 
-            panel = _panel({"id": 11, "uuid": "legacy-a"})
+            panel = _panel({"id": 11, "uuid": LEGACY_A})
             code, dry = await run_backfill(
                 panel=panel, session_factory=Session, apply=False
             )
@@ -211,6 +215,90 @@ def test_existing_projection_without_primary_is_repaired() -> None:
             async with Session() as session:
                 link = await session.scalar(select(UserSubscription))
                 assert link is not None and link.is_primary is True
+        finally:
+            await engine.dispose()
+
+    _run(go())
+
+
+def test_non_uuid_legacy_sentinels_are_reported_but_do_not_block() -> None:
+    async def go() -> None:
+        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        try:
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+            Session = async_sessionmaker(engine, expire_on_commit=False)
+            async with Session() as session:
+                session.add_all([
+                    User(id=1, tg_id=101, vless_uuid="None"),
+                    User(id=2, tg_id=202, vless_uuid="null"),
+                    User(id=3, tg_id=303, vless_uuid="not-a-panel-uuid"),
+                ])
+                await session.commit()
+
+            code, report = await run_backfill(
+                panel=_panel({"id": 11, "uuid": LEGACY_A}),
+                session_factory=Session,
+                apply=False,
+            )
+            assert code == 0
+            assert report["ready"] is True
+            assert report["blocker_counts"]["unresolved_user_ids"] == 0
+            assert report["ignored_counts"]["non_uuid_legacy_values"] == 3
+            assert [
+                item["user_id"]
+                for item in report["ignored_samples"]["non_uuid_legacy_values"]
+            ] == [1, 2, 3]
+        finally:
+            await engine.dispose()
+
+    _run(go())
+
+
+def test_primary_mismatch_report_contains_both_numeric_ids() -> None:
+    async def go() -> None:
+        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        try:
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+            Session = async_sessionmaker(engine, expire_on_commit=False)
+            async with Session() as session:
+                session.add(User(id=1, tg_id=101, rw_id=11, vless_uuid=LEGACY_A))
+                session.add_all([
+                    UserSubscription(
+                        user_id=1,
+                        rw_id=11,
+                        source="legacy_projection",
+                        is_primary=False,
+                        created_at="2026-01-01T00:00:00",
+                        updated_at="2026-01-01T00:00:00",
+                    ),
+                    UserSubscription(
+                        user_id=1,
+                        rw_id=22,
+                        source="primary",
+                        is_primary=True,
+                        created_at="2026-01-02T00:00:00",
+                        updated_at="2026-01-02T00:00:00",
+                    ),
+                ])
+                await session.commit()
+
+            code, report = await run_backfill(
+                panel=_panel(
+                    {"id": 11, "uuid": LEGACY_A},
+                    {"id": 22, "uuid": LEGACY_B},
+                ),
+                session_factory=Session,
+                apply=False,
+            )
+            assert code == 2
+            assert report["blocker_samples"]["primary_mismatch_user_ids"] == [1]
+            assert report["primary_mismatch_details"] == [{
+                "user_id": 1,
+                "users_rw_id": 11,
+                "primary_rw_id": 22,
+            }]
         finally:
             await engine.dispose()
 
