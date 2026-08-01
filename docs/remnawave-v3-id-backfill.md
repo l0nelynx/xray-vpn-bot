@@ -30,8 +30,14 @@ MiniApp, workers, Postgres, or Remnawave.
 ## 3. Dry-run
 
 ```bash
-docker compose --profile maintenance run --rm --no-deps rw-id-backfill
+docker compose --profile maintenance run --rm --no-deps rw-id-backfill \
+  --repair-primary 2001:1184
 ```
+
+`--repair-primary USER_ID:RW_ID` is an explicit operator confirmation that the
+given `user_subscriptions` primary is authoritative. The script validates that
+the primary has not changed, then plans synchronization of the denormalized
+`users.rw_id` field. Other primary mismatches remain blockers.
 
 Review the JSON report:
 
@@ -60,7 +66,8 @@ Stop services that can create or merge users, but keep Postgres running:
 
 ```bash
 docker compose stop bot miniapp dashboard crm-worker
-docker compose --profile maintenance run --rm --no-deps rw-id-backfill --apply
+docker compose --profile maintenance run --rm --no-deps rw-id-backfill \
+  --repair-primary 2001:1184 --apply
 ```
 
 The apply command re-runs the ownership audit inside its database transaction.
@@ -77,7 +84,8 @@ It then:
 Run the dry-run once more:
 
 ```bash
-docker compose --profile maintenance run --rm --no-deps rw-id-backfill
+docker compose --profile maintenance run --rm --no-deps rw-id-backfill \
+  --repair-primary 2001:1184
 ```
 
 The final report must contain:

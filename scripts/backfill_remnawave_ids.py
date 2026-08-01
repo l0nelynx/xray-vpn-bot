@@ -54,7 +54,7 @@ class PanelIndex:
 class BackfillAction:
     user_id: int
     rw_id: int
-    kind: str  # resolve_legacy | attach_existing
+    kind: str  # resolve_legacy | attach_existing | sync_primary_projection
 
 
 @dataclass(frozen=True)
@@ -171,8 +171,11 @@ def _sample(values: list[Any], limit: int = 100) -> list[Any]:
 
 
 async def audit_database(
-    session: AsyncSession, panel: PanelIndex
+    session: AsyncSession,
+    panel: PanelIndex,
+    primary_projection_repairs: dict[int, int] | None = None,
 ) -> AuditState:
+    requested_repairs = primary_projection_repairs or {}
     users = list((await session.scalars(select(User).order_by(User.id))).all())
     links = list(
         (await session.scalars(select(UserSubscription).order_by(UserSubscription.id))).all()
@@ -259,6 +262,33 @@ async def audit_database(
         and int(user.id) in primary_by_user
         and int(primary_by_user[int(user.id)].rw_id) != int(user.rw_id)
     ]
+    users_by_id = {int(user.id): user for user in users}
+    confirmed_primary_repairs: list[dict[str, int]] = []
+    invalid_primary_repairs: list[dict[str, Any]] = []
+    for user_id, expected_rw_id in sorted(requested_repairs.items()):
+        user = users_by_id.get(user_id)
+        primary = primary_by_user.get(user_id)
+        actual_primary_rw_id = int(primary.rw_id) if primary is not None else None
+        if user is None or actual_primary_rw_id != expected_rw_id:
+            invalid_primary_repairs.append({
+                "user_id": user_id,
+                "requested_primary_rw_id": expected_rw_id,
+                "actual_primary_rw_id": actual_primary_rw_id,
+                "reason": "user_not_found" if user is None else "primary_changed",
+            })
+            continue
+        confirmed_primary_repairs.append({
+            "user_id": user_id,
+            "primary_rw_id": expected_rw_id,
+        })
+        if user.rw_id is None or int(user.rw_id) != expected_rw_id:
+            actions.append(BackfillAction(
+                user_id, expected_rw_id, "sync_primary_projection"
+            ))
+
+    confirmed_repair_user_ids = {
+        item["user_id"] for item in confirmed_primary_repairs
+    }
     panel_missing_ids = sorted(
         rw_id for rw_id in owners if rw_id not in panel.ids
     )
@@ -272,8 +302,11 @@ async def audit_database(
         "ownership_conflicts": conflicts,
         "multiple_local_owners": multiple_owners,
         "primary_mismatch_user_ids": [
-            item["user_id"] for item in primary_mismatch_details
+            item["user_id"]
+            for item in primary_mismatch_details
+            if item["user_id"] not in confirmed_repair_user_ids
         ],
+        "invalid_primary_repair_requests": invalid_primary_repairs,
         "panel_missing_rw_ids": panel_missing_ids,
         "duplicate_panel_uuids": duplicate_panel_uuids,
     }
@@ -286,6 +319,9 @@ async def audit_database(
         "planned": {
             "resolve_legacy": sum(a.kind == "resolve_legacy" for a in actions),
             "attach_existing": sum(a.kind == "attach_existing" for a in actions),
+            "sync_primary_projection": sum(
+                a.kind == "sync_primary_projection" for a in actions
+            ),
         },
         "policy": {
             "ignore_missing_panel_profile_below_user_id": (
@@ -305,6 +341,7 @@ async def audit_database(
             ),
         },
         "primary_mismatch_details": _sample(primary_mismatch_details),
+        "confirmed_primary_projection_repairs": confirmed_primary_repairs,
         "blocker_counts": {name: len(value) for name, value in blockers.items()},
         "blocker_samples": {name: _sample(value) for name, value in blockers.items()},
     }
@@ -325,6 +362,12 @@ async def apply_actions(
             continue
 
         primary = await subscriptions.get_primary(session, action.user_id)
+        if action.kind == "sync_primary_projection":
+            if primary is None or int(primary.rw_id) != action.rw_id:
+                raise RuntimeError(f"primary_changed:{action.user_id}")
+            user.rw_id = action.rw_id
+            continue
+
         await subscriptions.attach(
             session,
             user_id=action.user_id,
@@ -340,10 +383,16 @@ async def apply_actions(
 
 
 async def run_backfill(
-    *, panel: PanelIndex, session_factory: async_sessionmaker, apply: bool
+    *,
+    panel: PanelIndex,
+    session_factory: async_sessionmaker,
+    apply: bool,
+    primary_projection_repairs: dict[int, int] | None = None,
 ) -> tuple[int, dict[str, Any]]:
     async with session_factory() as session:
-        state = await audit_database(session, panel)
+        state = await audit_database(
+            session, panel, primary_projection_repairs
+        )
 
     has_blockers = any(state.report["blocker_counts"].values())
     if has_blockers:
@@ -354,7 +403,9 @@ async def run_backfill(
     async with session_factory() as session:
         # Re-audit under the write transaction so a concurrent ownership
         # change cannot invalidate the earlier dry-run plan.
-        fresh = await audit_database(session, panel)
+        fresh = await audit_database(
+            session, panel, primary_projection_repairs
+        )
         if any(fresh.report["blocker_counts"].values()):
             await session.rollback()
             return 2, {"mode": "apply", **fresh.report}
@@ -362,7 +413,9 @@ async def run_backfill(
         await session.commit()
 
     async with session_factory() as session:
-        final = await audit_database(session, panel)
+        final = await audit_database(
+            session, panel, primary_projection_repairs
+        )
     report = {
         "mode": "apply",
         "applied": len(state.actions),
@@ -398,6 +451,20 @@ def load_remnawave_config(path: Path) -> tuple[str, str]:
     return base_url, token
 
 
+def _primary_repair(value: str) -> tuple[int, int]:
+    try:
+        raw_user_id, raw_rw_id = value.split(":", 1)
+        user_id = int(raw_user_id)
+        rw_id = int(raw_rw_id)
+    except (TypeError, ValueError) as exc:
+        raise argparse.ArgumentTypeError(
+            "primary repair must have USER_ID:RW_ID format"
+        ) from exc
+    if user_id <= 0 or rw_id <= 0:
+        raise argparse.ArgumentTypeError("primary repair IDs must be positive")
+    return user_id, rw_id
+
+
 async def _main_async(args: argparse.Namespace) -> int:
     base_url, token = load_remnawave_config(_config_path(args.config))
     panel_users = await fetch_panel_users(
@@ -415,7 +482,10 @@ async def _main_async(args: argparse.Namespace) -> int:
     engine, session_factory = make_async_session(default_sqlite_path="db.sqlite3")
     try:
         code, report = await run_backfill(
-            panel=panel, session_factory=session_factory, apply=args.apply
+            panel=panel,
+            session_factory=session_factory,
+            apply=args.apply,
+            primary_projection_repairs=args.primary_projection_repairs,
         )
     finally:
         await engine.dispose()
@@ -433,6 +503,14 @@ def main() -> int:
     parser.add_argument(
         "--config", help="config.yml path; defaults to CONFIG_PATH/config.yml"
     )
+    parser.add_argument(
+        "--repair-primary",
+        action="append",
+        default=[],
+        type=_primary_repair,
+        metavar="USER_ID:RW_ID",
+        help="confirm primary rw_id and synchronize users.rw_id (repeatable)",
+    )
     parser.add_argument("--page-size", type=int, default=500)
     parser.add_argument("--timeout", type=float, default=30.0)
     args = parser.parse_args()
@@ -440,6 +518,9 @@ def main() -> int:
         parser.error("--page-size must be between 1 and 5000")
     if args.timeout <= 0:
         parser.error("--timeout must be positive")
+    args.primary_projection_repairs = dict(args.repair_primary)
+    if len(args.primary_projection_repairs) != len(args.repair_primary):
+        parser.error("each --repair-primary USER_ID may be specified only once")
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     try:
         return asyncio.run(_main_async(args))

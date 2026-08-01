@@ -11,6 +11,7 @@ from common_db.models import User, UserSubscription
 from scripts.backfill_remnawave_ids import (
     _api_base_url,
     _page,
+    _primary_repair,
     build_panel_index,
     run_backfill,
 )
@@ -51,6 +52,10 @@ def test_api_base_url_matches_sdk_convention() -> None:
     assert _api_base_url("https://panel.example/api/") == "https://panel.example/api"
 
 
+def test_primary_repair_argument_parses_explicit_ids() -> None:
+    assert _primary_repair("2001:1184") == (2001, 1184)
+
+
 def test_dry_run_then_apply_resolves_and_attaches() -> None:
     async def go() -> None:
         engine = create_async_engine("sqlite+aiosqlite:///:memory:")
@@ -77,6 +82,7 @@ def test_dry_run_then_apply_resolves_and_attaches() -> None:
             assert report["planned"] == {
                 "resolve_legacy": 1,
                 "attach_existing": 1,
+                "sync_primary_projection": 0,
             }
             async with Session() as session:
                 assert await session.scalar(select(UserSubscription)) is None
@@ -320,11 +326,12 @@ def test_primary_mismatch_report_contains_both_numeric_ids() -> None:
                 ])
                 await session.commit()
 
+            panel = _panel(
+                {"id": 11, "uuid": LEGACY_A},
+                {"id": 22, "uuid": LEGACY_B},
+            )
             code, report = await run_backfill(
-                panel=_panel(
-                    {"id": 11, "uuid": LEGACY_A},
-                    {"id": 22, "uuid": LEGACY_B},
-                ),
+                panel=panel,
                 session_factory=Session,
                 apply=False,
             )
@@ -335,6 +342,51 @@ def test_primary_mismatch_report_contains_both_numeric_ids() -> None:
                 "users_rw_id": 11,
                 "primary_rw_id": 22,
             }]
+
+            code, report = await run_backfill(
+                panel=panel,
+                session_factory=Session,
+                apply=False,
+                primary_projection_repairs={1: 999},
+            )
+            assert code == 2
+            assert report["planned"]["sync_primary_projection"] == 0
+            assert report["blocker_counts"]["invalid_primary_repair_requests"] == 1
+
+            code, report = await run_backfill(
+                panel=panel,
+                session_factory=Session,
+                apply=False,
+                primary_projection_repairs={1: 22},
+            )
+            assert code == 0
+            assert report["ready"] is False
+            assert report["planned"]["sync_primary_projection"] == 1
+            assert report["blocker_counts"]["primary_mismatch_user_ids"] == 0
+            assert report["confirmed_primary_projection_repairs"] == [{
+                "user_id": 1,
+                "primary_rw_id": 22,
+            }]
+
+            code, report = await run_backfill(
+                panel=panel,
+                session_factory=Session,
+                apply=True,
+                primary_projection_repairs={1: 22},
+            )
+            assert code == 0 and report["ready"] is True
+            async with Session() as session:
+                user = await session.get(User, 1)
+                links = list(
+                    (await session.scalars(
+                        select(UserSubscription).order_by(UserSubscription.rw_id)
+                    )).all()
+                )
+                assert user.rw_id == 22
+                assert [(link.rw_id, link.is_primary) for link in links] == [
+                    (11, False),
+                    (22, True),
+                ]
         finally:
             await engine.dispose()
 
