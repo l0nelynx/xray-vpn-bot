@@ -42,6 +42,10 @@ Review the JSON report:
 - `ignored_counts.non_uuid_legacy_values` contains historical sentinel or
   malformed values (for example the literal string `None`); they are reported
   for audit but are not panel identities and therefore do not block migration;
+- `ignored_counts.missing_panel_legacy_profiles_below_cutoff` contains local
+  user IDs below `1000` whose valid legacy UUID no longer exists in Remnawave;
+  the script assumes these are deleted expired profiles, preserves the local
+  UUID for audit, and does not block migration on them;
 - `primary_mismatch_details` shows both `users.rw_id` and the primary
   subscription `rw_id` for every projection mismatch;
 - `ready` is expected to be `false` while safe changes are still planned.

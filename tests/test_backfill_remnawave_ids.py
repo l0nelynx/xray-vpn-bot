@@ -255,6 +255,42 @@ def test_non_uuid_legacy_sentinels_are_reported_but_do_not_block() -> None:
     _run(go())
 
 
+def test_missing_legacy_profile_is_ignored_only_below_user_id_cutoff() -> None:
+    async def go() -> None:
+        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        try:
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+            Session = async_sessionmaker(engine, expire_on_commit=False)
+            async with Session() as session:
+                session.add_all([
+                    User(id=999, tg_id=999, vless_uuid=LEGACY_A),
+                    User(id=1000, tg_id=1000, vless_uuid=LEGACY_B),
+                ])
+                await session.commit()
+
+            code, report = await run_backfill(
+                panel=_panel({"id": 30, "uuid": LEGACY_PRIMARY}),
+                session_factory=Session,
+                apply=False,
+            )
+            assert code == 2
+            assert report["policy"] == {
+                "ignore_missing_panel_profile_below_user_id": 1000,
+            }
+            assert report["blocker_samples"]["unresolved_user_ids"] == [1000]
+            assert report["ignored_counts"][
+                "missing_panel_legacy_profiles_below_cutoff"
+            ] == 1
+            assert report["ignored_samples"][
+                "missing_panel_legacy_profiles_below_cutoff"
+            ] == [999]
+        finally:
+            await engine.dispose()
+
+    _run(go())
+
+
 def test_primary_mismatch_report_contains_both_numeric_ids() -> None:
     async def go() -> None:
         engine = create_async_engine("sqlite+aiosqlite:///:memory:")

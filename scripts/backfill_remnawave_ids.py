@@ -36,6 +36,11 @@ from common_db.session import make_async_session
 
 logger = logging.getLogger("backfill_remnawave_ids")
 
+# Profiles belonging to the earliest local users may already have been deleted
+# from Remnawave after their subscriptions expired. Keep their legacy UUID for
+# audit, but do not require a numeric panel ID that no longer exists.
+MISSING_PANEL_PROFILE_IGNORE_BELOW_USER_ID = 1000
+
 
 @dataclass(frozen=True)
 class PanelIndex:
@@ -187,6 +192,7 @@ async def audit_database(
 
     unresolved: list[int] = []
     ignored_non_uuid_legacy: list[dict[str, Any]] = []
+    ignored_missing_legacy_profiles: list[int] = []
     conflicts: list[dict[str, Any]] = []
     actions: list[BackfillAction] = []
     planned: dict[int, int] = {}
@@ -202,6 +208,9 @@ async def audit_database(
         if user.rw_id is None and legacy_uuid:
             rw_id = panel.by_legacy_uuid.get(legacy_uuid)
             if rw_id is None:
+                if int(user.id) < MISSING_PANEL_PROFILE_IGNORE_BELOW_USER_ID:
+                    ignored_missing_legacy_profiles.append(int(user.id))
+                    continue
                 unresolved.append(int(user.id))
                 continue
             claimed_by = sorted(owners.get(rw_id, set()) - {int(user.id)})
@@ -278,11 +287,22 @@ async def audit_database(
             "resolve_legacy": sum(a.kind == "resolve_legacy" for a in actions),
             "attach_existing": sum(a.kind == "attach_existing" for a in actions),
         },
+        "policy": {
+            "ignore_missing_panel_profile_below_user_id": (
+                MISSING_PANEL_PROFILE_IGNORE_BELOW_USER_ID
+            ),
+        },
         "ignored_counts": {
             "non_uuid_legacy_values": len(ignored_non_uuid_legacy),
+            "missing_panel_legacy_profiles_below_cutoff": len(
+                ignored_missing_legacy_profiles
+            ),
         },
         "ignored_samples": {
             "non_uuid_legacy_values": _sample(ignored_non_uuid_legacy),
+            "missing_panel_legacy_profiles_below_cutoff": _sample(
+                ignored_missing_legacy_profiles
+            ),
         },
         "primary_mismatch_details": _sample(primary_mismatch_details),
         "blocker_counts": {name: len(value) for name, value in blockers.items()},
