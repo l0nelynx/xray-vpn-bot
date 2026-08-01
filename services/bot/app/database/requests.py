@@ -432,9 +432,8 @@ async def update_order_status(transaction_id: str, new_status: str) -> bool:
 
 async def claim_order_for_processing(transaction_id: str) -> bool:
     """
-    Атомарно проверяет статус заказа и переводит его в 'confirmed'.
-    Возвращает True только если статус БЫЛ 'created' — гарантирует,
-    что только один обработчик получит право на доставку подписки.
+    Атомарно захватывает новый или ожидающий повтора заказ и переводит его в
+    ``confirmed``. Уже доставленная транзакция никогда не захватывается.
 
     Args:
         transaction_id: Идентификатор транзакции
@@ -443,22 +442,37 @@ async def claim_order_for_processing(transaction_id: str) -> bool:
         bool: True если заказ успешно захвачен для обработки, False если уже обработан
     """
     async with async_session() as session:
-        transaction = await session.scalar(
-            select(Transaction).where(
-                Transaction.transaction_id == transaction_id,
-                Transaction.order_status == "created"
+        claimed = (
+            await session.execute(
+                update(Transaction)
+                .where(
+                    Transaction.transaction_id == transaction_id,
+                    Transaction.order_status.in_(("created", "pending")),
+                    func.coalesce(Transaction.delivery_status, 0) != 1,
+                )
+                .values(order_status="confirmed")
+                .returning(Transaction.created_at, Transaction.days_ordered)
             )
-        )
-        if not transaction:
+        ).first()
+        if claimed is None:
+            await session.rollback()
             return False
 
+        created_at, days_ordered = claimed
         expire_date = None
-        if transaction.created_at and transaction.days_ordered:
-            created = datetime.fromisoformat(transaction.created_at)
-            expire_date = (created + timedelta(days=transaction.days_ordered)).isoformat(timespec='seconds')
-
-        transaction.order_status = "confirmed"
-        transaction.expire_date = expire_date
+        if created_at and days_ordered:
+            created = datetime.fromisoformat(created_at)
+            expire_date = (
+                created + timedelta(days=days_ordered)
+            ).isoformat(timespec="seconds")
+            await session.execute(
+                update(Transaction)
+                .where(
+                    Transaction.transaction_id == transaction_id,
+                    Transaction.order_status == "confirmed",
+                )
+                .values(expire_date=expire_date)
+            )
         await session.commit()
         return True
 

@@ -14,8 +14,8 @@ Each function returns a dict with at least:
         "status": str | None,
     }
 
-If the underlying Remnawave call fails, returns None. (RemnawaveClient already
-logs the failure.)
+By default, a failed Remnawave call returns None for compatibility. Delivery
+code passes ``strict=True`` to receive a typed RemnawaveOperationError instead.
 """
 
 import time
@@ -51,6 +51,7 @@ async def apply_new_user(
     traffic_limit_strategy: Optional[str] = None,
     tag: Optional[str] = None,
     client: Optional[RemnawaveClient] = None,
+    strict: bool = False,
 ) -> dict | None:
     """Create a new Remnawave user."""
     return await _client(client).create_user(
@@ -66,6 +67,7 @@ async def apply_new_user(
         traffic_limit_bytes=traffic_limit_bytes,
         traffic_limit_strategy=traffic_limit_strategy,
         tag=tag,
+        raise_on_error=strict,
     )
 
 
@@ -83,6 +85,7 @@ async def apply_extend(
     traffic_limit_strategy: Optional[str] = None,
     tag: Optional[str] = None,
     client: Optional[RemnawaveClient] = None,
+    strict: bool = False,
 ) -> dict | None:
     """Extend an existing PAID subscription: new_expire = current_days_left + days,
     no traffic limit, kept on the given squad."""
@@ -101,6 +104,7 @@ async def apply_extend(
         traffic_limit_bytes=traffic_limit_bytes,
         traffic_limit_strategy=traffic_limit_strategy,
         tag=tag,
+        raise_on_error=strict,
     )
 
 
@@ -119,6 +123,7 @@ async def apply_update(
     traffic_limit_strategy: Optional[str] = None,
     tag: Optional[str] = None,
     client: Optional[RemnawaveClient] = None,
+    strict: bool = False,
 ) -> dict | None:
     """Replace subscription parameters wholesale (used when switching FREE↔PAID
     or refreshing a limited/expired user)."""
@@ -135,4 +140,5 @@ async def apply_update(
         traffic_limit_strategy=traffic_limit_strategy,
         tag=tag,
         status=status,
+        raise_on_error=strict,
     )

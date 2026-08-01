@@ -2,9 +2,18 @@
 
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 
-from remnawave_client.client import _extract_rw_id, _normalize_user
+import httpx
+import pytest
+
+from remnawave_client.client import (
+    RemnawaveClient,
+    RemnawaveOperationError,
+    _extract_rw_id,
+    _normalize_user,
+)
 
 
 def test_extract_rw_id_from_dto() -> None:
@@ -42,3 +51,36 @@ def test_normalize_user_includes_rw_id() -> None:
     assert normalized["username"] == "user01_42"
     assert normalized["description"] == "provisioning:tx-1"
     assert normalized["tag"] == "PAID"
+
+
+def test_strict_lookup_preserves_transient_error() -> None:
+    class Users:
+        async def get_user_by_id(self, _rw_id):
+            raise httpx.ReadTimeout("panel unavailable")
+
+    client = RemnawaveClient("https://panel.invalid", "token")
+    client._sdk = SimpleNamespace(users=Users())
+
+    with pytest.raises(RemnawaveOperationError) as exc_info:
+        asyncio.run(client.get_user_by_id(42, raise_on_error=True))
+
+    assert exc_info.value.retryable is True
+    assert "ReadTimeout" in str(exc_info.value)
+
+
+def test_strict_lookup_keeps_real_404_as_not_found() -> None:
+    request = httpx.Request("GET", "https://panel.invalid/api/users/42")
+    response = httpx.Response(404, request=request)
+
+    class Users:
+        async def get_user_by_id(self, _rw_id):
+            raise httpx.HTTPStatusError(
+                "not found", request=request, response=response,
+            )
+
+    client = RemnawaveClient("https://panel.invalid", "token")
+    client._sdk = SimpleNamespace(users=Users())
+
+    assert asyncio.run(
+        client.get_user_by_id(42, raise_on_error=True)
+    ) is None

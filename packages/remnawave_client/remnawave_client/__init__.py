@@ -15,7 +15,12 @@ Public API:
 
 from . import api
 from .api import set_config_provider
-from .client import RemnawaveClient, configure, get_default_client
+from .client import (
+    RemnawaveClient,
+    RemnawaveOperationError,
+    configure,
+    get_default_client,
+)
 from .operations import apply_extend, apply_new_user, apply_update
 from .managed_subscriptions import serialize_managed_subscription
 from .perks import apply_crm_bonus_days, apply_crm_bonus_traffic, is_free_tier_user
@@ -60,6 +65,7 @@ from .webhooks import (
 
 __all__ = [
     "RemnawaveClient",
+    "RemnawaveOperationError",
     "configure",
     "get_default_client",
     "api",

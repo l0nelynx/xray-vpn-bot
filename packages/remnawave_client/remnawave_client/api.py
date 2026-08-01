@@ -143,8 +143,12 @@ async def get_all_users_for_crm() -> list[dict]:
     return await _client().get_all_users_for_crm()
 
 
-async def get_user_from_username(username: str) -> dict | None:
-    return await _client().get_user_by_username(username)
+async def get_user_from_username(
+    username: str, *, strict: bool = False,
+) -> dict | None:
+    return await _client().get_user_by_username(
+        username, raise_on_error=strict,
+    )
 
 
 async def get_user_from_email(email: str) -> dict | None:
@@ -155,8 +159,8 @@ async def get_user_from_uuid(user_uuid: str) -> dict | None:
     return await _client().get_user_by_uuid(user_uuid)
 
 
-async def get_user_from_id(rw_id: int) -> dict | None:
-    return await _client().get_user_by_id(rw_id)
+async def get_user_from_id(rw_id: int, *, strict: bool = False) -> dict | None:
+    return await _client().get_user_by_id(rw_id, raise_on_error=strict)
 
 
 async def get_user_by_short_uuid_raw(short_uuid: str) -> dict | None:

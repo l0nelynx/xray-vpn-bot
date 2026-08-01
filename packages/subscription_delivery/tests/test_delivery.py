@@ -4,10 +4,11 @@ DB session and notifier all faked — no network, no real DB.
 import asyncio
 from contextlib import asynccontextmanager
 
+import httpx
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from remnawave_client import SubscriptionScenario
+from remnawave_client import RemnawaveOperationError, SubscriptionScenario
 import subscription_delivery.delivery as d
 
 
@@ -49,7 +50,7 @@ def _make_session_factory(sink):
 def _patch_remnawave(monkeypatch, *, scenario, info=None, apply_result=None):
     created = False
 
-    async def fake_get_user_from_username(_username):
+    async def fake_get_user_from_username(_username, **_kwargs):
         if info is not None:
             return info
         return apply_result if created else None
@@ -115,7 +116,7 @@ def test_existing_target_can_be_extended_without_local_email(monkeypatch):
     captured = {}
     _patch_db(monkeypatch, user_id=12, action="existing")
 
-    async def get_by_id(rw_id):
+    async def get_by_id(rw_id, **_kwargs):
         assert rw_id == 777
         return {"uuid": "target-uuid", "rw_id": 777, "username": "marketplace_user", "expire": None}
 
@@ -208,7 +209,7 @@ def test_existing_user_receives_full_target_without_overwriting_blank_descriptio
     captured = {}
     _patch_db(monkeypatch, user_id=8, action="existing")
 
-    async def fake_get_user_from_id(_rw_id):
+    async def fake_get_user_from_id(_rw_id, **_kwargs):
         return {"uuid": "rw-existing", "rw_id": 888, "username": "user_8", "expire": None}
 
     async def fake_apply_extend(**values):
@@ -247,7 +248,7 @@ def test_existing_user_receives_full_target_without_overwriting_blank_descriptio
     assert captured["internal_squad_ids"] == ["S1", "S2"]
     assert captured["traffic_limit_bytes"] == 25 * 1024**3
     assert captured["traffic_limit_strategy"] == "MONTH"
-    assert captured["description"] is None
+    assert captured["description"] == "delivery:tx-target"
     assert captured["tag"] == "PAID"
 
 
@@ -264,7 +265,7 @@ def test_target_owned_by_another_user_is_pending_without_rw_mutation(monkeypatch
     _patch_db(monkeypatch, user_id=42, owner=77)
     called = False
 
-    async def get_by_id(_rw_id):
+    async def get_by_id(_rw_id, **_kwargs):
         nonlocal called
         called = True
         return {"uuid": "foreign", "rw_id": 900}
@@ -283,7 +284,7 @@ def test_foreign_candidate_advances_to_next_subscription_number(monkeypatch):
     _patch_db(monkeypatch, user_id=42)
     created = None
 
-    async def lookup(username):
+    async def lookup(username, **_kwargs):
         nonlocal created
         if username == "user01_42":
             return {"uuid": "foreign", "rw_id": 1, "description": "other"}
@@ -313,7 +314,7 @@ def test_create_error_recovers_same_marker_without_second_create(monkeypatch):
     calls = 0
     appeared = False
 
-    async def lookup(username):
+    async def lookup(username, **_kwargs):
         if not appeared:
             return None
         return {
@@ -340,11 +341,84 @@ def test_create_error_recovers_same_marker_without_second_create(monkeypatch):
     assert calls == 1
 
 
+def test_target_lookup_outage_is_retryable_and_never_creates(monkeypatch):
+    _patch_db(monkeypatch, user_id=42)
+    create_called = False
+
+    async def unavailable(_rw_id, **_kwargs):
+        raise RemnawaveOperationError(
+            "get_user_by_id", httpx.ReadTimeout("panel unavailable"),
+        )
+
+    async def forbidden_create(**_kwargs):
+        nonlocal create_called
+        create_called = True
+        raise AssertionError("read outage must not be treated as missing user")
+
+    monkeypatch.setattr(d.rem, "get_user_from_id", unavailable)
+    monkeypatch.setattr(d, "apply_new_user", forbidden_create)
+
+    result = asyncio.run(d.deliver_android_paid(
+        transaction_id="tx-outage", android_user_id=42, email=None, days=30,
+        tariff_slug="sid:S1:esid:E1", target_rw_id=901,
+        session_factory=_make_session_factory([]),
+        notifier=lambda text: _noop(), purchase_source="miniapp",
+    ))
+
+    assert result["status"] == "pending"
+    assert result["retryable"] is True
+    assert "ReadTimeout" in result["message"]
+    assert create_called is False
+
+
+def test_lost_extend_response_recovers_marker_without_double_extension(
+    monkeypatch,
+):
+    _patch_db(monkeypatch, user_id=42, action="existing")
+    state = {
+        "uuid": "existing-uuid", "rw_id": 901, "username": "user01_42",
+        "expire": None, "description": "old description",
+        "subscription_url": "https://sub/existing",
+    }
+    update_calls = 0
+
+    async def get_by_id(_rw_id, **_kwargs):
+        return dict(state)
+
+    async def extend(**values):
+        nonlocal update_calls
+        update_calls += 1
+        state["description"] = values["description"]
+        raise RemnawaveOperationError(
+            "update_user", httpx.ReadTimeout("response lost"),
+        )
+
+    monkeypatch.setattr(d.rem, "get_user_from_id", get_by_id)
+    monkeypatch.setattr(d, "resolve_scenario", lambda *_: SubscriptionScenario.EXTEND)
+    monkeypatch.setattr(d, "apply_extend", extend)
+
+    async def deliver():
+        return await d.deliver_android_paid(
+            transaction_id="tx-marker", android_user_id=42, email=None,
+            days=30, tariff_slug="sid:S1:esid:E1", target_rw_id=901,
+            session_factory=_make_session_factory([]),
+            notifier=lambda text: _noop(), purchase_source="miniapp",
+        )
+
+    first = asyncio.run(deliver())
+    second = asyncio.run(deliver())
+
+    assert first["status"] == "success"
+    assert second["status"] == "success"
+    assert state["description"].startswith("delivery:tx-marker")
+    assert update_calls == 1
+
+
 def test_allocation_stops_after_one_hundred_foreign_candidates(monkeypatch):
     _patch_db(monkeypatch, user_id=42)
     checked: list[str] = []
 
-    async def occupied(username):
+    async def occupied(username, **_kwargs):
         checked.append(username)
         return {"uuid": f"foreign-{username}", "rw_id": len(checked), "description": "other"}
 
@@ -381,6 +455,29 @@ async def _seed_purchase(session_factory, *, user_id=42, target_rw_id=None):
         await session.commit()
 
 
+def test_successful_retry_restores_confirmed_status_and_clears_error(
+    session_factory,
+):
+    from common_db.models import Transaction
+
+    async def run():
+        await _seed_purchase(session_factory)
+        async with session_factory() as session:
+            await session.execute(d.text(
+                "UPDATE transactions SET order_status = 'pending', "
+                "delivery_error = 'temporary outage' WHERE transaction_id = 'tx-42'"
+            ))
+            await session.commit()
+
+        await d._update_delivery_status(session_factory, "tx-42", 1)
+
+        async with session_factory() as session:
+            tx = await session.get(Transaction, "tx-42")
+            return tx.order_status, tx.delivery_status, tx.delivery_error
+
+    assert asyncio.run(run()) == ("confirmed", 1, None)
+
+
 def test_real_db_target_owner_conflict_becomes_pending(
     monkeypatch, session_factory,
 ):
@@ -396,7 +493,7 @@ def test_real_db_target_owner_conflict_becomes_pending(
             ))
             await session.commit()
 
-        async def forbidden(_rw_id):
+        async def forbidden(_rw_id, **_kwargs):
             raise AssertionError("foreign Remnawave profile must not be read or changed")
 
         monkeypatch.setattr(d.rem, "get_user_from_id", forbidden)
@@ -423,7 +520,7 @@ def test_real_db_unowned_external_target_is_recovered(
 ):
     from common_db.models import Transaction, User, UserSubscription
 
-    async def get_by_id(rw_id):
+    async def get_by_id(rw_id, **_kwargs):
         assert rw_id == 901
         return {
             "uuid": "external-uuid", "rw_id": 901, "username": "legacy_profile",
@@ -474,11 +571,11 @@ def test_real_db_null_or_missing_target_creates_and_replaces_target(
 
     created: dict = {}
 
-    async def get_by_id(rw_id):
+    async def get_by_id(rw_id, **_kwargs):
         assert rw_id == 902
         return None
 
-    async def get_by_username(username):
+    async def get_by_username(username, **_kwargs):
         return created.get(username)
 
     async def create(**values):

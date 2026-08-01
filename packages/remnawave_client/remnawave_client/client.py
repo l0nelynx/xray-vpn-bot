@@ -3,6 +3,7 @@ import logging
 import uuid as _uuid
 from typing import Optional
 
+import httpx
 from pydantic import BaseModel, ConfigDict, Field
 from remnawave import RemnawaveSDK
 from remnawave.enums import TrafficLimitStrategy, UserStatus
@@ -15,6 +16,35 @@ from remnawave.models import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class RemnawaveOperationError(RuntimeError):
+    """A Remnawave request failed for a reason other than a genuine 404.
+
+    The legacy client returns ``None`` for compatibility. Delivery code can
+    opt into this exception so an outage is not confused with "user missing".
+    """
+
+    def __init__(self, operation: str, cause: Exception) -> None:
+        self.operation = operation
+        self.cause = cause
+        response = getattr(cause, "response", None)
+        self.status_code = getattr(response, "status_code", None)
+        self.retryable = (
+            isinstance(cause, (httpx.TimeoutException, httpx.NetworkError))
+            or self.status_code in {408, 425, 429}
+            or (self.status_code is not None and self.status_code >= 500)
+        )
+        detail = str(cause).strip() or type(cause).__name__
+        status = f" http_status={self.status_code}" if self.status_code else ""
+        super().__init__(
+            f"remnawave_{operation}_failed:{type(cause).__name__}{status}: {detail}"
+        )
+
+
+def _is_not_found_error(exc: Exception) -> bool:
+    response = getattr(exc, "response", None)
+    return getattr(response, "status_code", None) == 404
 
 
 # --- HWID compatibility shim ------------------------------------------------
@@ -288,14 +318,20 @@ class RemnawaveClient:
 
         return normalized
 
-    async def get_user_by_username(self, username: str) -> dict | None:
+    async def get_user_by_username(
+        self, username: str, *, raise_on_error: bool = False,
+    ) -> dict | None:
         try:
             response = await self.sdk.users.get_user_by_username(username)
             if not response:
                 return None
             return _normalize_user(response)
         except Exception as e:
+            if _is_not_found_error(e):
+                return None
             logger.error("Remnawave get_user_by_username(%s) failed: %s", username, e)
+            if raise_on_error:
+                raise RemnawaveOperationError("get_user_by_username", e) from e
             return None
 
     async def get_user_by_email(self, email: str) -> dict | None:
@@ -318,17 +354,25 @@ class RemnawaveClient:
             logger.error("Remnawave get_user_by_uuid(%s) failed: %s", user_uuid, e)
             return None
 
-    async def get_user_by_id(self, rw_id: int) -> dict | None:
+    async def get_user_by_id(
+        self, rw_id: int, *, raise_on_error: bool = False,
+    ) -> dict | None:
         """Fetch a Remnawave user by its stable numeric panel id."""
         try:
             response = await self.sdk.users.get_user_by_id(str(int(rw_id)))
             if not response:
                 return None
             return _normalize_user(response)
-        except (TypeError, ValueError):
+        except (TypeError, ValueError) as e:
+            if raise_on_error:
+                raise RemnawaveOperationError("get_user_by_id", e) from e
             return None
         except Exception as e:
+            if _is_not_found_error(e):
+                return None
             logger.error("Remnawave get_user_by_id(%s) failed: %s", rw_id, e)
+            if raise_on_error:
+                raise RemnawaveOperationError("get_user_by_id", e) from e
             return None
 
     async def _uuid_for_id(self, rw_id: int) -> str | None:
@@ -383,6 +427,7 @@ class RemnawaveClient:
         external_squad_id: Optional[str] = None,
         traffic_limit_bytes: Optional[int] = None,
         traffic_limit_strategy: Optional[str] = None,
+        raise_on_error: bool = False,
     ) -> dict | None:
         try:
             if email is None:
@@ -439,6 +484,8 @@ class RemnawaveClient:
             }
         except Exception as e:
             logger.error("Remnawave create_user(%s) failed: %s", username, e)
+            if raise_on_error:
+                raise RemnawaveOperationError("create_user", e) from e
             return None
 
     async def update_user(
@@ -456,6 +503,7 @@ class RemnawaveClient:
         external_squad_id: Optional[str] = None,
         traffic_limit_bytes: Optional[int] = None,
         traffic_limit_strategy: Optional[str] = None,
+        raise_on_error: bool = False,
     ) -> dict | None:
         try:
             update_data: dict = {"uuid": _uuid.UUID(user_uuid)}
@@ -536,6 +584,8 @@ class RemnawaveClient:
             }
         except Exception as e:
             logger.error("Remnawave update_user(%s) failed: %s", user_uuid, e)
+            if raise_on_error:
+                raise RemnawaveOperationError("update_user", e) from e
             return None
 
     async def update_user_by_id(self, rw_id: int, **changes) -> dict | None:

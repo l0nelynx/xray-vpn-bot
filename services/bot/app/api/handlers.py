@@ -193,7 +193,7 @@ async def _process_account_payment(order_id: str, userdata: dict, db_user_id: in
     """Deliver a paid transaction using local ownership, independent of UI."""
     from app.handlers.android_delivery import deliver_android_paid
 
-    if userdata.get('status') != 'created':
+    if userdata.get('status') not in {'created', 'pending'}:
         logging.warning(
             f"Account payment {order_id} ignored — status={userdata.get('status')}"
         )
@@ -221,25 +221,39 @@ async def _process_account_payment(order_id: str, userdata: dict, db_user_id: in
         transaction_id=local_transaction_id,
     )
 
-    result = await deliver_android_paid(
-        transaction_id=local_transaction_id,
-        android_user_id=db_user_id,
-        email=email,
-        days=tariff_days,
-        tariff_slug=userdata.get("tariff_slug"),
-        delivery_target={
-            "internal_squad_ids": userdata.get("internal_squad_ids") or [],
-            "external_squad_id": userdata.get("external_squad_id"),
-            "traffic_limit_bytes": userdata.get("traffic_limit_bytes") or 0,
-            "traffic_limit_strategy": userdata.get("traffic_limit_strategy") or "NO_RESET",
-            "remnawave_description": userdata.get("remnawave_description"),
-            "remnawave_tag": userdata.get("remnawave_tag"),
-        },
-        target_rw_id=userdata.get("target_rw_id"),
-        tg_id=tg_id,
-        tg_username=username if tg_id is not None else None,
-        purchase_source=purchase_source,
-    )
+    attempts = 0
+    while True:
+        attempts += 1
+        result = await deliver_android_paid(
+            transaction_id=local_transaction_id,
+            android_user_id=db_user_id,
+            email=email,
+            days=tariff_days,
+            tariff_slug=userdata.get("tariff_slug"),
+            delivery_target={
+                "internal_squad_ids": userdata.get("internal_squad_ids") or [],
+                "external_squad_id": userdata.get("external_squad_id"),
+                "traffic_limit_bytes": userdata.get("traffic_limit_bytes") or 0,
+                "traffic_limit_strategy": userdata.get("traffic_limit_strategy") or "NO_RESET",
+                "remnawave_description": userdata.get("remnawave_description"),
+                "remnawave_tag": userdata.get("remnawave_tag"),
+            },
+            target_rw_id=userdata.get("target_rw_id"),
+            tg_id=tg_id,
+            tg_username=username if tg_id is not None else None,
+            purchase_source=purchase_source,
+        )
+        if result["status"] == "success":
+            break
+        if not result.get("retryable") or attempts >= 3:
+            break
+        delay = 2 ** attempts  # 2s, then 4s
+        logging.warning(
+            "Transient account delivery failure order=%s attempt=%s/3: %s; "
+            "retrying in %ss",
+            order_id, attempts, result.get("message"), delay,
+        )
+        await asyncio.sleep(delay)
 
     if result["status"] != "success":
         await rq.update_order_status(local_transaction_id, 'pending')
@@ -251,7 +265,8 @@ async def _process_account_payment(order_id: str, userdata: dict, db_user_id: in
             text=(
                 f"❌ Subscription delivery failed ({purchase_source}): {order_id}\n"
                 f"User: {username or email} (db_id={db_user_id})\n"
-                f"Error: {result.get('message')}"
+                f"Error: {result.get('message')}\n"
+                f"Attempts: {attempts}/3"
             ),
         )
         return

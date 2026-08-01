@@ -30,6 +30,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
 from remnawave_client import (
+    RemnawaveOperationError,
     SubscriptionScenario,
     SubscriptionType,
     apply_extend,
@@ -96,6 +97,27 @@ def provisioning_description(
         f"tg_username:{original_tg_username or 'none'}"
     )
     return f"{metadata}; {description}" if description else metadata
+
+
+def delivery_description(transaction_id: str, description: str | None) -> str:
+    """Attach an idempotency marker to a mutating delivery operation."""
+    marker = f"delivery:{transaction_id}"
+    if description and marker in description:
+        return description
+    return f"{marker}; {description}" if description else marker
+
+
+def _pending_result(reason: str, *, retryable: bool = False) -> dict:
+    result = {"status": "pending", "message": reason}
+    if retryable:
+        result["retryable"] = True
+    return result
+
+
+def _is_retryable_exception(exc: Exception) -> bool:
+    if isinstance(exc, RemnawaveOperationError):
+        return exc.retryable
+    return isinstance(exc, (TimeoutError, ConnectionError, OSError))
 
 
 def _rw_id(info: dict | None) -> int | None:
@@ -192,11 +214,16 @@ async def _update_delivery_status(
     error: str | None = None,
     pending: bool = False,
 ) -> None:
+    order_status_sql = (
+        ", order_status = 'pending'"
+        if pending
+        else (", order_status = 'confirmed'" if status == 1 else "")
+    )
     async with session_factory() as session:
         await session.execute(
             text(
                 "UPDATE transactions SET delivery_status = :s, delivery_error = :e"
-                + (", order_status = 'pending'" if pending else "")
+                + order_status_sql
                 + " WHERE transaction_id = :t"
             ),
             {"s": status, "e": error, "t": transaction_id},
@@ -427,7 +454,21 @@ async def deliver_android_paid(
                 purchase_source=purchase_source, reason="target_owner_conflict",
             )
             return {"status": "pending", "message": "target_owner_conflict"}
-        info = await rem.get_user_from_id(int(target_rw_id))
+        try:
+            info = await rem.get_user_from_id(int(target_rw_id), strict=True)
+        except RemnawaveOperationError as exc:
+            reason = str(exc)
+            await _update_delivery_status(
+                session_factory, transaction_id, 0,
+                error=reason[:255], pending=True,
+            )
+            await _notify(
+                notifier, ok=False, transaction_id=transaction_id,
+                db_user_id=db_user_id, tg_id=tg_id, tg_username=tg_username,
+                email=email, days=days, tariff_slug=tariff_slug,
+                purchase_source=purchase_source, reason=reason,
+            )
+            return _pending_result(reason, retryable=exc.retryable)
     else:
         owner = None
         info = None
@@ -440,7 +481,24 @@ async def deliver_android_paid(
         info = None
         for ordinal in range(start, start + _MAX_USERNAME_ATTEMPTS):
             candidate = build_remnawave_username(tg_username, db_user_id, ordinal)
-            occupied = await rem.get_user_from_username(candidate)
+            try:
+                occupied = await rem.get_user_from_username(
+                    candidate, strict=True,
+                )
+            except RemnawaveOperationError as exc:
+                reason = str(exc)
+                await _update_delivery_status(
+                    session_factory, transaction_id, 0,
+                    error=reason[:255], pending=True,
+                )
+                await _notify(
+                    notifier, ok=False, transaction_id=transaction_id,
+                    db_user_id=db_user_id, tg_id=tg_id,
+                    tg_username=tg_username, email=email, days=days,
+                    tariff_slug=tariff_slug, purchase_source=purchase_source,
+                    reason=reason,
+                )
+                return _pending_result(reason, retryable=exc.retryable)
             if occupied:
                 if marker in str(occupied.get("description") or ""):
                     info = occupied
@@ -468,10 +526,34 @@ async def deliver_android_paid(
                     traffic_limit_strategy=target.get("traffic_limit_strategy"),
                     tag=target.get("remnawave_tag"),
                     description=description,
+                    strict=True,
                 )
             except Exception as exc:
                 logger.warning("create failed for %s, checking marker: %s", candidate, exc)
-                appeared = await rem.get_user_from_username(candidate)
+                try:
+                    appeared = await rem.get_user_from_username(
+                        candidate, strict=True,
+                    )
+                except RemnawaveOperationError as verify_exc:
+                    reason = f"{exc}; verification_failed:{verify_exc}"
+                    await _update_delivery_status(
+                        session_factory, transaction_id, 0,
+                        error=reason[:255], pending=True,
+                    )
+                    await _notify(
+                        notifier, ok=False, transaction_id=transaction_id,
+                        db_user_id=db_user_id, tg_id=tg_id,
+                        tg_username=tg_username, email=email, days=days,
+                        tariff_slug=tariff_slug,
+                        purchase_source=purchase_source, reason=reason,
+                    )
+                    return _pending_result(
+                        reason,
+                        retryable=(
+                            _is_retryable_exception(exc)
+                            or verify_exc.retryable
+                        ),
+                    )
                 if appeared and marker in str(appeared.get("description") or ""):
                     info = appeared
                     break
@@ -487,8 +569,18 @@ async def deliver_android_paid(
                     email=email, days=days, tariff_slug=tariff_slug,
                     purchase_source=purchase_source, reason=str(exc),
                 )
-                return {"status": "pending", "message": str(exc)}
-            appeared = await rem.get_user_from_username(candidate)
+                return _pending_result(
+                    str(exc), retryable=_is_retryable_exception(exc),
+                )
+            try:
+                appeared = await rem.get_user_from_username(
+                    candidate, strict=True,
+                )
+            except RemnawaveOperationError:
+                # A successful create response already identifies the exact
+                # profile and carries our marker. Do not turn a follow-up read
+                # outage into a failed delivery.
+                appeared = None
             if appeared:
                 if marker in str(appeared.get("description") or ""):
                     info = appeared
@@ -505,7 +597,9 @@ async def deliver_android_paid(
                     session_factory, transaction_id, 0,
                     error="remnawave_apply_returned_none", pending=True,
                 )
-                return {"status": "pending", "message": "remnawave_apply_returned_none"}
+                return _pending_result(
+                    "remnawave_apply_returned_none", retryable=True,
+                )
             created = True
             break
         if info is None:
@@ -557,9 +651,27 @@ async def deliver_android_paid(
         tg_username, db_user_id, ordinal or 0
     ))
     scenario = resolve_scenario(info, SubscriptionType.PAID)
+    delivery_marker = f"delivery:{transaction_id}"
+    base_description = (
+        target.get("remnawave_description")
+        if has_delivery_target
+        else (
+            f"{purchase_source} paid extend"
+            if scenario == SubscriptionScenario.EXTEND
+            else f"{purchase_source} paid update"
+        )
+    )
+    operation_description = delivery_description(
+        transaction_id, base_description,
+    )
 
     try:
-        if created or marker in str((info or {}).get("description") or ""):
+        current_description = str((info or {}).get("description") or "")
+        if (
+            created
+            or marker in current_description
+            or delivery_marker in current_description
+        ):
             result = info
         elif scenario == SubscriptionScenario.EXTEND:
             uuid = (info or {}).get("uuid")
@@ -577,14 +689,11 @@ async def deliver_android_paid(
                 squad_id=internal_ids[0],
                 internal_squad_ids=internal_ids,
                 external_squad_id=external_squad_id,
-                description=(
-                    target.get("remnawave_description")
-                    if has_delivery_target
-                    else f"{purchase_source} paid extend"
-                ),
+                description=operation_description,
                 traffic_limit_bytes=target.get("traffic_limit_bytes"),
                 traffic_limit_strategy=target.get("traffic_limit_strategy"),
                 tag=target.get("remnawave_tag"),
+                strict=True,
             )
         else:  # UPDATE / LIMITED / ALREADY_ACTIVE all fall through to update.
             uuid = (info or {}).get("uuid")
@@ -604,41 +713,88 @@ async def deliver_android_paid(
                 internal_squad_ids=internal_ids,
                 external_squad_id=external_squad_id,
                 status="active",
-                description=(
-                    target.get("remnawave_description")
-                    if has_delivery_target
-                    else f"{purchase_source} paid update"
-                ),
+                description=operation_description,
                 traffic_limit_bytes=target.get("traffic_limit_bytes"),
                 traffic_limit_strategy=target.get("traffic_limit_strategy"),
                 tag=target.get("remnawave_tag"),
+                strict=True,
             )
     except Exception as exc:
-        logger.error("subscription delivery for tx=%s failed: %s", transaction_id, exc)
-        await _update_delivery_status(
-            session_factory, transaction_id, 0, error=str(exc)[:255], pending=True
+        logger.error(
+            "subscription delivery for tx=%s failed: %s",
+            transaction_id, exc,
         )
-        await _notify(
-            notifier, ok=False, transaction_id=transaction_id,
-            db_user_id=db_user_id, tg_id=tg_id, tg_username=tg_username,
-            email=email, days=days, tariff_slug=tariff_slug,
-            purchase_source=purchase_source, reason=str(exc),
-        )
-        return {"status": "pending", "message": str(exc)}
+        try:
+            appeared = await rem.get_user_from_id(actual_rw_id, strict=True)
+        except RemnawaveOperationError as verify_exc:
+            reason = f"{exc}; verification_failed:{verify_exc}"
+            await _update_delivery_status(
+                session_factory, transaction_id, 0,
+                error=reason[:255], pending=True,
+            )
+            await _notify(
+                notifier, ok=False, transaction_id=transaction_id,
+                db_user_id=db_user_id, tg_id=tg_id,
+                tg_username=tg_username, email=email, days=days,
+                tariff_slug=tariff_slug, purchase_source=purchase_source,
+                reason=reason,
+            )
+            return _pending_result(
+                reason,
+                retryable=(
+                    _is_retryable_exception(exc) or verify_exc.retryable
+                ),
+            )
+        if appeared and delivery_marker in str(
+            appeared.get("description") or ""
+        ):
+            info = appeared
+            result = appeared
+        else:
+            reason = str(exc)
+            await _update_delivery_status(
+                session_factory, transaction_id, 0,
+                error=reason[:255], pending=True,
+            )
+            await _notify(
+                notifier, ok=False, transaction_id=transaction_id,
+                db_user_id=db_user_id, tg_id=tg_id, tg_username=tg_username,
+                email=email, days=days, tariff_slug=tariff_slug,
+                purchase_source=purchase_source, reason=reason,
+            )
+            return _pending_result(
+                reason, retryable=_is_retryable_exception(exc),
+            )
 
     if not result:
-        await _update_delivery_status(
-            session_factory, transaction_id, 0,
-            error="remnawave_apply_returned_none", pending=True,
-        )
-        await _notify(
-            notifier, ok=False, transaction_id=transaction_id,
-            db_user_id=db_user_id, tg_id=tg_id, tg_username=tg_username,
-            email=email, days=days, tariff_slug=tariff_slug,
-            purchase_source=purchase_source,
-            reason="remnawave_apply_returned_none",
-        )
-        return {"status": "pending", "message": "remnawave_apply_returned_none"}
+        try:
+            appeared = await rem.get_user_from_id(actual_rw_id, strict=True)
+        except RemnawaveOperationError as verify_exc:
+            appeared = None
+            verification_reason = str(verify_exc)
+        else:
+            verification_reason = None
+        if appeared and delivery_marker in str(
+            appeared.get("description") or ""
+        ):
+            info = appeared
+            result = appeared
+        else:
+            reason = "remnawave_apply_returned_none"
+            if verification_reason:
+                reason = f"{reason}; verification_failed:{verification_reason}"
+            await _update_delivery_status(
+                session_factory, transaction_id, 0,
+                error=reason[:255], pending=True,
+            )
+            await _notify(
+                notifier, ok=False, transaction_id=transaction_id,
+                db_user_id=db_user_id, tg_id=tg_id, tg_username=tg_username,
+                email=email, days=days, tariff_slug=tariff_slug,
+                purchase_source=purchase_source,
+                reason=reason,
+            )
+            return _pending_result(reason, retryable=True)
 
     rw_uuid = result.get("uuid") or (info or {}).get("uuid")
 
