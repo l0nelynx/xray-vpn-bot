@@ -337,24 +337,14 @@ def test_primary_mismatch_report_contains_both_numeric_ids() -> None:
             Session = async_sessionmaker(engine, expire_on_commit=False)
             async with Session() as session:
                 session.add(User(id=1, tg_id=101, rw_id=11, vless_uuid=LEGACY_A))
-                session.add_all([
-                    UserSubscription(
-                        user_id=1,
-                        rw_id=11,
-                        source="legacy_projection",
-                        is_primary=False,
-                        created_at="2026-01-01T00:00:00",
-                        updated_at="2026-01-01T00:00:00",
-                    ),
-                    UserSubscription(
-                        user_id=1,
-                        rw_id=22,
-                        source="primary",
-                        is_primary=True,
-                        created_at="2026-01-02T00:00:00",
-                        updated_at="2026-01-02T00:00:00",
-                    ),
-                ])
+                session.add(UserSubscription(
+                    user_id=1,
+                    rw_id=22,
+                    source="primary",
+                    is_primary=True,
+                    created_at="2026-01-02T00:00:00",
+                    updated_at="2026-01-02T00:00:00",
+                ))
                 await session.commit()
 
             panel = _panel(
@@ -392,6 +382,7 @@ def test_primary_mismatch_report_contains_both_numeric_ids() -> None:
             )
             assert code == 0
             assert report["ready"] is False
+            assert report["planned"]["attach_existing"] == 1
             assert report["planned"]["sync_primary_projection"] == 1
             assert report["blocker_counts"]["primary_mismatch_user_ids"] == 0
             assert report["confirmed_primary_projection_repairs"] == [{
@@ -406,6 +397,7 @@ def test_primary_mismatch_report_contains_both_numeric_ids() -> None:
                 primary_projection_repairs={1: 22},
             )
             assert code == 0 and report["ready"] is True
+            assert report["applied"] == 2
             async with Session() as session:
                 user = await session.get(User, 1)
                 links = list(

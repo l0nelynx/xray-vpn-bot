@@ -401,7 +401,7 @@ async def apply_actions(
             user_id=action.user_id,
             rw_id=action.rw_id,
             source="legacy_uuid_backfill_2_8",
-            make_primary=(action.kind == "attach_existing" or primary is None),
+            make_primary=(primary is None),
         )
         if action.kind == "resolve_legacy" and primary is not None:
             # Keep an already-established primary; the legacy profile remains
