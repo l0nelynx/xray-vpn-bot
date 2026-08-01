@@ -425,7 +425,8 @@ async def transfer_subscription_time(
             )
 
     source_user, target_user = await asyncio.gather(
-        get_user_from_id(source_rw_id), get_user_from_id(target.rw_id)
+        get_user_from_id(source_rw_id, strict=True),
+        get_user_from_id(target.rw_id, strict=True),
     )
     if source_user is None or target_user is None:
         async with async_session() as session:
@@ -453,7 +454,9 @@ async def transfer_subscription_time(
         )
 
     target_days = _remaining_days(target_user)
-    extended = await update_user_by_id(target.rw_id, days=target_days + source_days)
+    extended = await update_user_by_id(
+        target.rw_id, days=target_days + source_days, status="active"
+    )
     if extended is None:
         async with async_session() as session:
             row = await session.get(SubscriptionTransfer, ledger.id)

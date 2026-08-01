@@ -1,7 +1,6 @@
 """CRM user segmentation helpers over Remnawave user DTOs.
 
-Pure functions — no DB, no Telegram. Dashboard CRM joins these dicts with
-local ``users`` rows by ``vless_uuid``.
+Pure functions — no DB, no Telegram. Dashboard CRM joins these dicts by ``rw_id``.
 """
 
 from __future__ import annotations
@@ -91,7 +90,6 @@ def _first_connected_at(user: Any) -> Any:
 
 def normalize_user_for_crm(user: UserResponseDto | dict) -> dict:
     """Normalized Remnawave user view for CRM segmentation."""
-    uuid = _get_attr(user, "uuid")
     expire_at = _get_attr(user, "expire_at", "expireAt")
     if isinstance(expire_at, str):
         try:
@@ -152,7 +150,6 @@ def normalize_user_for_crm(user: UserResponseDto | dict) -> dict:
     tag = str(tag_raw).strip().upper().replace(" ", "") if tag_raw else None
 
     return {
-        "uuid": str(uuid) if uuid else None,
         "rw_id": rw_id,
         "status": status,
         "expire_ts": expire_ts,
@@ -178,7 +175,7 @@ def matches_rw_segment(
     *,
     days_threshold: int = DEFAULT_DAYS_THRESHOLD,
     traffic_threshold: float = DEFAULT_TRAFFIC_THRESHOLD,
-    torrent_uuids: set[str] | None = None,
+    torrent_rw_ids: set[int] | None = None,
 ) -> bool:
     """Return True when a normalized CRM user matches a Remnawave-backed segment."""
     if segment_id not in SEGMENT_IDS or segment_id in (
@@ -188,7 +185,7 @@ def matches_rw_segment(
         return False
 
     status = crm_user.get("status")
-    uuid = crm_user.get("uuid")
+    rw_id = crm_user.get("rw_id")
 
     if segment_id == SEGMENT_NEVER_CONNECTED:
         return crm_user.get("first_connected_at") is None
@@ -218,7 +215,7 @@ def matches_rw_segment(
         return count >= limit
 
     if segment_id == SEGMENT_TORRENT:
-        return bool(uuid and torrent_uuids and uuid in torrent_uuids)
+        return bool(rw_id is not None and torrent_rw_ids and rw_id in torrent_rw_ids)
 
     return False
 

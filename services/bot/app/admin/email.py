@@ -63,23 +63,22 @@ async def admin_email_save(message: Message, state: FSMContext):
         parse_mode='HTML',
     )
 
-    # Пробуем найти пользователя по email в RemnaWave и обновить vless_uuid
+    # Exact email lookup may safely attach a numeric Remnawave id.
     info = await rq.get_user_full_info_by_tg_id(tg_id)
     if info:
         try:
             from remnawave_client.api import get_user_from_email
             rw_user = await get_user_from_email(email)
-            if rw_user and rw_user.get("uuid"):
+            if rw_user and rw_user.get("rw_id") is not None:
                 await rq.update_user_api_info(
                     tg_id=tg_id,
                     username=info.get("username"),
-                    vless_uuid=rw_user["uuid"],
                     api_provider="remnawave",
                     rw_id=rw_user.get("rw_id"),
                 )
                 await message.answer(
                     f"Пользователь найден в RemnaWave по email.\n"
-                    f"UUID: <code>{rw_user['uuid']}</code>\n"
+                    f"RW ID: <code>{rw_user['rw_id']}</code>\n"
                     f"API провайдер обновлён на remnawave.",
                     parse_mode='HTML',
                 )

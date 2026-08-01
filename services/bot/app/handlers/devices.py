@@ -14,12 +14,12 @@ router = Router()
 DEVICES_PER_PAGE = 5
 
 
-async def _get_user_uuid(tg_id: int, username: str) -> str | None:
+async def _get_user_rw_id(tg_id: int, username: str) -> int | None:
     """Resolve through stable local ownership; never trust username alone."""
     from app.handlers.tools import resolve_remnawave_account
 
-    rw_uuid, _ = await resolve_remnawave_account(tg_id, username)
-    return rw_uuid
+    rw_id, _ = await resolve_remnawave_account(tg_id, username)
+    return rw_id
 
 
 def _build_devices_keyboard(devices: list, lang, page: int = 0) -> InlineKeyboardMarkup:
@@ -84,8 +84,8 @@ def _format_datetime(dt) -> str:
 
 async def _show_devices(message_func, tg_id: int, username: str, lang, page: int = 0):
     """Общая логика показа списка устройств."""
-    user_uuid = await _get_user_uuid(tg_id, username)
-    if not user_uuid:
+    rw_id = await _get_user_rw_id(tg_id, username)
+    if rw_id is None:
         await message_func(
             text=lang.msg_devices_no_subscription,
             parse_mode='HTML',
@@ -95,7 +95,7 @@ async def _show_devices(message_func, tg_id: int, username: str, lang, page: int
         )
         return
 
-    response = await rem.get_user_hwid_devices(user_uuid)
+    response = await rem.get_user_hwid_devices_by_id(rw_id)
     if response is None:
         await message_func(
             text=lang.msg_devices_error,
@@ -157,12 +157,12 @@ async def cb_device_info(callback: CallbackQuery):
     lang = await get_user_lang(callback.from_user.id)
     device_index = int(callback.data.split(':')[1])
 
-    user_uuid = await _get_user_uuid(callback.from_user.id, callback.from_user.username)
-    if not user_uuid:
+    rw_id = await _get_user_rw_id(callback.from_user.id, callback.from_user.username)
+    if rw_id is None:
         await callback.answer(lang.msg_devices_no_subscription, show_alert=True)
         return
 
-    response = await rem.get_user_hwid_devices(user_uuid)
+    response = await rem.get_user_hwid_devices_by_id(rw_id)
     if response is None or not response.devices or device_index >= len(response.devices):
         await callback.answer(lang.msg_devices_error, show_alert=True)
         return
@@ -195,18 +195,18 @@ async def cb_device_delete(callback: CallbackQuery):
     lang = await get_user_lang(callback.from_user.id)
     device_index = int(callback.data.split(':')[1])
 
-    user_uuid = await _get_user_uuid(callback.from_user.id, callback.from_user.username)
-    if not user_uuid:
+    rw_id = await _get_user_rw_id(callback.from_user.id, callback.from_user.username)
+    if rw_id is None:
         await callback.answer(lang.msg_devices_no_subscription, show_alert=True)
         return
 
-    response = await rem.get_user_hwid_devices(user_uuid)
+    response = await rem.get_user_hwid_devices_by_id(rw_id)
     if response is None or not response.devices or device_index >= len(response.devices):
         await callback.answer(lang.msg_devices_error, show_alert=True)
         return
 
     device = response.devices[device_index]
-    result = await rem.delete_user_hwid_device(user_uuid, device.hwid)
+    result = await rem.delete_user_hwid_device_by_id(rw_id, device.hwid)
 
     if result is not None:
         await callback.answer(lang.msg_device_deleted, show_alert=True)

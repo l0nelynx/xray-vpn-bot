@@ -94,7 +94,7 @@ def test_set_primary_keeps_all_subscriptions_and_moves_legacy_pointer() -> None:
     _run(go())
 
 
-def test_primary_must_change_before_detach_and_last_detach_clears_legacy_ids() -> None:
+def test_primary_must_change_before_detach_and_last_detach_keeps_legacy_audit_id() -> None:
     async def go() -> None:
         engine = create_async_engine("sqlite+aiosqlite:///:memory:")
         try:
@@ -130,7 +130,7 @@ def test_primary_must_change_before_detach_and_last_detach_clears_legacy_ids() -
                 user = await session.get(User, 1)
                 assert user is not None
                 assert user.rw_id is None
-                assert user.vless_uuid is None
+                assert user.vless_uuid == "legacy-uuid"
                 assert await subscriptions.list_for_user(session, 1) == []
         finally:
             await engine.dispose()

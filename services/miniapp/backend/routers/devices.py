@@ -26,12 +26,11 @@ async def _resolve_user_rw_id(tg: TgUser) -> int:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "user not registered")
     if user.is_banned:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "user is banned")
-    if not (user.rw_id or user.vless_uuid or user.email or user.username):
+    if user.rw_id is None and not (user.email or user.username):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "no identifier")
 
     rem_user = await resolve_remnawave_user(
         rw_id=user.rw_id,
-        vless_uuid=user.vless_uuid,
         email=user.email,
         username=user.username,
         expected_telegram_id=tg.tg_id,

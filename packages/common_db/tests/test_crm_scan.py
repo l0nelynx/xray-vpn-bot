@@ -29,7 +29,7 @@ class FakeRwClient:
         expire = int((datetime.now(timezone.utc) + timedelta(days=2)).timestamp())
         return [
             {
-                "uuid": "uuid-expiring",
+                "rw_id": 11,
                 "status": "active",
                 "expire_ts": expire,
                 "days_left": 2,
@@ -43,7 +43,7 @@ class FakeRwClient:
                 "username": "exp_user",
             },
             {
-                "uuid": "uuid-ok",
+                "rw_id": 22,
                 "status": "active",
                 "expire_ts": int((datetime.now(timezone.utc) + timedelta(days=30)).timestamp()),
                 "days_left": 30,
@@ -58,7 +58,7 @@ class FakeRwClient:
             },
         ]
 
-    async def get_user_hwid_devices(self, user_uuid: str):
+    async def get_user_hwid_devices_by_id(self, rw_id: int):
         return None
 
 
@@ -80,6 +80,7 @@ def test_scan_expiring_soon_segment() -> None:
                         id=1,
                         tg_id=1001,
                         username="exp_user",
+                        rw_id=11,
                         vless_uuid="uuid-expiring",
                         api_provider="remnawave",
                     )
@@ -89,6 +90,7 @@ def test_scan_expiring_soon_segment() -> None:
                         id=2,
                         tg_id=1002,
                         username="ok_user",
+                        rw_id=22,
                         vless_uuid="uuid-ok",
                         api_provider="remnawave",
                     )

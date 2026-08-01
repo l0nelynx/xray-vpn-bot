@@ -7,7 +7,7 @@ the user opens `https://t.me/<bot>?start=link_<code>`. This module's
 Bot must NOT import `miniapp.backend` (clean dependency direction — the bot
 boots as its own service and may run without the FastAPI app loaded), so
 this file talks to the shared sqlite via raw SQL on `app.database.models`'s
-async_session, mirroring `android_delivery._save_vless_uuid`.
+async_session.
 """
 from __future__ import annotations
 
@@ -41,14 +41,13 @@ async def _notify_link_attempt(
     android_user_id: int | None = None,
     android_email: str | None = None,
     tg_user_id: int | None = None,
-    a_rw_uuid: str | None = None,
-    t_rw_uuid: str | None = None,
+    a_rw_id: int | None = None,
+    t_rw_id: int | None = None,
     a_tier: str = "?",
     t_tier: str = "?",
     survivor_id: int | None = None,
     loser_id: int | None = None,
-    kept_uuid: str | None = None,
-    disabled_uuid: str | None = None,
+    kept_rw_id: int | None = None,
     error: str | None = None,
 ) -> None:
     """Send a unified log-channel notification for any link attempt outcome."""
@@ -58,14 +57,14 @@ async def _notify_link_attempt(
         parts.append(
             f"android: <code>{android_user_id}</code> "
             f"{esc(android_email or '—')} "
-            f"rw=<code>{esc(a_rw_uuid or '—')}</code> "
+            f"rw_id=<code>{esc(a_rw_id or '—')}</code> "
             f"tier=<code>{esc(a_tier)}</code>"
         )
     parts.append(
         f"tg: <code>{tg_id}</code> "
         f"existing_user=<code>"
         f"{esc(tg_user_id if tg_user_id is not None else '—')}</code> "
-        f"rw=<code>{esc(t_rw_uuid or '—')}</code> "
+        f"rw_id=<code>{esc(t_rw_id or '—')}</code> "
         f"tier=<code>{esc(t_tier)}</code>"
     )
     parts.append(f"result: <code>{esc(result)}</code>")
@@ -74,8 +73,7 @@ async def _notify_link_attempt(
             f"survivor=<code>{survivor_id}</code> "
             f"loser=<code>"
             f"{esc(loser_id if loser_id is not None else '—')}</code> "
-            f"kept_uuid=<code>{esc(kept_uuid or '—')}</code> "
-            f"disabled_uuid=<code>{esc(disabled_uuid or '—')}</code>"
+            f"kept_rw_id=<code>{esc(kept_rw_id or '—')}</code>"
         )
     if error:
         parts.append(f"error: <code>{esc(error[:300])}</code>")
@@ -175,8 +173,8 @@ async def consume_android_link_code(tg_id: int, code: str) -> str:
                     result="both_pro_support_needed", tg_id=tg_id,
                     android_user_id=user_id, android_email=android_email,
                     tg_user_id=existing_row[0],
-                    a_rw_uuid=blocked.details.get("a_rw_uuid"),
-                    t_rw_uuid=blocked.details.get("t_rw_uuid"),
+                    a_rw_id=blocked.details.get("a_rw_id"),
+                    t_rw_id=blocked.details.get("t_rw_id"),
                     a_tier="pro", t_tier="pro",
                 )
                 return "both_pro_support_needed"
@@ -206,11 +204,10 @@ async def consume_android_link_code(tg_id: int, code: str) -> str:
                 result=merge["result"], tg_id=tg_id,
                 android_user_id=user_id, android_email=android_email,
                 tg_user_id=existing_row[0],
-                a_rw_uuid=merge["a_rw_uuid"], t_rw_uuid=merge["t_rw_uuid"],
+                a_rw_id=merge["a_rw_id"], t_rw_id=merge["t_rw_id"],
                 a_tier=merge["a_tier"], t_tier=merge["t_tier"],
                 survivor_id=merge["survivor_id"], loser_id=merge["loser_id"],
-                kept_uuid=merge.get("chosen_uuid"),
-                disabled_uuid=None,
+                kept_rw_id=merge.get("chosen_rw_id"),
             )
             return merge["result"]
 

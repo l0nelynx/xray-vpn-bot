@@ -9,7 +9,8 @@ Anti-enumeration:
     "no active code" and "wrong code" cases.
 
 Verifying an email also eagerly provisions a FREE Remnawave subscription so
-the Android client can immediately fetch a `vless_uuid` from /me.
+the Android client can immediately fetch the numeric Remnawave `rw_id` and
+subscription URL from /me.
 """
 from __future__ import annotations
 
@@ -180,9 +181,8 @@ async def email_verify(
     # Eagerly hand the user a FREE Remnawave subscription. Failures here
     # don't block verification — the client can retry via /me later.
     # Skip when the user already owns a Remnawave subscription (the
-    # `/migrate` flow pre-fills `vless_uuid`) so we don't overwrite a
-    # paid plan with the free tier.
-    if user.rw_id is None and not user.vless_uuid:
+    # `/migrate` flow pre-fills ``rw_id``) so we don't overwrite a paid plan.
+    if user.rw_id is None:
         try:
             await provisioning.ensure_free_subscription(user.id, user.email)
         except Exception as exc:

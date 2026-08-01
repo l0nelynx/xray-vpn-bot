@@ -39,7 +39,7 @@ def test_transfer_is_confirmed_single_use_and_idempotent(
         202: {"id": 202, "expire": now + 5 * 86400, "status": "active"},
     }
 
-    async def get_user(rw_id: int):
+    async def get_user(rw_id: int, *, strict: bool = False):
         return rem_users.get(rw_id)
 
     async def update_user(rw_id: int, **changes):
@@ -72,7 +72,10 @@ def test_transfer_is_confirmed_single_use_and_idempotent(
         assert first.status == "completed"
         assert first.days_transferred == 3
         assert second == first
-        assert calls == [(202, {"days": 8}), (101, {"status": "disabled"})]
+        assert calls == [
+            (202, {"days": 8, "status": "active"}),
+            (101, {"status": "disabled"}),
+        ]
 
         async with session_factory() as session:
             rows = await subscriptions.list_for_user(session, 1)

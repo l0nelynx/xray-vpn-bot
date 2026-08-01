@@ -288,7 +288,7 @@ export const handlers: HttpHandler[] = [
   http.delete(`${API}/users/:id`, () => new HttpResponse(null, { status: 204 })),
   http.patch(`${API}/users/:id/identifiers`, () => HttpResponse.json({ ok: true })),
   http.patch(`${API}/users/:id/email`, () =>
-    HttpResponse.json({ ok: true, rw_uuid: "mock-uuid", rw_id: 99 }),
+    HttpResponse.json({ ok: true, rw_id: 99 }),
   ),
   http.post(`${API}/users/:id/credits`, () => HttpResponse.json({ ok: true, balance: 250 })),
   http.post(`${API}/users/:id/send-message`, () => HttpResponse.json({ ok: true })),

@@ -36,7 +36,7 @@ async def stop_bot():
     await _notify.send_message(secrets.get('admin_id'), 'Бот остановлен')
 
 
-async def main_menu(message_func, menu_type, user_id: int = None, days=None, data_limit=None, link=None, user_uuid: str = None):
+async def main_menu(message_func, menu_type, user_id: int = None, days=None, data_limit=None, link=None, rw_id: int = None):
     """
     Display main menu with localized text and keyboards.
 
@@ -47,7 +47,7 @@ async def main_menu(message_func, menu_type, user_id: int = None, days=None, dat
         days: Remaining subscription days (for pro/free)
         data_limit: Traffic limit in bytes (None or 0 = unlimited)
         link: Subscription link
-        user_uuid: RemnaWave user UUID for device count lookup
+        rw_id: Remnawave numeric user ID for device count lookup
     """
     # Resolve language
     lang_code = "ru"
@@ -94,13 +94,13 @@ async def main_menu(message_func, menu_type, user_id: int = None, days=None, dat
         plan = "PRO" if menu_type == "pro" else "FREE"
 
         devices_count = 0
-        if user_uuid:
+        if rw_id is not None:
             try:
-                hwid_response = await rem.get_user_hwid_devices(user_uuid)
+                hwid_response = await rem.get_user_hwid_devices_by_id(rw_id)
                 if hwid_response:
                     devices_count = hwid_response.total
             except Exception as e:
-                logger.warning("Failed to get device count for uuid %s: %s", user_uuid, e)
+                logger.warning("Failed to get device count for rw_id %s: %s", rw_id, e)
 
         sub_info_text = lang.sub_info_block.format(
             days=days, traffic=traffic, plan=plan, link=link, devices=devices_count

@@ -98,16 +98,15 @@ def _user_summary(user: repo.UserRow) -> AndroidUserSummary:
 
 
 async def _resolve_remnawave_id(user: repo.UserRow) -> int | None:
-    """Resolve the Remnawave UUID via the fallback chain
-    (vless_uuid → email → username-from-email). Going through
+    """Resolve the Remnawave user via the fallback chain
+    (rw_id → exact email → verified username). Going through
     `resolve_remnawave_user` guarantees the same lookup priority as
     `/me` so /devices doesn't disagree with what the user sees on the
     account screen."""
-    if not (user.rw_id or user.vless_uuid or user.email):
+    if user.rw_id is None and not user.email:
         return None
     rem_user = await resolve_remnawave_user(
         rw_id=user.rw_id,
-        vless_uuid=user.vless_uuid,
         email=user.email,
         username=email_to_username(user.email) if user.email else None,
         expected_telegram_id=user.tg_id,
@@ -127,7 +126,7 @@ async def get_me(
     links = _links()
     summary = _user_summary(user)
 
-    if not (user.rw_id or user.vless_uuid or user.email):
+    if user.rw_id is None and not user.email:
         return AndroidMeResponse(user=summary, subscription=None, links=links)
 
     # This IAP lookup only needs user.id, so start it now and let it run
@@ -137,7 +136,6 @@ async def get_me(
 
     rem_user = await resolve_remnawave_user(
         rw_id=user.rw_id,
-        vless_uuid=user.vless_uuid,
         email=user.email,
         username=email_to_username(user.email) if user.email else None,
         expected_telegram_id=user.tg_id,

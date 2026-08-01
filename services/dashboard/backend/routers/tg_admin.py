@@ -130,7 +130,7 @@ async def sub_clean_scan(_: str = Depends(get_current_user)):
         result = await session.execute(
             select(User).where(
                 User.api_provider == "remnawave",
-                User.vless_uuid.is_not(None),
+                User.rw_id.is_not(None),
                 User.vip == 0,
                 User.is_banned != True,
                 User.tg_id.is_not(None),
@@ -138,7 +138,7 @@ async def sub_clean_scan(_: str = Depends(get_current_user)):
             )
         )
         users = [
-            {"tg_id": u.tg_id, "username": u.username, "vless_uuid": u.vless_uuid}
+            {"tg_id": u.tg_id, "username": u.username, "rw_id": u.rw_id}
             for u in result.scalars().all()
         ]
 
@@ -188,15 +188,15 @@ async def sub_clean_execute(body: SubCleanExecuteRequest, _: str = Depends(get_c
 
     for tg_id in body.tg_ids:
         user = users.get(tg_id)
-        if not user or not user.vless_uuid:
+        if not user or user.rw_id is None:
             errors += 1
             continue
         try:
-            rw_user = await rw.get_user_by_uuid(user.vless_uuid)
+            rw_user = await rw.get_user_by_id(int(user.rw_id))
             current_status = (rw_user or {}).get("status", "active")
 
             # Disable in RemnaWave first; only write to DB on success
-            rw_result = await rw.update_user(user_uuid=user.vless_uuid, status="disabled")
+            rw_result = await rw.update_user_by_id(int(user.rw_id), status="disabled")
             if not rw_result:
                 errors += 1
                 continue

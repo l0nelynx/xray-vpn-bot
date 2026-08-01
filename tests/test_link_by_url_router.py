@@ -156,10 +156,11 @@ URL = f"https://sub.domain.com/{SHORT}"
 
 
 class TestLinkByUrlEndpoint:
-    def _seed_a(self, with_app_db, *, vless="a-uuid", email="a@x.io"):
+    def _seed_a(self, with_app_db, *, vless="a-uuid", email="a@x.io",
+                rw_id=1):
         async def go():
             async with with_app_db() as s:
-                s.add(User(id=100, email=email, vless_uuid=vless,
+                s.add(User(id=100, email=email, vless_uuid=vless, rw_id=rw_id,
                            password_hash="ph",
                            email_verified_at="2026-05-19T00:00:00"))
                 await s.commit()
@@ -351,9 +352,9 @@ class TestLinkByUrlEndpoint:
             "Failed to disable" in m for m in link_by_url_app.state.notify_calls
         )
         # Final result notify must reflect the failed disable as
-        # disabled_uuid=— (not the still-live b-uuid).
+        # The notification reports only the retained numeric profile ID.
         assert any(
-            "merged_pro" in m and "disabled_uuid=<code>—</code>" in m
+            "merged_pro" in m and "chosen_rw_id=<code>" in m
             for m in link_by_url_app.state.notify_calls
         )
 

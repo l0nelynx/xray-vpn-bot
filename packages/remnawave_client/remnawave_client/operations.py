@@ -8,7 +8,7 @@ tariffs, referrals, or localization. Callers handle those concerns.
 
 Each function returns a dict with at least:
     {
-        "uuid": str | None,
+        "rw_id": int | None,
         "subscription_url": str | None,
         "expire": int | None,           # unix timestamp
         "status": str | None,
@@ -73,7 +73,7 @@ async def apply_new_user(
 
 async def apply_extend(
     *,
-    user_uuid: str,
+    rw_id: int,
     username: str,
     days: int,
     current_days_left: int,
@@ -92,8 +92,8 @@ async def apply_extend(
     new_total = (
         current_days_left + days if isinstance(current_days_left, int) else days
     )
-    return await _client(client).update_user(
-        user_uuid=user_uuid,
+    return await _client(client).update_user_by_id(
+        rw_id=rw_id,
         username=username,
         days=_coerce_days(new_total),
         limit_gb=None,
@@ -104,13 +104,14 @@ async def apply_extend(
         traffic_limit_bytes=traffic_limit_bytes,
         traffic_limit_strategy=traffic_limit_strategy,
         tag=tag,
+        status="active",
         raise_on_error=strict,
     )
 
 
 async def apply_update(
     *,
-    user_uuid: str,
+    rw_id: int,
     username: str,
     days: int,
     limit_gb: int = 0,
@@ -127,8 +128,8 @@ async def apply_update(
 ) -> dict | None:
     """Replace subscription parameters wholesale (used when switching FREE↔PAID
     or refreshing a limited/expired user)."""
-    return await _client(client).update_user(
-        user_uuid=user_uuid,
+    return await _client(client).update_user_by_id(
+        rw_id=rw_id,
         username=username,
         days=_coerce_days(days),
         limit_gb=limit_gb,

@@ -170,11 +170,11 @@ async def link_by_url(
             pending_notify = _format_notify(
                 result="both_pro_support_needed",
                 user_id=user.id, email=user.email,
-                a_rw_uuid=blocked.details.get("a_rw_uuid"),
+                a_rw_id=blocked.details.get("a_rw_id"),
                 a_tier="pro",
-                b_rw_uuid=blocked.details.get("t_rw_uuid"),
+                b_rw_id=blocked.details.get("t_rw_id"),
                 b_tier="pro",
-                chosen=None, disabled=None,
+                chosen=None,
             )
             blocked_response = LinkByUrlResponse(
                 result="both_pro_support_needed",
@@ -211,18 +211,15 @@ async def link_by_url(
 
     assert merge is not None  # success path: merge was populated
 
-    disabled_uuid = None
-
     await notify_log(
         _format_notify(
             result=merge["result"],
             user_id=user.id, email=user.email,
-            a_rw_uuid=merge.get("a_rw_uuid"),
+            a_rw_id=merge.get("a_rw_id"),
             a_tier=merge["a_tier"],
-            b_rw_uuid=merge["b_rw_uuid"],
+            b_rw_id=merge["b_rw_id"],
             b_tier=merge["b_tier"],
-            chosen=merge["chosen_uuid"],
-            disabled=disabled_uuid,
+            chosen=merge["chosen_rw_id"],
         )
     )
 
@@ -238,26 +235,24 @@ def _format_notify(
     result: str,
     user_id: int,
     email: str | None,
-    a_rw_uuid: str | None,
+    a_rw_id: int | None,
     a_tier: str,
-    b_rw_uuid: str | None,
+    b_rw_id: int | None,
     b_tier: str,
-    chosen: str | None,
-    disabled: str | None,
+    chosen: int | None,
 ) -> str:
     parts = [f"🔗 <b>Android sub-URL import: {esc(result)}</b>"]
     parts.append(
         f"user: <code>{user_id}</code> {esc(email or '—')} "
-        f"rw=<code>{esc(a_rw_uuid or '—')}</code> "
+        f"rw_id=<code>{esc(a_rw_id or '—')}</code> "
         f"tier=<code>{esc(a_tier)}</code>"
     )
     parts.append(
-        f"imported: rw=<code>{esc(b_rw_uuid or '—')}</code> "
+        f"imported: rw_id=<code>{esc(b_rw_id or '—')}</code> "
         f"tier=<code>{esc(b_tier)}</code>"
     )
     if result != "both_pro_support_needed":
         parts.append(
-            f"chosen_uuid=<code>{esc(chosen or '—')}</code> "
-            f"disabled_uuid=<code>{esc(disabled or '—')}</code>"
+            f"chosen_rw_id=<code>{esc(chosen or '—')}</code>"
         )
     return "\n".join(parts)

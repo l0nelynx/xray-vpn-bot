@@ -73,7 +73,7 @@ async def get_remnawave_broadcast_users(session: AsyncSession) -> list[User]:
             User.tg_id.is_not(None),
             User.is_banned != True,  # noqa: E712
             User.api_provider == "remnawave",
-            User.vless_uuid.is_not(None),
+            User.rw_id.is_not(None),
         )
     )
     return list(result)
@@ -101,19 +101,4 @@ async def users_with_unpaid_invoices(
         .distinct()
     )
     result = await session.scalars(stmt)
-    return list(result)
-
-
-async def users_by_vless_uuids(
-    session: AsyncSession, uuids: set[str]
-) -> list[User]:
-    if not uuids:
-        return []
-    result = await session.scalars(
-        select(User).where(
-            User.vless_uuid.in_(list(uuids)),
-            User.tg_id.is_not(None),
-            User.is_banned != True,  # noqa: E712
-        )
-    )
     return list(result)

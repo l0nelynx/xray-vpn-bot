@@ -75,7 +75,7 @@ def is_known_webhook_pair(scope: str, event: str) -> bool:
 class RemnawaveWebhookUser(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    uuid: str | None = None
+    id: int | None = None
     telegram_id: int | None = Field(None, alias="telegramId")
     username: str | None = None
 
@@ -87,7 +87,7 @@ class TorrentBlockerActionReport(BaseModel):
     ip: str | None = None
     block_duration: int | None = Field(None, alias="blockDuration")
     will_unblock_at: str | None = Field(None, alias="willUnblockAt")
-    user_id: str | None = Field(None, alias="userId")
+    user_id: int | None = Field(None, alias="userId")
     processed_at: str | None = Field(None, alias="processedAt")
 
 
@@ -177,29 +177,38 @@ def _find_user_dict(data: dict[str, Any]) -> dict[str, Any] | None:
     for key in ("hwidUser", "hwid_user"):
         nested = data.get(key)
         if isinstance(nested, dict) and (
-            "uuid" in nested or "telegramId" in nested or "telegram_id" in nested
+            "id" in nested or "userId" in nested
+            or "telegramId" in nested or "telegram_id" in nested
         ):
             return nested
     return None
 
 
-def extract_vless_uuid(payload: RemnawaveWebhookPayload) -> str | None:
-    """Return the Remnawave user UUID from webhook data, if present."""
+def extract_rw_id(payload: RemnawaveWebhookPayload) -> int | None:
+    """Return the numeric Remnawave user ID from a v3 webhook."""
     if payload.scope == SCOPE_TORRENT_BLOCKER:
         tb = _as_torrent_data(payload)
-        if tb and tb.user and tb.user.uuid:
-            return tb.user.uuid
+        if tb and tb.report and tb.report.action_report:
+            if tb.report.action_report.user_id is not None:
+                return int(tb.report.action_report.user_id)
+        if tb and tb.user and tb.user.id is not None:
+            return int(tb.user.id)
     data = _data_dict(payload)
-    # user scope: data often IS the user object
     if payload.scope == SCOPE_USER:
-        uuid = data.get("uuid")
-        if uuid:
-            return str(uuid)
+        value = data.get("id")
+        if value is not None:
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                return None
     user = _find_user_dict(data)
     if user:
-        uuid = user.get("uuid")
-        if uuid:
-            return str(uuid)
+        value = user.get("id") or user.get("userId") or user.get("user_id")
+        if value is not None:
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                return None
     return None
 
 

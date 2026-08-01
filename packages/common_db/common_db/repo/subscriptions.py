@@ -195,7 +195,8 @@ async def detach(
         if user is None:
             raise ValueError("user_not_found")
         user.rw_id = None
-        user.vless_uuid = None
+        # users.vless_uuid is the historical Remnawave panel-user UUID. It is
+        # no longer an ownership key, but remains immutable audit/rollback data.
     await session.flush()
     return target
 

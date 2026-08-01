@@ -125,6 +125,7 @@ async def add_delivery(
     *,
     campaign_id: int,
     tg_id: int,
+    rw_id: int | None,
     vless_uuid: str | None,
     perk_status: str,
     message_status: str,
@@ -133,6 +134,7 @@ async def add_delivery(
     row = CrmCampaignDelivery(
         campaign_id=campaign_id,
         tg_id=tg_id,
+        rw_id=rw_id,
         vless_uuid=vless_uuid,
         perk_status=perk_status,
         message_status=message_status,

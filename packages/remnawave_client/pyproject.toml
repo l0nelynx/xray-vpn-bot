@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Shared Remnawave SDK wrapper and subscription operations used by app/miniapp/dashboard."
 requires-python = ">=3.11"
 dependencies = [
-    "remnawave>=2.8.0",
+    "remnawave-api==3.0.1",
 ]
 
 [tool.setuptools.packages.find]

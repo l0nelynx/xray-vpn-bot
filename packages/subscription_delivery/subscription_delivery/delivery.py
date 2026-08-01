@@ -237,10 +237,10 @@ async def _local_context(session_factory, user_id: int) -> dict | None:
             await session.execute(
                 text(
                     "SELECT u.id, u.tg_id, u.username, u.email, u.rw_id, "
-                    "u.vless_uuid, COUNT(s.id) AS subscription_count "
+                    "COUNT(s.id) AS subscription_count "
                     "FROM users u LEFT JOIN user_subscriptions s ON s.user_id = u.id "
                     "WHERE u.id = :u "
-                    "GROUP BY u.id, u.tg_id, u.username, u.email, u.rw_id, u.vless_uuid"
+                    "GROUP BY u.id, u.tg_id, u.username, u.email, u.rw_id"
                 ),
                 {"u": user_id},
             )
@@ -285,7 +285,6 @@ async def _attach_subscription(
     *,
     user_id: int,
     rw_id: int,
-    rw_uuid: str | None,
     transaction_id: str,
     source: str,
 ) -> tuple[str, int]:
@@ -330,8 +329,8 @@ async def _attach_subscription(
                 )
                 if count == 0:
                     await session.execute(
-                        text("UPDATE users SET rw_id = :r, vless_uuid = :v WHERE id = :u"),
-                        {"r": rw_id, "v": rw_uuid, "u": user_id},
+                        text("UPDATE users SET rw_id = :r WHERE id = :u"),
+                        {"r": rw_id, "u": user_id},
                     )
             await session.execute(
                 text(
@@ -340,16 +339,6 @@ async def _attach_subscription(
                 ),
                 {"r": rw_id, "t": transaction_id},
             )
-            if rw_uuid:
-                await session.execute(
-                    text(
-                        "UPDATE users SET rw_id = :r, vless_uuid = :v "
-                        "WHERE id = :u AND EXISTS ("
-                        "SELECT 1 FROM user_subscriptions s WHERE s.user_id = :u "
-                        "AND s.rw_id = :r AND s.is_primary = true)"
-                    ),
-                    {"r": rw_id, "v": rw_uuid, "u": user_id},
-                )
             await session.commit()
     except IntegrityError:
         owner = await _subscription_owner(session_factory, rw_id)
@@ -364,16 +353,6 @@ async def _attach_subscription(
                 ),
                 {"r": rw_id, "t": transaction_id},
             )
-            if rw_uuid:
-                await session.execute(
-                    text(
-                        "UPDATE users SET rw_id = :r, vless_uuid = :v "
-                        "WHERE id = :u AND EXISTS ("
-                        "SELECT 1 FROM user_subscriptions s WHERE s.user_id = :u "
-                        "AND s.rw_id = :r AND s.is_primary = true)"
-                    ),
-                    {"r": rw_id, "v": rw_uuid, "u": user_id},
-                )
             await session.commit()
     return action, await _subscription_number(session_factory, user_id, rw_id)
 
@@ -628,7 +607,6 @@ async def deliver_android_paid(
             session_factory,
             user_id=db_user_id,
             rw_id=actual_rw_id,
-            rw_uuid=(info or {}).get("uuid"),
             transaction_id=transaction_id,
             source=purchase_source,
         )
@@ -674,15 +652,14 @@ async def deliver_android_paid(
         ):
             result = info
         elif scenario == SubscriptionScenario.EXTEND:
-            uuid = (info or {}).get("uuid")
-            if not uuid:
+            if actual_rw_id is None:
                 await _update_delivery_status(
                     session_factory, transaction_id, 0,
-                    error="extend_without_uuid", pending=True,
+                    error="extend_without_rw_id", pending=True,
                 )
-                return {"status": "pending", "message": "extend without uuid"}
+                return {"status": "pending", "message": "extend without rw_id"}
             result = await apply_extend(
-                user_uuid=uuid,
+                rw_id=actual_rw_id,
                 username=username,
                 days=days,
                 current_days_left=_days_left(info),
@@ -696,16 +673,15 @@ async def deliver_android_paid(
                 strict=True,
             )
         else:  # UPDATE / LIMITED / ALREADY_ACTIVE all fall through to update.
-            uuid = (info or {}).get("uuid")
-            if not uuid:
-                reason = f"{scenario.value}_without_uuid"
+            if actual_rw_id is None:
+                reason = f"{scenario.value}_without_rw_id"
                 await _update_delivery_status(
                     session_factory, transaction_id, 0,
                     error=reason, pending=True,
                 )
                 return {"status": "pending", "message": reason}
             result = await apply_update(
-                user_uuid=uuid,
+                rw_id=actual_rw_id,
                 username=username,
                 days=days,
                 limit_gb=0,
@@ -796,8 +772,6 @@ async def deliver_android_paid(
             )
             return _pending_result(reason, retryable=True)
 
-    rw_uuid = result.get("uuid") or (info or {}).get("uuid")
-
     await _update_delivery_status(session_factory, transaction_id, 1)
     await _notify(
         notifier, ok=True, transaction_id=transaction_id,
@@ -809,7 +783,6 @@ async def deliver_android_paid(
     return {
         "status": "success",
         "scenario": scenario.value,
-        "uuid": rw_uuid,
         "subscription_url": result.get("subscription_url"),
         "rw_id": actual_rw_id,
         "username": username,
@@ -850,7 +823,7 @@ async def _deliver_telegram_paid_legacy(
         )
         return {"status": "error", "message": f"bad tariff_slug: {tariff_slug!r}"}
 
-    info = await rem.get_user_from_username(username)
+    info = await rem.get_user_from_username(username, strict=True)
     scenario = resolve_scenario(info, SubscriptionType.PAID)
 
     try:
@@ -868,13 +841,14 @@ async def _deliver_telegram_paid_legacy(
                 traffic_limit_bytes=target.get("traffic_limit_bytes"),
                 traffic_limit_strategy=target.get("traffic_limit_strategy"),
                 tag=target.get("remnawave_tag"),
+                strict=True,
             )
         elif scenario == SubscriptionScenario.EXTEND:
-            uuid = (info or {}).get("uuid")
-            if not uuid:
-                return {"status": "error", "message": "extend without uuid"}
+            rw_id = _rw_id(info)
+            if rw_id is None:
+                return {"status": "error", "message": "extend without rw_id"}
             result = await apply_extend(
-                user_uuid=uuid,
+                rw_id=rw_id,
                 username=username,
                 days=days,
                 current_days_left=_days_left(info),
@@ -889,13 +863,14 @@ async def _deliver_telegram_paid_legacy(
                 traffic_limit_bytes=target.get("traffic_limit_bytes"),
                 traffic_limit_strategy=target.get("traffic_limit_strategy"),
                 tag=target.get("remnawave_tag"),
+                strict=True,
             )
         else:
-            uuid = (info or {}).get("uuid")
-            if not uuid:
-                return {"status": "error", "message": f"{scenario.value} without uuid"}
+            rw_id = _rw_id(info)
+            if rw_id is None:
+                return {"status": "error", "message": f"{scenario.value} without rw_id"}
             result = await apply_update(
-                user_uuid=uuid,
+                rw_id=rw_id,
                 username=username,
                 days=days,
                 limit_gb=0,
@@ -911,6 +886,7 @@ async def _deliver_telegram_paid_legacy(
                 traffic_limit_bytes=target.get("traffic_limit_bytes"),
                 traffic_limit_strategy=target.get("traffic_limit_strategy"),
                 tag=target.get("remnawave_tag"),
+                strict=True,
             )
     except Exception as exc:
         logger.error("telegram delivery for tx=%s failed: %s", transaction_id, exc)
@@ -925,20 +901,6 @@ async def _deliver_telegram_paid_legacy(
     if not result:
         return {"status": "error", "message": "remnawave_apply_returned_none"}
 
-    rw_uuid = result.get("uuid") or (info or {}).get("uuid")
-    if rw_uuid and tg_id:
-        try:
-            async with session_factory() as session:
-                await session.execute(
-                    text(
-                        "UPDATE users SET vless_uuid = :u WHERE tg_id = :t"
-                    ),
-                    {"u": rw_uuid, "t": tg_id},
-                )
-                await session.commit()
-        except Exception as exc:
-            logger.warning("Failed to save vless_uuid for tg_id %s: %s", tg_id, exc)
-
     await _update_delivery_status(session_factory, transaction_id, 1)
     await notifier(
         f"📦 <b>Subscription delivered (bonus credits)</b>\n"
@@ -950,6 +912,6 @@ async def _deliver_telegram_paid_legacy(
     return {
         "status": "success",
         "scenario": scenario.value,
-        "uuid": rw_uuid,
+        "rw_id": result.get("rw_id") or (info or {}).get("rw_id"),
         "subscription_url": result.get("subscription_url"),
     }

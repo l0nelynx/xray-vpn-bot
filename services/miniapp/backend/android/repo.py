@@ -64,6 +64,7 @@ _USER_COLS = (
     "language, vless_uuid, rw_id"
     ", username"
 )
+_USER_COLS_U = ", ".join(f"u.{column.strip()}" for column in _USER_COLS.split(","))
 
 
 async def find_user_by_email(email: str) -> UserRow | None:
@@ -85,19 +86,15 @@ async def find_user_by_id(user_id: int) -> UserRow | None:
     return _row_to_user(row)
 
 
-async def find_user_by_vless_uuid(vless_uuid: str) -> UserRow | None:
-    async with async_session() as s:
-        row = (await s.execute(
-            text(f"SELECT {_USER_COLS} FROM users WHERE vless_uuid = :u LIMIT 1"),
-            {"u": vless_uuid},
-        )).first()
-    return _row_to_user(row)
-
-
 async def find_user_by_rw_id(rw_id: int) -> UserRow | None:
     async with async_session() as s:
         row = (await s.execute(
-            text(f"SELECT {_USER_COLS} FROM users WHERE rw_id = :r LIMIT 1"),
+            text(
+                f"SELECT {_USER_COLS_U} FROM users u "
+                "LEFT JOIN user_subscriptions us ON us.user_id = u.id "
+                "WHERE us.rw_id = :r OR u.rw_id = :r "
+                "ORDER BY CASE WHEN us.rw_id = :r THEN 0 ELSE 1 END LIMIT 1"
+            ),
             {"r": int(rw_id)},
         )).first()
     return _row_to_user(row)
@@ -147,11 +144,11 @@ async def create_user_with_password(email: str, password_hash: str) -> int:
         return int(new_id)
 
 
-async def create_user_with_password_and_vless(
-    email: str, password_hash: str, vless_uuid: str
+async def create_user_with_password_and_rw_id(
+    email: str, password_hash: str, rw_id: int
 ) -> int:
     """Create a new Android-only user pre-bound to an existing Remnawave
-    `vless_uuid`. Used by the migration flow when a Remnawave subscription
+    numeric `rw_id`. Used by the migration flow when a Remnawave subscription
     exists but no `users` row references it yet.
 
     Raises sqlalchemy.exc.IntegrityError on email collision (the caller
@@ -165,35 +162,46 @@ async def create_user_with_password_and_vless(
             email=normalized,
             password_hash=password_hash,
             password_updated_at=now,
-            vless_uuid=vless_uuid,
+            rw_id=int(rw_id),
             api_provider="remnawave",
         )
         s.add(user)
         await s.flush()
         new_id = user.id
+        await s.execute(text(
+            "INSERT INTO user_subscriptions "
+            "(user_id, rw_id, source, is_primary, created_at, updated_at) "
+            "VALUES (:u, :r, 'android_migrate', true, :n, :n)"
+        ), {"u": new_id, "r": int(rw_id), "n": now})
         await s.commit()
         return int(new_id)
 
 
-async def create_bare_user_with_vless(vless_uuid: str) -> int:
+async def create_bare_user_with_rw_id(rw_id: int) -> int:
     """Create a credential-less user row pre-bound to a Remnawave
-    `vless_uuid`. Used by the claim flow when a subscription exists in
+    `rw_id`. Used by the claim flow when a subscription exists in
     Remnawave but no `users` row references it yet — verification codes
     need a user_id anchor before credentials are chosen. The row is
     indistinguishable from a Telegram-created one and is picked up by
-    `find_user_by_vless_uuid` on the next resolve, so abandoned claims
+    `find_user_by_rw_id` on the next resolve, so abandoned claims
     leave no duplicates."""
     async with async_session() as s:
         user = User(
             tg_id=None,
             email=None,
             password_hash=None,
-            vless_uuid=vless_uuid,
+            rw_id=int(rw_id),
             api_provider="remnawave",
         )
         s.add(user)
         await s.flush()
         new_id = user.id
+        now = _utcnow_iso()
+        await s.execute(text(
+            "INSERT INTO user_subscriptions "
+            "(user_id, rw_id, source, is_primary, created_at, updated_at) "
+            "VALUES (:u, :r, 'android_claim', true, :n, :n)"
+        ), {"u": new_id, "r": int(rw_id), "n": now})
         await s.commit()
         return int(new_id)
 
@@ -202,10 +210,10 @@ async def adopt_user_for_migration(
     user_id: int,
     email: str,
     password_hash: str,
-    vless_uuid: str,
+    rw_id: int,
 ) -> None:
-    """Fill `password_hash`, `email`, and `vless_uuid` on an existing row.
-    Used when a user record exists (matched by vless_uuid/username/email)
+    """Fill credentials and attach the existing Remnawave numeric id.
+    Used when a user record exists (matched by numeric rw_id)
     but is missing the credentials needed for Android login. Won't touch
     `email_verified_at` — that's still gated through `/email/verify`."""
     normalized = email.strip().lower()
@@ -214,17 +222,27 @@ async def adopt_user_for_migration(
         await s.execute(
             text(
                 "UPDATE users SET email = :e, password_hash = :p, "
-                "password_updated_at = :n, vless_uuid = :v "
+                "password_updated_at = :n, rw_id = :r "
                 "WHERE id = :i"
             ),
             {
                 "e": normalized,
                 "p": password_hash,
                 "n": now,
-                "v": vless_uuid,
+                "r": int(rw_id),
                 "i": user_id,
             },
         )
+        exists = await s.scalar(text(
+            "SELECT 1 FROM user_subscriptions WHERE rw_id = :r"
+        ), {"r": int(rw_id)})
+        if not exists:
+            await s.execute(text(
+                "INSERT INTO user_subscriptions "
+                "(user_id, rw_id, source, is_primary, created_at, updated_at) "
+                "VALUES (:u, :r, 'android_adopt', "
+                "NOT EXISTS (SELECT 1 FROM user_subscriptions WHERE user_id=:u), :n, :n)"
+            ), {"u": user_id, "r": int(rw_id), "n": now})
         await s.commit()
 
 
@@ -435,41 +453,6 @@ async def update_user_email(user_id: int, new_email: str) -> None:
             ),
             {"e": normalized, "n": now, "i": user_id},
         )
-        await s.commit()
-
-
-async def get_user_vless_uuid(user_id: int) -> str | None:
-    async with async_session() as s:
-        row = (await s.execute(
-            text("SELECT vless_uuid FROM users WHERE id = :i"),
-            {"i": user_id},
-        )).first()
-    return row[0] if row else None
-
-
-async def set_user_vless_uuid(
-    user_id: int, uuid: str, rw_id: int | None = None,
-) -> None:
-    async with async_session() as s:
-        if rw_id is not None:
-            from common_db.repo import subscriptions as subscription_repo
-
-            link = await subscription_repo.attach(
-                s,
-                user_id=user_id,
-                rw_id=int(rw_id),
-                source="provisioned",
-            )
-            if link.is_primary:
-                await s.execute(
-                    text("UPDATE users SET vless_uuid = :u WHERE id = :i"),
-                    {"u": uuid, "i": user_id},
-                )
-        else:
-            await s.execute(
-                text("UPDATE users SET vless_uuid = :u WHERE id = :i"),
-                {"u": uuid, "i": user_id},
-            )
         await s.commit()
 
 
@@ -747,17 +730,6 @@ async def find_user_by_tg_id(tg_id: int) -> UserRow | None:
         row = (await s.execute(
             text(f"SELECT {_USER_COLS} FROM users WHERE tg_id = :t LIMIT 1"),
             {"t": tg_id},
-        )).first()
-    return _row_to_user(row)
-
-
-async def find_user_by_username_ci(username: str) -> UserRow | None:
-    """Case-insensitive Telegram @username lookup. Used for Telegram OIDC login
-    where preferred_username from the JWT matches users.username."""
-    async with async_session() as s:
-        row = (await s.execute(
-            text(f"SELECT {_USER_COLS} FROM users WHERE LOWER(username) = :u LIMIT 1"),
-            {"u": username.lower()},
         )).first()
     return _row_to_user(row)
 

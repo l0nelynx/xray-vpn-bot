@@ -47,10 +47,10 @@ async def admin_confirm_delete(callback: CallbackQuery):
 
     info = await rq.get_user_full_info_by_tg_id(tg_id)
 
-    if info and info.get("vless_uuid") and info["api_provider"] == "remnawave":
+    if info and info.get("rw_id") and info["api_provider"] == "remnawave":
         try:
-            from remnawave_client.api import delete_user
-            await delete_user(info["vless_uuid"])
+            from remnawave_client.api import delete_user_by_id
+            await delete_user_by_id(int(info["rw_id"]))
         except Exception as e:
             logging.error(f"Error deleting user from RemnaWave: {e}")
 

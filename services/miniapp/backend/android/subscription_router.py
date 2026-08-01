@@ -6,10 +6,9 @@ caller knows the matching email/username — used during onboarding so the
 client can confidently surface a "recover this subscription" flow.
 
 `/api/android/migrate` performs the actual recovery: given the same proof
-plus a target login (acc_email + password), it locates the matching row in
-the local `users` table (priority: vless_uuid → username → email) and
-binds Android credentials to it. If no local row exists yet, a new one is
-created pre-bound to the Remnawave `vless_uuid`.
+plus a target login (acc_email + password), it locates the local owner by
+numeric Remnawave ``rw_id`` and binds Android credentials to it. If no local
+row exists yet, a new one is created and attached to that ``rw_id``.
 
 Both endpoints sit outside auth_router because they're intentionally
 unauthenticated — they're the entry points to recovery, before the client
@@ -111,22 +110,19 @@ async def migrate(req: MigrateRequest, request: Request) -> AuthResponse:
     Ownership proof is the same as `/check-uuid`: the caller must know both
     the `short_uuid` and a matching `identifier` (email or username).
 
-    Local-row resolution priority:
-      1. `users.vless_uuid == rw.uuid` (panel user UUID; legacy column name)
-      2. `users.email`-derived username == rw.username
-      3. `users.email == rw.email`
+    Local ownership is resolved only through the numeric Remnawave user ID.
 
     Outcomes:
       - No local row found → create one with `email = acc_email`,
-        `password_hash`, and `vless_uuid` pre-bound.
+        `password_hash`, and `rw_id` pre-bound.
       - Local row found, has BOTH email and password → 409 `already_registered`.
       - Local row found, missing password (email may or may not be set) →
-        fill in `email = acc_email`, `password_hash`, `vless_uuid`.
+        fill in `email = acc_email`, `password_hash`, and attach `rw_id`.
 
     `email_verified_at` is NEVER set here — the client must call the normal
     `/email/send-code` + `/email/verify` flow afterwards. That's also when
     free-provisioning would have triggered, but `email_verify` skips it
-    when `vless_uuid` is already populated, so an existing paid Remnawave
+    when `rw_id` is already populated, so an existing paid Remnawave
     subscription is preserved.
 
     On success returns an `AuthResponse` identical to `/register`.
@@ -149,25 +145,16 @@ async def migrate(req: MigrateRequest, request: Request) -> AuthResponse:
             detail={"code": "identifier_mismatch"},
         )
 
-    # Legacy: users.vless_uuid stores Remnawave panel `uuid`, not protocol vlessUuid.
-    vless_uuid = rw_data.get("uuid") or rw_data.get("vlessUuid")
-    if not vless_uuid:
-        # Should be impossible — Remnawave always returns uuid for an
-        # active user — but guard so we don't write NULL into our column.
-        logger.error("Remnawave DTO missing uuid for short_uuid=%s", req.short_uuid)
+    rw_id = rw_data.get("id")
+    if rw_id is None:
+        logger.error("Remnawave DTO missing id for short_uuid=%s", req.short_uuid)
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY,
             detail={"code": "upstream_invalid"},
         )
 
-    rw_username = rw_data.get("username")
-    rw_email = rw_data.get("email")
-
-    user = await repo.find_user_by_vless_uuid(str(vless_uuid))
-    if user is None and rw_username:
-        user = await repo.find_user_by_remnawave_username(rw_username)
-    if user is None and rw_email:
-        user = await repo.find_user_by_email(rw_email)
+    rw_id = int(rw_id)
+    user = await repo.find_user_by_rw_id(rw_id)
 
     acc_email_normalized = str(req.acc_email).strip().lower()
     pwd_hash = await security.hash_password(req.password)
@@ -178,8 +165,8 @@ async def migrate(req: MigrateRequest, request: Request) -> AuthResponse:
         # possible if acc_email belongs to someone else — treat that the
         # same as /register.
         try:
-            user_id = await repo.create_user_with_password_and_vless(
-                acc_email_normalized, pwd_hash, str(vless_uuid)
+            user_id = await repo.create_user_with_password_and_rw_id(
+                acc_email_normalized, pwd_hash, rw_id
             )
         except IntegrityError:
             raise HTTPException(
@@ -213,7 +200,7 @@ async def migrate(req: MigrateRequest, request: Request) -> AuthResponse:
                 )
         try:
             await repo.adopt_user_for_migration(
-                user.id, acc_email_normalized, pwd_hash, str(vless_uuid)
+                user.id, acc_email_normalized, pwd_hash, rw_id
             )
         except IntegrityError:
             raise HTTPException(
@@ -230,7 +217,7 @@ async def migrate(req: MigrateRequest, request: Request) -> AuthResponse:
         f"🔁 <b>Android migrate</b>\n"
         f"ID: <code>{user_id}</code>\n"
         f"email: <code>{esc(user_row.email)}</code>\n"
-        f"vless: <code>{esc(str(vless_uuid))}</code>\n"
+        f"rw_id: <code>{rw_id}</code>\n"
         f"IP: <code>{esc(ip or '—')}</code>\n"
         f"UA: <code>{esc((ua or '—')[:120])}</code>"
     )

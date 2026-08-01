@@ -27,22 +27,20 @@ from remnawave_client import (
 _notify = admin_bot or bot
 
 
-async def _persist_vless_uuid(
+async def _persist_rw_id(
     user_id: int,
     username: str,
-    uuid: str | None,
     rw_id: int | None = None,
 ) -> None:
-    if not uuid:
+    if rw_id is None:
         return
     import app.database.requests as rq
 
     await rq.update_user_api_info(
         tg_id=user_id,
         username=username,
-        vless_uuid=str(uuid),
         api_provider="remnawave",
-        rw_id=rw_id,
+        rw_id=int(rw_id),
     )
 
 
@@ -144,7 +142,7 @@ async def deliver_subscription(
         # Resolve account by uuid (DB) -> email -> username so that scenario
         # detection and the subsequent Remnawave update target the same
         # account. See app.handlers.tools.resolve_remnawave_account.
-        account_uuid, user_info = await resolve_remnawave_account(user_id, username)
+        account_rw_id, user_info = await resolve_remnawave_account(user_id, username)
         if user_info is None:
             user_info = 404
 
@@ -184,13 +182,13 @@ async def deliver_subscription(
         elif scenario == SubscriptionScenario.EXTEND:
             result = await _handle_extend_subscription(
                 message, username, user_id, days, subscription_type, lang, user_info=user_info,
-                tariff_squad=tariff_squad, account_uuid=account_uuid,
+                tariff_squad=tariff_squad, account_rw_id=account_rw_id,
                 delivery_target=delivery_target,
             )
         elif scenario == SubscriptionScenario.UPDATE:
             result = await _handle_update_subscription(
                 message, username, user_id, days, data_limit, reset_strategy, subscription_type, lang,
-                tariff_squad=tariff_squad, account_uuid=account_uuid,
+                tariff_squad=tariff_squad, account_rw_id=account_rw_id,
                 delivery_target=delivery_target,
                 user_info=user_info,
             )
@@ -294,7 +292,7 @@ async def _handle_new_user(
     buyer_info = None
     for ordinal in range(start, start + 100):
         candidate = build_remnawave_username(username, db_user_id, ordinal)
-        occupied = await rem_api.get_user_from_username(candidate)
+        occupied = await rem_api.get_user_from_username(candidate, strict=True)
         if occupied:
             if marker in str(occupied.get("description") or ""):
                 buyer_info = occupied
@@ -321,14 +319,14 @@ async def _handle_new_user(
                 tag=(paid_target or {}).get("remnawave_tag"),
             )
         except Exception:
-            appeared = await rem_api.get_user_from_username(candidate)
+            appeared = await rem_api.get_user_from_username(candidate, strict=True)
             if appeared and marker in str(appeared.get("description") or ""):
                 buyer_info = appeared
             elif appeared:
                 continue
             else:
                 raise
-        appeared = await rem_api.get_user_from_username(candidate)
+        appeared = await rem_api.get_user_from_username(candidate, strict=True)
         if appeared:
             if marker in str(appeared.get("description") or ""):
                 buyer_info = appeared
@@ -351,11 +349,10 @@ async def _handle_new_user(
         )
         await session.commit()
 
-    if buyer_info and buyer_info.get("uuid") and link.is_primary:
+    if buyer_info and buyer_info.get("rw_id") is not None and link.is_primary:
         await rq.update_user_api_info(
             tg_id=user_id,
             username=username,
-            vless_uuid=buyer_info["uuid"],
             api_provider="remnawave",
             rw_id=buyer_info.get("rw_id"),
         )
@@ -383,7 +380,7 @@ async def _handle_extend_subscription(
     subscription_type: SubscriptionType,
     lang=None,
     tariff_squad: Optional[dict] = None,
-    account_uuid: Optional[str] = None,
+    account_rw_id: Optional[int] = None,
     delivery_target: Optional[dict] = None,
     user_info: dict | None = None,
 ) -> dict:
@@ -414,22 +411,19 @@ async def _handle_extend_subscription(
         else "updated by backend v2"
     )
 
-    # Prefer the resolved account_uuid (uuid -> email -> username) over a
-    # bare DB lookup so we update the same Remnawave account the scenario
-    # was resolved against.
-    target_uuid = account_uuid
-    if not target_uuid:
+    target_rw_id = account_rw_id
+    if target_rw_id is None:
         db_user = await rq_extend.get_full_username_info(username)
-        target_uuid = (db_user or {}).get("vless_uuid")
-    if not target_uuid:
-        target_uuid = user_info.get("uuid")
-    if not target_uuid:
+        target_rw_id = (db_user or {}).get("rw_id")
+    if target_rw_id is None:
+        target_rw_id = user_info.get("rw_id")
+    if target_rw_id is None:
         logging.warning(f"User {username} not found in DB for extend")
         return {"days": expire_day, "link": sub_link}
 
     if subscription_type == SubscriptionType.FREE:
         buyer_info = await apply_update(
-            user_uuid=target_uuid,
+            rw_id=int(target_rw_id),
             username=user_info.get("username") or username,
             days=new_expire_days,
             limit_gb=0,
@@ -439,7 +433,7 @@ async def _handle_extend_subscription(
         )
     else:
         buyer_info = await apply_extend(
-            user_uuid=target_uuid,
+            rw_id=int(target_rw_id),
             username=user_info.get("username") or username,
             days=days_for_apply,
             current_days_left=current_days_left,
@@ -465,11 +459,10 @@ async def _handle_extend_subscription(
 
     await _send_response(message, response_text, sub_link, user_id, lang)
 
-    await _persist_vless_uuid(
+    await _persist_rw_id(
         user_id,
         username,
-        target_uuid or (buyer_info or {}).get("uuid"),
-        rw_id=(buyer_info or {}).get("rw_id"),
+        rw_id=(buyer_info or {}).get("rw_id") or target_rw_id,
     )
 
     return {"days": final_expire_day, "link": sub_link}
@@ -485,13 +478,13 @@ async def _handle_update_subscription(
     subscription_type: SubscriptionType,
     lang=None,
     tariff_squad: Optional[dict] = None,
-    account_uuid: Optional[str] = None,
+    account_rw_id: Optional[int] = None,
     delivery_target: Optional[dict] = None,
 ) -> dict:
     """Handle subscription update (replacement)"""
     # Lazy import to avoid circular dependency
     from app.handlers.tools import get_user_days
-    from remnawave_client.api import reset_user_traffic
+    from remnawave_client.api import reset_user_traffic_by_id
     import app.database.requests as rq_update
 
     # При переходе с FREE на PAID — ставим PRO squad, при FREE — FREE squad
@@ -508,29 +501,29 @@ async def _handle_update_subscription(
         else "updated by backend v2"
     )
 
-    target_uuid = account_uuid
-    if not target_uuid:
+    target_rw_id = account_rw_id
+    if target_rw_id is None:
         db_user = await rq_update.get_full_username_info(username)
-        target_uuid = (db_user or {}).get("vless_uuid")
-    if not target_uuid:
+        target_rw_id = (db_user or {}).get("rw_id")
+    if target_rw_id is None:
         from app.handlers.tools import get_user_info
         user_info = await get_user_info(username)
         if user_info != 404:
-            target_uuid = user_info.get("uuid")
-    if not target_uuid:
+            target_rw_id = user_info.get("rw_id")
+    if target_rw_id is None:
         logging.warning(f"User {username} not found in DB for update")
         return {"days": 0, "link": None}
 
     # Сброс трафика при выдаче FREE подписки (чтобы limited пользователь мог снова пользоваться)
     if subscription_type == SubscriptionType.FREE and data_limit > 0:
         try:
-            await reset_user_traffic(target_uuid)
+            await reset_user_traffic_by_id(int(target_rw_id))
             logging.info(f"Reset traffic for {username} before FREE subscription update")
         except Exception as e:
             logging.warning(f"Failed to reset traffic for {username}: {e}")
 
     buyer_info = await apply_update(
-        user_uuid=target_uuid,
+        rw_id=int(target_rw_id),
         username=(user_info or {}).get("username") or username,
         days=days,
         limit_gb=data_limit,
@@ -557,11 +550,10 @@ async def _handle_update_subscription(
 
     await _send_response(message, response_text, sub_link, user_id, lang)
 
-    await _persist_vless_uuid(
+    await _persist_rw_id(
         user_id,
         username,
-        target_uuid or (buyer_info or {}).get("uuid"),
-        rw_id=(buyer_info or {}).get("rw_id"),
+        rw_id=(buyer_info or {}).get("rw_id") or target_rw_id,
     )
 
     return {"days": expire_day, "link": sub_link}
@@ -598,12 +590,12 @@ async def _handle_limited(
         logging.warning(f"Cannot send limited message: message={message}")
 
     if isinstance(message, Message):
-        await _persist_vless_uuid(
-            message.from_user.id, username, user_info.get("uuid"), user_info.get("rw_id"),
+        await _persist_rw_id(
+            message.from_user.id, username, user_info.get("rw_id"),
         )
     elif isinstance(message, CallbackQuery):
-        await _persist_vless_uuid(
-            message.from_user.id, username, user_info.get("uuid"), user_info.get("rw_id"),
+        await _persist_rw_id(
+            message.from_user.id, username, user_info.get("rw_id"),
         )
 
     return {"days": expire_day, "limited": True}
@@ -642,8 +634,8 @@ async def _handle_already_active(
     await _send_response(message, response_text, sub_link, user_id, lang)
 
     if user_id:
-        await _persist_vless_uuid(
-            user_id, username, user_info.get("uuid"), user_info.get("rw_id"),
+        await _persist_rw_id(
+            user_id, username, user_info.get("rw_id"),
         )
 
     return {"days": expire_day, "link": sub_link, "already_active": True}

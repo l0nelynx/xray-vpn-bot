@@ -8,11 +8,10 @@ from pydantic import BaseModel, ConfigDict, Field
 from remnawave import RemnawaveSDK
 from remnawave.enums import TrafficLimitStrategy, UserStatus
 from remnawave.models import (
-    CreateUserRequestDto,
+    CreateUserBodyDto,
     DeleteUserHwidDeviceRequestDto,
-    UpdateUserRequestDto,
+    UpdateUserBodyDto,
     UserResponseDto,
-    UsersResponseDto,
 )
 
 logger = logging.getLogger(__name__)
@@ -47,27 +46,10 @@ def _is_not_found_error(exc: Exception) -> bool:
     return getattr(response, "status_code", None) == 404
 
 
-# --- HWID compatibility shim ------------------------------------------------
-#
-# The installed `remnawave` SDK (pinned remnawave>=2.8.0, currently 2.8.0)
-# still models device rows with a required `userUuid: UUID` field
-# (remnawave.models.hwid.HwidDeviceDto). Newer Remnawave panels return
-# `userId: int` instead, so `sdk.hwid.get_hwid_user()` /
-# `sdk.hwid.delete_hwid_to_user()` raise a pydantic ValidationError on every
-# call and we fall into the except branches below, returning None. A fix is
-# pending upstream (PR under review); until a fixed SDK version is released,
-# both HWID device calls bypass the typed SDK methods and go straight through
-# the SDK's own authenticated httpx client (`sdk.hwid.client`, a public
-# dataclass field — see rapid_api_client.RapidApi), parsing the response with
-# this tolerant local model instead.
-#
-# TODO: once `remnawave` ships a compatible HwidDeviceDto, delete this shim and
-# restore `self.sdk.hwid.get_hwid_user(...)` / `self.sdk.hwid.delete_hwid_to_user(...)`.
 class HwidDeviceCompat(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     hwid: str
-    user_uuid: Optional[_uuid.UUID] = Field(None, alias="userUuid")
     user_id: Optional[int] = Field(None, alias="userId")
     platform: Optional[str] = None
     os_version: Optional[str] = Field(None, alias="osVersion")
@@ -134,7 +116,6 @@ def _normalize_user(user: UserResponseDto) -> dict:
                 active_squads.append(str(value))
 
     return {
-        "uuid": str(user.uuid) if user.uuid else None,
         "rw_id": _extract_rw_id(user),
         "expire": expire_ts,
         "subscription_url": user.subscription_url,
@@ -196,26 +177,6 @@ class RemnawaveClient:
 
     # ----- read -----
 
-    async def _fetch_users_page(
-        self, *, start: int = 0, size: int = 500
-    ) -> UsersResponseDto:
-        """Paginated users list — works across SDK versions."""
-        users_ctrl = self.sdk.users
-        fetch_v2 = getattr(users_ctrl, "get_all_users_v2", None)
-        if fetch_v2 is not None:
-            return await fetch_v2(start=start, size=size)
-        try:
-            return await users_ctrl.get_all_users(start=start, size=size)
-        except TypeError:
-            if start != 0:
-                raise
-            return await users_ctrl.get_all_users()
-
-    async def get_all_users(self) -> UsersResponseDto:
-        response = await self._fetch_users_page()
-        logger.info("Remnawave total users: %s", response.total)
-        return response
-
     async def _get_squads(self, kind: str, *, strict: bool = False) -> list[dict]:
         """List internal/external squads through the SDK-authenticated client."""
         from .segmentation import _get_attr
@@ -264,59 +225,38 @@ class RemnawaveClient:
         """List external squads from Remnawave panel."""
         return await self._get_squads("external", strict=strict)
 
+    async def _stream_users(self, **filters) -> list[UserResponseDto]:
+        """Read every v3 cursor page; outages are never converted to not-found."""
+        cursor: int | None = None
+        users: list[UserResponseDto] = []
+        while True:
+            page = await self.sdk.users.get_users_stream(
+                size=500, cursor=cursor, **filters
+            )
+            users.extend(page.users)
+            if not page.has_more:
+                return users
+            if page.next_cursor is None or page.next_cursor == cursor:
+                raise RuntimeError("remnawave_users_stream_invalid_cursor")
+            cursor = page.next_cursor
+
     async def get_users_by_tag(self, tag: str) -> list[dict]:
-        """Fetch panel users with the given tag (uppercase, no spaces)."""
         from .segmentation import normalize_user_for_crm
 
         normalized = tag.strip().upper().replace(" ", "")
         if not normalized:
             return []
-        try:
-            response = await self.sdk.users.client.get(
-                f"/users/by-tag/{normalized}"
-            )
-            response.raise_for_status()
-            data = _unwrap_response_envelope(response.json())
-            items: list = []
-            if isinstance(data, list):
-                items = data
-            elif isinstance(data, dict):
-                for key in ("users", "root"):
-                    raw = data.get(key)
-                    if isinstance(raw, list):
-                        items = raw
-                        break
-            return [normalize_user_for_crm(u) for u in items]
-        except Exception as e:
-            logger.error("Remnawave get_users_by_tag(%s) failed: %s", normalized, e)
-            raise
+        return [
+            normalize_user_for_crm(user)
+            for user in await self._stream_users(tag=normalized)
+            if (user.tag or "").strip().upper() == normalized
+        ]
 
     async def get_all_users_for_crm(self) -> list[dict]:
         """Bulk-fetch every panel user normalized for CRM segmentation."""
         from .segmentation import normalize_user_for_crm
 
-        page_size = 500
-        start = 0
-        total: int | None = None
-        normalized: list[dict] = []
-
-        while True:
-            response = await self._fetch_users_page(start=start, size=page_size)
-            raw_users = (
-                getattr(response, "users", None)
-                or getattr(response, "root", None)
-                or []
-            )
-            if total is None:
-                total = int(getattr(response, "total", None) or len(raw_users))
-                logger.info("Remnawave total users: %s", total)
-
-            normalized.extend(normalize_user_for_crm(u) for u in raw_users)
-            start += len(raw_users)
-            if not raw_users or start >= total:
-                break
-
-        return normalized
+        return [normalize_user_for_crm(user) for user in await self._stream_users()]
 
     async def get_user_by_username(
         self, username: str, *, raise_on_error: bool = False,
@@ -334,32 +274,36 @@ class RemnawaveClient:
                 raise RemnawaveOperationError("get_user_by_username", e) from e
             return None
 
-    async def get_user_by_email(self, email: str) -> dict | None:
+    async def get_users_by_email(self, email: str) -> list[dict]:
+        normalized = email.strip().casefold()
+        if not normalized:
+            return []
         try:
-            response = await self.sdk.users.get_users_by_email(email)
-            if not response or not response.root:
-                return None
-            return _normalize_user(response.root[0])
+            users = await self._stream_users(email=email.strip())
+            return [
+                _normalize_user(user)
+                for user in users
+                if (user.email or "").strip().casefold() == normalized
+            ]
         except Exception as e:
             logger.error("Remnawave get_user_by_email(%s) failed: %s", email, e)
-            return None
+            raise RemnawaveOperationError("get_user_by_email", e) from e
 
-    async def get_user_by_uuid(self, user_uuid: str) -> dict | None:
-        try:
-            response = await self.sdk.users.get_user_by_uuid(user_uuid)
-            if not response:
-                return None
-            return _normalize_user(response)
-        except Exception as e:
-            logger.error("Remnawave get_user_by_uuid(%s) failed: %s", user_uuid, e)
-            return None
+    async def get_user_by_email(self, email: str) -> dict | None:
+        matches = await self.get_users_by_email(email)
+        if len(matches) > 1:
+            raise RemnawaveOperationError(
+                "get_user_by_email_conflict",
+                ValueError(f"multiple exact email matches: {email}"),
+            )
+        return matches[0] if matches else None
 
     async def get_user_by_id(
         self, rw_id: int, *, raise_on_error: bool = False,
     ) -> dict | None:
         """Fetch a Remnawave user by its stable numeric panel id."""
         try:
-            response = await self.sdk.users.get_user_by_id(str(int(rw_id)))
+            response = await self.sdk.users.get_user_by_id(int(rw_id))
             if not response:
                 return None
             return _normalize_user(response)
@@ -375,14 +319,9 @@ class RemnawaveClient:
                 raise RemnawaveOperationError("get_user_by_id", e) from e
             return None
 
-    async def _uuid_for_id(self, rw_id: int) -> str | None:
-        user = await self.get_user_by_id(rw_id)
-        if not user:
-            return None
-        value = user.get("uuid")
-        return str(value) if value else None
-
-    async def get_user_by_short_uuid_raw(self, short_uuid: str) -> dict | None:
+    async def get_user_by_short_uuid_raw(
+        self, short_uuid: str, *, raise_on_error: bool = False,
+    ) -> dict | None:
         """Lookup user by Remnawave short_uuid and return the SDK DTO
         serialized as-is (no normalization). Used by the Android
         /check-uuid endpoint to verify ownership of an existing subscription
@@ -393,15 +332,11 @@ class RemnawaveClient:
                 return None
             return response.model_dump(mode="json", by_alias=True, exclude_none=False)
         except Exception as e:
+            if _is_not_found_error(e):
+                return None
             logger.error("Remnawave get_user_by_short_uuid(%s) failed: %s", short_uuid, e)
-            return None
-
-    async def get_subscription_link(self, user_uuid: str) -> str | None:
-        try:
-            response: UserResponseDto = await self.sdk.users.get_user_by_uuid(user_uuid)
-            return response.subscription_url if response else None
-        except Exception as e:
-            logger.error("Remnawave get_subscription_link(%s) failed: %s", user_uuid, e)
+            if raise_on_error:
+                raise RemnawaveOperationError("get_user_by_short_uuid", e) from e
             return None
 
     async def get_subscription_link_by_id(self, rw_id: int) -> str | None:
@@ -449,12 +384,12 @@ class RemnawaveClient:
                 or ("MONTH" if effective_limit > 0 else "NO_RESET")
             ).upper()
 
-            new_user = CreateUserRequestDto(
+            new_user = CreateUserBodyDto(
                 expire_at=datetime.datetime.now() + datetime.timedelta(days=days),
                 username=username,
                 created_at=datetime.datetime.now(),
                 status=UserStatus.ACTIVE,
-                vless_uuid=f"{_uuid.uuid4()}",
+                vless_uuid=_uuid.uuid4(),
                 traffic_limit_bytes=effective_limit,
                 traffic_limit_strategy=TrafficLimitStrategy(strategy_name),
                 description=descr,
@@ -471,7 +406,6 @@ class RemnawaveClient:
 
             expire_ts = int(response.expire_at.timestamp()) if response.expire_at else None
             return {
-                "uuid": str(response.uuid) if response.uuid else None,
                 "rw_id": _extract_rw_id(response),
                 "expire": expire_ts,
                 "subscription_url": response.subscription_url,
@@ -488,9 +422,9 @@ class RemnawaveClient:
                 raise RemnawaveOperationError("create_user", e) from e
             return None
 
-    async def update_user(
+    async def update_user_by_id(
         self,
-        user_uuid: str,
+        rw_id: int,
         username: Optional[str] = None,
         days: Optional[int] = None,
         limit_gb: Optional[int] = None,
@@ -506,11 +440,9 @@ class RemnawaveClient:
         raise_on_error: bool = False,
     ) -> dict | None:
         try:
-            update_data: dict = {"uuid": _uuid.UUID(user_uuid)}
+            update_data: dict = {"id": int(rw_id)}
 
-            if status is None:
-                update_data["status"] = UserStatus.ACTIVE
-            else:
+            if status is not None:
                 try:
                     update_data["status"] = _STATUS_MAP[status.lower()]
                 except KeyError:
@@ -550,7 +482,7 @@ class RemnawaveClient:
             if external_squad_id:
                 update_data["external_squad_uuid"] = external_squad_id
 
-            request = UpdateUserRequestDto(**update_data)
+            request = UpdateUserBodyDto(**update_data)
             response: UserResponseDto = await self.sdk.users.update_user(request)
 
             expire_ts = int(response.expire_at.timestamp()) if response.expire_at else None
@@ -561,10 +493,10 @@ class RemnawaveClient:
                 if v:
                     resp_squads.append(str(v))
             logger.info(
-                "Remnawave update_user OK uuid=%s "
+                "Remnawave update_user OK rw_id=%s "
                 "sent{status=%s expire_at=%s traffic_limit_bytes=%s squads=%s ext_squad=%s} "
                 "resp{status=%s expire_at=%s traffic_limit_bytes=%s squads=%s}",
-                user_uuid,
+                rw_id,
                 update_data.get("status"),
                 update_data.get("expire_at"),
                 update_data.get("traffic_limit_bytes"),
@@ -576,103 +508,62 @@ class RemnawaveClient:
                 resp_squads,
             )
             return {
-                "uuid": str(response.uuid) if response.uuid else None,
                 "rw_id": _extract_rw_id(response),
                 "expire": expire_ts,
                 "subscription_url": response.subscription_url,
                 "status": response.status.value.lower() if response.status else None,
             }
         except Exception as e:
-            logger.error("Remnawave update_user(%s) failed: %s", user_uuid, e)
+            logger.error("Remnawave update_user_by_id(%s) failed: %s", rw_id, e)
             if raise_on_error:
                 raise RemnawaveOperationError("update_user", e) from e
             return None
 
-    async def update_user_by_id(self, rw_id: int, **changes) -> dict | None:
-        """ID-first update while the upstream SDK still mutates by UUID."""
-        user_uuid = await self._uuid_for_id(rw_id)
-        if not user_uuid:
-            return None
-        return await self.update_user(user_uuid, **changes)
-
-    async def reset_user_traffic(self, user_uuid: str) -> bool:
-        try:
-            await self.sdk.users.reset_user_traffic(user_uuid)
-            return True
-        except Exception as e:
-            logger.error("Remnawave reset_user_traffic(%s) failed: %s", user_uuid, e)
-            return False
-
     async def reset_user_traffic_by_id(self, rw_id: int) -> bool:
-        user_uuid = await self._uuid_for_id(rw_id)
-        return bool(user_uuid) and await self.reset_user_traffic(user_uuid)
-
-    async def delete_user(self, user_uuid: str) -> bool:
         try:
-            await self.sdk.users.delete_user(user_uuid)
+            await self.sdk.users.reset_user_traffic(int(rw_id))
             return True
         except Exception as e:
-            logger.error("Remnawave delete_user(%s) failed: %s", user_uuid, e)
+            logger.error("Remnawave reset_user_traffic_by_id(%s) failed: %s", rw_id, e)
             return False
 
     async def delete_user_by_id(self, rw_id: int) -> bool:
-        user_uuid = await self._uuid_for_id(rw_id)
-        return bool(user_uuid) and await self.delete_user(user_uuid)
+        try:
+            await self.sdk.users.delete_user(int(rw_id))
+            return True
+        except Exception as e:
+            logger.error("Remnawave delete_user_by_id(%s) failed: %s", rw_id, e)
+            return False
 
     # ----- HWID devices -----
-
-    async def get_user_hwid_devices(
-        self, user_uuid: str
-    ) -> HwidDevicesCompat | None:
-        """Returns .total and .devices (see HwidDevicesCompat above for why this
-        bypasses self.sdk.hwid.get_hwid_user()). Consumers that need a list of
-        dicts should map each device themselves; the compat DTO is intentionally
-        exposed because app/handlers/devices.py uses attribute access on device
-        fields including datetime objects."""
-        try:
-            response = await self.sdk.hwid.client.get(f"/hwid/devices/{user_uuid}")
-            response.raise_for_status()
-            data = _unwrap_response_envelope(response.json())
-            return HwidDevicesCompat.model_validate(data)
-        except Exception as e:
-            logger.error("Remnawave get_user_hwid_devices(%s) failed: %s", user_uuid, e)
-            return None
 
     async def get_user_hwid_devices_by_id(
         self, rw_id: int
     ) -> HwidDevicesCompat | None:
-        user_uuid = await self._uuid_for_id(rw_id)
-        if not user_uuid:
-            return None
-        return await self.get_user_hwid_devices(user_uuid)
-
-    async def delete_user_hwid_device(
-        self, user_uuid: str, hwid: str
-    ) -> HwidDevicesCompat | None:
-        """See get_user_hwid_devices — the delete response embeds the same
-        broken devices list, so it needs the same bypass."""
         try:
-            request = DeleteUserHwidDeviceRequestDto(user_uuid=user_uuid, hwid=hwid)
-            response = await self.sdk.hwid.client.post(
-                "/hwid/devices/delete",
-                json=request.model_dump(mode="json", by_alias=True),
+            response = await self.sdk.hwid.get_hwid_user(int(rw_id))
+            return HwidDevicesCompat.model_validate(
+                response.model_dump(mode="json", by_alias=True)
             )
-            response.raise_for_status()
-            data = _unwrap_response_envelope(response.json())
-            return HwidDevicesCompat.model_validate(data)
         except Exception as e:
-            logger.error(
-                "Remnawave delete_user_hwid_device(%s, %s) failed: %s", user_uuid, hwid, e
-            )
+            logger.error("Remnawave get_user_hwid_devices_by_id(%s) failed: %s", rw_id, e)
             return None
 
     async def delete_user_hwid_device_by_id(
         self, rw_id: int, hwid: str
     ) -> HwidDevicesCompat | None:
-        user_uuid = await self._uuid_for_id(rw_id)
-        if not user_uuid:
+        try:
+            request = DeleteUserHwidDeviceRequestDto(user_id=int(rw_id), hwid=hwid)
+            response = await self.sdk.hwid.delete_hwid_to_user(request)
+            return HwidDevicesCompat.model_validate(
+                response.model_dump(mode="json", by_alias=True)
+            )
+        except Exception as e:
+            logger.error(
+                "Remnawave delete_user_hwid_device_by_id(%s, %s) failed: %s",
+                rw_id, hwid, e,
+            )
             return None
-        return await self.delete_user_hwid_device(user_uuid, hwid)
 
 
 # ============================================================================

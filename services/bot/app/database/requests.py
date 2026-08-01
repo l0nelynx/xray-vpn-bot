@@ -61,49 +61,9 @@ async def get_user_by_username(username: str):
         return await _repo_users.get_user_by_username(session, username)
 
 
-async def get_user_by_vless_uuid(vless_uuid: str) -> dict | None:
-    """Lookup local user by Remnawave VLESS UUID (for inbound panel webhooks)."""
-    if not vless_uuid:
-        return None
-    async with async_session() as session:
-        user = await _repo_users.get_user_by_vless_uuid(session, vless_uuid)
-        if not user:
-            return None
-        return {
-            "tg_id": user.tg_id,
-            "is_banned": bool(user.is_banned),
-        }
-
-
-async def create_user_with_info(tg_id: int, username: str, vless_uuid: str = None, api_provider: str = "remnawave"):
-    """
-    Создает нового пользователя с полной информацией
-
-    Args:
-        tg_id (int): Telegram ID пользователя
-        username (str): Telegram username
-        vless_uuid (str): UUID для VLESS конфигурации
-        api_provider (str): Провайдер API (marzban или remnawave)
-
-    Returns:
-        User: Созданный объект пользователя
-    """
-    async with async_session() as session:
-        new_user = User(
-            tg_id=tg_id,
-            username=username,
-            vless_uuid=f"{vless_uuid}",
-            api_provider=api_provider
-        )
-        session.add(new_user)
-        await session.commit()
-        return new_user
-
-
 async def update_user_api_info(
     tg_id: int = 0,
     username: str = 0,
-    vless_uuid: str = None,
     api_provider: str = None,
     rw_id: int | None = None,
 ):
@@ -113,7 +73,6 @@ async def update_user_api_info(
     Args:
         tg_id: Telegram ID пользователя
         username (str): Telegram username
-        vless_uuid (str): UUID для VLESS конфигурации
         api_provider (str): Провайдер API (marzban или remnawave)
         rw_id: Remnawave panel numeric user id
 
@@ -127,8 +86,6 @@ async def update_user_api_info(
             return False
         if username is not None:
             user.username = username
-        if vless_uuid is not None:
-            user.vless_uuid = f"{vless_uuid}"
         if api_provider is not None:
             user.api_provider = api_provider
         if rw_id is not None:
@@ -136,22 +93,6 @@ async def update_user_api_info(
 
         await session.commit()
         return True
-
-
-async def update_user_vless_uuid(tg_id: int, username: str, vless_uuid: str):
-    """
-    Обновляет UUID пользователя
-
-    Args:
-        tg_id:
-        username (str): Telegram username
-        vless_uuid (str): Новый UUID для VLESS конфигурации
-
-    Returns:
-        bool: True если успешно, False если пользователь не найден
-    """
-    return await update_user_api_info(tg_id=tg_id, username=username, vless_uuid=vless_uuid)
-
 
 async def get_user_api_provider(username: str) -> str:
     """
@@ -189,6 +130,7 @@ async def get_full_username_info(username: str) -> dict:
             "tg_id": user.tg_id,
             "username": user.username,
             "vless_uuid": user.vless_uuid,
+            "rw_id": user.rw_id,
             "api_provider": user.api_provider,
             "vip": user.vip,
         }
@@ -928,6 +870,7 @@ async def get_free_non_vip_remnawave_users() -> list[dict]:
                 ~has_any_tx,
                 (User.vip == 0) | (User.vip == None),  # noqa: E711
                 User.api_provider == "remnawave",
+                User.rw_id.is_not(None),
                 (User.is_banned == False) | (User.is_banned == None),  # noqa: E712
             )
         )
@@ -936,7 +879,6 @@ async def get_free_non_vip_remnawave_users() -> list[dict]:
             {
                 "tg_id": u.tg_id,
                 "username": u.username,
-                "vless_uuid": u.vless_uuid,
                 "rw_id": u.rw_id,
                 "email": u.email,
             }

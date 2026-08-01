@@ -112,7 +112,6 @@ async def get_me(tg: TgUser = Depends(get_tg_user)) -> MeResponse:
     # subscription_url.
     rem_user = await resolve_remnawave_user(
         rw_id=user.rw_id,
-        vless_uuid=user.vless_uuid,
         email=user.email,
         username=user.username,
         expected_telegram_id=tg.tg_id,

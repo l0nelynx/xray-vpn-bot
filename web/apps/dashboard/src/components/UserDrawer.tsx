@@ -63,7 +63,6 @@ export default function UserDrawer({ userId, open, onClose, onChanged }: Props) 
 
   const [editTgId, setEditTgId] = useState("");
   const [editUsername, setEditUsername] = useState("");
-  const [editUuid, setEditUuid] = useState("");
   const [idSaving, setIdSaving] = useState(false);
 
   const [emailInput, setEmailInput] = useState("");
@@ -92,7 +91,6 @@ export default function UserDrawer({ userId, open, onClose, onChanged }: Props) 
       setSubscriptions(s.subscriptions);
       setEditTgId(u.tg_id != null ? String(u.tg_id) : "");
       setEditUsername(u.username || "");
-      setEditUuid(u.vless_uuid || "");
       setEmailInput(u.email || "");
       setMsgText("");
       setCreditsDelta("");
@@ -123,7 +121,6 @@ export default function UserDrawer({ userId, open, onClose, onChanged }: Props) 
       await api.patch(`/users/${user.id}/identifiers`, {
         tg_id: newTgId ? Number(newTgId) : null,
         username: editUsername,
-        vless_uuid: editUuid,
       });
       toast.success("Saved");
       await load(user.id);
@@ -213,12 +210,11 @@ export default function UserDrawer({ userId, open, onClose, onChanged }: Props) 
     if (!user || !emailInput.trim()) return;
     setEmailSaving(true);
     try {
-      const res = await api.patch<{ ok: boolean; rw_uuid: string | null; rw_id: number | null }>(
+      const res = await api.patch<{ ok: boolean; rw_id: number | null }>(
         `/users/${user.id}/email`,
         { email: emailInput.trim() },
       );
       const parts = ["Email saved"];
-      if (res.rw_uuid) parts.push(`UUID: ${res.rw_uuid}`);
       if (res.rw_id != null) parts.push(`rw_id: ${res.rw_id}`);
       toast.success(parts.join(", "));
       await load(user.id);
@@ -295,7 +291,7 @@ export default function UserDrawer({ userId, open, onClose, onChanged }: Props) 
                 <Row label="TG ID">{user.tg_id ?? "—"}</Row>
                 <Row label="Username">{user.username || "—"}</Row>
                 <Row label="Email">{user.email || "—"}</Row>
-                <Row label="vless_uuid">
+                <Row label="Legacy panel UUID">
                   {user.vless_uuid ? (
                     <span className="flex items-center gap-2">
                       <span className="break-all font-mono text-xs">{user.vless_uuid}</span>
@@ -441,12 +437,6 @@ export default function UserDrawer({ userId, open, onClose, onChanged }: Props) 
                     value={editUsername}
                     onChange={(e) => setEditUsername(e.target.value)}
                     placeholder="username"
-                  />
-                  <LabeledInput
-                    label="UUID"
-                    value={editUuid}
-                    onChange={(e) => setEditUuid(e.target.value)}
-                    placeholder="vless_uuid"
                   />
                   <Button onClick={handleSaveIdentifiers} disabled={idSaving}>
                     <Pencil className="h-4 w-4" />

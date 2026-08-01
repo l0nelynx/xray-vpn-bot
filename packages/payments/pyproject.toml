@@ -9,7 +9,7 @@ description = "Shared payment-gateway providers and webhook signature verificati
 requires-python = ">=3.11"
 dependencies = [
     "aiohttp>=3.9",
-    "aiosend>=3.0.5",
+    "aiosend==3.0.7",
 ]
 
 [tool.setuptools.packages.find]

@@ -163,7 +163,7 @@ def test_new_user_success_updates_delivery_and_notifies(monkeypatch):
         monkeypatch,
         scenario=SubscriptionScenario.NEW_USER,
         info=None,
-        apply_result={"uuid": "rw-uuid", "rw_id": 999, "subscription_url": "https://sub/x"},
+        apply_result={"rw_id": 999, "subscription_url": "https://sub/x"},
     )
     sink: list = []
     notes: list = []
@@ -174,7 +174,7 @@ def test_new_user_success_updates_delivery_and_notifies(monkeypatch):
         notifier=lambda t: _append(notes, t),
     ))
     assert res["status"] == "success"
-    assert res["uuid"] == "rw-uuid"
+    assert res["rw_id"] == 999
     assert res["subscription_url"] == "https://sub/x"
     assert notes and "delivered" in notes[-1]
     assert "Subscription delivered (android)" in notes[-1]
@@ -560,7 +560,7 @@ def test_real_db_unowned_external_target_is_recovered(
     assert result["action"] == "recovered"
     assert link is not None
     assert tx.delivery_status == 1 and tx.delivery_error is None
-    assert user.rw_id == 901 and user.vless_uuid == "external-uuid"
+    assert user.rw_id == 901 and user.vless_uuid is None
 
 
 @pytest.mark.parametrize("original_target", [None, 902])

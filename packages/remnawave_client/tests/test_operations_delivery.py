@@ -12,11 +12,11 @@ class FakeClient:
 
     async def create_user(self, **values):
         self.created = values
-        return {"uuid": "created"}
+        return {"rw_id": 100}
 
-    async def update_user(self, **values):
+    async def update_user_by_id(self, **values):
         self.updated = values
-        return {"uuid": values["user_uuid"]}
+        return {"rw_id": values["rw_id"]}
 
 
 def test_new_user_passes_complete_delivery_target() -> None:
@@ -35,7 +35,7 @@ def test_new_user_passes_complete_delivery_target() -> None:
             client=client,
         )
     )
-    assert result == {"uuid": "created"}
+    assert result == {"rw_id": 100}
     assert client.created is not None
     assert client.created["internal_squad_ids"] == ["squad-a", "squad-b"]
     assert client.created["traffic_limit_bytes"] == 50 * 1024**3
@@ -47,7 +47,7 @@ def test_extend_does_not_replace_limit_with_legacy_zero() -> None:
     client = FakeClient()
     asyncio.run(
         apply_extend(
-            user_uuid="00000000-0000-4000-8000-000000000001",
+            rw_id=42,
             username="alice",
             days=30,
             current_days_left=10,
@@ -64,3 +64,4 @@ def test_extend_does_not_replace_limit_with_legacy_zero() -> None:
     assert client.updated["limit_gb"] is None
     assert client.updated["traffic_limit_bytes"] == 0
     assert client.updated["traffic_limit_strategy"] == "NO_RESET"
+    assert client.updated["status"] == "active"

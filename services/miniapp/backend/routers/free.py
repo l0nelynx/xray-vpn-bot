@@ -2,7 +2,7 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from ..config import get_free_days, get_free_traffic, get_news_url, get_rw_free_id
 from ..database.models import TelmtFreeParams, User
@@ -15,7 +15,7 @@ from remnawave_client.api import (
     create_user,
     get_user_from_username,
     resolve_remnawave_user,
-    update_user,
+    update_user_by_id,
 )
 from subscription_delivery import build_remnawave_username
 from ..notify_log import notify_log
@@ -27,8 +27,8 @@ router = APIRouter(prefix="/api/free", tags=["free"])
 logger = logging.getLogger(__name__)
 
 
-async def _persist_rw_uuid(user: User, rw_user: dict | None) -> None:
-    if not rw_user or not rw_user.get("uuid") or rw_user.get("rw_id") is None:
+async def _persist_rw_id(user: User, rw_user: dict | None) -> None:
+    if not rw_user or rw_user.get("rw_id") is None:
         return
     async with async_session() as session:
         try:
@@ -46,12 +46,9 @@ async def _persist_rw_uuid(user: User, rw_user: dict | None) -> None:
                 status.HTTP_409_CONFLICT, "target_owner_conflict"
             ) from exc
         if link.is_primary:
-            await _repo_users.persist_remnawave_uuid(
-                session,
-                tg_id=user.tg_id,
-                vless_uuid=str(rw_user["uuid"]),
-                username=user.username,
-                rw_id=rw_user.get("rw_id"),
+            await session.execute(
+                text("UPDATE users SET rw_id = :r WHERE id = :u"),
+                {"r": int(rw_user["rw_id"]), "u": user.id},
             )
         await session.commit()
 
@@ -61,13 +58,12 @@ async def _resolve_existing(user: User, tg: TgUser) -> dict | None:
         primary = await _repo_subscriptions.get_primary(session, user.id)
     existing = await resolve_remnawave_user(
         rw_id=primary.rw_id if primary else user.rw_id,
-        vless_uuid=user.vless_uuid,
         email=user.email,
         username=user.username,
         expected_telegram_id=tg.tg_id,
     )
     if existing is None and user.username:
-        collision = await get_user_from_username(user.username)
+        collision = await get_user_from_username(user.username, strict=True)
         if collision:
             await notify_log(
                 "⚠️ <b>legacy_username_collision</b>\n"
@@ -124,8 +120,8 @@ async def free_vpn_status(tg: TgUser = Depends(get_tg_user)) -> FreeStatusRespon
     user = await _ensure_user(tg)
     free_squad = get_rw_free_id() or None
     existing = await _resolve_existing(user, tg)
-    if existing and existing.get("uuid"):
-        await _persist_rw_uuid(user, existing)
+    if existing and existing.get("rw_id") is not None:
+        await _persist_rw_id(user, existing)
         squads = {s.lower() for s in existing.get("active_squads", [])}
         is_free = bool(free_squad and free_squad.lower() in squads)
         is_active_pro = existing.get("status") == "active" and existing.get("data_limit") is None
@@ -167,12 +163,12 @@ async def free_claim(tg: TgUser = Depends(get_tg_user)) -> ClaimResponse:
     free_squad = get_rw_free_id() or None
 
     existing = await _resolve_existing(user, tg)
-    if existing and existing.get("uuid"):
+    if existing and existing.get("rw_id") is not None:
         squads = {s.lower() for s in existing.get("active_squads", [])}
         is_free = bool(free_squad and free_squad.lower() in squads)
         is_active_pro = existing.get("status") == "active" and existing.get("data_limit") is None
         if is_active_pro or is_free:
-            await _persist_rw_uuid(user, existing)
+            await _persist_rw_id(user, existing)
             return ClaimResponse(
                 ok=True,
                 subscription_url=existing.get("subscription_url"),
@@ -180,8 +176,8 @@ async def free_claim(tg: TgUser = Depends(get_tg_user)) -> ClaimResponse:
                 detail="already_active",
             )
         # Inactive / limited / expired free user — refresh
-        updated = await update_user(
-            existing["uuid"],
+        updated = await update_user_by_id(
+            int(existing["rw_id"]),
             days=days,
             limit_gb=limit_gb,
             squad_id=free_squad,
@@ -189,7 +185,7 @@ async def free_claim(tg: TgUser = Depends(get_tg_user)) -> ClaimResponse:
         )
         if not updated:
             return ClaimResponse(ok=False, detail="update_failed")
-        await _persist_rw_uuid(user, updated)
+        await _persist_rw_id(user, updated)
         return ClaimResponse(
             ok=True,
             subscription_url=updated.get("subscription_url"),
@@ -202,7 +198,7 @@ async def free_claim(tg: TgUser = Depends(get_tg_user)) -> ClaimResponse:
     created = None
     for ordinal in range(start, start + 100):
         candidate = build_remnawave_username(user.username, user.id, ordinal)
-        occupied = await get_user_from_username(candidate)
+        occupied = await get_user_from_username(candidate, strict=True)
         if occupied:
             if marker in str(occupied.get("description") or ""):
                 created = occupied
@@ -223,14 +219,14 @@ async def free_claim(tg: TgUser = Depends(get_tg_user)) -> ClaimResponse:
                 squad_id=free_squad,
             )
         except Exception:
-            appeared = await get_user_from_username(candidate)
+            appeared = await get_user_from_username(candidate, strict=True)
             if appeared and marker in str(appeared.get("description") or ""):
                 created = appeared
             elif appeared:
                 continue
             else:
                 raise
-        appeared = await get_user_from_username(candidate)
+        appeared = await get_user_from_username(candidate, strict=True)
         if appeared:
             if marker in str(appeared.get("description") or ""):
                 created = appeared
@@ -242,7 +238,7 @@ async def free_claim(tg: TgUser = Depends(get_tg_user)) -> ClaimResponse:
         break
     if not created:
         return ClaimResponse(ok=False, detail="rw_username_allocation_failed")
-    await _persist_rw_uuid(user, created)
+    await _persist_rw_id(user, created)
     return ClaimResponse(
         ok=True,
         subscription_url=created.get("subscription_url"),

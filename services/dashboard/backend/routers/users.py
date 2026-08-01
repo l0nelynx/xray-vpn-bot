@@ -152,80 +152,6 @@ async def list_users(
     return {"items": users, "total": total, "page": page, "per_page": per_page}
 
 
-@router.post("/backfill-rw-ids")
-async def backfill_rw_ids(_: str = Depends(get_current_user)):
-    """Temporary bulk backfill: map local vless_uuid -> Remnawave panel id."""
-    rw_url = get_remnawave_url()
-    rw_token = get_remnawave_token()
-    if not rw_url or not rw_token:
-        raise HTTPException(status_code=503, detail="Remnawave not configured")
-
-    from remnawave_client import configure
-
-    rw = configure(base_url=rw_url, token=rw_token, free_squad_id="")
-
-    async with async_session() as session:
-        result = await session.execute(
-            select(User.id, User.vless_uuid).where(
-                User.vless_uuid.isnot(None),
-                User.vless_uuid != "",
-                User.rw_id.is_(None),
-            )
-        )
-        candidates = list(result.all())
-
-    local_candidates = len(candidates)
-    if not local_candidates:
-        return {
-            "local_candidates": 0,
-            "updated": 0,
-            "not_found_on_panel": 0,
-            "errors": 0,
-        }
-
-    try:
-        panel_users = await rw.get_all_users_for_crm()
-    except Exception as exc:
-        logger.exception("backfill_rw_ids: Remnawave fetch failed")
-        raise HTTPException(status_code=502, detail=f"Remnawave fetch failed: {exc}") from exc
-
-    uuid_to_rw_id: dict[str, int] = {}
-    for panel_user in panel_users:
-        panel_uuid = panel_user.get("uuid")
-        panel_rw_id = panel_user.get("rw_id")
-        if panel_uuid and panel_rw_id is not None:
-            uuid_to_rw_id[str(panel_uuid).lower()] = int(panel_rw_id)
-
-    updated = 0
-    not_found_on_panel = 0
-    errors = 0
-
-    async with async_session() as session:
-        for user_id, vless_uuid in candidates:
-            rw_id = uuid_to_rw_id.get((vless_uuid or "").lower())
-            if rw_id is None:
-                not_found_on_panel += 1
-                continue
-            try:
-                user = await session.get(User, user_id)
-                if user is None:
-                    errors += 1
-                    continue
-                user.rw_id = rw_id
-                updated += 1
-            except Exception:
-                logger.exception("backfill_rw_ids: failed for user id=%s", user_id)
-                errors += 1
-        await session.commit()
-
-    return {
-        "local_candidates": local_candidates,
-        "updated": updated,
-        "not_found_on_panel": not_found_on_panel,
-        "errors": errors,
-    }
-
-
 @router.get("/{user_id}")
 async def get_user(user_id: int, _: str = Depends(get_current_user)):
     """Fetch user by local DB primary key (works for Android/web accounts without tg_id)."""
@@ -326,7 +252,7 @@ async def attach_user_subscription(
 ):
     _configure_dashboard_remnawave()
     try:
-        rem_user = await get_user_from_id(body.rw_id)
+        rem_user = await get_user_from_id(body.rw_id, strict=True)
     except Exception as exc:
         logger.warning("Remnawave lookup failed for rw_id=%s: %s", body.rw_id, exc)
         raise HTTPException(502, detail={"code": "remnawave_unavailable"}) from exc
@@ -416,7 +342,6 @@ async def detach_user_subscription(
 class UpdateIdentifiersRequest(BaseModel):
     tg_id: int | None = None
     username: str | None = None
-    vless_uuid: str | None = None
     rw_id: int | None = None
 
 
@@ -426,8 +351,10 @@ async def update_identifiers(
     body: UpdateIdentifiersRequest,
     _: str = Depends(get_current_user),
 ):
-    """Edit a user's tg_id / username / vless_uuid / rw_id. Empty string clears the
-    field (sets NULL); a missing field is left unchanged."""
+    """Edit display identifiers. Subscription ownership is managed separately.
+
+    ``users.vless_uuid`` is deliberately read-only legacy audit data.
+    """
     async with async_session() as session:
         user = await _repo_users.get_user_by_id(session, user_id)
         if not user:
@@ -435,8 +362,6 @@ async def update_identifiers(
 
         if body.username is not None:
             user.username = body.username.strip().lstrip("@") or None
-        if body.vless_uuid is not None:
-            user.vless_uuid = body.vless_uuid.strip() or None
         if "rw_id" in body.model_fields_set:
             if body.rw_id != user.rw_id:
                 raise HTTPException(
@@ -627,24 +552,25 @@ async def update_email(user_id: int, body: UpdateEmailRequest, _: str = Depends(
         user.email = email
         await session.commit()
 
-    rw_uuid = None
     rw_id = None
     try:
         from remnawave_client import configure
         rw = configure(base_url=get_remnawave_url(), token=get_remnawave_token(), free_squad_id="")
         rw_user = await rw.get_user_by_email(email)
-        if rw_user and rw_user.get("uuid"):
-            rw_uuid = str(rw_user["uuid"])
+        if rw_user and rw_user.get("rw_id") is not None:
             rw_id = rw_user.get("rw_id")
             async with async_session() as session:
                 user = await _repo_users.get_user_by_id(session, user_id)
                 if user:
-                    user.vless_uuid = rw_uuid
                     user.api_provider = "remnawave"
-                    if rw_id is not None:
-                        user.rw_id = int(rw_id)
+                    user.rw_id = int(rw_id)
+                    from common_db.repo import subscriptions as _subscriptions
+                    await _subscriptions.attach(
+                        session, user_id=user_id, rw_id=int(rw_id),
+                        source="dashboard_email_attach",
+                    )
                     await session.commit()
     except Exception as exc:
         logger.warning("RW email lookup failed for %s: %s", email, exc)
 
-    return {"ok": True, "email": email, "rw_uuid": rw_uuid, "rw_id": rw_id}
+    return {"ok": True, "email": email, "rw_id": rw_id}
