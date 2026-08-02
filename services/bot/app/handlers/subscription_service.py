@@ -347,9 +347,12 @@ async def _handle_new_user(
             rw_id=int(buyer_info["rw_id"]),
             source=f"{subscription_type.value.lower()}_bot",
         )
+        # Capture this before commit: the production session expires ORM
+        # attributes on commit, and the instance is detached below.
+        is_primary = bool(link.is_primary)
         await session.commit()
 
-    if buyer_info and buyer_info.get("rw_id") is not None and link.is_primary:
+    if buyer_info and buyer_info.get("rw_id") is not None and is_primary:
         await rq.update_user_api_info(
             tg_id=user_id,
             username=username,

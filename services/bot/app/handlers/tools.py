@@ -174,6 +174,7 @@ async def resolve_remnawave_account(
     if info and info.get("rw_id") is not None:
         rw_id = info.get("rw_id")
         link = None
+        is_primary = True
         async with async_session() as session:
             if rw_id is not None:
                 try:
@@ -191,8 +192,13 @@ async def resolve_remnawave_account(
                         f"rw_id: <code>{rw_id}</code>"
                     )
                     return None, None
+                # The bot sessionmaker uses SQLAlchemy's default
+                # expire_on_commit=True.  Keep the scalar decision while the
+                # ORM instance is still attached; reading link.is_primary
+                # after commit/session close raises DetachedInstanceError.
+                is_primary = bool(link.is_primary)
             await session.commit()
-        if link is None or link.is_primary:
+        if link is None or is_primary:
             await rq.update_user_api_info(
                 tg_id=tg_id,
                 username=username,

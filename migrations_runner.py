@@ -23,6 +23,27 @@ _ALEMBIC_DIR = _ROOT / "alembic"
 _BASELINE_REV = "0001_baseline"
 
 
+def _redact_db_url(db_url: str) -> str:
+    """Return a log-safe database URL without exposing credentials.
+
+    Split on the last ``@`` so passwords containing URL-reserved characters
+    are still hidden even when a legacy deployment did not percent-encode
+    them.  The original URL remains untouched for SQLAlchemy/Alembic.
+    """
+    if "://" not in db_url:
+        return "***"
+    scheme, remainder = db_url.split("://", 1)
+    if "@" not in remainder:
+        return db_url
+    credentials, location = remainder.rsplit("@", 1)
+    if ":" in credentials:
+        username, _password = credentials.split(":", 1)
+        credentials = f"{username}:***"
+    else:
+        credentials = "***"
+    return f"{scheme}://{credentials}@{location}"
+
+
 def _resolve_db_url() -> str:
     url = os.environ.get("DATABASE_URL")
     if url:
@@ -90,5 +111,5 @@ def upgrade_to_head() -> None:
         logger.info("Alembic: stamping pre-existing schema at %s", _BASELINE_REV)
         command.stamp(cfg, _BASELINE_REV)
 
-    logger.info("Alembic: upgrading to head (db=%s)", db_url)
+    logger.info("Alembic: upgrading to head (db=%s)", _redact_db_url(db_url))
     command.upgrade(cfg, "head")
