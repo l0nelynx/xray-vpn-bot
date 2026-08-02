@@ -136,6 +136,11 @@ smtp_password: "your-smtp-password"                # preferred: Dashboard Email 
 # smtp_use_tls: false                              # preferred: Dashboard Email
 # email_code_ttl: 900                              # preferred: Dashboard Email
 # email_code_max_attempts: 5                       # preferred: Dashboard Email
+# Extra domains rejected at android/web register (merged with built-ins like
+# example.com, qzz.io). Local-part probes (probe123@…, test_…) are always blocked.
+# email_denied_domains:
+#   - mailinator.com
+#   - guerrillamail.com
 
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗

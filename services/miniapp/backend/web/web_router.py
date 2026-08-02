@@ -47,6 +47,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
 from ..android import deps
+from ..android import email_policy, register_ip_guard
 from ..android import repo as android_repo
 from ..android import security as android_security
 from ..android.auth_router import _issue_pair, _user_summary, limiter
@@ -322,6 +323,8 @@ async def web_register(
     """
     ip = _client_ip(request)
     brute_force.check(ip)
+    register_ip_guard.check(ip)
+    email_policy.assert_email_allowed(str(body.email))
 
     code = body.invite_code.strip().upper() if body.invite_code else None
     claim_rw_id: int | None = None
@@ -421,6 +424,7 @@ async def web_register(
 
     user = await android_repo.find_user_by_id(user_id)
     assert user is not None
+    register_ip_guard.record(ip)
 
     if claim_rw_id is None:
         assert code is not None
@@ -898,12 +902,14 @@ async def setup_email_request(
     if other is not None and other.id != user.id:
         raise HTTPException(status.HTTP_409_CONFLICT, detail={"code": "email_taken"})
 
-    from ..android import mailer, security as _sec
+    from ..android import email_send_guard, mailer, security as _sec
     from ..config import get_email_code_ttl_seconds
 
     password_hash = await _sec.hash_password(body.new_password)
     payload = _json.dumps({"email": new_email, "ph": password_hash})
 
+    ip = _client_ip(request)
+    email_send_guard.check(email=new_email, ip=ip)
     code = _sec.new_email_code()
     code_hash = _sec.hash_email_code(code)
     await android_repo.invalidate_pending_codes(user.id, android_repo.PURPOSE_SETUP_EMAIL)
@@ -914,6 +920,7 @@ async def setup_email_request(
         payload=payload,
         ttl_seconds=get_email_code_ttl_seconds(),
     )
+    email_send_guard.record(email=new_email, ip=ip)
     try:
         subject, text_body = mailer.render_verify(code)
         await mailer.send_email(to=new_email, subject=subject, text=text_body)

@@ -24,7 +24,7 @@ from ..config import (
     get_email_code_ttl_seconds,
 )
 from ..notify_log import esc, notify_log
-from . import deps, mailer, provisioning, repo, security
+from . import deps, email_send_guard, mailer, provisioning, repo, security
 from .auth_router import limiter
 from .schemas import SimpleStatus
 
@@ -73,9 +73,12 @@ async def _send_code(
     to_email: str,
     payload: str | None,
     template,
+    request: Request | None = None,
 ) -> None:
     """Generate, persist, and send a code. Old codes for the purpose are
     invalidated atomically so only the freshest code is valid."""
+    ip = deps.real_client_ip(request) if request is not None else None
+    email_send_guard.check(email=to_email, ip=ip)
     code = security.new_email_code()
     code_hash = security.hash_email_code(code)
     await repo.invalidate_pending_codes(user_id, purpose)
@@ -86,6 +89,7 @@ async def _send_code(
         payload=payload,
         ttl_seconds=get_email_code_ttl_seconds(),
     )
+    email_send_guard.record(email=to_email, ip=ip)
     rendered = template(code) if payload is None else template(code, payload)
     subject, body = rendered
     try:
@@ -105,6 +109,7 @@ async def _consume_code(
     user_id: int,
     purpose: str,
     presented_code: str,
+    email: str | None = None,
 ) -> repo.VerificationRow:
     """Locate the active code for (user, purpose), check expiry/attempts,
     constant-time compare, and mark used on success. Raises HTTPException on
@@ -128,6 +133,8 @@ async def _consume_code(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail={"code": "code_invalid"})
 
     await repo.mark_code_used(row.id)
+    if email:
+        email_send_guard.clear_consecutive(email=email)
     return row
 
 
@@ -150,6 +157,7 @@ async def email_send_code(
         to_email=user.email,
         payload=None,
         template=mailer.render_verify,
+        request=request,
     )
     return SimpleStatus()
 
@@ -170,6 +178,7 @@ async def email_verify(
         user_id=user.id,
         purpose=repo.PURPOSE_VERIFY,
         presented_code=req.code,
+        email=user.email,
     )
     await repo.mark_email_verified(user.id)
     await notify_log(
@@ -210,6 +219,7 @@ async def password_reset_request(
                 to_email=user.email or str(req.email),
                 payload=None,
                 template=mailer.render_password_reset,
+                request=request,
             )
         except HTTPException:
             # Swallow SMTP errors so we don't reveal user existence; logged
@@ -233,6 +243,7 @@ async def password_reset_confirm(
         user_id=user.id,
         purpose=repo.PURPOSE_PASSWORD_RESET,
         presented_code=req.code,
+        email=user.email or str(req.email),
     )
     await repo.set_password(user.id, await security.hash_password(req.new_password))
     await repo.revoke_all_user_tokens(user.id)
@@ -259,6 +270,8 @@ async def email_change_request(
         # client must know it failed before storing the candidate locally.
         raise HTTPException(status.HTTP_409_CONFLICT, detail={"code": "email_taken"})
 
+    ip = deps.real_client_ip(request)
+    email_send_guard.check(email=new_email, ip=ip)
     code = security.new_email_code()
     code_hash = security.hash_email_code(code)
     await repo.invalidate_pending_codes(user.id, repo.PURPOSE_EMAIL_CHANGE)
@@ -269,6 +282,7 @@ async def email_change_request(
         payload=new_email,
         ttl_seconds=get_email_code_ttl_seconds(),
     )
+    email_send_guard.record(email=new_email, ip=ip)
     subject, body = mailer.render_email_change(code, new_email)
     try:
         await mailer.send_email(to=new_email, subject=subject, text=body)
@@ -296,6 +310,7 @@ async def email_change_confirm(
     new_email = (row.payload or "").strip().lower()
     if not new_email:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail={"code": "code_invalid"})
+    email_send_guard.clear_consecutive(email=new_email)
 
     # Last-second collision check: someone may have registered the address
     # in the window between request and confirm.

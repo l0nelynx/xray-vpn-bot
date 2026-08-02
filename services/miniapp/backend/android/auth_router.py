@@ -18,7 +18,7 @@ from slowapi import Limiter
 from sqlalchemy.exc import IntegrityError
 
 from ..notify_log import esc, notify_log
-from . import deps, repo, security
+from . import deps, email_policy, register_ip_guard, repo, security
 
 # Module-level limiter shared with main.app.state.limiter via singleton.
 # Key on the real client IP (X-Real-IP from the trusted edge), NOT the socket
@@ -86,6 +86,9 @@ async def _issue_pair(
 @router.post("/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit("5/minute")
 async def register(req: RegisterRequest, request: Request) -> AuthResponse:
+    ip = deps.real_client_ip(request)
+    register_ip_guard.check(ip)
+    email_policy.assert_email_allowed(str(req.email))
     pwd_hash = await security.hash_password(req.password)
     try:
         user_id = await repo.create_user_with_password(str(req.email), pwd_hash)
@@ -97,10 +100,11 @@ async def register(req: RegisterRequest, request: Request) -> AuthResponse:
             status_code=status.HTTP_409_CONFLICT,
             detail={"code": "email_taken"},
         )
+    register_ip_guard.record(ip)
     user = await repo.find_user_by_id(user_id)
     assert user is not None
     tokens = await _issue_pair(user_id, request)
-    ua, ip = deps.client_meta(request)
+    ua, _ip = deps.client_meta(request)
     await notify_log(
         f"🆕 <b>Android registration</b>\n"
         f"ID: <code>{user_id}</code>\n"

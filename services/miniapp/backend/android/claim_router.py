@@ -322,6 +322,7 @@ async def claim_otp_request(req: ClaimOtpRequest, request: Request) -> SimpleSta
         to_email=resolved.owner_email,
         payload=resolved.owner_email.lower(),
         template=lambda code, _payload: mailer.render_verify(code),
+        request=request,
     )
     return SimpleStatus()
 
@@ -376,6 +377,7 @@ async def claim_complete(req: ClaimCompleteRequest, request: Request) -> AuthRes
             user_id=user.id,
             purpose=repo.PURPOSE_CLAIM,
             presented_code=req.code,
+            email=resolved.owner_email,
         )
         otp_email = (code_row.payload or "").strip().lower()
     elif user is None:

@@ -336,6 +336,17 @@ def get_email_code_max_attempts() -> int:
     return int(get_config().get("email_code_max_attempts", 5) or 5)
 
 
+def get_email_denied_domains() -> list[str]:
+    """Extra email domains rejected at registration (merged with built-in list).
+
+    Config key: ``email_denied_domains`` — YAML list or comma-separated string.
+    """
+    raw = get_config().get("email_denied_domains") or []
+    if isinstance(raw, str):
+        return [d.strip().lower() for d in raw.split(",") if d.strip()]
+    return [str(d).strip().lower() for d in raw if d]
+
+
 # --- Web portal ------------------------------------------------------------
 
 def get_tg_client_secret() -> str:
