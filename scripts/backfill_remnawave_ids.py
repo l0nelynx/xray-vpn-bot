@@ -1,9 +1,11 @@
 """Backfill numeric Remnawave IDs while the panel still runs v2.8.
 
 The script intentionally does not import the Remnawave SDK. It reads the
-legacy ``uuid`` and numeric ``id`` fields directly from ``GET /users``, then
-audits the local ownership graph. Dry-run is the default; ``--apply`` writes
-all safe changes in one database transaction.
+legacy panel-user ``uuid``, protocol ``vlessUuid`` and numeric ``id`` fields
+directly from ``GET /users``, then audits the local ownership graph. Both UUID
+fields are indexed because an old Android migration bug could persist the
+protocol UUID in ``users.vless_uuid``. Dry-run is the default; ``--apply``
+writes all safe changes in one database transaction.
 
 Run from the application container (or with the same ``DATABASE_URL`` and
 ``CONFIG_PATH`` environment)::
@@ -45,13 +47,18 @@ class PanelIndex:
     ids: frozenset[int]
     by_legacy_uuid: dict[str, int]
     duplicate_legacy_uuids: dict[str, tuple[int, ...]]
+    by_protocol_vless_uuid: dict[str, int]
+    duplicate_protocol_vless_uuids: dict[str, tuple[int, ...]]
+    cross_identifier_collisions: dict[str, tuple[int, ...]]
 
 
 @dataclass(frozen=True)
 class BackfillAction:
     user_id: int
     rw_id: int
-    kind: str  # resolve_legacy | attach_existing | sync_primary_projection
+    # resolve_legacy | resolve_protocol_vless | attach_existing |
+    # sync_primary_projection
+    kind: str
 
 
 @dataclass(frozen=True)
@@ -72,9 +79,10 @@ def _normalize_uuid(value: object) -> str | None:
 
 
 def build_panel_index(items: list[dict[str, Any]]) -> PanelIndex:
-    """Build an unambiguous legacy UUID -> numeric ID map."""
+    """Build unambiguous panel UUID and protocol VLESS UUID indexes."""
     ids: set[int] = set()
-    candidates: dict[str, set[int]] = {}
+    legacy_candidates: dict[str, set[int]] = {}
+    protocol_candidates: dict[str, set[int]] = {}
     for item in items:
         raw_id = item.get("id")
         try:
@@ -84,23 +92,46 @@ def build_panel_index(items: list[dict[str, Any]]) -> PanelIndex:
         ids.add(rw_id)
         legacy_uuid = _normalize_uuid(item.get("uuid"))
         if legacy_uuid:
-            candidates.setdefault(legacy_uuid, set()).add(rw_id)
+            legacy_candidates.setdefault(legacy_uuid, set()).add(rw_id)
+        protocol_uuid = _normalize_uuid(
+            item.get("vlessUuid") or item.get("vless_uuid")
+        )
+        if protocol_uuid:
+            protocol_candidates.setdefault(protocol_uuid, set()).add(rw_id)
 
-    duplicates = {
+    legacy_duplicates = {
         legacy_uuid: tuple(sorted(values))
-        for legacy_uuid, values in candidates.items()
+        for legacy_uuid, values in legacy_candidates.items()
         if len(values) > 1
     }
-    mapping = {
+    legacy_mapping = {
         legacy_uuid: next(iter(values))
-        for legacy_uuid, values in candidates.items()
+        for legacy_uuid, values in legacy_candidates.items()
         if len(values) == 1
+    }
+    protocol_duplicates = {
+        protocol_uuid: tuple(sorted(values))
+        for protocol_uuid, values in protocol_candidates.items()
+        if len(values) > 1
+    }
+    protocol_mapping = {
+        protocol_uuid: next(iter(values))
+        for protocol_uuid, values in protocol_candidates.items()
+        if len(values) == 1
+    }
+    cross_collisions = {
+        value: tuple(sorted({legacy_mapping[value], protocol_mapping[value]}))
+        for value in legacy_mapping.keys() & protocol_mapping.keys()
+        if legacy_mapping[value] != protocol_mapping[value]
     }
     return PanelIndex(
         total=len(items),
         ids=frozenset(ids),
-        by_legacy_uuid=mapping,
-        duplicate_legacy_uuids=duplicates,
+        by_legacy_uuid=legacy_mapping,
+        duplicate_legacy_uuids=legacy_duplicates,
+        by_protocol_vless_uuid=protocol_mapping,
+        duplicate_protocol_vless_uuids=protocol_duplicates,
+        cross_identifier_collisions=cross_collisions,
     )
 
 
@@ -218,6 +249,7 @@ async def audit_database(
     ignored_non_uuid_legacy: list[dict[str, Any]] = []
     ignored_missing_legacy_profiles: list[int] = []
     conflicts: list[dict[str, Any]] = []
+    ambiguous_local_identifiers: list[dict[str, Any]] = []
     actions: list[BackfillAction] = []
     planned: dict[int, int] = {}
 
@@ -230,7 +262,22 @@ async def audit_database(
                 "value": raw_legacy_uuid,
             })
         if user.rw_id is None and legacy_uuid:
-            rw_id = panel.by_legacy_uuid.get(legacy_uuid)
+            legacy_rw_id = panel.by_legacy_uuid.get(legacy_uuid)
+            protocol_rw_id = panel.by_protocol_vless_uuid.get(legacy_uuid)
+            matched_rw_ids = sorted({
+                rw_id
+                for rw_id in (legacy_rw_id, protocol_rw_id)
+                if rw_id is not None
+            })
+            if len(matched_rw_ids) > 1:
+                ambiguous_local_identifiers.append({
+                    "user_id": int(user.id),
+                    "stored_uuid": legacy_uuid,
+                    "panel_uuid_rw_id": legacy_rw_id,
+                    "protocol_vless_uuid_rw_id": protocol_rw_id,
+                })
+                continue
+            rw_id = matched_rw_ids[0] if matched_rw_ids else None
             if rw_id is None:
                 if int(user.id) not in active_transactions_by_user:
                     ignored_missing_legacy_profiles.append(int(user.id))
@@ -249,7 +296,12 @@ async def audit_database(
                 })
                 continue
             planned[rw_id] = int(user.id)
-            actions.append(BackfillAction(int(user.id), rw_id, "resolve_legacy"))
+            kind = (
+                "resolve_legacy"
+                if legacy_rw_id is not None
+                else "resolve_protocol_vless"
+            )
+            actions.append(BackfillAction(int(user.id), rw_id, kind))
 
         if user.rw_id is not None:
             rw_id = int(user.rw_id)
@@ -317,6 +369,14 @@ async def audit_database(
         {"legacy_uuid": key, "rw_ids": list(values)}
         for key, values in sorted(panel.duplicate_legacy_uuids.items())
     ]
+    duplicate_protocol_vless_uuids = [
+        {"vless_uuid": key, "rw_ids": list(values)}
+        for key, values in sorted(panel.duplicate_protocol_vless_uuids.items())
+    ]
+    cross_identifier_collisions = [
+        {"uuid": key, "rw_ids": list(values)}
+        for key, values in sorted(panel.cross_identifier_collisions.items())
+    ]
     unresolved_active_paid_details = [
         {
             "user_id": user_id,
@@ -337,15 +397,24 @@ async def audit_database(
         "invalid_primary_repair_requests": invalid_primary_repairs,
         "panel_missing_rw_ids": panel_missing_ids,
         "duplicate_panel_uuids": duplicate_panel_uuids,
+        "duplicate_protocol_vless_uuids": duplicate_protocol_vless_uuids,
+        "cross_identifier_collisions": cross_identifier_collisions,
+        "ambiguous_local_identifiers": ambiguous_local_identifiers,
     }
     blocker_count = sum(len(value) for value in blockers.values())
     report = {
         "ready": blocker_count == 0 and not actions,
         "panel_users": panel.total,
         "panel_users_with_legacy_uuid": len(panel.by_legacy_uuid),
+        "panel_users_with_protocol_vless_uuid": len(
+            panel.by_protocol_vless_uuid
+        ),
         "local_users": len(users),
         "planned": {
             "resolve_legacy": sum(a.kind == "resolve_legacy" for a in actions),
+            "resolve_protocol_vless": sum(
+                a.kind == "resolve_protocol_vless" for a in actions
+            ),
             "attach_existing": sum(a.kind == "attach_existing" for a in actions),
             "sync_primary_projection": sum(
                 a.kind == "sync_primary_projection" for a in actions
@@ -384,7 +453,10 @@ async def apply_actions(
         user = await session.get(User, action.user_id)
         if user is None:
             raise RuntimeError(f"user_disappeared:{action.user_id}")
-        if action.kind == "resolve_legacy" and user.rw_id is not None:
+        if (
+            action.kind in {"resolve_legacy", "resolve_protocol_vless"}
+            and user.rw_id is not None
+        ):
             if int(user.rw_id) != action.rw_id:
                 raise RuntimeError(f"user_changed:{action.user_id}")
             continue
@@ -400,10 +472,17 @@ async def apply_actions(
             session,
             user_id=action.user_id,
             rw_id=action.rw_id,
-            source="legacy_uuid_backfill_2_8",
+            source=(
+                "protocol_vless_uuid_backfill_2_8"
+                if action.kind == "resolve_protocol_vless"
+                else "legacy_uuid_backfill_2_8"
+            ),
             make_primary=(primary is None),
         )
-        if action.kind == "resolve_legacy" and primary is not None:
+        if (
+            action.kind in {"resolve_legacy", "resolve_protocol_vless"}
+            and primary is not None
+        ):
             # Keep an already-established primary; the legacy profile remains
             # attached as an additional subscription.
             user.rw_id = int(primary.rw_id)
@@ -505,6 +584,14 @@ async def _main_async(args: argparse.Namespace) -> int:
     if not panel.by_legacy_uuid:
         raise RuntimeError(
             "panel returned no legacy user UUIDs; run this script against Remnawave 2.8"
+        )
+    if (
+        not panel.by_protocol_vless_uuid
+        and not panel.duplicate_protocol_vless_uuids
+    ):
+        raise RuntimeError(
+            "panel returned no protocol vlessUuid values; the Android UUID "
+            "repair cannot be completed from this /users response"
         )
 
     engine, session_factory = make_async_session(default_sqlite_path="db.sqlite3")

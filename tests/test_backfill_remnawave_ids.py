@@ -19,6 +19,8 @@ from scripts.backfill_remnawave_ids import (
 LEGACY_A = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 LEGACY_B = "bbbbbbbb-cccc-dddd-eeee-ffffffffffff"
 LEGACY_PRIMARY = "cccccccc-dddd-eeee-ffff-000000000000"
+PROTOCOL_A = "11111111-2222-3333-4444-555555555555"
+PROTOCOL_B = "22222222-3333-4444-5555-666666666666"
 
 
 def _run(coro):
@@ -37,6 +39,16 @@ def test_panel_index_detects_ambiguous_legacy_uuid() -> None:
     )
     assert panel.by_legacy_uuid == {LEGACY_B: 33}
     assert panel.duplicate_legacy_uuids == {LEGACY_A: (11, 22)}
+
+
+def test_panel_index_maps_and_deduplicates_protocol_vless_uuid() -> None:
+    panel = _panel(
+        {"id": 11, "uuid": LEGACY_A, "vlessUuid": PROTOCOL_A.upper()},
+        {"id": 22, "uuid": LEGACY_B, "vlessUuid": PROTOCOL_B},
+        {"id": 33, "uuid": LEGACY_PRIMARY, "vlessUuid": PROTOCOL_B},
+    )
+    assert panel.by_protocol_vless_uuid == {PROTOCOL_A: 11}
+    assert panel.duplicate_protocol_vless_uuids == {PROTOCOL_B: (22, 33)}
 
 
 def test_page_unwraps_remnawave_envelope() -> None:
@@ -81,6 +93,7 @@ def test_dry_run_then_apply_resolves_and_attaches() -> None:
             assert report["ready"] is False
             assert report["planned"] == {
                 "resolve_legacy": 1,
+                "resolve_protocol_vless": 0,
                 "attach_existing": 1,
                 "sync_primary_projection": 0,
             }
@@ -106,6 +119,80 @@ def test_dry_run_then_apply_resolves_and_attaches() -> None:
                     (1, 11, True),
                     (2, 22, True),
                 ]
+        finally:
+            await engine.dispose()
+
+    _run(go())
+
+
+def test_protocol_vless_uuid_recovers_android_bugged_user() -> None:
+    async def go() -> None:
+        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        try:
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+            Session = async_sessionmaker(engine, expire_on_commit=False)
+            async with Session() as session:
+                session.add(User(
+                    id=1,
+                    email="android@example.com",
+                    vless_uuid=PROTOCOL_A,
+                ))
+                await session.commit()
+
+            panel = _panel({
+                "id": 11,
+                "uuid": LEGACY_A,
+                "vlessUuid": PROTOCOL_A,
+            })
+            code, dry = await run_backfill(
+                panel=panel, session_factory=Session, apply=False
+            )
+            assert code == 0
+            assert dry["planned"]["resolve_legacy"] == 0
+            assert dry["planned"]["resolve_protocol_vless"] == 1
+
+            code, report = await run_backfill(
+                panel=panel, session_factory=Session, apply=True
+            )
+            assert code == 0 and report["ready"] is True
+            async with Session() as session:
+                user = await session.get(User, 1)
+                link = await session.scalar(select(UserSubscription))
+                assert user is not None and user.rw_id == 11
+                assert link is not None
+                assert link.rw_id == 11 and link.is_primary is True
+                assert link.source == "protocol_vless_uuid_backfill_2_8"
+        finally:
+            await engine.dispose()
+
+    _run(go())
+
+
+def test_cross_panel_and_protocol_uuid_collision_blocks_writes() -> None:
+    async def go() -> None:
+        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        try:
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+            Session = async_sessionmaker(engine, expire_on_commit=False)
+            async with Session() as session:
+                session.add(User(id=1, vless_uuid=PROTOCOL_A))
+                await session.commit()
+
+            panel = _panel(
+                {"id": 11, "uuid": LEGACY_A, "vlessUuid": PROTOCOL_A},
+                {"id": 22, "uuid": PROTOCOL_A, "vlessUuid": PROTOCOL_B},
+            )
+            code, report = await run_backfill(
+                panel=panel, session_factory=Session, apply=True
+            )
+            assert code == 2
+            assert report["blocker_counts"]["cross_identifier_collisions"] == 1
+            assert report["blocker_counts"]["ambiguous_local_identifiers"] == 1
+            async with Session() as session:
+                assert (await session.get(User, 1)).rw_id is None
+                assert await session.scalar(select(UserSubscription)) is None
         finally:
             await engine.dispose()
 

@@ -1,8 +1,8 @@
 # Remnawave 2.8 → 3.0: numeric ID backfill
 
 Run this procedure **before** upgrading the Remnawave panel. Version 2.8 is
-the last point where the panel response contains both the legacy user `uuid`
-and the numeric user `id`.
+the last point where the panel response contains the legacy user `uuid`, the
+protocol `vlessUuid`, and the numeric user `id` together.
 
 The maintenance script is SDK-independent, does not print the API token, and
 uses dry-run mode unless `--apply` is supplied. Writes are atomic: any
@@ -43,6 +43,12 @@ Review the JSON report:
 
 - `blocker_counts` must contain only zeroes;
 - `planned.resolve_legacy` is the number of `users.rw_id` values to recover;
+- `planned.resolve_protocol_vless` is the number recovered from protocol
+  `vlessUuid` values accidentally persisted by the old Android claim/migrate
+  implementation;
+- `panel_users_with_protocol_vless_uuid` should equal `panel_users`; if the
+  endpoint returns no protocol UUIDs at all, the script stops with exit code 3
+  instead of producing an incomplete audit;
 - `planned.attach_existing` is the number of missing
   `user_subscriptions` rows to create;
 - `ignored_counts.non_uuid_legacy_values` contains historical sentinel or
@@ -55,6 +61,8 @@ Review the JSON report:
 - `unresolved_active_paid_details` contains transaction ID, status, expiry,
   delivery status and target `rw_id` when a missing panel profile still has an
   active `confirmed` or `delivered` transaction; these users remain blockers;
+- duplicate UUIDs, a UUID shared by different panel/protocol identities, and
+  local ownership conflicts are blockers; no changes are applied in this case;
 - `primary_mismatch_details` shows both `users.rw_id` and the primary
   subscription `rw_id` for every projection mismatch;
 - `ready` is expected to be `false` while safe changes are still planned.
@@ -76,7 +84,9 @@ docker compose --profile maintenance run --rm --no-deps rw-id-backfill \
 The apply command re-runs the ownership audit inside its database transaction.
 It then:
 
-1. maps `users.vless_uuid` (legacy panel user UUID) to numeric `rw_id`;
+1. maps `users.vless_uuid` to numeric `rw_id`, accepting either the intended
+   legacy panel-user `uuid` or the protocol `vlessUuid` written by the old
+   Android bug;
 2. creates missing `user_subscriptions` ownership rows;
 3. preserves an already-established primary subscription;
 4. otherwise makes the recovered profile primary;
@@ -98,7 +108,8 @@ The final report must contain:
   "ready": true,
   "planned": {
     "attach_existing": 0,
-    "resolve_legacy": 0
+    "resolve_legacy": 0,
+    "resolve_protocol_vless": 0
   }
 }
 ```
