@@ -50,13 +50,15 @@ class PanelIndex:
     by_protocol_vless_uuid: dict[str, int]
     duplicate_protocol_vless_uuids: dict[str, tuple[int, ...]]
     cross_identifier_collisions: dict[str, tuple[int, ...]]
+    by_email: dict[str, int]
+    duplicate_emails: dict[str, tuple[int, ...]]
 
 
 @dataclass(frozen=True)
 class BackfillAction:
     user_id: int
     rw_id: int
-    # resolve_legacy | resolve_protocol_vless | attach_existing |
+    # resolve_legacy | resolve_protocol_vless | resolve_email | attach_existing |
     # sync_primary_projection
     kind: str
 
@@ -78,11 +80,18 @@ def _normalize_uuid(value: object) -> str | None:
         return None
 
 
+def _normalize_email(value: object) -> str | None:
+    """Normalize an email for an exact, case-insensitive identity match."""
+    normalized = str(value or "").strip().casefold()
+    return normalized if normalized and "@" in normalized else None
+
+
 def build_panel_index(items: list[dict[str, Any]]) -> PanelIndex:
     """Build unambiguous panel UUID and protocol VLESS UUID indexes."""
     ids: set[int] = set()
     legacy_candidates: dict[str, set[int]] = {}
     protocol_candidates: dict[str, set[int]] = {}
+    email_candidates: dict[str, set[int]] = {}
     for item in items:
         raw_id = item.get("id")
         try:
@@ -98,6 +107,9 @@ def build_panel_index(items: list[dict[str, Any]]) -> PanelIndex:
         )
         if protocol_uuid:
             protocol_candidates.setdefault(protocol_uuid, set()).add(rw_id)
+        email = _normalize_email(item.get("email"))
+        if email:
+            email_candidates.setdefault(email, set()).add(rw_id)
 
     legacy_duplicates = {
         legacy_uuid: tuple(sorted(values))
@@ -124,6 +136,16 @@ def build_panel_index(items: list[dict[str, Any]]) -> PanelIndex:
         for value in legacy_mapping.keys() & protocol_mapping.keys()
         if legacy_mapping[value] != protocol_mapping[value]
     }
+    email_duplicates = {
+        email: tuple(sorted(values))
+        for email, values in email_candidates.items()
+        if len(values) > 1
+    }
+    email_mapping = {
+        email: next(iter(values))
+        for email, values in email_candidates.items()
+        if len(values) == 1
+    }
     return PanelIndex(
         total=len(items),
         ids=frozenset(ids),
@@ -132,6 +154,8 @@ def build_panel_index(items: list[dict[str, Any]]) -> PanelIndex:
         by_protocol_vless_uuid=protocol_mapping,
         duplicate_protocol_vless_uuids=protocol_duplicates,
         cross_identifier_collisions=cross_collisions,
+        by_email=email_mapping,
+        duplicate_emails=email_duplicates,
     )
 
 
@@ -250,6 +274,7 @@ async def audit_database(
     ignored_missing_legacy_profiles: list[int] = []
     conflicts: list[dict[str, Any]] = []
     ambiguous_local_identifiers: list[dict[str, Any]] = []
+    ambiguous_email_matches: list[dict[str, Any]] = []
     actions: list[BackfillAction] = []
     planned: dict[int, int] = {}
 
@@ -278,6 +303,29 @@ async def audit_database(
                 })
                 continue
             rw_id = matched_rw_ids[0] if matched_rw_ids else None
+            kind: str | None = None
+            if rw_id is not None:
+                kind = (
+                    "resolve_legacy"
+                    if legacy_rw_id is not None
+                    else "resolve_protocol_vless"
+                )
+            if rw_id is None:
+                email = _normalize_email(user.email)
+                duplicate_email_rw_ids = (
+                    panel.duplicate_emails.get(email) if email else None
+                )
+                if duplicate_email_rw_ids:
+                    ambiguous_email_matches.append({
+                        "user_id": int(user.id),
+                        "email": email,
+                        "rw_ids": list(duplicate_email_rw_ids),
+                    })
+                    continue
+                if email:
+                    rw_id = panel.by_email.get(email)
+                    if rw_id is not None:
+                        kind = "resolve_email"
             if rw_id is None:
                 if int(user.id) not in active_transactions_by_user:
                     ignored_missing_legacy_profiles.append(int(user.id))
@@ -296,11 +344,7 @@ async def audit_database(
                 })
                 continue
             planned[rw_id] = int(user.id)
-            kind = (
-                "resolve_legacy"
-                if legacy_rw_id is not None
-                else "resolve_protocol_vless"
-            )
+            assert kind is not None
             actions.append(BackfillAction(int(user.id), rw_id, kind))
 
         if user.rw_id is not None:
@@ -400,6 +444,7 @@ async def audit_database(
         "duplicate_protocol_vless_uuids": duplicate_protocol_vless_uuids,
         "cross_identifier_collisions": cross_identifier_collisions,
         "ambiguous_local_identifiers": ambiguous_local_identifiers,
+        "ambiguous_email_matches": ambiguous_email_matches,
     }
     blocker_count = sum(len(value) for value in blockers.values())
     report = {
@@ -409,19 +454,24 @@ async def audit_database(
         "panel_users_with_protocol_vless_uuid": len(
             panel.by_protocol_vless_uuid
         ),
+        "panel_users_with_unique_email": len(panel.by_email),
+        "panel_duplicate_email_count": len(panel.duplicate_emails),
         "local_users": len(users),
         "planned": {
             "resolve_legacy": sum(a.kind == "resolve_legacy" for a in actions),
             "resolve_protocol_vless": sum(
                 a.kind == "resolve_protocol_vless" for a in actions
             ),
+            "resolve_email": sum(a.kind == "resolve_email" for a in actions),
             "attach_existing": sum(a.kind == "attach_existing" for a in actions),
             "sync_primary_projection": sum(
                 a.kind == "sync_primary_projection" for a in actions
             ),
         },
         "policy": {
-            "missing_panel_profile": "block_only_with_active_paid_transaction",
+            "missing_panel_profile": (
+                "try_exact_unique_email_then_block_only_with_active_paid_transaction"
+            ),
             "active_paid_order_statuses": list(PAID_ORDER_STATUSES),
         },
         "ignored_counts": {
@@ -454,7 +504,11 @@ async def apply_actions(
         if user is None:
             raise RuntimeError(f"user_disappeared:{action.user_id}")
         if (
-            action.kind in {"resolve_legacy", "resolve_protocol_vless"}
+            action.kind in {
+                "resolve_legacy",
+                "resolve_protocol_vless",
+                "resolve_email",
+            }
             and user.rw_id is not None
         ):
             if int(user.rw_id) != action.rw_id:
@@ -472,15 +526,18 @@ async def apply_actions(
             session,
             user_id=action.user_id,
             rw_id=action.rw_id,
-            source=(
-                "protocol_vless_uuid_backfill_2_8"
-                if action.kind == "resolve_protocol_vless"
-                else "legacy_uuid_backfill_2_8"
-            ),
+            source={
+                "resolve_protocol_vless": "protocol_vless_uuid_backfill_2_8",
+                "resolve_email": "exact_email_backfill_2_8",
+            }.get(action.kind, "legacy_uuid_backfill_2_8"),
             make_primary=(primary is None),
         )
         if (
-            action.kind in {"resolve_legacy", "resolve_protocol_vless"}
+            action.kind in {
+                "resolve_legacy",
+                "resolve_protocol_vless",
+                "resolve_email",
+            }
             and primary is not None
         ):
             # Keep an already-established primary; the legacy profile remains

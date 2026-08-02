@@ -46,6 +46,8 @@ Review the JSON report:
 - `planned.resolve_protocol_vless` is the number recovered from protocol
   `vlessUuid` values accidentally persisted by the old Android claim/migrate
   implementation;
+- `planned.resolve_email` is the number whose stale UUID was absent from the
+  panel but whose local email matched exactly one current Remnawave profile;
 - `panel_users_with_protocol_vless_uuid` should equal `panel_users`; if the
   endpoint returns no protocol UUIDs at all, the script stops with exit code 3
   instead of producing an incomplete audit;
@@ -55,14 +57,17 @@ Review the JSON report:
   malformed values (for example the literal string `None`); they are reported
   for audit but are not panel identities and therefore do not block migration;
 - `ignored_counts.missing_panel_profiles_without_active_paid_transaction`
-  contains users whose valid legacy UUID no longer exists in Remnawave and who
-  have no active paid transaction; the script treats these as deleted expired
-  profiles, preserves the local UUID for audit, and does not block migration;
+  contains users whose valid stored UUID no longer exists in Remnawave, whose
+  email did not resolve to exactly one current profile, and who have no active
+  paid transaction; the script treats these as deleted expired profiles,
+  preserves the local UUID for audit, and does not block migration;
 - `unresolved_active_paid_details` contains transaction ID, status, expiry,
   delivery status and target `rw_id` when a missing panel profile still has an
   active `confirmed` or `delivered` transaction; these users remain blockers;
 - duplicate UUIDs, a UUID shared by different panel/protocol identities, and
   local ownership conflicts are blockers; no changes are applied in this case;
+- if a local email matches multiple current Remnawave profiles,
+  `ambiguous_email_matches` blocks all writes and lists their numeric IDs;
 - `primary_mismatch_details` shows both `users.rw_id` and the primary
   subscription `rw_id` for every projection mismatch;
 - `ready` is expected to be `false` while safe changes are still planned.
@@ -87,10 +92,12 @@ It then:
 1. maps `users.vless_uuid` to numeric `rw_id`, accepting either the intended
    legacy panel-user `uuid` or the protocol `vlessUuid` written by the old
    Android bug;
-2. creates missing `user_subscriptions` ownership rows;
-3. preserves an already-established primary subscription;
-4. otherwise makes the recovered profile primary;
-5. rolls back the whole transaction on any conflict.
+2. if neither UUID exists on the current panel, tries one exact normalized
+   email match;
+3. creates missing `user_subscriptions` ownership rows;
+4. preserves an already-established primary subscription;
+5. otherwise makes the recovered profile primary;
+6. rolls back the whole transaction on any conflict.
 
 ## 5. Verify
 
@@ -108,6 +115,7 @@ The final report must contain:
   "ready": true,
   "planned": {
     "attach_existing": 0,
+    "resolve_email": 0,
     "resolve_legacy": 0,
     "resolve_protocol_vless": 0
   }

@@ -19,8 +19,10 @@ from scripts.backfill_remnawave_ids import (
 LEGACY_A = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 LEGACY_B = "bbbbbbbb-cccc-dddd-eeee-ffffffffffff"
 LEGACY_PRIMARY = "cccccccc-dddd-eeee-ffff-000000000000"
+LEGACY_C = "dddddddd-eeee-ffff-0000-111111111111"
 PROTOCOL_A = "11111111-2222-3333-4444-555555555555"
 PROTOCOL_B = "22222222-3333-4444-5555-666666666666"
+PROTOCOL_C = "33333333-4444-5555-6666-777777777777"
 
 
 def _run(coro):
@@ -94,6 +96,7 @@ def test_dry_run_then_apply_resolves_and_attaches() -> None:
             assert report["planned"] == {
                 "resolve_legacy": 1,
                 "resolve_protocol_vless": 0,
+                "resolve_email": 0,
                 "attach_existing": 1,
                 "sync_primary_projection": 0,
             }
@@ -389,7 +392,9 @@ def test_missing_legacy_profile_blocks_only_for_active_paid_user() -> None:
             )
             assert code == 2
             assert report["policy"] == {
-                "missing_panel_profile": "block_only_with_active_paid_transaction",
+                "missing_panel_profile": (
+                    "try_exact_unique_email_then_block_only_with_active_paid_transaction"
+                ),
                 "active_paid_order_statuses": ["confirmed", "delivered"],
             }
             assert report["blocker_samples"]["unresolved_user_ids"] == [999]
@@ -409,6 +414,100 @@ def test_missing_legacy_profile_blocks_only_for_active_paid_user() -> None:
                     "target_rw_id": 11,
                 }],
             }]
+        finally:
+            await engine.dispose()
+
+    _run(go())
+
+
+def test_missing_legacy_profile_is_recovered_by_exact_email() -> None:
+    async def go() -> None:
+        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        try:
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+            Session = async_sessionmaker(engine, expire_on_commit=False)
+            async with Session() as session:
+                session.add(User(
+                    id=2000,
+                    email=" Migrated@Example.COM ",
+                    vless_uuid=LEGACY_A,
+                ))
+                await session.commit()
+
+            panel = _panel({
+                "id": 30,
+                "uuid": LEGACY_PRIMARY,
+                "vlessUuid": PROTOCOL_A,
+                "email": "migrated@example.com",
+            })
+            code, dry = await run_backfill(
+                panel=panel, session_factory=Session, apply=False
+            )
+            assert code == 0 and dry["ready"] is False
+            assert dry["planned"]["resolve_email"] == 1
+            assert dry["ignored_counts"][
+                "missing_panel_profiles_without_active_paid_transaction"
+            ] == 0
+
+            code, report = await run_backfill(
+                panel=panel, session_factory=Session, apply=True
+            )
+            assert code == 0 and report["ready"] is True
+            async with Session() as session:
+                user = await session.get(User, 2000)
+                link = await session.scalar(select(UserSubscription))
+                assert user is not None and user.rw_id == 30
+                assert link is not None and link.rw_id == 30
+                assert link.source == "exact_email_backfill_2_8"
+        finally:
+            await engine.dispose()
+
+    _run(go())
+
+
+def test_duplicate_panel_email_blocks_automatic_recovery() -> None:
+    async def go() -> None:
+        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        try:
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+            Session = async_sessionmaker(engine, expire_on_commit=False)
+            async with Session() as session:
+                session.add(User(
+                    id=2000,
+                    email="duplicate@example.com",
+                    vless_uuid=LEGACY_A,
+                ))
+                await session.commit()
+
+            panel = _panel(
+                {
+                    "id": 30,
+                    "uuid": LEGACY_PRIMARY,
+                    "vlessUuid": PROTOCOL_A,
+                    "email": "duplicate@example.com",
+                },
+                {
+                    "id": 31,
+                    "uuid": LEGACY_C,
+                    "vlessUuid": PROTOCOL_C,
+                    "email": "DUPLICATE@example.com",
+                },
+            )
+            code, report = await run_backfill(
+                panel=panel, session_factory=Session, apply=True
+            )
+            assert code == 2
+            assert report["blocker_counts"]["ambiguous_email_matches"] == 1
+            assert report["blocker_samples"]["ambiguous_email_matches"] == [{
+                "user_id": 2000,
+                "email": "duplicate@example.com",
+                "rw_ids": [30, 31],
+            }]
+            async with Session() as session:
+                assert (await session.get(User, 2000)).rw_id is None
+                assert await session.scalar(select(UserSubscription)) is None
         finally:
             await engine.dispose()
 
