@@ -13,9 +13,9 @@ Where app/ and miniapp historically diverged:
 - HWID device listing: app consumed the raw SDK DTO, miniapp wanted a list of
   plain dicts. Both shapes are exposed: `get_user_hwid_devices` (raw DTO) and
   `list_user_hwid_devices` (normalized list[dict]).
-- create_user email default: the underlying client already fills
-  `<username>@bot.local` when email is None; the miniapp-specific
-  `<username>@miniapp.xyz` is now passed explicitly by its single caller.
+- create_user email handling: omitted when the caller has no real email;
+  callers that intentionally use an application-specific address pass it
+  explicitly.
 """
 
 import asyncio

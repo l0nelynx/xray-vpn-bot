@@ -365,9 +365,6 @@ class RemnawaveClient:
         raise_on_error: bool = False,
     ) -> dict | None:
         try:
-            if email is None:
-                email = f"{username}@bot.local"
-
             effective_squad = squad_id or self.free_squad_id
             active_squads = (
                 list(dict.fromkeys(internal_squad_ids))
@@ -384,7 +381,7 @@ class RemnawaveClient:
                 or ("MONTH" if effective_limit > 0 else "NO_RESET")
             ).upper()
 
-            new_user = CreateUserBodyDto(
+            create_fields = dict(
                 expire_at=datetime.datetime.now() + datetime.timedelta(days=days),
                 username=username,
                 created_at=datetime.datetime.now(),
@@ -393,11 +390,13 @@ class RemnawaveClient:
                 traffic_limit_bytes=effective_limit,
                 traffic_limit_strategy=TrafficLimitStrategy(strategy_name),
                 description=descr,
-                email=email,
                 active_internal_squads=active_squads,
                 telegram_id=telegram_id,
                 external_squad_uuid=external_squad_id,
             )
+            if email is not None:
+                create_fields["email"] = email
+            new_user = CreateUserBodyDto(**create_fields)
 
             if tag:
                 new_user.tag = tag

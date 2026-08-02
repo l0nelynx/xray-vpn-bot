@@ -130,6 +130,47 @@ def test_update_by_id_calls_numeric_sdk_endpoint_directly() -> None:
     asyncio.run(go())
 
 
+def test_create_user_omits_absent_email_from_v3_dto() -> None:
+    import asyncio
+
+    async def go() -> None:
+        client = RemnawaveClient("https://panel.example", "token")
+        users = SimpleNamespace(create_user=AsyncMock(return_value=_dto()))
+        client._sdk = SimpleNamespace(users=users)
+
+        result = await client.create_user(
+            "smoke_test", days=1, raise_on_error=True
+        )
+
+        request = users.create_user.await_args.args[0]
+        assert request.email is None
+        assert "email" not in request.model_fields_set
+        assert result is not None and result["rw_id"] == 42
+
+    asyncio.run(go())
+
+
+def test_create_user_preserves_explicit_valid_email() -> None:
+    import asyncio
+
+    async def go() -> None:
+        client = RemnawaveClient("https://panel.example", "token")
+        users = SimpleNamespace(create_user=AsyncMock(return_value=_dto()))
+        client._sdk = SimpleNamespace(users=users)
+
+        await client.create_user(
+            "telegram_user",
+            email="telegram_user@telegram.user",
+            raise_on_error=True,
+        )
+
+        request = users.create_user.await_args.args[0]
+        assert request.email == "telegram_user@telegram.user"
+        assert "email" in request.model_fields_set
+
+    asyncio.run(go())
+
+
 def test_resolver_does_not_fall_through_after_numeric_lookup_outage(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
