@@ -9,6 +9,8 @@ from common_db import Base
 import common_db.models  # noqa: F401
 from common_db.models import Transaction, User, UserSubscription
 from scripts.backfill_remnawave_ids import (
+    _BACKFILL_SUBSCRIPTION_SOURCES,
+    _DEFAULT_BACKFILL_SUBSCRIPTION_SOURCE,
     _api_base_url,
     _page,
     _primary_repair,
@@ -23,6 +25,14 @@ LEGACY_C = "dddddddd-eeee-ffff-0000-111111111111"
 PROTOCOL_A = "11111111-2222-3333-4444-555555555555"
 PROTOCOL_B = "22222222-3333-4444-5555-666666666666"
 PROTOCOL_C = "33333333-4444-5555-6666-777777777777"
+
+
+def test_backfill_subscription_sources_fit_database_column() -> None:
+    sources = [
+        _DEFAULT_BACKFILL_SUBSCRIPTION_SOURCE,
+        *_BACKFILL_SUBSCRIPTION_SOURCES.values(),
+    ]
+    assert all(len(source) <= 30 for source in sources)
 
 
 def _run(coro):
@@ -165,7 +175,7 @@ def test_protocol_vless_uuid_recovers_android_bugged_user() -> None:
                 assert user is not None and user.rw_id == 11
                 assert link is not None
                 assert link.rw_id == 11 and link.is_primary is True
-                assert link.source == "protocol_vless_uuid_backfill_2_8"
+                assert link.source == "protocol_uuid_backfill_2_8"
         finally:
             await engine.dispose()
 

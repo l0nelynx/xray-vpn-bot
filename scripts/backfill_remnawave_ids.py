@@ -40,6 +40,12 @@ from common_db.session import make_async_session
 
 logger = logging.getLogger("backfill_remnawave_ids")
 
+_BACKFILL_SUBSCRIPTION_SOURCES = {
+    "resolve_protocol_vless": "protocol_uuid_backfill_2_8",
+    "resolve_email": "exact_email_backfill_2_8",
+}
+_DEFAULT_BACKFILL_SUBSCRIPTION_SOURCE = "legacy_uuid_backfill_2_8"
+
 
 @dataclass(frozen=True)
 class PanelIndex:
@@ -526,10 +532,9 @@ async def apply_actions(
             session,
             user_id=action.user_id,
             rw_id=action.rw_id,
-            source={
-                "resolve_protocol_vless": "protocol_vless_uuid_backfill_2_8",
-                "resolve_email": "exact_email_backfill_2_8",
-            }.get(action.kind, "legacy_uuid_backfill_2_8"),
+            source=_BACKFILL_SUBSCRIPTION_SOURCES.get(
+                action.kind, _DEFAULT_BACKFILL_SUBSCRIPTION_SOURCE
+            ),
             make_primary=(primary is None),
         )
         if (
