@@ -17,6 +17,22 @@ from remnawave.models import (
 logger = logging.getLogger(__name__)
 
 
+def _http_status_code(exc: BaseException) -> int | None:
+    """Extract HTTP status from httpx errors or remnawave-api ApiError.
+
+    remnawave-api raises ``NotFoundError`` / ``ApiError`` with ``status_code``
+    on the exception itself. httpx raises ``HTTPStatusError`` with the code on
+    ``exc.response.status_code``. Treat both shapes the same so a genuine 404
+    is never promoted to ``RemnawaveOperationError``.
+    """
+    code = getattr(exc, "status_code", None)
+    if isinstance(code, int):
+        return code
+    response = getattr(exc, "response", None)
+    code = getattr(response, "status_code", None)
+    return code if isinstance(code, int) else None
+
+
 class RemnawaveOperationError(RuntimeError):
     """A Remnawave request failed for a reason other than a genuine 404.
 
@@ -27,8 +43,7 @@ class RemnawaveOperationError(RuntimeError):
     def __init__(self, operation: str, cause: Exception) -> None:
         self.operation = operation
         self.cause = cause
-        response = getattr(cause, "response", None)
-        self.status_code = getattr(response, "status_code", None)
+        self.status_code = _http_status_code(cause)
         self.retryable = (
             isinstance(cause, (httpx.TimeoutException, httpx.NetworkError))
             or self.status_code in {408, 425, 429}
@@ -42,8 +57,7 @@ class RemnawaveOperationError(RuntimeError):
 
 
 def _is_not_found_error(exc: Exception) -> bool:
-    response = getattr(exc, "response", None)
-    return getattr(response, "status_code", None) == 404
+    return _http_status_code(exc) == 404
 
 
 class HwidDeviceCompat(BaseModel):

@@ -83,3 +83,28 @@ def test_strict_lookup_keeps_real_404_as_not_found() -> None:
     assert asyncio.run(
         client.get_user_by_id(42, raise_on_error=True)
     ) is None
+
+
+def test_strict_lookup_keeps_remnawave_sdk_not_found_as_none() -> None:
+    """remnawave-api raises NotFoundError with status_code on the exception,
+    not on .response — new Telegram users without a panel account hit this
+    path from GET /me via username fallback."""
+    from remnawave.exceptions import NotFoundError
+    from remnawave.exceptions.general import ApiErrorResponse
+
+    class Users:
+        async def get_user_by_username(self, _username):
+            raise NotFoundError(
+                404,
+                ApiErrorResponse(
+                    message="User with specified params not found",
+                    code="A063",
+                ),
+            )
+
+    client = RemnawaveClient("https://panel.invalid", "token")
+    client._sdk = SimpleNamespace(users=Users())
+
+    assert asyncio.run(
+        client.get_user_by_username("brand_new_user", raise_on_error=True)
+    ) is None
