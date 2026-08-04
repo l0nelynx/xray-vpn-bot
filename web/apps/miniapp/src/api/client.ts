@@ -15,6 +15,7 @@ export interface UserInfo {
   tg_id: number;
   username: string | null;
   language: string | null;
+  has_email?: boolean;
 }
 
 export interface SubscriptionInfo {
@@ -52,6 +53,16 @@ export type UiLanguage = "ru" | "en";
 export const me = {
   setLanguage: (language: UiLanguage) =>
     api.patch<UserInfo>("/me/language", { language }),
+};
+
+export interface LinkEmailResponse {
+  result: string;
+  survivor_id: number;
+}
+
+export const linkEmail = {
+  link: (email: string, password: string) =>
+    api.post<LinkEmailResponse>("/link/email", { email, password }),
 };
 
 export interface TicketSummary {

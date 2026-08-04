@@ -7,8 +7,8 @@ Provides three groups of endpoints:
        rate-limited (5/min per IP) + in-memory brute-force guard.
 
 2. Web registration
-   POST /api/web/register — create account + auto-activate promo discount;
-       requires a valid invite code; rate-limited (3/min per IP).
+   POST /api/web/register — create account; optional invite code is redeemed
+       when provided; rate-limited (3/min per IP).
 
 3. Discount-aware payment endpoints
    GET  /api/web/payments/menu    — tariff tree with prices discounted for
@@ -311,15 +311,11 @@ async def web_register(
     body: WebRegisterRequest,
     request: Request,
 ) -> AuthResponse:
-    """Register a new account requiring a valid invite code.
+    """Register a new web account.
 
-    Flow:
-      1. Brute-force + rate-limit check.
-      2. Validate invite code (code must exist; any type accepted).
-      3. Create user with hashed password.
-      4. Record a PromoRedemption with tg_id = -user.id so the discount
-         is applied when the user creates their first payment invoice.
-      5. Issue access + refresh token pair.
+    Invite code is optional. When provided it must be valid and is redeemed
+    after account creation. ``subscription_context`` still claims an existing
+    Remnawave profile during registration.
     """
     ip = _client_ip(request)
     brute_force.check(ip)
@@ -361,11 +357,7 @@ async def web_register(
                 )
             grant = await _resolve_credit_grant_for_promo(promo)
     else:
-        brute_force.record_fail(ip)
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            detail={"code": "invite_or_subscription_required"},
-        )
+        grant = 0
 
     brute_force.clear(ip)
 
@@ -426,8 +418,7 @@ async def web_register(
     assert user is not None
     register_ip_guard.record(ip)
 
-    if claim_rw_id is None:
-        assert code is not None
+    if claim_rw_id is None and code is not None:
         fake_tg = _fake_tg_id(user_id)
         async with async_session() as session:
             redeem_result = await _repo_promos.redeem_promo(session, fake_tg, code)
@@ -439,13 +430,20 @@ async def web_register(
                 )
             await session.commit()
 
+    if claim_rw_id is not None:
+        source = "subscription"
+    elif code is not None:
+        source = "invite"
+    else:
+        source = "open"
+
     tokens = await _issue_pair(user_id, request)
     _, ip_log = deps.client_meta(request)
     await notify_log(
         f"🌐 <b>Web registration</b>\n"
         f"ID: <code>{user_id}</code>\n"
         f"email: <code>{esc(user.email)}</code>\n"
-        f"source: <code>{'subscription' if claim_rw_id is not None else 'invite'}</code>\n"
+        f"source: <code>{source}</code>\n"
         f"credits: <code>{grant}</code>\n"
         f"IP: <code>{esc(ip_log or '—')}</code>"
     )

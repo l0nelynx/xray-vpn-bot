@@ -434,6 +434,133 @@ class TestMergeAndroidAndTg:
         assert tg == 55
 
 
+from account_linking import merge_tg_into_email
+
+
+class TestMergeTgIntoEmail:
+    def _seed(self, s):
+        s.add(User(id=100, email="a@x.io", password_hash="ph", rw_id=1,
+                   email_verified_at="2026-05-19T00:00:00"))
+        s.add(User(id=200, tg_id=55, username="bob",
+                   vless_uuid="t-uuid", rw_id=2, language="ru"))
+
+    def test_email_is_survivor_and_keeps_primary(
+        self, session_factory, fake_remnawave,
+    ):
+        from common_db.models import UserSubscription
+
+        fake_remnawave.add_user(uuid="a-uuid", email="a@x.io",
+                                status="active", data_limit=None, rw_id=1)
+        fake_remnawave.add_user(uuid="t-uuid", username="bob",
+                                status="active", data_limit=None, rw_id=2,
+                                telegram_id=55)
+
+        async def go():
+            async with session_factory() as s:
+                self._seed(s)
+                s.add(UserSubscription(
+                    user_id=100, rw_id=1, source="android",
+                    is_primary=True, created_at="2026-01-01",
+                    updated_at="2026-01-01",
+                ))
+                s.add(UserSubscription(
+                    user_id=200, rw_id=2, source="telegram",
+                    is_primary=True, created_at="2026-02-01",
+                    updated_at="2026-02-01",
+                ))
+                await s.flush()
+                result = await merge_tg_into_email(
+                    s, email_user_id=100, tg_user_id=200, tg_id=55,
+                )
+                await s.commit()
+                survivor = await s.get(User, 100)
+                loser = await s.get(User, 200)
+                rows = (await s.execute(text(
+                    "SELECT rw_id, is_primary FROM user_subscriptions "
+                    "WHERE user_id = 100 ORDER BY rw_id"
+                ))).all()
+                return result, survivor, loser, rows
+
+        result, survivor, loser, rows = _asyncio.run(go())
+        assert result["result"] == "merged_pro"
+        assert result["survivor_id"] == 100
+        assert result["loser_id"] == 200
+        assert loser is None
+        assert survivor.tg_id == 55
+        assert survivor.email == "a@x.io"
+        assert survivor.username == "bob"
+        assert len(rows) == 2
+        primary = [r for r in rows if r.is_primary]
+        assert len(primary) == 1
+        assert primary[0].rw_id == 1  # email primary kept
+        non_primary = [r for r in rows if not r.is_primary]
+        assert len(non_primary) == 1
+        assert non_primary[0].rw_id == 2
+
+    def test_tg_only_sub_becomes_primary_when_email_has_none(
+        self, session_factory, fake_remnawave,
+    ):
+        from common_db.models import UserSubscription
+
+        fake_remnawave.add_user(uuid="t-uuid", username="bob",
+                                status="active", data_limit=None, rw_id=2,
+                                telegram_id=55)
+
+        async def go():
+            async with session_factory() as s:
+                s.add(User(id=100, email="a@x.io", password_hash="ph",
+                           email_verified_at="2026-05-19T00:00:00"))
+                s.add(User(id=200, tg_id=55, username="bob",
+                           vless_uuid="t-uuid", rw_id=2))
+                s.add(UserSubscription(
+                    user_id=200, rw_id=2, source="telegram",
+                    is_primary=True, created_at="2026-02-01",
+                    updated_at="2026-02-01",
+                ))
+                await s.flush()
+                result = await merge_tg_into_email(
+                    s, email_user_id=100, tg_user_id=200, tg_id=55,
+                )
+                await s.commit()
+                survivor = await s.get(User, 100)
+                rows = (await s.execute(text(
+                    "SELECT rw_id, is_primary FROM user_subscriptions "
+                    "WHERE user_id = 100"
+                ))).all()
+                return result, survivor, rows
+
+        result, survivor, rows = _asyncio.run(go())
+        assert result["result"] == "merged_pro"
+        assert result["survivor_id"] == 100
+        assert survivor.tg_id == 55
+        assert len(rows) == 1
+        assert bool(rows[0].is_primary)
+        assert rows[0].rw_id == 2
+
+    def test_neither_side_has_rw_still_links_tg(
+        self, session_factory, fake_remnawave,
+    ):
+        async def go():
+            async with session_factory() as s:
+                s.add(User(id=100, email="a@x.io", password_hash="ph"))
+                s.add(User(id=200, tg_id=55, username="bob"))
+                await s.flush()
+                result = await merge_tg_into_email(
+                    s, email_user_id=100, tg_user_id=200, tg_id=55,
+                )
+                await s.commit()
+                survivor = await s.get(User, 100)
+                loser = await s.get(User, 200)
+                return result, survivor, loser
+
+        result, survivor, loser = _asyncio.run(go())
+        assert result["result"] == "ok"
+        assert result["survivor_id"] == 100
+        assert loser is None
+        assert survivor.tg_id == 55
+        assert survivor.username == "bob"
+
+
 import hashlib
 
 from app.handlers.android_link import consume_android_link_code

@@ -96,7 +96,13 @@ function AppRoutes({
         <Route path="/support/:id" element={<SupportTicketPage />} />
         <Route
           path="/settings"
-          element={<SettingsPage username={data.user?.username || ""} />}
+          element={
+            <SettingsPage
+              username={data.user?.username || ""}
+              hasEmail={Boolean(data.user?.has_email)}
+              reload={reload}
+            />
+          }
         />
         <Route path="/invite" element={<InvitePage />} />
         <Route path="/policy" element={<PolicyPage links={data.links} />} />

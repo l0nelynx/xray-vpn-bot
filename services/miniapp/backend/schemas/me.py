@@ -7,6 +7,7 @@ class UserInfo(BaseModel):
     tg_id: int
     username: str | None
     language: str | None
+    has_email: bool = False
 
 
 class LanguageUpdate(BaseModel):

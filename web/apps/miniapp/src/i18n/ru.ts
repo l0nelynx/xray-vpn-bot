@@ -220,6 +220,20 @@ export const ru: Messages = {
   "settings.promo.errorFallback": "Ошибка",
   "settings.language.toastSaved": "Язык сохранён",
   "settings.language.toastFailed": "Не удалось сохранить язык",
+  "settings.linkEmail.title": "Уже есть аккаунт?",
+  "settings.linkEmail.body":
+    "Войдите по email и паролю, чтобы привязать этот Telegram к существующему аккаунту.",
+  "settings.linkEmail.email": "Email",
+  "settings.linkEmail.password": "Пароль",
+  "settings.linkEmail.submit": "Привязать аккаунт",
+  "settings.linkEmail.submitting": "Привязываем…",
+  "settings.linkEmail.success": "Аккаунт привязан",
+  "settings.linkEmail.errCredentials": "Неверный email или пароль",
+  "settings.linkEmail.errConflict":
+    "Этот email уже привязан к другому Telegram. Обратитесь в поддержку.",
+  "settings.linkEmail.errHasEmail": "К этому Telegram уже привязан email-аккаунт.",
+  "settings.linkEmail.errGeneric": "Не удалось привязать аккаунт. Попробуйте снова.",
+  "settings.linkEmail.contactSupport": "Написать в поддержку",
 
   // invite
   "invite.title": "Пригласить друзей",

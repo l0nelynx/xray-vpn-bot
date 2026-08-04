@@ -220,6 +220,20 @@ export const en: Messages = {
   "settings.promo.errorFallback": "Error",
   "settings.language.toastSaved": "Language saved",
   "settings.language.toastFailed": "Failed to save language",
+  "settings.linkEmail.title": "Already have an account?",
+  "settings.linkEmail.body":
+    "Sign in with email and password to link this Telegram to your existing account.",
+  "settings.linkEmail.email": "Email",
+  "settings.linkEmail.password": "Password",
+  "settings.linkEmail.submit": "Link account",
+  "settings.linkEmail.submitting": "Linking…",
+  "settings.linkEmail.success": "Account linked",
+  "settings.linkEmail.errCredentials": "Invalid email or password",
+  "settings.linkEmail.errConflict":
+    "This email is already linked to another Telegram. Contact support to resolve.",
+  "settings.linkEmail.errHasEmail": "This Telegram is already linked to an email account.",
+  "settings.linkEmail.errGeneric": "Could not link account. Please try again.",
+  "settings.linkEmail.contactSupport": "Contact support",
 
   // invite
   "invite.title": "Invite friends",

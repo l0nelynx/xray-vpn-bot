@@ -123,7 +123,7 @@ export const handlers: HttpHandler[] = [
   http.get(`${API}/me`, () =>
     HttpResponse.json({
       registered: true,
-      user: { tg_id: 424242, username: "mock_user", language: mockLanguage },
+      user: { tg_id: 424242, username: "mock_user", language: mockLanguage, has_email: false },
       subscription: (() => {
         const primary = mockSubscriptions.find((item) => item.is_primary)!;
         return { ...primary, subscription_id: primary.id };
@@ -158,7 +158,25 @@ export const handlers: HttpHandler[] = [
       tg_id: 424242,
       username: "mock_user",
       language: mockLanguage,
+      has_email: false,
     });
+  }),
+
+  http.post(`${API}/link/email`, async ({ request }) => {
+    const body = (await request.json()) as { email: string; password: string };
+    if (body.password !== "correct") {
+      return HttpResponse.json(
+        { detail: { code: "invalid_credentials" } },
+        { status: 401 },
+      );
+    }
+    if (body.email === "taken@example.com") {
+      return HttpResponse.json(
+        { detail: { code: "telegram_conflict" } },
+        { status: 409 },
+      );
+    }
+    return HttpResponse.json({ result: "ok", survivor_id: 1 });
   }),
 
   http.get(`${API}/menu/tree`, () => HttpResponse.json(menuTree)),

@@ -77,6 +77,7 @@ async def get_me(tg: TgUser = Depends(get_tg_user)) -> MeResponse:
         tg_id=user.tg_id,
         username=user.username,
         language=user.language,
+        has_email=bool(user.email),
     )
 
     if user.is_banned:
@@ -169,4 +170,5 @@ async def patch_language(
             tg_id=user.tg_id,
             username=user.username,
             language=user.language,
+            has_email=bool(user.email),
         )

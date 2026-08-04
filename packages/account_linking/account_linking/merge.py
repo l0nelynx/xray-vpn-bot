@@ -308,6 +308,7 @@ async def merge_android_and_tg(
     """Collapse the Android-side and Telegram-side ``users`` rows into one.
 
     Caller owns the transaction — this function does NOT commit.
+    The Telegram row is always the survivor (forward Android→TG link flow).
     """
     from common_db.models import User
 
@@ -372,6 +373,103 @@ async def merge_android_and_tg(
         "result": result_code,
         "survivor_id": survivor_id,
         "loser_id": loser_id,
+        "loser_rw_id": None,
+        "a_tier": a_tier,
+        "t_tier": t_tier,
+        "a_rw_id": a_rw_id,
+        "t_rw_id": t_rw_id,
+        "chosen_rw_id": primary_rw_id,
+    }
+
+
+async def merge_tg_into_email(
+    session,
+    email_user_id: int,
+    tg_user_id: int,
+    tg_id: int,
+) -> dict[str, Any]:
+    """Collapse a Telegram-only row into an email account (email is survivor).
+
+    Used by the miniapp ``POST /api/link/email`` flow. Caller owns the
+    transaction — this function does NOT commit.
+
+    All Remnawave profiles are preserved. The email account's existing
+    primary stays primary; TG-side subscriptions become non-primary.
+    """
+    from common_db.models import User
+
+    email_user = await session.get(User, email_user_id)
+    tg_user = await session.get(User, tg_user_id)
+    if email_user is None or tg_user is None:
+        raise RuntimeError(
+            f"merge_tg_into_email: rows not found email={email_user_id} "
+            f"tg={tg_user_id}"
+        )
+    if email_user_id == tg_user_id:
+        raise RuntimeError(
+            f"merge_tg_into_email: same row id={email_user_id}"
+        )
+
+    a_info, t_info = await _lookup_rw(
+        a_rw_id=email_user.rw_id,
+        t_rw_id=tg_user.rw_id,
+        email=email_user.email,
+        username=tg_user.username,
+        expected_telegram_id=tg_id,
+    )
+    a_tier = _classify(a_info)
+    t_tier = _classify(t_info)
+    a_rw_id = (a_info or {}).get("rw_id")
+    t_rw_id = (t_info or {}).get("rw_id")
+
+    from common_db.repo import subscriptions as repo_subscriptions
+    for owner_id, info in ((email_user_id, a_info), (tg_user_id, t_info)):
+        rw_id = (info or {}).get("rw_id")
+        if rw_id is None:
+            continue
+        try:
+            await repo_subscriptions.attach(
+                session,
+                user_id=owner_id,
+                rw_id=int(rw_id),
+                source="account_merge_backfill",
+            )
+        except ValueError:
+            logger.warning(
+                "Merge backfill skipped rw_id=%s: already linked", rw_id
+            )
+
+    if a_tier == "pro" or t_tier == "pro":
+        result_code = "merged_pro"
+    elif a_tier == "free" or t_tier == "free":
+        result_code = "merged_free"
+    else:
+        result_code = "ok"
+
+    # Prefer email-side rw_id for the legacy projection fallback; primary
+    # selection in _apply_merge_db already prefers the survivor's primary.
+    chosen_rw_id = a_rw_id or t_rw_id
+
+    await _apply_merge_db(
+        session=session,
+        survivor_id=email_user_id,
+        loser_id=tg_user_id,
+        tg_id=tg_id,
+        chosen_rw_id=chosen_rw_id,
+    )
+    survivor = await session.get(User, email_user_id)
+    primary_rw_id = survivor.rw_id if survivor is not None else chosen_rw_id
+
+    logger.info(
+        "merge_tg_into_email: survivor=%s loser=%s code=%s "
+        "a_tier=%s t_tier=%s",
+        email_user_id, tg_user_id, result_code, a_tier, t_tier,
+    )
+
+    return {
+        "result": result_code,
+        "survivor_id": email_user_id,
+        "loser_id": tg_user_id,
         "loser_rw_id": None,
         "a_tier": a_tier,
         "t_tier": t_tier,
