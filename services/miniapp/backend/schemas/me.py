@@ -8,6 +8,7 @@ class UserInfo(BaseModel):
     username: str | None
     language: str | None
     has_email: bool = False
+    email: str | None = None
 
 
 class LanguageUpdate(BaseModel):

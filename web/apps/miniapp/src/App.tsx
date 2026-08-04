@@ -100,6 +100,7 @@ function AppRoutes({
             <SettingsPage
               username={data.user?.username || ""}
               hasEmail={Boolean(data.user?.has_email)}
+              email={data.user?.email || null}
               reload={reload}
             />
           }

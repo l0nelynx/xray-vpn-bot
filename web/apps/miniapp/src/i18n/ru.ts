@@ -201,6 +201,7 @@ export const ru: Messages = {
   // settings
   "settings.title": "Аккаунт",
   "settings.telegram": "Telegram",
+  "settings.email": "Email",
   "settings.bonusBalance": "Бонусный баланс",
   "settings.activatePromo": "Активировать промокод",
   "settings.inviteFriends": "Пригласить друзей",

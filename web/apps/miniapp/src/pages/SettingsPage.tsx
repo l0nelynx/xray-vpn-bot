@@ -37,6 +37,7 @@ import { showAlert } from "../tg/webapp";
 interface Props {
   username: string;
   hasEmail: boolean;
+  email: string | null;
   reload: () => void;
 }
 
@@ -59,7 +60,7 @@ function errorCode(e: unknown): string | null {
   return null;
 }
 
-export default function SettingsPage({ username, hasEmail, reload }: Props) {
+export default function SettingsPage({ username, hasEmail, email, reload }: Props) {
   const navigate = useNavigate();
   const { t, locale, setLocale } = useLocale();
   const [promoState, setPromoState] = useState<PromoState | null>(null);
@@ -200,7 +201,14 @@ export default function SettingsPage({ username, hasEmail, reload }: Props) {
         </div>
       )}
 
-      {!hasEmail && (
+      {hasEmail && email ? (
+        <div className="flex items-center justify-between gap-3 bg-card border border-border rounded-2xl px-4 py-3.5 mb-3">
+          <span className="text-muted-foreground text-sm">{t("settings.email")}</span>
+          <Badge className="max-w-[70%] truncate font-normal normal-case tracking-normal">
+            {email}
+          </Badge>
+        </div>
+      ) : (
         <div className="bg-card border border-border rounded-2xl px-4 py-4 mb-3">
           <div className="flex items-start gap-3 mb-3">
             <div className="settings-item__icon mt-0.5">

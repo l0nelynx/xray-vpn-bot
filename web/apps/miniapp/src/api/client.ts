@@ -16,6 +16,7 @@ export interface UserInfo {
   username: string | null;
   language: string | null;
   has_email?: boolean;
+  email?: string | null;
 }
 
 export interface SubscriptionInfo {

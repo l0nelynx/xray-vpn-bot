@@ -123,7 +123,7 @@ export const handlers: HttpHandler[] = [
   http.get(`${API}/me`, () =>
     HttpResponse.json({
       registered: true,
-      user: { tg_id: 424242, username: "mock_user", language: mockLanguage, has_email: false },
+      user: { tg_id: 424242, username: "mock_user", language: mockLanguage, has_email: false, email: null },
       subscription: (() => {
         const primary = mockSubscriptions.find((item) => item.is_primary)!;
         return { ...primary, subscription_id: primary.id };
@@ -159,6 +159,7 @@ export const handlers: HttpHandler[] = [
       username: "mock_user",
       language: mockLanguage,
       has_email: false,
+      email: null,
     });
   }),
 

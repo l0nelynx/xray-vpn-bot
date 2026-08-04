@@ -201,6 +201,7 @@ export const en: Messages = {
   // settings
   "settings.title": "Account",
   "settings.telegram": "Telegram",
+  "settings.email": "Email",
   "settings.bonusBalance": "Bonus balance",
   "settings.activatePromo": "Activate promo code",
   "settings.inviteFriends": "Invite friends",
