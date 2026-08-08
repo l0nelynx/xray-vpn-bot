@@ -205,7 +205,7 @@ async def create_payment_invoice(
         currency=invoice_data["currency"],
         days=invoice_data["days"],
         user_tg_id=tg.tg_id,
-        username=tg.username,
+        username=tg.username or f"id_{tg.tg_id}",
         description=body.description or node["text"],
         method=invoice_data["method"],
     )

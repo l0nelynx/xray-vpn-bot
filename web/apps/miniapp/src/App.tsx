@@ -49,18 +49,17 @@ function AppRoutes({
   }
 
   if (error) {
-    const isUsername = error === "username required";
     return (
       <div className="page page-centered">
         <div style={{ textAlign: "center", maxWidth: 320 }}>
           <AlertTriangle
-            style={{ width: 48, height: 48, color: isUsername ? "#FFD479" : "#FF8A8A", margin: "0 auto 16px" }}
+            style={{ width: 48, height: 48, color: "#FF8A8A", margin: "0 auto 16px" }}
           />
           <div style={{ fontSize: 18, fontWeight: 700, color: "#FFFFFF", marginBottom: 8 }}>
-            {isUsername ? t("app.error.usernameTitle") : t("app.error.genericTitle")}
+            {t("app.error.genericTitle")}
           </div>
           <div style={{ fontSize: 14, color: "rgba(255,255,255,0.52)", lineHeight: 1.5 }}>
-            {isUsername ? t("app.error.usernameBody") : error}
+            {error}
           </div>
         </div>
       </div>

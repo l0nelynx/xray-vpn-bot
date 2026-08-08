@@ -31,7 +31,7 @@ Every API request includes the `X-Telegram-Init-Data` header.
 
 1. HMAC-SHA256 signature per [Telegram WebApp spec](https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app)
 2. TTL: 24 hours
-3. Requires `user.id` and **`user.username`** (403 if username missing)
+3. Requires `user.id`. Telegram `@username` is optional (Remnawave names fall back to `user_{db_id}`).
 
 **Frontend** (`web/apps/miniapp/src/tg/webapp.ts`):
 

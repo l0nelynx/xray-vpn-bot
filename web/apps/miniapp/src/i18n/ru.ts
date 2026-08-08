@@ -8,10 +8,7 @@ export const ru: Messages = {
   "tabs.account": "Аккаунт",
 
   // app
-  "app.error.usernameTitle": "Нужен username",
   "app.error.genericTitle": "Ошибка",
-  "app.error.usernameBody":
-    "Установите username в настройках Telegram, чтобы пользоваться сервисом.",
   "app.error.noData": "Нет данных",
 
   // common
@@ -114,7 +111,6 @@ export const ru: Messages = {
   "freeTrial.error.updateFailed":
     "Не удалось обновить подписку. Попробуйте позже.",
   "freeTrial.error.banned": "Аккаунт заблокирован.",
-  "freeTrial.error.usernameRequired": "Установите username в Telegram.",
 
   // buy
   "buy.title": "Тарифы",

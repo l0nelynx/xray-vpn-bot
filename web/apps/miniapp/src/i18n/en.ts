@@ -8,10 +8,7 @@ export const en: Messages = {
   "tabs.account": "Account",
 
   // app
-  "app.error.usernameTitle": "Username required",
   "app.error.genericTitle": "Error",
-  "app.error.usernameBody":
-    "Set a username in Telegram settings to use the service.",
   "app.error.noData": "No data",
 
   // common
@@ -114,7 +111,6 @@ export const en: Messages = {
   "freeTrial.error.updateFailed":
     "Failed to update subscription. Try again later.",
   "freeTrial.error.banned": "Account is banned.",
-  "freeTrial.error.usernameRequired": "Set a username in Telegram.",
 
   // buy
   "buy.title": "Plans",

@@ -65,8 +65,6 @@ export default function FreeTrialPage() {
         return t("freeTrial.error.updateFailed");
       case "user is banned":
         return t("freeTrial.error.banned");
-      case "username required":
-        return t("freeTrial.error.usernameRequired");
       default:
         return detail;
     }

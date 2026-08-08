@@ -433,7 +433,6 @@ Migrations run automatically via the `migrate` container on each `up`.
 | Telemt 503 in Dashboard | `telemt_server` empty or unreachable |
 | Support image upload 413 | Raise `client_max_body_size` on edge nginx |
 | nginx upstream not found | Use variable + resolver pattern (see above) |
-| MiniApp 403 username required | User must have a Telegram @username |
 
 ## Documentation site
 

@@ -61,12 +61,11 @@ async def get_tg_user(
 
     if not user.get("id"):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "no user id")
-    if not user.get("username"):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "username required")
 
+    # Telegram @username is optional. Remnawave names fall back to user_{db_id}.
     return TgUser(
         tg_id=int(user["id"]),
-        username=user.get("username"),
+        username=user.get("username") or None,
         language_code=user.get("language_code"),
         auth_date=auth_date,
     )
