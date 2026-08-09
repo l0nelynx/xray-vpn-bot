@@ -184,25 +184,27 @@ export default function BuyMenuPage() {
     <>
       <div className="page">
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
-          <button
-            onClick={() => navigate("/")}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              width: 36,
-              height: 36,
-              borderRadius: 12,
-              background: "rgba(255,255,255,0.07)",
-              border: "1px solid rgba(255,255,255,0.13)",
-              color: "rgba(255,255,255,0.75)",
-              cursor: "pointer",
-              outline: "none",
-              flexShrink: 0,
-            }}
-          >
-            <ChevronLeft style={{ width: 16, height: 16 }} />
-          </button>
+          {subscriptionId && (
+            <button
+              onClick={() => navigate("/")}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 36,
+                height: 36,
+                borderRadius: 12,
+                background: "rgba(255,255,255,0.07)",
+                border: "1px solid rgba(255,255,255,0.13)",
+                color: "rgba(255,255,255,0.75)",
+                cursor: "pointer",
+                outline: "none",
+                flexShrink: 0,
+              }}
+            >
+              <ChevronLeft style={{ width: 16, height: 16 }} />
+            </button>
+          )}
           <span style={{ fontSize: 20, fontWeight: 700, color: "#FFFFFF", letterSpacing: "-0.3px" }}>
             {t("buy.title")}
           </span>

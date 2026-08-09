@@ -7,6 +7,7 @@ import {
   LogIn,
   RefreshCw,
   Settings,
+  ShoppingBag,
   UserPlus,
   Wifi,
 } from "lucide-react";
@@ -129,6 +130,13 @@ export default function HomePage({ me, reload, refresh }: Props) {
               ? (hasConnected ? t("home.connectAnother") : t("home.setupVpn"))
               : t("home.resume")}
           </Button>
+
+          {isActive && (
+            <Button size="lg" variant="outline" className="w-full home-renew-cta" onClick={() => navigate(`/buy${targetQuery}`)}>
+              <ShoppingBag />
+              {t("home.extend")}
+            </Button>
+          )}
 
           <button className="home-row" onClick={() => navigate("/free/telemt")}>
             <span className="home-row__icon"><Wifi /></span>

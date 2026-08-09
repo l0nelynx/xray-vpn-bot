@@ -371,6 +371,7 @@ export const en: Messages = {
   "legal.agreement.callout":
     "By using {brand}, you confirm that you have read and agree to these terms.",
   "tabs.connect": "Connect",
+  "tabs.buy": "Buy",
   "tabs.help": "Help",
   "home.setupVpn": "Set up VPN",
   "home.connectAnother": "Connect another device",

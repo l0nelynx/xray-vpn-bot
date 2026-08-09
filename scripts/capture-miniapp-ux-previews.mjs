@@ -48,6 +48,7 @@ const captures = [
   ["telegram-proxy", "connected", "free/telemt"],
   ["invite", "connected", "invite"],
   ["subscriptions", "connected", "subscriptions"],
+  ["buy", "connected", "buy"],
   ["payment-awaiting", "connected", "buy/success?transaction_id=tx-awaiting"],
   ["payment-processing", "connected", "buy/success?transaction_id=tx-processing"],
   ["payment-succeeded", "connected", "buy/success?transaction_id=tx-credits-1&preview_success=1"],

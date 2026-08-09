@@ -89,7 +89,7 @@ function AppRoutes({
     return <Navigate to="/onboarding" replace />;
   }
 
-  const showTabs = pathname === "/" || pathname === "/connect" || pathname === "/support";
+  const showTabs = pathname === "/" || pathname === "/connect" || pathname === "/buy" || pathname === "/support";
 
   return (
     <div className="app">

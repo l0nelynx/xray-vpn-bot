@@ -371,6 +371,7 @@ export const ru: Messages = {
   "legal.agreement.callout":
     "Используя сервис {brand}, вы подтверждаете, что ознакомились и согласны с условиями данного соглашения.",
   "tabs.connect": "Подключение",
+  "tabs.buy": "Купить",
   "tabs.help": "Помощь",
   "home.setupVpn": "Настроить VPN",
   "home.connectAnother": "Подключить ещё устройство",

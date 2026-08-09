@@ -646,6 +646,7 @@ summary:focus-visible {
 }
 
 .home-primary-cta { min-height: 54px; margin-bottom: 4px; }
+.home-renew-cta { min-height: 50px; margin-bottom: 4px; }
 .home-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
 .home-identity { flex: 1 1 auto; width: 0; min-width: 0; }
 .home-username { display: block; width: 100%; max-width: 100%; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--foreground); padding: 2px 4px; margin: -2px -4px 0; font: inherit; font-size: clamp(19px, 5.3vw, 22px); font-weight: 700; letter-spacing: -.02em; line-height: 1.2; overflow: visible; overflow-wrap: anywhere; white-space: normal; cursor: pointer; text-align: left; transition: background-color .16s ease; }

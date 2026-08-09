@@ -1,10 +1,11 @@
-import { CircleHelp, Home, Link2 } from "lucide-react";
+import { CircleHelp, Home, Link2, ShoppingBag } from "lucide-react";
 import { useLocation, useNavigate } from "react-router";
 import { useT } from "../i18n/LocaleContext";
 
 const TABS = [
   { path: "/", icon: <Home />, labelKey: "tabs.home" },
   { path: "/connect", icon: <Link2 />, labelKey: "tabs.connect" },
+  { path: "/buy", icon: <ShoppingBag />, labelKey: "tabs.buy" },
   { path: "/support", icon: <CircleHelp />, labelKey: "tabs.help" },
 ] as const;
 
