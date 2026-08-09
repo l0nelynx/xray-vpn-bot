@@ -20,6 +20,7 @@ import {
   Bell,
   Download,
   Trophy,
+  Activity,
   ChevronDown,
   type LucideIcon,
 } from "lucide-react";
@@ -50,6 +51,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/users": "Users",
   "/transactions": "Transactions",
   "/stats": "Statistics",
+  "/api-health": "API Health",
   "/tariffs": "Tariffs",
   "/menus": "Bot Menus",
   "/squads": "Squads",
@@ -86,6 +88,7 @@ function buildMenuGroups(): NavGroup[] {
         { key: "/users", icon: Users, label: "Users" },
         { key: "/transactions", icon: ArrowRightLeft, label: "Transactions" },
         { key: "/stats", icon: BarChart3, label: "Statistics" },
+        { key: "/api-health", icon: Activity, label: "API Health" },
       ],
     },
   ];

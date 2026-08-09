@@ -22,6 +22,11 @@ import common_db.models  # noqa: F401  -- side-effect: populate metadata
 
 
 CANONICAL_TABLES = frozenset({
+    "api_alert_state",
+    "api_error_events",
+    "api_metric_hours",
+    "api_metric_minutes",
+    "api_service_status",
     "android_fcm_tokens",
     "app_runtime_settings",
     "app_integrations",

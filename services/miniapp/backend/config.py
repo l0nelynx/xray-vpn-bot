@@ -72,6 +72,10 @@ def get_bot_token() -> str:
     return get_config().get("token", "")
 
 
+def get_redis_url() -> str:
+    return os.environ.get("REDIS_URL", "redis://redis:6379/0")
+
+
 def get_admin_bot_token() -> str:
     return get_config().get("admin_bot_token", "")
 

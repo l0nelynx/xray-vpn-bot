@@ -29,6 +29,11 @@ def test_create_all_succeeds() -> None:
             "support_tickets",
             "support_messages",
             "transactions",
+            "api_metric_minutes",
+            "api_metric_hours",
+            "api_error_events",
+            "api_service_status",
+            "api_alert_state",
         } <= tables
 
         # Spot-check critical indexes survived create_all.

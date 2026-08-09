@@ -74,6 +74,7 @@ RUNTIME_KEYS: frozenset[str] = frozenset({
     "rw_ext_free_id",
     "rw_ext_pro_id",
     "subscription_url",
+    "api_health_alerts",
 })
 
 DEFAULT_MAINTENANCE: dict[str, Any] = {
@@ -91,6 +92,14 @@ DEFAULT_RUNTIME_CONFIG: dict[str, Any] = {
     "smtp_use_tls": False,
     "email_code_ttl": 900,
     "email_code_max_attempts": 5,
+    "api_health_alerts": {
+        "enabled": True,
+        "server_error_threshold": 20,
+        "latency_p95_ms": 2000,
+        "latency_min_requests": 20,
+        "health_failures": 3,
+        "cooldown_minutes": 30,
+    },
 }
 
 # provider -> list of PaymentsConfig / YAML field names

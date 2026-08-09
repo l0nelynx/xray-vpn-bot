@@ -35,6 +35,7 @@ from .routers import (
     crm,
     push,
     giveaways,
+    api_health,
 )
 
 BASE_PATH = "/bot/dashboard"
@@ -107,6 +108,14 @@ app = FastAPI(
     redoc_url=None,
     lifespan=lifespan,
 )
+from common_db.api_health import ApiHealthMiddleware
+from .database.session import async_session as _telemetry_session
+app.add_middleware(
+    ApiHealthMiddleware,
+    service="dashboard",
+    redis_url=get_redis_url(),
+    session_factory=_telemetry_session,
+)
 
 # Routers
 app.include_router(users.router, prefix=BASE_PATH)
@@ -127,11 +136,28 @@ app.include_router(tg_admin.router, prefix=BASE_PATH)
 app.include_router(crm.router, prefix=BASE_PATH)
 app.include_router(push.router, prefix=BASE_PATH)
 app.include_router(giveaways.router, prefix=BASE_PATH)
+app.include_router(api_health.router, prefix=BASE_PATH)
 
 
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get(f"{BASE_PATH}/api/health", include_in_schema=False)
+async def public_health():
+    return {"status": "ok", "service": "dashboard"}
+
+
+@app.exception_handler(Exception)
+async def _unhandled_error(request: Request, exc: Exception):
+    request.state.api_exception = exc
+    logger.exception("Unhandled Dashboard API error request_id=%s", getattr(request.state, "request_id", None))
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "internal_server_error", "request_id": getattr(request.state, "request_id", None)},
+        headers={"X-Request-ID": getattr(request.state, "request_id", "")},
+    )
 
 
 @app.post(f"{BASE_PATH}/api/auth/login", response_model=TokenResponse)

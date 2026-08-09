@@ -33,6 +33,7 @@ from .runtime import AppRuntimeSettings, AppIntegration, PaymentIntegration
 from .system import BotFeatureFlags, CacheVersion, TelmtFreeParams
 from .transactions import Transaction
 from .users import DisabledUser, SubscriptionTransfer, User, UserSubscription
+from .api_health import ApiAlertState, ApiErrorEvent, ApiMetricHour, ApiMetricMinute, ApiServiceStatus
 
 __all__ = [
     # users
@@ -88,4 +89,9 @@ __all__ = [
     "AppRuntimeSettings",
     "AppIntegration",
     "PaymentIntegration",
+    "ApiMetricMinute",
+    "ApiMetricHour",
+    "ApiErrorEvent",
+    "ApiServiceStatus",
+    "ApiAlertState",
 ]

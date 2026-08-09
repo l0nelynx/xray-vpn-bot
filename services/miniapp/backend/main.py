@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 
-from .config import get_expose_api_docs, get_log_level, get_web_allowed_origins, get_yaml_config
+from .config import get_expose_api_docs, get_log_level, get_redis_url, get_web_allowed_origins, get_yaml_config
 from .security_config import validate_security_config
 from .maintenance import MaintenanceMiddleware
 
@@ -100,6 +100,14 @@ app = FastAPI(
 )
 app.state.limiter = limiter
 app.add_middleware(MaintenanceMiddleware)
+from common_db.api_health import ApiHealthMiddleware
+from .database.session import async_session as _telemetry_session
+app.add_middleware(
+    ApiHealthMiddleware,
+    service="miniapp",
+    redis_url=get_redis_url(),
+    session_factory=_telemetry_session,
+)
 
 # CORS for the external web portal (separate static hosting)
 _cors_origins = get_web_allowed_origins()
@@ -116,6 +124,17 @@ if _cors_origins:
 @app.exception_handler(RateLimitExceeded)
 async def _rate_limit_handler(request, exc):
     return JSONResponse(status_code=429, content={"detail": {"code": "rate_limited"}})
+
+
+@app.exception_handler(Exception)
+async def _unhandled_error(request, exc):
+    request.state.api_exception = exc
+    logging.getLogger(__name__).exception("Unhandled MiniApp API error request_id=%s", getattr(request.state, "request_id", None))
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "internal_server_error", "request_id": getattr(request.state, "request_id", None)},
+        headers={"X-Request-ID": getattr(request.state, "request_id", "")},
+    )
 
 
 app.include_router(me.router, prefix=BASE_PATH)
@@ -147,6 +166,11 @@ app.include_router(connect_router, prefix=BASE_PATH)
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get(f"{BASE_PATH}/api/health", include_in_schema=False)
+async def public_health():
+    return {"status": "ok", "service": "miniapp"}
 
 
 # The React SPA (Telegram MiniApp + web portal) is built and served by the

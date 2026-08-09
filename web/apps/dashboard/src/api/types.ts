@@ -108,6 +108,99 @@ export interface OrderStatusStat {
   count: number;
 }
 
+export interface ApiServiceHealth {
+  service: "miniapp" | "bot" | "dashboard";
+  is_healthy: boolean;
+  checked_at: string;
+  last_ok_at: string | null;
+  last_error: string | null;
+  consecutive_failures: number;
+  response_time_ms: number | null;
+}
+
+export interface ApiHealthSummary {
+  requests: number;
+  avg_rps: number;
+  success_rate: number;
+  client_errors: number;
+  server_errors: number;
+  error_rate: number;
+  avg_ms: number;
+  p50_ms: number;
+  p95_ms: number;
+  p99_ms: number;
+  max_ms: number;
+  client_error_rate: number;
+  server_error_rate: number;
+  slow_requests: number;
+  dropped_events: number;
+  last_telemetry_at: string | null;
+  services: ApiServiceHealth[];
+}
+
+export interface ApiHealthSeriesPoint {
+  bucket: string;
+  requests: number;
+  status_2xx: number;
+  status_3xx: number;
+  status_4xx: number;
+  status_5xx: number;
+  error_rate: number;
+  p50_ms: number;
+  p95_ms: number;
+  p99_ms: number;
+}
+
+export interface ApiEndpointHealth extends Omit<ApiHealthSummary, "avg_rps" | "last_telemetry_at" | "services"> {
+  service: string;
+  method: string;
+  route: string;
+  last_error_at: string | null;
+}
+
+export interface ApiErrorEvent {
+  id: number;
+  occurred_at: string;
+  request_id: string;
+  service: string;
+  method: string;
+  route: string;
+  status_code: number;
+  duration_ms: number;
+  user_id: number | null;
+  tg_id: number | null;
+  actor: string | null;
+  client_ip: string | null;
+  client_channel: string | null;
+  user_agent: string | null;
+  app_version: string | null;
+  exception_type: string | null;
+  error_message: string | null;
+  error_fingerprint: string;
+  traceback?: string | null;
+}
+
+export interface ApiErrorGroup {
+  fingerprint: string;
+  service: string;
+  route: string;
+  status_code: number;
+  exception_type: string | null;
+  message: string | null;
+  count: number;
+  affected_users: number;
+  last_seen_at: string;
+}
+
+export interface ApiAlertSettings {
+  enabled: boolean;
+  server_error_threshold: number;
+  latency_p95_ms: number;
+  latency_min_requests: number;
+  health_failures: number;
+  cooldown_minutes: number;
+}
+
 export interface PromoItem {
   promo_code: string;
   promo_type: string;

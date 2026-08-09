@@ -44,12 +44,12 @@ function StatusBadges({ user }: { user: UserItem }) {
   );
 }
 
-export default function UsersTable() {
+export default function UsersTable({ initialSearch = "" }: { initialSearch?: string }) {
   const [data, setData] = useState<UserItem[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [perPage] = useState(20);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(initialSearch);
   const [filter, setFilter] = useState("all");
   const [sort, setSort] = useState("id");
   const [order, setOrder] = useState<SortOrder>("desc");

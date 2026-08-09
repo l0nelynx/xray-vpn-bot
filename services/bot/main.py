@@ -27,6 +27,16 @@ from app.bot_constructor import get_router as get_bot_constructor_router
 
 app_uvi.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+from common_db.api_health import ApiHealthMiddleware
+from app.database.models import async_session as _telemetry_session
+import os
+app_uvi.add_middleware(
+    ApiHealthMiddleware,
+    service="bot",
+    redis_url=os.environ.get("REDIS_URL", "redis://redis:6379/0"),
+    session_factory=_telemetry_session,
+)
+
 class UsernameRequiredMiddleware(BaseMiddleware):
     async def __call__(
         self,
@@ -78,6 +88,23 @@ admin_dp.include_router(router_admin)
 async def health_check():
     """Health check endpoint для docker healthcheck"""
     return {"status": "healthy", "message": "Bot is running"}
+
+
+@app_uvi.get("/bot/health", include_in_schema=False)
+async def public_health_check():
+    return {"status": "ok", "service": "bot"}
+
+
+@app_uvi.exception_handler(Exception)
+async def _unhandled_api_error(request: Request, exc: Exception):
+    request.state.api_exception = exc
+    logging.getLogger(__name__).exception("Unhandled bot API error request_id=%s", getattr(request.state, "request_id", None))
+    from fastapi.responses import JSONResponse
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "internal_server_error", "request_id": getattr(request.state, "request_id", None)},
+        headers={"X-Request-ID": getattr(request.state, "request_id", "")},
+    )
 
 
 @app_uvi.post("/bot/apays_webhook")

@@ -5,7 +5,7 @@ import time
 from dataclasses import dataclass
 from urllib.parse import parse_qsl
 
-from fastapi import Header, HTTPException, status
+from fastapi import Header, HTTPException, Request, status
 
 from .config import get_bot_token
 
@@ -36,6 +36,7 @@ def _check_signature(init_data: str, bot_token: str) -> dict:
 
 
 async def get_tg_user(
+    request: Request = None,
     x_telegram_init_data: str = Header(..., alias="X-Telegram-Init-Data"),
 ) -> TgUser:
     bot_token = get_bot_token()
@@ -63,9 +64,12 @@ async def get_tg_user(
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "no user id")
 
     # Telegram @username is optional. Remnawave names fall back to user_{db_id}.
-    return TgUser(
+    result = TgUser(
         tg_id=int(user["id"]),
         username=user.get("username") or None,
         language_code=user.get("language_code"),
         auth_date=auth_date,
     )
+    if request is not None:
+        request.state.api_tg_id = result.tg_id
+    return result

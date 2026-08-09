@@ -17,6 +17,7 @@ import CrmPage from "./pages/crm/CrmPage";
 import PromocodesPage from "./pages/PromocodesPage";
 import GiveawaysPage from "./pages/GiveawaysPage";
 import PushPage from "./pages/push/PushPage";
+import ApiHealthPage from "./pages/ApiHealthPage";
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   if (!isAuthenticated()) {
@@ -41,6 +42,7 @@ export default function App() {
         <Route path="users" element={<UsersPage />} />
         <Route path="transactions" element={<TransactionsPage />} />
         <Route path="stats" element={<StatsPage />} />
+        <Route path="api-health" element={<ApiHealthPage />} />
         <Route path="tariffs" element={<Navigate to="/webapp/tariffs" replace />} />
         <Route path="menus" element={<MenuEditorPage />} />
         <Route path="squads" element={<Navigate to="/webapp/tariffs" replace />} />

@@ -22,6 +22,7 @@ import { api } from "../api/client";
 import type { SummaryStats, TransactionItem } from "../api/types";
 import useIsMobile from "../hooks/useIsMobile";
 import { PERIOD_OPTIONS, statusBadgeVariant } from "../utils/constants";
+import ApiHealthWidget from "../components/ApiHealthWidget";
 
 const rub = (v: number) => Math.round(v).toLocaleString("en-US");
 
@@ -238,6 +239,8 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       )}
+
+      <ApiHealthWidget />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">

@@ -17,3 +17,4 @@ psycopg2-binary>=2.9
 remnawave-api==3.0.1
 python-multipart>=0.0.20
 Pillow>=11.0.0
+redis>=5.2.0

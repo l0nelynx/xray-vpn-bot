@@ -118,6 +118,7 @@ class TransferSubscriptionResponse(BaseModel):
 
 
 async def _subscription_session_user(
+    request: Request,
     authorization: str | None = Header(default=None),
 ) -> repo.UserRow:
     if not authorization or not authorization.lower().startswith("bearer "):
@@ -133,6 +134,8 @@ async def _subscription_session_user(
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED, detail={"code": "user_unavailable"}
         )
+    request.state.api_user_id = user.id
+    request.state.api_tg_id = user.tg_id
     return user
 
 

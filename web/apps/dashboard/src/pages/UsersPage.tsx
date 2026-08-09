@@ -1,6 +1,8 @@
 import UsersTable from "../components/UsersTable";
+import { useSearchParams } from "react-router";
 
 export default function UsersPage() {
+  const [params] = useSearchParams();
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -11,7 +13,7 @@ export default function UsersPage() {
           </p>
         </div>
       </div>
-      <UsersTable />
+      <UsersTable initialSearch={params.get("search") ?? ""} />
     </div>
   );
 }
