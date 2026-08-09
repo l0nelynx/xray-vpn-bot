@@ -10,6 +10,7 @@ import secrets
 import time
 import urllib.parse
 from datetime import datetime, timedelta, timezone
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from pydantic import BaseModel, Field
@@ -17,6 +18,7 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 
 from common_db.models import SubscriptionTransfer, WebAuthorizationCode
+from common_db.repo import subscription_onboarding
 from common_db.repo import subscriptions as subscription_repo
 from remnawave_client.api import get_user_by_short_uuid_raw, get_user_from_id, update_user_by_id
 
@@ -117,6 +119,26 @@ class TransferSubscriptionResponse(BaseModel):
     target_subscription_id: int
 
 
+class InitialAttachRequest(BaseModel):
+    context: str = Field(min_length=20, max_length=4096)
+
+
+class InitialAttachResponse(BaseModel):
+    status: Literal["attached", "already_attached", "skipped_nonempty"]
+    subscription_id: int | None = None
+    is_primary: bool = False
+
+
+def _require_verified_identity(user: repo.UserRow) -> None:
+    # Telegram authentication is already a verified identity. Email-only
+    # registrations must complete OTP verification before OAuth can finish.
+    if user.email_verified_at is None and user.tg_id is None:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail={"code": "email_not_verified"},
+        )
+
+
 async def _subscription_session_user(
     request: Request,
     authorization: str | None = Header(default=None),
@@ -172,6 +194,7 @@ async def authorize_subscription_page(
     user: repo.UserRow = Depends(deps.get_current_user),
 ) -> AuthorizeResponse:
     _validate_client(body.client_id, body.redirect_uri)
+    _require_verified_identity(user)
     if body.code_challenge_method != "S256" or not _PKCE_RE.fullmatch(body.code_challenge):
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, detail={"code": "invalid_pkce"}
@@ -310,6 +333,79 @@ async def attach_subscription(
         await session.commit()
     return AttachSubscriptionResponse(
         subscription_id=linked.id, is_primary=linked.is_primary
+    )
+
+
+@router.post(
+    "/oauth/subscriptions/attach-initial",
+    response_model=InitialAttachResponse,
+)
+async def attach_initial_subscription(
+    body: InitialAttachRequest,
+    user: repo.UserRow = Depends(_subscription_session_user),
+) -> InitialAttachResponse:
+    _require_verified_identity(user)
+    try:
+        rw_id, _ = security.decode_subscription_context(body.context)
+    except security.JWTError as exc:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, detail={"code": "invalid_context"}
+        ) from exc
+
+    async with async_session() as session:
+        try:
+            result, subscription_id, is_primary = (
+                await subscription_onboarding.attach_initial(
+                    session,
+                    user_id=user.id,
+                    rw_id=rw_id,
+                )
+            )
+            await session.commit()
+        except ValueError as exc:
+            await session.rollback()
+            code = str(exc)
+            http_status = (
+                status.HTTP_409_CONFLICT
+                if code == "subscription_already_linked"
+                else status.HTTP_400_BAD_REQUEST
+            )
+            raise HTTPException(http_status, detail={"code": code}) from exc
+        except IntegrityError:
+            # Re-read after a concurrent first-profile attach. Unique rw_id and
+            # primary constraints decide the winner; this request returns the
+            # stable resulting state instead of leaking a database error.
+            await session.rollback()
+            owner = await subscription_repo.get_by_rw_id(session, rw_id)
+            if owner is not None and owner.user_id == user.id:
+                result, subscription_id, is_primary = (
+                    "already_attached",
+                    owner.id,
+                    owner.is_primary,
+                )
+            elif owner is not None:
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    detail={"code": "subscription_already_linked"},
+                )
+            elif await subscription_repo.count_for_user(session, user.id):
+                result, subscription_id, is_primary = (
+                    "skipped_nonempty",
+                    None,
+                    False,
+                )
+            else:
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    detail={"code": "subscription_attach_conflict"},
+                )
+            await subscription_onboarding.clear(session, user.id)
+            await session.commit()
+
+    return InitialAttachResponse(
+        status=result,
+        subscription_id=subscription_id,
+        is_primary=is_primary,
     )
 
 

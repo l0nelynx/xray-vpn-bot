@@ -68,6 +68,7 @@ from payments import (
 from . import brute_force
 from common_db.repo import balance as _repo_balance
 from common_db.repo import promos as _repo_promos
+from common_db.repo import subscription_onboarding as _repo_onboarding
 from common_db.repo import system as _repo_system
 from common_db.repo import subscriptions as _repo_subscriptions
 from common_db.models import User
@@ -149,6 +150,7 @@ class WebRegisterRequest(BaseModel):
     password: str = Field(min_length=8, max_length=128)
     invite_code: str | None = Field(default=None, min_length=1, max_length=20)
     subscription_context: str | None = Field(default=None, min_length=20, max_length=4096)
+    subscription_flow: bool = False
 
 
 class PartnershipInquiryRequest(BaseModel):
@@ -313,9 +315,9 @@ async def web_register(
 ) -> AuthResponse:
     """Register a new web account.
 
-    Invite code is optional. When provided it must be valid and is redeemed
-    after account creation. ``subscription_context`` still claims an existing
-    Remnawave profile during registration.
+    Invite code is optional. A subscription-page registration stores only a
+    short-lived onboarding marker; ownership is finalized after email
+    verification or by the subscription-page OAuth callback.
     """
     ip = _client_ip(request)
     brute_force.check(ip)
@@ -336,15 +338,8 @@ async def web_register(
                 detail={"code": "invalid_subscription_context"},
             ) from exc
 
-        from common_db.repo import subscriptions as _repo_subscriptions
-
-        async with async_session() as session:
-            owner = await _repo_subscriptions.get_by_rw_id(session, claim_rw_id)
-        if owner is not None:
-            raise HTTPException(
-                status.HTTP_409_CONFLICT,
-                detail={"code": "subscription_already_linked"},
-            )
+        grant = 0
+    elif body.subscription_flow:
         grant = 0
     elif code:
         async with async_session() as session:
@@ -361,18 +356,14 @@ async def web_register(
 
     brute_force.clear(ip)
 
+    subscription_flow = body.subscription_flow or claim_rw_id is not None
     pwd_hash = await android_security.hash_password(body.password)
-    if claim_rw_id is not None:
-        # Create the account and claim ownership in one transaction. The public
-        # pre-check above is UX only; this re-check is the race-safe boundary.
+    if subscription_flow:
+        # Keep the user empty until ownership has been verified. This marker
+        # also suppresses eager FREE provisioning between verification and the
+        # subscription-page OAuth callback.
         try:
             async with async_session() as session:
-                owner = await _repo_subscriptions.get_by_rw_id(session, claim_rw_id)
-                if owner is not None:
-                    raise HTTPException(
-                        status.HTTP_409_CONFLICT,
-                        detail={"code": "subscription_already_linked"},
-                    )
                 db_user = User(
                     tg_id=None,
                     email=str(body.email).strip().lower(),
@@ -383,22 +374,13 @@ async def web_register(
                 session.add(db_user)
                 await session.flush()
                 user_id = int(db_user.id)
-                await _repo_subscriptions.attach(
+                await _repo_onboarding.create(
                     session,
                     user_id=user_id,
                     rw_id=claim_rw_id,
-                    source="subscription_page_registration",
-                    make_primary=True,
                 )
                 await session.commit()
         except IntegrityError:
-            async with async_session() as session:
-                owner = await _repo_subscriptions.get_by_rw_id(session, claim_rw_id)
-            if owner is not None:
-                raise HTTPException(
-                    status.HTTP_409_CONFLICT,
-                    detail={"code": "subscription_already_linked"},
-                )
             raise HTTPException(
                 status.HTTP_409_CONFLICT,
                 detail={"code": "email_taken"},
@@ -418,7 +400,7 @@ async def web_register(
     assert user is not None
     register_ip_guard.record(ip)
 
-    if claim_rw_id is None and code is not None:
+    if not subscription_flow and code is not None:
         fake_tg = _fake_tg_id(user_id)
         async with async_session() as session:
             redeem_result = await _repo_promos.redeem_promo(session, fake_tg, code)
@@ -430,7 +412,7 @@ async def web_register(
                 )
             await session.commit()
 
-    if claim_rw_id is not None:
+    if subscription_flow:
         source = "subscription"
     elif code is not None:
         source = "invite"

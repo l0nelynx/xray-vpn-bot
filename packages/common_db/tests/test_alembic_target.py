@@ -51,6 +51,7 @@ CANONICAL_TABLES = frozenset({
     "menu_screens",
     "miniapp_ux_events",
     "payment_integrations",
+    "pending_subscription_onboardings",
     "promo_redemptions",
     "promo_settings",
     "promos",

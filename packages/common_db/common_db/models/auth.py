@@ -80,3 +80,27 @@ class WebAuthorizationCode(Base):
         Index("ix_web_authorization_codes_user_id", "user_id"),
         Index("ix_web_authorization_codes_expires_at", "expires_at"),
     )
+
+
+class PendingSubscriptionOnboarding(Base):
+    """Short-lived marker for registration started from subscription-page.
+
+    The signed context itself and the subscription URL are deliberately not
+    persisted. ``rw_id`` is populated only for the one-release legacy flow
+    where the portal still receives a signed subscription context.
+    """
+
+    __tablename__ = "pending_subscription_onboardings"
+
+    user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    rw_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    created_at: Mapped[str] = mapped_column(String(30))
+    expires_at: Mapped[str] = mapped_column(String(30))
+
+    __table_args__ = (
+        Index("ix_pending_subscription_onboardings_expires_at", "expires_at"),
+    )

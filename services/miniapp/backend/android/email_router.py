@@ -15,15 +15,20 @@ subscription URL from /me.
 from __future__ import annotations
 
 import logging
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr, Field
+from sqlalchemy.exc import IntegrityError
+
+from common_db.repo import subscription_onboarding, subscriptions
 
 from ..config import (
     get_email_code_max_attempts,
     get_email_code_ttl_seconds,
 )
 from ..notify_log import esc, notify_log
+from ..database.session import async_session
 from . import deps, email_send_guard, mailer, provisioning, repo, security
 from .auth_router import limiter
 from .schemas import SimpleStatus
@@ -38,6 +43,18 @@ router = APIRouter(prefix="/api/android/auth", tags=["android-auth-email"])
 
 class EmailVerifyConfirmRequest(BaseModel):
     code: str = Field(min_length=4, max_length=12)
+
+
+class EmailVerifyResponse(BaseModel):
+    status: str = "ok"
+    subscription_status: Literal[
+        "attached",
+        "awaiting_oauth",
+        "already_attached",
+        "skipped_nonempty",
+        "conflict",
+        "none",
+    ] = "none"
 
 
 class PasswordResetRequest(BaseModel):
@@ -162,42 +179,83 @@ async def email_send_code(
     return SimpleStatus()
 
 
-@router.post("/email/verify", response_model=SimpleStatus)
+async def _finalize_subscription_onboarding(user_id: int) -> str:
+    # A concurrent OAuth callback may win the first-profile race. Retry once
+    # after the unique constraint settles so the response is idempotent.
+    for attempt in range(2):
+        async with async_session() as session:
+            try:
+                result = await subscription_onboarding.finalize_email_verification(
+                    session, user_id=user_id
+                )
+                await session.commit()
+                return result
+            except IntegrityError:
+                await session.rollback()
+                if attempt:
+                    raise
+    return "none"
+
+
+@router.post("/email/verify", response_model=EmailVerifyResponse)
 @limiter.limit("10/minute")
 async def email_verify(
     req: EmailVerifyConfirmRequest,
     request: Request,
     user: repo.UserRow = Depends(deps.get_current_user),
-) -> SimpleStatus:
-    if user.email_verified_at:
-        return SimpleStatus(status="already_verified")
+) -> EmailVerifyResponse:
+    was_verified = bool(user.email_verified_at)
     if not user.email:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail={"code": "email_missing"})
 
-    await _consume_code(
-        user_id=user.id,
-        purpose=repo.PURPOSE_VERIFY,
-        presented_code=req.code,
-        email=user.email,
-    )
-    await repo.mark_email_verified(user.id)
-    await notify_log(
-        f"✅ <b>Email verified</b>\n"
-        f"ID: <code>{user.id}</code>\n"
-        f"email: <code>{esc(user.email)}</code>"
-    )
+    if not was_verified:
+        await _consume_code(
+            user_id=user.id,
+            purpose=repo.PURPOSE_VERIFY,
+            presented_code=req.code,
+            email=user.email,
+        )
+
+    subscription_status = await _finalize_subscription_onboarding(user.id)
+
+    if not was_verified:
+        await notify_log(
+            f"✅ <b>Email verified</b>\n"
+            f"ID: <code>{user.id}</code>\n"
+            f"email: <code>{esc(user.email)}</code>"
+        )
 
     # Eagerly hand the user a FREE Remnawave subscription. Failures here
     # don't block verification — the client can retry via /me later.
     # Skip when the user already owns a Remnawave subscription (the
     # `/migrate` flow pre-fills ``rw_id``) so we don't overwrite a paid plan.
-    if user.rw_id is None:
+    should_provision_free = not was_verified and subscription_status in {
+        "none",
+        "conflict",
+    }
+    if should_provision_free:
+        async with async_session() as session:
+            has_subscriptions = await subscriptions.count_for_user(session, user.id)
+        fresh_user = await repo.find_user_by_id(user.id)
+    else:
+        has_subscriptions = 1
+        fresh_user = None
+
+    if (
+        should_provision_free
+        and has_subscriptions == 0
+        and fresh_user is not None
+        and fresh_user.rw_id is None
+    ):
         try:
             await provisioning.ensure_free_subscription(user.id, user.email)
         except Exception as exc:
             logger.warning("Free provisioning for user %s failed: %s", user.id, exc)
 
-    return SimpleStatus()
+    return EmailVerifyResponse(
+        status="already_verified" if was_verified else "ok",
+        subscription_status=subscription_status,
+    )
 
 
 # --- Password reset --------------------------------------------------------
