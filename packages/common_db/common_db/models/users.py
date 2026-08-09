@@ -55,6 +55,11 @@ class User(Base):
         String(5), default=None, server_default="ru", nullable=True
     )
 
+    # Highest MiniApp onboarding revision the user has completed or skipped.
+    miniapp_onboarding_version: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", nullable=False
+    )
+
     # VIP flag (Sub Clean protection). BigInteger on prod since 0007.
     vip: Mapped[int] = mapped_column(
         BigInteger, default=0, server_default="0", nullable=True

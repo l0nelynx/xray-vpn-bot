@@ -58,6 +58,10 @@ const menuTree = {
 
 let ticketSeq = 2;
 let mockLanguage = "en";
+let mockOnboardingVersion = 1;
+let mockHasEmail = false;
+const transactionPolls = new Map<string, number>();
+let connectionVerificationPolls = 0;
 let mockSubscriptions = [
   {
     id: 1,
@@ -74,11 +78,12 @@ let mockSubscriptions = [
     traffic_used_gb: 42.5,
     devices_count: 2,
     subscription_url: "https://example.com/sub/mock-main",
+    connection_state: "connected" as const,
   },
   {
     id: 2,
     rw_id: 2048,
-    label: "Marketplace order",
+    label: "",
     product_key: "marketplace",
     source: "marketplace",
     is_primary: false,
@@ -90,8 +95,15 @@ let mockSubscriptions = [
     traffic_used_gb: 9.2,
     devices_count: 1,
     subscription_url: "https://example.com/sub/mock-marketplace",
+    connection_state: "connected" as const,
   },
 ];
+
+function scenarioFrom(request: Request): { name: string; language: "ru" | "en" | null } {
+  const raw = request.headers.get("X-Telegram-Init-Data")?.split("mock-scenario:")[1] || "";
+  const language = raw.endsWith("-ru") ? "ru" : raw.endsWith("-en") ? "en" : null;
+  return { name: raw.replace(/-(?:ru|en)$/, ""), language };
+}
 const tickets = [
   {
     id: 1,
@@ -120,22 +132,44 @@ const tickets = [
 ];
 
 export const handlers: HttpHandler[] = [
-  http.get(`${API}/me`, () =>
-    HttpResponse.json({
+  http.get(`${API}/me`, ({ request }) => {
+    const { name: scenario, language } = scenarioFrom(request);
+    const empty = (scenario === "onboarding" && !mockHasEmail) || scenario === "empty";
+    const unknown = scenario === "connection-unknown";
+    const never = scenario === "connection-never";
+    const selectedSubscriptions = scenario === "single" ? mockSubscriptions.slice(0, 1) : mockSubscriptions;
+    const availableSubscriptions = empty ? [] : selectedSubscriptions.map((item) => ({
+      ...item,
+      status: unknown ? "unavailable" : scenario === "expired" ? "expired" : item.status,
+      days_left: scenario === "expired" ? 0 : item.days_left,
+      connection_state: unknown ? "unknown" : never || scenario === "connection-progress" ? "never_connected" : item.connection_state,
+    }));
+    const primary = availableSubscriptions.find((item) => item.is_primary);
+    return HttpResponse.json({
       registered: true,
-      user: { tg_id: 424242, username: "mock_user", language: mockLanguage, has_email: false, email: null },
-      subscription: (() => {
-        const primary = mockSubscriptions.find((item) => item.is_primary)!;
-        return { ...primary, subscription_id: primary.id };
-      })(),
-      subscriptions_count: mockSubscriptions.length,
+      user: {
+        tg_id: 424242, username: "jason_karker", language: language || mockLanguage,
+        has_email: mockHasEmail, email: mockHasEmail ? "existing@example.com" : null,
+        onboarding_version: scenario === "onboarding" ? 0 : mockOnboardingVersion,
+      },
+      subscription: primary ? { ...primary, subscription_id: primary.id } : null,
+      subscriptions_count: availableSubscriptions.length,
       links,
-    }),
-  ),
+    });
+  }),
 
-  http.get(`${API}/subscriptions`, () =>
-    HttpResponse.json({ subscriptions: mockSubscriptions }),
-  ),
+  http.get(`${API}/subscriptions`, ({ request }) => {
+    const { name: scenario } = scenarioFrom(request);
+    if ((scenario === "onboarding" && !mockHasEmail) || scenario === "empty") return HttpResponse.json({ subscriptions: [] });
+    if (scenario === "connection-progress") connectionVerificationPolls += 1;
+    const selectedSubscriptions = scenario === "single" ? mockSubscriptions.slice(0, 1) : mockSubscriptions;
+    return HttpResponse.json({ subscriptions: selectedSubscriptions.map((item) => ({
+      ...item,
+      status: scenario === "connection-unknown" ? "unavailable" : scenario === "expired" ? "expired" : item.status,
+      days_left: scenario === "expired" ? 0 : item.days_left,
+      connection_state: scenario === "connection-unknown" ? "unknown" : scenario === "connection-never" ? "never_connected" : scenario === "connection-progress" && connectionVerificationPolls < 2 ? "never_connected" : item.connection_state,
+    })) });
+  }),
   http.post(`${API}/subscriptions/:id/primary`, ({ params }) => {
     const id = Number(params.id);
     if (!mockSubscriptions.some((item) => item.id === id)) {
@@ -160,7 +194,14 @@ export const handlers: HttpHandler[] = [
       language: mockLanguage,
       has_email: false,
       email: null,
+      onboarding_version: mockOnboardingVersion,
     });
+  }),
+
+  http.patch(`${API}/me/onboarding`, async ({ request }) => {
+    const body = (await request.json()) as { version: number };
+    mockOnboardingVersion = Math.max(mockOnboardingVersion, body.version);
+    return HttpResponse.json({ onboarding_version: mockOnboardingVersion });
   }),
 
   http.post(`${API}/link/email`, async ({ request }) => {
@@ -177,8 +218,11 @@ export const handlers: HttpHandler[] = [
         { status: 409 },
       );
     }
+    mockHasEmail = true;
     return HttpResponse.json({ result: "ok", survivor_id: 1 });
   }),
+
+  http.post(`${API}/ux/events`, () => new HttpResponse(null, { status: 204 })),
 
   http.get(`${API}/menu/tree`, () => HttpResponse.json(menuTree)),
 
@@ -213,6 +257,25 @@ export const handlers: HttpHandler[] = [
       message: "Paid with credits (mock)",
     }),
   ),
+  http.get(`${API}/payments/transactions/:transactionId`, ({ params }) => {
+    const transactionId = String(params.transactionId);
+    if (transactionId === "tx-failed") {
+      return HttpResponse.json({ transaction_id: transactionId, state: "failed", delivery_status: 0 });
+    }
+    if (transactionId === "tx-awaiting") {
+      return HttpResponse.json({ transaction_id: transactionId, state: "awaiting_payment", delivery_status: 0 });
+    }
+    if (transactionId === "tx-processing") {
+      return HttpResponse.json({ transaction_id: transactionId, state: "processing", delivery_status: 0 });
+    }
+    if (transactionId === "tx-credits-1") {
+      return HttpResponse.json({ transaction_id: transactionId, state: "succeeded", delivery_status: 1 });
+    }
+    const polls = (transactionPolls.get(transactionId) || 0) + 1;
+    transactionPolls.set(transactionId, polls);
+    const state = polls <= 2 ? "awaiting_payment" : polls <= 4 ? "processing" : "succeeded";
+    return HttpResponse.json({ transaction_id: transactionId, state, delivery_status: state === "succeeded" ? 1 : 0 });
+  }),
 
   http.get(`${API}/devices`, () =>
     HttpResponse.json({

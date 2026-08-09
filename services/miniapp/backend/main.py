@@ -27,7 +27,7 @@ from .android import promo_router as android_promo_router
 from .android import subscription_router as android_subscription_router
 from .android import support_router as android_support_router
 from .connect.router import router as connect_router
-from .routers import devices, free, link_email, me, menu, payments, promo, subscriptions, support
+from .routers import devices, free, link_email, me, menu, payments, promo, subscriptions, support, ux
 from .web import web_router
 from .web import subscription_sso_router
 
@@ -146,6 +146,7 @@ app.include_router(menu.router, prefix=BASE_PATH)
 app.include_router(promo.router, prefix=BASE_PATH)
 app.include_router(free.router, prefix=BASE_PATH)
 app.include_router(link_email.router, prefix=BASE_PATH)
+app.include_router(ux.router, prefix=BASE_PATH)
 app.include_router(android_auth_router.router, prefix=BASE_PATH)
 app.include_router(android_email_router.router, prefix=BASE_PATH)
 app.include_router(android_payments_router.router, prefix=BASE_PATH)

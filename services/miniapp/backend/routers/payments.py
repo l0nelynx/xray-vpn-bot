@@ -3,6 +3,7 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy import select
 from payments import (
     InvoiceRequest,
     PaymentError,
@@ -27,6 +28,7 @@ from ..schemas.payments import (
     PayCreditsResponse,
     ProviderInfo,
     ProvidersResponse,
+    TransactionStatusResponse,
 )
 from ..tg_auth import TgUser, get_tg_user
 from ..android.auth_router import limiter
@@ -37,6 +39,16 @@ logger = logging.getLogger(__name__)
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _transaction_state(order_status: str, delivery_status: int) -> str:
+    if delivery_status == 1:
+        return "succeeded"
+    if order_status == "failed":
+        return "failed"
+    if order_status in {"confirmed", "pending"}:
+        return "processing"
+    return "awaiting_payment"
 
 
 async def _purchase_target_rw_id(
@@ -80,6 +92,37 @@ async def get_credit_balance(tg: TgUser = Depends(get_tg_user)):
             raise HTTPException(status.HTTP_404_NOT_FOUND, "user not registered")
         balance = await _repo_balance.get_balance(session, user.id)
         return {"balance": balance}
+
+
+@router.get(
+    "/transactions/{transaction_id}", response_model=TransactionStatusResponse
+)
+async def get_transaction_status(
+    transaction_id: str,
+    tg: TgUser = Depends(get_tg_user),
+) -> TransactionStatusResponse:
+    async with async_session() as session:
+        user = await _repo_users.get_user_by_tg_id(session, tg.tg_id)
+        if not user:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "user not registered")
+        transaction = (
+            await session.execute(
+                select(Transaction).where(
+                    Transaction.transaction_id == transaction_id,
+                    Transaction.user_id == user.id,
+                )
+            )
+        ).scalar_one_or_none()
+    if transaction is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, detail={"code": "transaction_not_found"}
+        )
+    delivery_status = int(transaction.delivery_status or 0)
+    return TransactionStatusResponse(
+        transaction_id=transaction.transaction_id,
+        state=_transaction_state(transaction.order_status, delivery_status),
+        delivery_status=delivery_status,
+    )
 
 
 @router.post("/pay-credits", response_model=PayCreditsResponse)

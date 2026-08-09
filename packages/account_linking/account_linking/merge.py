@@ -235,6 +235,10 @@ async def _apply_merge_db(
     survivor.bonus_credits = int(survivor.bonus_credits or 0) + int(
         loser.bonus_credits or 0
     )
+    survivor.miniapp_onboarding_version = max(
+        int(survivor.miniapp_onboarding_version or 0),
+        int(loser.miniapp_onboarding_version or 0),
+    )
 
     survivor.tg_id = tg_id
     # Preserve all Remnawave profiles. Primary preference is survivor's

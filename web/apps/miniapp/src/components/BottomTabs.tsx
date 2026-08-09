@@ -1,12 +1,11 @@
-import { Home, Laptop, MessageCircle, Settings } from "lucide-react";
+import { CircleHelp, Home, Link2 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router";
 import { useT } from "../i18n/LocaleContext";
 
 const TABS = [
   { path: "/", icon: <Home />, labelKey: "tabs.home" },
-  { path: "/devices", icon: <Laptop />, labelKey: "tabs.devices" },
-  { path: "/support", icon: <MessageCircle />, labelKey: "tabs.support" },
-  { path: "/settings", icon: <Settings />, labelKey: "tabs.account" },
+  { path: "/connect", icon: <Link2 />, labelKey: "tabs.connect" },
+  { path: "/support", icon: <CircleHelp />, labelKey: "tabs.help" },
 ] as const;
 
 export default function BottomTabs() {

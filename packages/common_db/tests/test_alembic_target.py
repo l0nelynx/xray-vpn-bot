@@ -49,6 +49,7 @@ CANONICAL_TABLES = frozenset({
     "giveaways",
     "menu_buttons",
     "menu_screens",
+    "miniapp_ux_events",
     "payment_integrations",
     "promo_redemptions",
     "promo_settings",

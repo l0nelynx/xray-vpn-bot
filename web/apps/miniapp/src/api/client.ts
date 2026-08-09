@@ -17,6 +17,7 @@ export interface UserInfo {
   language: string | null;
   has_email?: boolean;
   email?: string | null;
+  onboarding_version: number;
 }
 
 export interface SubscriptionInfo {
@@ -30,6 +31,7 @@ export interface SubscriptionInfo {
   traffic_used_gb: number;
   devices_count: number;
   subscription_url: string | null;
+  connection_state: "never_connected" | "connected" | "unknown";
 }
 
 export interface LinksInfo {
@@ -54,6 +56,42 @@ export type UiLanguage = "ru" | "en";
 export const me = {
   setLanguage: (language: UiLanguage) =>
     api.patch<UserInfo>("/me/language", { language }),
+  setOnboarding: (version: number, outcome: "completed" | "skipped") =>
+    api.patch<{ onboarding_version: number }>("/me/onboarding", { version, outcome }),
+};
+
+export type UxEventName =
+  | "email_link_started"
+  | "email_link_succeeded"
+  | "email_link_failed"
+  | "onboarding_started"
+  | "onboarding_completed"
+  | "onboarding_skipped"
+  | "invoice_created"
+  | "payment_awaiting"
+  | "payment_processing"
+  | "payment_succeeded"
+  | "payment_failed"
+  | "connect_started"
+  | "app_install_opened"
+  | "subscription_add_opened"
+  | "connection_verified"
+  | "connection_help_opened";
+
+export interface UxEvent {
+  name: UxEventName;
+  onboarding_version?: number;
+  subscription_id?: number;
+  transaction_id?: string;
+  session_id?: string;
+  platform?: string;
+  source?: string;
+  app?: string;
+  outcome?: string;
+}
+
+export const ux = {
+  track: (event: UxEvent) => api.post<void>("/ux/events", event),
 };
 
 export interface LinkEmailResponse {
@@ -163,6 +201,14 @@ export interface InvoiceResponse {
   payment_method: string;
 }
 
+export type PaymentState = "awaiting_payment" | "processing" | "succeeded" | "failed";
+
+export interface TransactionStatusResponse {
+  transaction_id: string;
+  state: PaymentState;
+  delivery_status: number;
+}
+
 export const payments = {
   listProviders: () => api.get<ProvidersResponse>("/payments/providers"),
   getBalance: () => api.get<{ balance: number }>("/payments/balance"),
@@ -170,6 +216,8 @@ export const payments = {
     api.post<InvoiceResponse>("/payments/invoice", body),
   payWithCredits: (body: { node_id: number; subscription_id?: number }) =>
     api.post<PayCreditsResponse>("/payments/pay-credits", body),
+  getTransaction: (transactionId: string) =>
+    api.get<TransactionStatusResponse>(`/payments/transactions/${encodeURIComponent(transactionId)}`),
 };
 
 export interface ManagedSubscription {
@@ -187,6 +235,7 @@ export interface ManagedSubscription {
   traffic_used_gb: number;
   devices_count: number;
   subscription_url: string | null;
+  connection_state: "never_connected" | "connected" | "unknown";
 }
 
 export const subscriptions = {

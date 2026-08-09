@@ -95,7 +95,7 @@ export default function SubscriptionsPage({ refresh }: { refresh: () => void }) 
               {unavailable && (
                 <Alert variant="warning"><AlertTitle>{t("subscriptions.unavailable")}</AlertTitle></Alert>
               )}
-              <div className="grid grid-cols-2 gap-2">
+              <div className="subscription-actions grid grid-cols-2 gap-2">
                 {!subscription.is_primary && (
                   <Button variant="outline" disabled={busy === subscription.id} onClick={() => void makePrimary(subscription.id)}>
                     {busy === subscription.id ? <Spinner /> : <Star />} {t("subscriptions.makePrimary")}

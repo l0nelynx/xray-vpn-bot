@@ -6,15 +6,17 @@ export function useMe() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchMe = async (silent: boolean) => {
+  const fetchMe = async (silent: boolean): Promise<MeResponse | null> => {
     if (!silent) setLoading(true);
     try {
       const me = await api.get<MeResponse>("/me");
       setData(me);
       setError(null);
+      return me;
     } catch (e: any) {
       setError(e?.detail || String(e));
       if (!silent) setData(null);
+      return null;
     } finally {
       if (!silent) setLoading(false);
     }

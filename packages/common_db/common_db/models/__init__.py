@@ -34,6 +34,7 @@ from .system import BotFeatureFlags, CacheVersion, TelmtFreeParams
 from .transactions import Transaction
 from .users import DisabledUser, SubscriptionTransfer, User, UserSubscription
 from .api_health import ApiAlertState, ApiErrorEvent, ApiMetricHour, ApiMetricMinute, ApiServiceStatus
+from .miniapp_ux import MiniappUxEvent
 
 __all__ = [
     # users
@@ -94,4 +95,5 @@ __all__ = [
     "ApiErrorEvent",
     "ApiServiceStatus",
     "ApiAlertState",
+    "MiniappUxEvent",
 ]

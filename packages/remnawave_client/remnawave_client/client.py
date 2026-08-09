@@ -129,6 +129,13 @@ def _normalize_user(user: UserResponseDto) -> dict:
             if value:
                 active_squads.append(str(value))
 
+    traffic = getattr(user, "user_traffic", None)
+    first_connected_at = (
+        getattr(user, "first_connected_at", None)
+        or getattr(user, "first_connected", None)
+        or getattr(traffic, "first_connected_at", None)
+    )
+
     return {
         "rw_id": _extract_rw_id(user),
         "expire": expire_ts,
@@ -148,6 +155,11 @@ def _normalize_user(user: UserResponseDto) -> dict:
         "username": getattr(user, "username", None),
         "description": getattr(user, "description", None),
         "tag": getattr(user, "tag", None),
+        "first_connected_at": (
+            first_connected_at.isoformat()
+            if hasattr(first_connected_at, "isoformat")
+            else first_connected_at
+        ),
     }
 
 

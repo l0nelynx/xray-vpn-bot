@@ -30,6 +30,7 @@ def test_unavailable_remnawave_link_is_preserved(monkeypatch):
     assert result["rw_id"] == 1031
     assert result["status"] == "unavailable"
     assert result["subscription_url"] is None
+    assert result["connection_state"] == "unknown"
 
 
 def test_live_remnawave_link_has_tariff_and_devices(monkeypatch):
@@ -55,3 +56,27 @@ def test_live_remnawave_link_has_tariff_and_devices(monkeypatch):
     assert result["tariff"] == "Premium"
     assert result["devices_count"] == 3
     assert result["status"] == "active"
+    assert result["connection_state"] == "never_connected"
+
+
+def test_live_subscription_reports_confirmed_connection(monkeypatch):
+    async def found(_rw_id):
+        return {
+            "active_squads": [],
+            "status": "active",
+            "expire": None,
+            "traffic_used": 0,
+            "data_limit": None,
+            "subscription_url": "https://example.test/sub",
+            "first_connected_at": "2026-03-01T10:00:00+00:00",
+        }
+
+    async def devices(_rw_id):
+        return 1
+
+    monkeypatch.setattr(managed, "get_user_from_id", found)
+    monkeypatch.setattr(managed, "get_user_devices_count_by_id", devices)
+
+    result = asyncio.run(managed.serialize_managed_subscription(_row()))
+
+    assert result["connection_state"] == "connected"

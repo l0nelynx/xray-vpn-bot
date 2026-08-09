@@ -440,14 +440,16 @@ from account_linking import merge_tg_into_email
 class TestMergeTgIntoEmail:
     def _seed(self, s):
         s.add(User(id=100, email="a@x.io", password_hash="ph", rw_id=1,
-                   email_verified_at="2026-05-19T00:00:00"))
+                   email_verified_at="2026-05-19T00:00:00",
+                   miniapp_onboarding_version=1))
         s.add(User(id=200, tg_id=55, username="bob",
-                   vless_uuid="t-uuid", rw_id=2, language="ru"))
+                   vless_uuid="t-uuid", rw_id=2, language="ru",
+                   miniapp_onboarding_version=3))
 
     def test_email_is_survivor_and_keeps_primary(
         self, session_factory, fake_remnawave,
     ):
-        from common_db.models import UserSubscription
+        from common_db.models import MiniappUxEvent, UserSubscription
 
         fake_remnawave.add_user(uuid="a-uuid", email="a@x.io",
                                 status="active", data_limit=None, rw_id=1)
@@ -468,6 +470,10 @@ class TestMergeTgIntoEmail:
                     is_primary=True, created_at="2026-02-01",
                     updated_at="2026-02-01",
                 ))
+                s.add(MiniappUxEvent(
+                    user_id=200, name="onboarding_started",
+                    onboarding_version=3, created_at="2026-02-01T00:00:00+00:00",
+                ))
                 await s.flush()
                 result = await merge_tg_into_email(
                     s, email_user_id=100, tg_user_id=200, tg_id=55,
@@ -479,9 +485,12 @@ class TestMergeTgIntoEmail:
                     "SELECT rw_id, is_primary FROM user_subscriptions "
                     "WHERE user_id = 100 ORDER BY rw_id"
                 ))).all()
-                return result, survivor, loser, rows
+                event_owner = (await s.execute(text(
+                    "SELECT user_id FROM miniapp_ux_events"
+                ))).scalar_one()
+                return result, survivor, loser, rows, event_owner
 
-        result, survivor, loser, rows = _asyncio.run(go())
+        result, survivor, loser, rows, event_owner = _asyncio.run(go())
         assert result["result"] == "merged_pro"
         assert result["survivor_id"] == 100
         assert result["loser_id"] == 200
@@ -489,6 +498,8 @@ class TestMergeTgIntoEmail:
         assert survivor.tg_id == 55
         assert survivor.email == "a@x.io"
         assert survivor.username == "bob"
+        assert survivor.miniapp_onboarding_version == 3
+        assert event_owner == 100
         assert len(rows) == 2
         primary = [r for r in rows if r.is_primary]
         assert len(primary) == 1

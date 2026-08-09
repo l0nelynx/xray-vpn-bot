@@ -16,6 +16,7 @@ import {
 } from "../api/client";
 import { useT } from "../i18n/LocaleContext";
 import { hapticImpact, openLink, showAlert } from "../tg/webapp";
+import { trackUx } from "../ux";
 
 interface ViewResult {
   chipLevels: MenuNode[][];
@@ -112,8 +113,11 @@ export default function BuyMenuPage() {
         description: selectedInvoice.text,
         subscription_id: subscriptionId,
       });
+      trackUx({ name: "invoice_created", transaction_id: res.transaction_id, subscription_id: subscriptionId, source: "fiat" });
       openLink(res.url);
-      navigate("/buy/success", { state: { paymentUrl: res.url } });
+      const query = new URLSearchParams({ transaction_id: res.transaction_id });
+      if (subscriptionId) query.set("subscription_id", String(subscriptionId));
+      navigate(`/buy/success?${query}`, { state: { paymentUrl: res.url } });
     } catch (e) {
       showAlert(t("buy.alert.invoiceError", { message: (e as Error).message }));
     } finally {
@@ -129,11 +133,14 @@ export default function BuyMenuPage() {
         node_id: selectedInvoice.id,
         subscription_id: subscriptionId,
       });
-      if (res.ok) {
+      if (res.ok && res.transaction_id) {
         setPromoState((prev) =>
           prev ? { ...prev, balance: res.balance_after ?? prev.balance } : prev
         );
-        navigate("/buy/success", { state: { paidWithCredits: true } });
+        trackUx({ name: "invoice_created", transaction_id: res.transaction_id, subscription_id: subscriptionId, source: "credits" });
+        const query = new URLSearchParams({ transaction_id: res.transaction_id });
+        if (subscriptionId) query.set("subscription_id", String(subscriptionId));
+        navigate(`/buy/success?${query}`, { state: { paidWithCredits: true } });
       }
     } catch (e) {
       showAlert(t("buy.alert.creditsError", { message: (e as Error).message }));

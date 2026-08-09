@@ -1,6 +1,6 @@
 import { ArrowLeft, Copy, Gift, Share2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { Alert, AlertTitle } from "@xray/ui/components/alert";
 import { Button } from "@xray/ui/components/button";
@@ -13,6 +13,7 @@ import { copyToClipboard, hapticImpact, shareToTelegram } from "../tg/webapp";
 
 export default function InvitePage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { t } = useT();
   const [state, setState] = useState<ReferralState | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -27,6 +28,10 @@ export default function InvitePage() {
   const inviteText = state
     ? t("invite.shareText", { creditGrant: formatPoints(state.credit_grant) })
     : "";
+  const requestedReturnTo = (location.state as { returnTo?: unknown } | null)?.returnTo;
+  const returnTo = typeof requestedReturnTo === "string" && requestedReturnTo.startsWith("/") && !requestedReturnTo.startsWith("//")
+    ? requestedReturnTo
+    : "/";
 
   const handleCopy = async () => {
     if (!state) return;
@@ -45,7 +50,7 @@ export default function InvitePage() {
   return (
     <div className="page">
       <div className="page-header">
-        <Button variant="ghost" size="icon" onClick={() => navigate("/settings")} aria-label={t("invite.backAria")}>
+        <Button variant="ghost" size="icon" onClick={() => navigate(returnTo, { replace: true })} aria-label={t("invite.backAria")}>
           <ArrowLeft />
         </Button>
         <div className="text-xl font-bold text-foreground">{t("invite.title")}</div>

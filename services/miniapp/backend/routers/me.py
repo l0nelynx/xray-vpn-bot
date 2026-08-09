@@ -18,7 +18,15 @@ from common_db.repo import users as _repo_users
 from common_db.repo import subscriptions as _repo_subscriptions
 from remnawave_client.api import get_user_devices_count_by_id, resolve_remnawave_user
 from ..android.managed_subscriptions_router import _serialize
-from ..schemas.me import LanguageUpdate, LinksInfo, MeResponse, SubscriptionInfo, UserInfo
+from ..schemas.me import (
+    LanguageUpdate,
+    LinksInfo,
+    MeResponse,
+    OnboardingState,
+    OnboardingUpdate,
+    SubscriptionInfo,
+    UserInfo,
+)
 from ..tg_auth import TgUser, get_tg_user
 
 router = APIRouter(prefix="/api", tags=["me"])
@@ -60,6 +68,11 @@ def _expire_iso(expire_ts: int | None) -> str | None:
     return datetime.fromtimestamp(expire_ts, tz=timezone.utc).isoformat()
 
 
+def _next_onboarding_version(current: int | None, requested: int) -> int:
+    """Onboarding progress is monotonic, including after account merges."""
+    return max(int(current or 0), requested)
+
+
 @router.get("/me", response_model=MeResponse)
 async def get_me(tg: TgUser = Depends(get_tg_user)) -> MeResponse:
     links = _links()
@@ -79,6 +92,7 @@ async def get_me(tg: TgUser = Depends(get_tg_user)) -> MeResponse:
         language=user.language,
         has_email=bool(user.email),
         email=user.email,
+        onboarding_version=int(user.miniapp_onboarding_version or 0),
     )
 
     if user.is_banned:
@@ -98,6 +112,7 @@ async def get_me(tg: TgUser = Depends(get_tg_user)) -> MeResponse:
             traffic_used_gb=managed.traffic_used_gb,
             devices_count=managed.devices_count,
             subscription_url=managed.subscription_url,
+            connection_state=managed.connection_state,
         )
         return MeResponse(
             registered=True,
@@ -144,6 +159,9 @@ async def get_me(tg: TgUser = Depends(get_tg_user)) -> MeResponse:
         traffic_used_gb=rem_user.get("traffic_used", 0),
         devices_count=devices_count,
         subscription_url=rem_user.get("subscription_url"),
+        connection_state=(
+            "connected" if rem_user.get("first_connected_at") else "never_connected"
+        ),
     )
 
     return MeResponse(
@@ -173,4 +191,23 @@ async def patch_language(
             language=user.language,
             has_email=bool(user.email),
             email=user.email,
+            onboarding_version=int(user.miniapp_onboarding_version or 0),
+        )
+
+
+@router.patch("/me/onboarding", response_model=OnboardingState)
+async def patch_onboarding(
+    body: OnboardingUpdate,
+    tg: TgUser = Depends(get_tg_user),
+) -> OnboardingState:
+    async with async_session() as session:
+        user = await _repo_users.get_user_by_tg_id(session, tg.tg_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        user.miniapp_onboarding_version = _next_onboarding_version(
+            user.miniapp_onboarding_version, body.version
+        )
+        await session.commit()
+        return OnboardingState(
+            onboarding_version=int(user.miniapp_onboarding_version or 0)
         )

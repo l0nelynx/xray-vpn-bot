@@ -19,6 +19,7 @@ class ManagedSubscription(BaseModel):
     traffic_used_gb: int = 0
     devices_count: int = 0
     subscription_url: str | None = None
+    connection_state: str = "unknown"
 
 
 class ManagedSubscriptionsResponse(BaseModel):

@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -44,3 +46,9 @@ class ProviderInfo(BaseModel):
 
 class ProvidersResponse(BaseModel):
     providers: list[ProviderInfo]
+
+
+class TransactionStatusResponse(BaseModel):
+    transaction_id: str
+    state: Literal["awaiting_payment", "processing", "succeeded", "failed"]
+    delivery_status: int

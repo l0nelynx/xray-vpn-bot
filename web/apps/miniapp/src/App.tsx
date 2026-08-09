@@ -2,7 +2,7 @@ import { AlertTriangle } from "lucide-react";
 import { Spinner } from "@xray/ui/components/spinner";
 import { Alert, AlertTitle } from "@xray/ui/components/alert";
 import { useCallback } from "react";
-import { Navigate, Route, Routes } from "react-router";
+import { Navigate, Route, Routes, useLocation } from "react-router";
 import { me as meApi, type MeResponse } from "./api/client";
 import BottomTabs from "./components/BottomTabs";
 import { useMe } from "./hooks/useMe";
@@ -24,6 +24,8 @@ import SupportCreatePage from "./pages/SupportCreatePage";
 import SupportPage from "./pages/SupportPage";
 import SupportTicketPage from "./pages/SupportTicketPage";
 import WelcomePage from "./pages/WelcomePage";
+import AccountLinkPage from "./pages/AccountLinkPage";
+import OnboardingPage, { ONBOARDING_VERSION } from "./pages/OnboardingPage";
 
 function AppRoutes({
   data,
@@ -35,10 +37,11 @@ function AppRoutes({
   data: MeResponse | null;
   loading: boolean;
   error: string | null;
-  reload: () => void;
-  refresh: () => void;
+  reload: () => Promise<MeResponse | null>;
+  refresh: () => Promise<MeResponse | null>;
 }) {
   const { t } = useT();
+  const { pathname } = useLocation();
 
   if (loading) {
     return (
@@ -80,6 +83,14 @@ function AppRoutes({
     return <WelcomePage links={data.links} />;
   }
 
+  const onboardingRequired = (data.user?.onboarding_version ?? 0) < ONBOARDING_VERSION;
+  const onboardingRoute = pathname === "/onboarding" || pathname === "/account/link";
+  if (onboardingRequired && !onboardingRoute) {
+    return <Navigate to="/onboarding" replace />;
+  }
+
+  const showTabs = pathname === "/" || pathname === "/connect" || pathname === "/support";
+
   return (
     <div className="app">
       <Routes>
@@ -87,6 +98,8 @@ function AppRoutes({
         <Route path="/buy" element={<BuyMenuPage />} />
         <Route path="/buy/success" element={<BuySuccessPage />} />
         <Route path="/connect" element={<ConnectPage />} />
+        <Route path="/onboarding" element={<OnboardingPage me={data} reload={reload} />} />
+        <Route path="/account/link" element={<AccountLinkPage hasEmail={Boolean(data.user?.has_email)} email={data.user?.email || null} reload={reload} />} />
         <Route path="/subscriptions" element={<SubscriptionsPage refresh={refresh} />} />
         <Route path="/devices" element={<DevicesPage />} />
         <Route path="/free/:mode" element={<FreeTrialPage />} />
@@ -100,7 +113,6 @@ function AppRoutes({
               username={data.user?.username || ""}
               hasEmail={Boolean(data.user?.has_email)}
               email={data.user?.email || null}
-              reload={reload}
             />
           }
         />
@@ -110,7 +122,7 @@ function AppRoutes({
         <Route path="/agreement" element={<AgreementPage links={data.links} />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-      <BottomTabs />
+      {showTabs && <BottomTabs />}
     </div>
   );
 }

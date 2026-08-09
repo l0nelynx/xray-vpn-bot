@@ -83,6 +83,8 @@ export function isDesktopTelegram(): boolean {
 export function getInitData(): string {
   // Browser mock mode: real Telegram initData is absent; MSW ignores the header.
   if (import.meta.env.VITE_MOCK_API === "1") {
+    const scenario = new URLSearchParams(window.location.search).get("mock");
+    if (scenario) return `mock-scenario:${scenario}`;
     return tg?.initData || "mock-telegram-init-data";
   }
   return tg?.initData || "";

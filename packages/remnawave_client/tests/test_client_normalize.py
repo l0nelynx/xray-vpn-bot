@@ -52,6 +52,29 @@ def test_normalize_user_includes_rw_id() -> None:
     assert normalized["tag"] == "PAID"
 
 
+def test_normalize_user_includes_first_connection_from_traffic() -> None:
+    import datetime
+
+    connected_at = datetime.datetime(2026, 3, 1, tzinfo=datetime.timezone.utc)
+    user = SimpleNamespace(
+        id=778,
+        expire_at=None,
+        subscription_url="https://example.com/sub",
+        status=SimpleNamespace(value="ACTIVE"),
+        traffic_limit_bytes=0,
+        used_traffic_bytes=0,
+        active_internal_squads=None,
+        email=None,
+        telegram_id=123,
+        username="user01_43",
+        description=None,
+        tag=None,
+        user_traffic=SimpleNamespace(first_connected_at=connected_at),
+    )
+
+    assert _normalize_user(user)["first_connected_at"] == connected_at.isoformat()
+
+
 def test_strict_lookup_preserves_transient_error() -> None:
     class Users:
         async def get_user_by_id(self, _rw_id):

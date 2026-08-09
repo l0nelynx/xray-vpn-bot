@@ -38,6 +38,12 @@ npm run dev:mock -w xray-vpn-miniapp
 
 - **Dashboard login:** any non-empty login/password (e.g. `admin` / `admin`).
 - **MiniApp:** opens in a normal browser; Telegram initData is stubbed.
+- **MiniApp UX scenarios:** append `?mock=<scenario>-<language>` to any route,
+  for example `?mock=onboarding-ru`. Available scenarios include `onboarding`,
+  `empty`, `single`, `multiple`, `connected`, `expired`, `connection-never`,
+  `connection-progress`, and `connection-unknown`. Payment
+  screens use transaction IDs `tx-awaiting`, `tx-processing`, `tx-failed`, and
+  `tx-credits-1`; any other mock transaction progresses through all states.
 - Handlers live in `web/apps/*/src/mocks/`. Unhandled API paths get a safe
   empty/`{ ok: true }` fallback so pages don't crash.
 - Production builds do **not** enable mocks unless you pass

@@ -5,8 +5,6 @@ import {
   Gift,
   Languages,
   Link2,
-  Lock,
-  Mail,
   Shield,
   Users,
   UserPlus,
@@ -23,22 +21,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@xray/ui/components/dialog";
-import {
-  ApiError,
-  PromoState,
-  linkEmail as linkEmailApi,
-  promo as promoApi,
-} from "../api/client";
+import { PromoState, promo as promoApi } from "../api/client";
 import { useLocale } from "../i18n/LocaleContext";
 import { translate, type Locale } from "../i18n";
 import { POINTS_ICON, formatPoints } from "../points";
 import { showAlert } from "../tg/webapp";
+import StackPageHeader from "../components/StackPageHeader";
 
 interface Props {
   username: string;
   hasEmail: boolean;
   email: string | null;
-  reload: () => void;
 }
 
 interface SettingsItemDef {
@@ -51,16 +44,7 @@ interface SettingsItemDef {
 
 const LANG_OPTIONS: Locale[] = ["ru", "en"];
 
-function errorCode(e: unknown): string | null {
-  if (!(e instanceof ApiError)) return null;
-  const detail = e.detail as unknown;
-  if (detail && typeof detail === "object" && "code" in detail) {
-    return String((detail as { code: unknown }).code);
-  }
-  return null;
-}
-
-export default function SettingsPage({ username, hasEmail, email, reload }: Props) {
+export default function SettingsPage({ username, hasEmail, email }: Props) {
   const navigate = useNavigate();
   const { t, locale, setLocale } = useLocale();
   const [promoState, setPromoState] = useState<PromoState | null>(null);
@@ -68,11 +52,6 @@ export default function SettingsPage({ username, hasEmail, email, reload }: Prop
   const [inputCode, setInputCode] = useState("");
   const [activating, setActivating] = useState(false);
   const [savingLang, setSavingLang] = useState(false);
-  const [linkEmail, setLinkEmail] = useState("");
-  const [linkPassword, setLinkPassword] = useState("");
-  const [linking, setLinking] = useState(false);
-  const [linkError, setLinkError] = useState<string | null>(null);
-  const [showSupportCta, setShowSupportCta] = useState(false);
 
   useEffect(() => {
     promoApi.getState().then(setPromoState).catch(() => {});
@@ -117,40 +96,12 @@ export default function SettingsPage({ username, hasEmail, email, reload }: Prop
     }
   };
 
-  const handleLinkEmail = async () => {
-    const email = linkEmail.trim().toLowerCase();
-    if (!email || !linkPassword || linking) return;
-    setLinking(true);
-    setLinkError(null);
-    setShowSupportCta(false);
-    try {
-      await linkEmailApi.link(email, linkPassword);
-      toast.success(t("settings.linkEmail.success"));
-      setLinkPassword("");
-      reload();
-    } catch (e: unknown) {
-      const code = errorCode(e);
-      if (code === "invalid_credentials") {
-        setLinkError(t("settings.linkEmail.errCredentials"));
-      } else if (code === "telegram_conflict") {
-        setLinkError(t("settings.linkEmail.errConflict"));
-        setShowSupportCta(true);
-      } else if (code === "already_has_email") {
-        setLinkError(t("settings.linkEmail.errHasEmail"));
-      } else {
-        setLinkError(t("settings.linkEmail.errGeneric"));
-      }
-    } finally {
-      setLinking(false);
-    }
-  };
-
   const referralItems: SettingsItemDef[] = [
     {
       key: "invite",
       icon: <UserPlus />,
       label: t("settings.inviteFriends"),
-      onClick: () => navigate("/invite"),
+      onClick: () => navigate("/invite", { state: { returnTo: "/settings" } }),
     },
     {
       key: "rules",
@@ -190,9 +141,7 @@ export default function SettingsPage({ username, hasEmail, email, reload }: Prop
 
   return (
     <div className="page">
-      <div className="text-[22px] font-bold text-foreground tracking-tight mb-5">
-        {t("settings.title")}
-      </div>
+      <StackPageHeader title={t("settings.title")} backTo="/" />
 
       {username && (
         <div className="flex items-center justify-between bg-card border border-border rounded-2xl px-4 py-3.5 mb-3">
@@ -209,67 +158,11 @@ export default function SettingsPage({ username, hasEmail, email, reload }: Prop
           </Badge>
         </div>
       ) : (
-        <div className="bg-card border border-border rounded-2xl px-4 py-4 mb-3">
-          <div className="flex items-start gap-3 mb-3">
-            <div className="settings-item__icon mt-0.5">
-              <Link2 />
-            </div>
-            <div>
-              <div className="text-sm font-semibold text-foreground">
-                {t("settings.linkEmail.title")}
-              </div>
-              <p className="text-muted-foreground text-xs m-0 mt-1 leading-relaxed">
-                {t("settings.linkEmail.body")}
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-col gap-2.5">
-            <div className="relative">
-              <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                type="email"
-                autoComplete="email"
-                placeholder={t("settings.linkEmail.email")}
-                value={linkEmail}
-                onChange={(e) => setLinkEmail(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-            <div className="relative">
-              <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                type="password"
-                autoComplete="current-password"
-                placeholder={t("settings.linkEmail.password")}
-                value={linkPassword}
-                onChange={(e) => setLinkPassword(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleLinkEmail()}
-                className="pl-9"
-              />
-            </div>
-            {linkError && (
-              <p className="text-destructive text-xs m-0 leading-relaxed">{linkError}</p>
-            )}
-            {showSupportCta && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full"
-                onClick={() => navigate("/support/new")}
-              >
-                {t("settings.linkEmail.contactSupport")}
-              </Button>
-            )}
-            <Button
-              size="lg"
-              className="w-full"
-              disabled={linking || !linkEmail.trim() || !linkPassword}
-              onClick={handleLinkEmail}
-            >
-              {linking ? t("settings.linkEmail.submitting") : t("settings.linkEmail.submit")}
-            </Button>
-          </div>
-        </div>
+        <button className="email-recovery-card mb-3" onClick={() => navigate("/account/link?returnTo=%2Fsettings")}>
+          <Link2 />
+          <span><strong>{t("settings.linkEmail.title")}</strong><small>{t("settings.linkEmail.body")}</small></span>
+          <ChevronRight />
+        </button>
       )}
 
       {(promoState?.balance ?? 0) > 0 && (
@@ -287,7 +180,7 @@ export default function SettingsPage({ username, hasEmail, email, reload }: Prop
             <Languages />
           </div>
           <span className="settings-item__text">{t("settings.language")}</span>
-          <div className="flex gap-1.5 ml-auto">
+          <div className="settings-language-options flex gap-1.5 ml-auto">
             {LANG_OPTIONS.map((code) => {
               const active = locale === code;
               return (

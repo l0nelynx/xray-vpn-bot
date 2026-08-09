@@ -60,6 +60,7 @@ async def serialize_managed_subscription(
             "traffic_used_gb": 0,
             "devices_count": 0,
             "subscription_url": None,
+            "connection_state": "unknown",
         }
 
     expire = rem_user.get("expire")
@@ -77,6 +78,9 @@ async def serialize_managed_subscription(
         "traffic_used_gb": rem_user.get("traffic_used", 0),
         "devices_count": devices,
         "subscription_url": rem_user.get("subscription_url"),
+        "connection_state": (
+            "connected" if rem_user.get("first_connected_at") else "never_connected"
+        ),
     }
 
 

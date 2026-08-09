@@ -8,6 +8,7 @@ import { Spinner } from "@xray/ui/components/spinner";
 import { free } from "../api/client";
 import { useT } from "../i18n/LocaleContext";
 import { hapticImpact, openLink, openTelegramLink } from "../tg/webapp";
+import StackPageHeader from "../components/StackPageHeader";
 
 const POLL_INTERVAL_MS = 3000;
 const POLL_TIMEOUT_MS = 15 * 1000;
@@ -186,7 +187,7 @@ export default function FreeTrialPage() {
     if (mode === "telemt") {
       openProxyLink(claimed.url);
     } else {
-      openLink(claimed.url);
+      navigate("/connect?source=trial", { replace: true });
     }
   };
 
@@ -201,6 +202,7 @@ export default function FreeTrialPage() {
   if (claimed) {
     return (
       <div className="page">
+        <StackPageHeader title={title} backTo="/" />
         <Card className="text-center">
           <CardContent className="p-6">
             <CheckCircle2 className="w-14 h-14 text-emerald-500 mx-auto" />
@@ -228,7 +230,7 @@ export default function FreeTrialPage() {
 
   return (
     <div className="page">
-      <div className="text-xl font-bold text-foreground mb-4">{title}</div>
+      <StackPageHeader title={title} backTo="/" />
 
       <Card>
         <CardContent className="p-5 flex flex-col gap-4">
@@ -272,9 +274,6 @@ export default function FreeTrialPage() {
             <Button size="lg" variant="outline" className="w-full" onClick={onManualCheck} disabled={waiting || checking}>
               {checking ? <Spinner /> : null}
               {t("freeTrial.check")}
-            </Button>
-            <Button size="lg" variant="outline" className="w-full" onClick={() => navigate("/", { replace: true })}>
-              {t("freeTrial.back")}
             </Button>
           </div>
         </CardContent>
