@@ -41,6 +41,36 @@ def test_branding_logo_validation_and_icon_rendering() -> None:
         assert any(pixel[:3] == (255, 255, 255) for pixel in image.get_flattened_data())
 
 
+def test_branding_allows_safe_svg_styles_and_local_clip_paths() -> None:
+    svg = b"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+    <defs>
+      <style>
+        .cls-1 { fill: #ffed00; stroke-width: 0 }
+        .cls-2 { clip-path: url(#clippath) }
+      </style>
+      <clipPath id="clippath"><rect width="100" height="100"/></clipPath>
+    </defs>
+    <g class="cls-2"><path class="cls-1" d="M0 0h100v100H0z"/></g>
+    </svg>"""
+
+    assert branding._validate_logo(svg, "image/svg+xml") == "image/svg+xml"
+
+
+@pytest.mark.parametrize(
+    "css",
+    [
+        "@import 'https://evil.example/style.css';",
+        ".x { fill: url(https://evil.example/image.svg) }",
+        ".x { behavior: url(#payload) }",
+        r".x { background: u\72l(https://evil.example/image.png) }",
+    ],
+)
+def test_branding_rejects_active_or_external_svg_css(css: str) -> None:
+    svg = f'<svg xmlns="http://www.w3.org/2000/svg"><style>{css}</style></svg>'.encode()
+    with pytest.raises(ValueError):
+        branding._validate_svg(svg)
+
+
 def test_branding_blocks_private_network_targets() -> None:
     assert branding._is_public_ip("8.8.8.8") is True
     assert branding._is_public_ip("127.0.0.1") is False

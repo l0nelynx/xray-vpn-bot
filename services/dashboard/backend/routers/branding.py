@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import ipaddress
+import re
 import socket
 from datetime import datetime, timezone
 from functools import lru_cache
@@ -95,6 +96,29 @@ async def _validate_public_url(url: str) -> None:
         raise ValueError("logo URL must resolve only to public addresses")
 
 
+_CSS_URL_RE = re.compile(r"url\s*\(\s*(['\"]?)(.*?)\1\s*\)", re.IGNORECASE | re.DOTALL)
+
+
+def _validate_svg_css(css: str) -> None:
+    """Allow presentation CSS while rejecting active or external resources."""
+    clean = re.sub(r"/\*.*?\*/", "", css, flags=re.DOTALL)
+    lowered = clean.casefold()
+    if "\\" in clean or re.search(
+        r"@import\b|expression\s*\(|(?:java|vb)script\s*:|-moz-binding\s*:|behavior\s*:",
+        lowered,
+    ):
+        raise ValueError("SVG CSS contains unsupported active content")
+
+    url_starts = list(re.finditer(r"url\s*\(", lowered))
+    urls = list(_CSS_URL_RE.finditer(clean))
+    if len(url_starts) != len(urls):
+        raise ValueError("SVG CSS contains an invalid URL")
+    for match in urls:
+        target = match.group(2).strip()
+        if not re.fullmatch(r"#[A-Za-z_][A-Za-z0-9_.:-]*", target):
+            raise ValueError("SVG external resources are not allowed")
+
+
 def _validate_svg(content: bytes) -> None:
     lowered = content.lower()
     if b"<!doctype" in lowered or b"<!entity" in lowered:
@@ -105,19 +129,26 @@ def _validate_svg(content: bytes) -> None:
         raise ValueError("invalid SVG") from exc
     if root.tag.rsplit("}", 1)[-1].lower() != "svg":
         raise ValueError("invalid SVG root element")
-    forbidden_tags = {"script", "foreignobject", "style"}
+    forbidden_tags = {"script", "foreignobject"}
     for node in root.iter():
-        if node.tag.rsplit("}", 1)[-1].lower() in forbidden_tags:
+        tag = node.tag.rsplit("}", 1)[-1].lower()
+        if tag in forbidden_tags:
             raise ValueError("SVG contains unsupported active content")
+        if tag == "style":
+            if len(node):
+                raise ValueError("SVG style contains unsupported markup")
+            _validate_svg_css(node.text or "")
         for raw_name, raw_value in node.attrib.items():
             name = raw_name.rsplit("}", 1)[-1].lower()
             value = raw_value.strip().lower()
             if name.startswith("on") or "javascript:" in value:
                 raise ValueError("SVG contains unsupported active content")
+            if name == "style":
+                _validate_svg_css(raw_value)
             if name in {"href", "src"} and value and not value.startswith(("#", "data:image/")):
                 raise ValueError("SVG external resources are not allowed")
-            if "url(" in value and "url(#" not in value:
-                raise ValueError("SVG external resources are not allowed")
+            if "url" in value and name != "style":
+                _validate_svg_css(f"value: {raw_value}")
 
 
 def _validate_logo(content: bytes, declared_type: str) -> str:
