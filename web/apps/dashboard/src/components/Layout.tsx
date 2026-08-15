@@ -195,7 +195,7 @@ export default function Layout() {
   const sidebarContent = (
     <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
       <div className="flex h-16 flex-shrink-0 items-center gap-3 border-b border-sidebar-border px-4">
-        <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg bg-primary text-xs font-semibold text-primary-foreground">
+        <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-background">
           <img src={branding.logo_url} alt="" className="h-full w-full object-contain" />
         </div>
         {showLabels && (

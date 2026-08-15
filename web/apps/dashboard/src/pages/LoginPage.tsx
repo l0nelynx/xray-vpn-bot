@@ -44,7 +44,7 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-background p-6">
       <Card className="w-full max-w-sm shadow-sm">
         <CardHeader className="space-y-1 text-center">
-          <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl bg-primary text-sm font-semibold text-primary-foreground">
+          <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl border border-border bg-background">
             <img src={branding.logo_url} alt="" className="h-full w-full object-contain" />
           </div>
           <CardTitle className="text-xl">{branding.branding_name}</CardTitle>
