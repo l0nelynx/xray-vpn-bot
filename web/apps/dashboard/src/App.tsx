@@ -52,7 +52,8 @@ export default function App() {
         <Route path="promocodes" element={<PromocodesPage />} />
         <Route path="giveaways" element={<GiveawaysPage />} />
         <Route path="webapp/tariffs" element={<WebAppTariffsPage />} />
-        <Route path="webapp/settings" element={<WebAppSettingsPage />} />
+        <Route path="settings" element={<WebAppSettingsPage />} />
+        <Route path="webapp/settings" element={<Navigate to="/settings" replace />} />
         <Route path="tg-admin" element={<TgAdminPage />} />
         <Route path="crm" element={<CrmPage />} />
         <Route path="push" element={<PushPage />} />

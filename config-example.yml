@@ -10,7 +10,8 @@
 # ║  CORE BOT IDENTITY                                                          ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
 
-branding_name: "YourVPN"                           # preferred: Dashboard → Settings → Runtime
+branding_name: "YourVPN"                           # preferred: Dashboard → Settings → Branding
+branding_logo_url: ""                              # preferred: Dashboard → Settings → Branding (PNG/SVG URL)
 token: "yourbottoken"                              # [REQUIRED] Main user-facing Telegram bot token (bootstrap — stays in YAML)
 bot_url: "https://t.me/YourBot"                   # [REQUIRED] Direct t.me link to your bot (used in notifications)
 miniapp_url: "https://example.com/bot/miniapp"    # [REQUIRED] Direct HTTPS URL of the MiniApp web page — used inside WebApp button (must be HTTPS, reachable by Telegram)

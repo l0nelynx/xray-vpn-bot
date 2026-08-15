@@ -27,6 +27,13 @@ interface RuntimeResponse {
   sources: Record<string, string>;
 }
 
+interface BrandingSettings {
+  branding_name: string;
+  branding_logo_url: string;
+  has_custom_logo: boolean;
+  updated_at: string | null;
+}
+
 interface ProviderFieldMeta {
   name: string;
   secret: boolean;
@@ -43,7 +50,6 @@ interface ProviderState {
 }
 
 const RUNTIME_CORE: Record<string, string> = {
-  branding_name: "Brand name",
   news_id: "News channel ID",
   news_url: "News URL",
   support_bot_id: "Support contact",
@@ -289,6 +295,9 @@ function IntegrationCards({
 }
 
 export default function WebAppSettingsPage() {
+  const [branding, setBranding] = useState<BrandingSettings | null>(null);
+  const [brandingName, setBrandingName] = useState("");
+  const [brandingLogoUrl, setBrandingLogoUrl] = useState("");
   const [flags, setFlags] = useState<FeatureFlags | null>(null);
   const [runtime, setRuntime] = useState<RuntimeResponse | null>(null);
   const [payments, setPayments] = useState<ProviderState[] | null>(null);
@@ -301,6 +310,14 @@ export default function WebAppSettingsPage() {
   const [integrationForms, setIntegrationForms] = useState<Record<string, ProviderForm>>({});
 
   useEffect(() => {
+    api
+      .get<BrandingSettings>("/settings/branding")
+      .then((data) => {
+        setBranding(data);
+        setBrandingName(data.branding_name);
+        setBrandingLogoUrl(data.branding_logo_url);
+      })
+      .catch(() => toast.error("Failed to load branding"));
     api
       .get<FeatureFlags>("/settings/features")
       .then(setFlags)
@@ -350,6 +367,30 @@ export default function WebAppSettingsPage() {
       })
       .catch(() => toast.error("Failed to load service integrations"));
   }, []);
+
+  async function saveBranding() {
+    const name = brandingName.trim();
+    if (!name) {
+      toast.error("Brand name is required");
+      return;
+    }
+    setSaving(true);
+    try {
+      const updated = await api.put<BrandingSettings>("/settings/branding", {
+        branding_name: name,
+        branding_logo_url: brandingLogoUrl.trim() || null,
+      });
+      setBranding(updated);
+      setBrandingName(updated.branding_name);
+      setBrandingLogoUrl(updated.branding_logo_url);
+      window.dispatchEvent(new Event("branding-updated"));
+      toast.success("Branding saved");
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.detail : "Failed to save branding");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function handleToggle(value: boolean) {
     if (!flags) return;
@@ -479,8 +520,9 @@ export default function WebAppSettingsPage() {
         remains the fallback.
       </p>
 
-      <Tabs defaultValue="runtime">
+      <Tabs defaultValue="branding">
         <TabsList className="mb-4 flex h-auto flex-wrap gap-1">
+          <TabsTrigger value="branding">Branding</TabsTrigger>
           <TabsTrigger value="runtime">Runtime</TabsTrigger>
           <TabsTrigger value="remnawave">Remnawave</TabsTrigger>
           {INTEGRATION_TABS.map((t) => (
@@ -491,6 +533,68 @@ export default function WebAppSettingsPage() {
           <TabsTrigger value="payments">Payments</TabsTrigger>
           <TabsTrigger value="flags">Feature flags</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="branding">
+          {!branding ? (
+            <Spinner className="h-6 w-6" />
+          ) : (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm">Dashboard identity</CardTitle>
+              </CardHeader>
+              <CardContent className="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
+                <div className="flex min-h-52 items-center justify-center rounded-2xl border border-border bg-muted/25 p-8">
+                  <div className="text-center">
+                    <div className="mx-auto flex h-24 w-24 items-center justify-center overflow-hidden rounded-3xl border border-border bg-background shadow-sm">
+                      <img
+                        src={
+                          brandingLogoUrl.trim() && brandingLogoUrl.trim() !== branding.branding_logo_url
+                            ? brandingLogoUrl.trim()
+                            : `/bot/dashboard/api/branding/logo?v=${encodeURIComponent(branding.updated_at || "default")}`
+                        }
+                        alt="Brand logo preview"
+                        className="h-full w-full object-contain"
+                      />
+                    </div>
+                    <p className="mt-4 break-words text-base font-semibold">{brandingName || "VPN Admin"}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">Logo preview</p>
+                  </div>
+                </div>
+                <div className="space-y-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="branding-name">Brand name</Label>
+                    <Input
+                      id="branding-name"
+                      maxLength={80}
+                      value={brandingName}
+                      onChange={(event) => setBrandingName(event.target.value)}
+                      placeholder="VPN Admin"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Used in Dashboard, Login, winner cards and supported client surfaces.
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="branding-logo-url">PNG or SVG logo URL</Label>
+                    <Input
+                      id="branding-logo-url"
+                      type="url"
+                      value={brandingLogoUrl}
+                      onChange={(event) => setBrandingLogoUrl(event.target.value)}
+                      placeholder="https://cdn.example.com/logo.svg"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      The image is validated and saved as a snapshot. Maximum size: 5 MB.
+                    </p>
+                  </div>
+                  <Button onClick={saveBranding} disabled={saving}>
+                    {saving ? "Saving…" : "Save branding"}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
 
         <TabsContent value="runtime">
           {!runtime ? (

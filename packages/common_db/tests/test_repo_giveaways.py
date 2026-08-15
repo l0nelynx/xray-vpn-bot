@@ -215,7 +215,150 @@ def test_draw_random_winner() -> None:
                 await session.commit()
                 assert len(winners) == 1
                 assert winners[0]["tg_id"] in (1001, 1002)
+                assert winners[0]["ticket_number"] in (1, 2)
                 assert g.status == "drawn"
+        finally:
+            await engine.dispose()
+
+    _run(go())
+
+
+def test_redraw_replaces_and_excludes_previous_winner() -> None:
+    async def go() -> None:
+        engine = _make_engine()
+        try:
+            await _setup(engine)
+            Session = async_sessionmaker(engine, expire_on_commit=False)
+            async with Session() as session:
+                g = await repo_giveaways.create_giveaway(
+                    session,
+                    title="Redraw",
+                    channel_text="",
+                    config={"chance_mode": "static", "winner_selection": "random"},
+                    winner_count=1,
+                    starts_at=None,
+                    ends_at=None,
+                )
+                await repo_giveaways.activate_giveaway(session, g)
+                for tg_id in (1001, 1002, 1003):
+                    await repo_giveaways.join_participant(session, g.id, tg_id)
+                await session.commit()
+
+                first = await repo_giveaways.draw_winners(session, g)
+                await session.commit()
+                second = await repo_giveaways.redraw_winners(session, g)
+                await session.commit()
+
+                assert len(second) == 1
+                assert second[0]["tg_id"] != first[0]["tg_id"]
+                assert second[0]["ticket_number"] in (1, 2, 3)
+                persisted = await repo_giveaways.get_winners(session, g.id)
+                assert persisted == second
+        finally:
+            await engine.dispose()
+
+    _run(go())
+
+
+def test_redraw_keeps_old_result_when_pool_is_too_small() -> None:
+    async def go() -> None:
+        engine = _make_engine()
+        try:
+            await _setup(engine)
+            Session = async_sessionmaker(engine, expire_on_commit=False)
+            async with Session() as session:
+                g = await repo_giveaways.create_giveaway(
+                    session,
+                    title="No replacements",
+                    channel_text="",
+                    config={"chance_mode": "static", "winner_selection": "random"},
+                    winner_count=2,
+                    starts_at=None,
+                    ends_at=None,
+                )
+                await repo_giveaways.activate_giveaway(session, g)
+                await repo_giveaways.join_participant(session, g.id, 1001)
+                await repo_giveaways.join_participant(session, g.id, 1002)
+                await session.commit()
+                giveaway_id = g.id
+
+                original = await repo_giveaways.draw_winners(session, g)
+                await session.commit()
+                try:
+                    await repo_giveaways.redraw_winners(session, g)
+                    raise AssertionError("expected ValueError")
+                except ValueError as exc:
+                    assert "not enough eligible participants" in str(exc)
+                    await session.rollback()
+
+                assert await repo_giveaways.get_winners(session, giveaway_id) == original
+        finally:
+            await engine.dispose()
+
+    _run(go())
+
+
+def test_most_tickets_uses_participants_first_ticket_number() -> None:
+    async def go() -> None:
+        engine = _make_engine()
+        try:
+            await _setup(engine)
+            Session = async_sessionmaker(engine, expire_on_commit=False)
+            async with Session() as session:
+                g = await repo_giveaways.create_giveaway(
+                    session,
+                    title="Most tickets",
+                    channel_text="",
+                    config={"chance_mode": "dynamic", "winner_selection": "most_tickets"},
+                    winner_count=1,
+                    starts_at=None,
+                    ends_at=None,
+                )
+                await repo_giveaways.activate_giveaway(session, g)
+                await repo_giveaways.join_participant(session, g.id, 1001)
+                await repo_giveaways.join_participant(session, g.id, 1002)
+                await repo_giveaways._grant_ticket(
+                    session,
+                    giveaway_id=g.id,
+                    participant_tg_id=1002,
+                    source="test_bonus",
+                    source_tg_id=1,
+                )
+                await session.commit()
+
+                winners = await repo_giveaways.draw_winners(session, g)
+                await session.commit()
+
+                assert winners[0]["tg_id"] == 1002
+                assert winners[0]["tickets"] == 2
+                assert winners[0]["ticket_number"] == 2
+        finally:
+            await engine.dispose()
+
+    _run(go())
+
+
+def test_redraw_rejects_non_drawn_status() -> None:
+    async def go() -> None:
+        engine = _make_engine()
+        try:
+            await _setup(engine)
+            Session = async_sessionmaker(engine, expire_on_commit=False)
+            async with Session() as session:
+                g = await repo_giveaways.create_giveaway(
+                    session,
+                    title="Draft",
+                    channel_text="",
+                    config={"chance_mode": "static"},
+                    winner_count=1,
+                    starts_at=None,
+                    ends_at=None,
+                )
+                try:
+                    await repo_giveaways.redraw_winners(session, g)
+                    raise AssertionError("expected ValueError")
+                except ValueError as exc:
+                    assert "only drawn giveaways" in str(exc)
         finally:
             await engine.dispose()
 

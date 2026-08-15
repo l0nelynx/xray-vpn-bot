@@ -38,6 +38,7 @@ BOOTSTRAP_KEYS: frozenset[str] = frozenset({
 # Preferred: Dashboard Runtime Settings. YAML remains fallback until set in DB.
 RUNTIME_KEYS: frozenset[str] = frozenset({
     "branding_name",
+    "branding_logo_url",
     "news_id",
     "news_url",
     "support_bot_id",

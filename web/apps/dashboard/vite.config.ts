@@ -11,42 +11,7 @@ export default defineConfig({
     VitePWA({
       registerType: "autoUpdate",
       includeAssets: ["favicon.svg"],
-      manifest: {
-        name: "XRAY Dashboard",
-        short_name: "Dashboard",
-        description: "VPN Admin Dashboard",
-        start_url: "/bot/dashboard/",
-        scope: "/bot/dashboard/",
-        display: "standalone",
-        background_color: "#0a0a0a",
-        theme_color: "#0a0a0a",
-        icons: [
-          {
-            src: "pwa-192x192.png",
-            sizes: "192x192",
-            type: "image/png",
-            purpose: "any",
-          },
-          {
-            src: "pwa-512x512.png",
-            sizes: "512x512",
-            type: "image/png",
-            purpose: "any",
-          },
-          {
-            src: "pwa-maskable-192x192.png",
-            sizes: "192x192",
-            type: "image/png",
-            purpose: "maskable",
-          },
-          {
-            src: "pwa-maskable-512x512.png",
-            sizes: "512x512",
-            type: "image/png",
-            purpose: "maskable",
-          },
-        ],
-      },
+      manifest: false,
       workbox: {
         navigateFallback: "/bot/dashboard/index.html",
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,

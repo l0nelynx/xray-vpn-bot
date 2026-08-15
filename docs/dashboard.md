@@ -25,14 +25,15 @@ After login you land on the **Overview** page with period KPIs and charts.
 
 ## Navigation structure
 
-The sidebar is grouped into four sections:
+The sidebar is grouped into five sections:
 
 | Section | Pages | Visible when |
 |---------|-------|--------------|
 | **Overview** | Dashboard, Users, Transactions, Statistics, Promocodes, CRM, Support, TG Admin | Always |
 | **Telegram Bot** | Menus | Always |
 | **Services** | Telemt, Store | Always (503 if not configured) |
-| **WebApp** | Tariff Constructor, Settings | Always |
+| **WebApp** | Tariff Constructor | Always |
+| **System** | Settings | Always |
 
 The feature flag changes only purchase runtime; it never hides the menu editor.
 
@@ -259,15 +260,16 @@ Changes are live immediately — clients read `webapp_menu_nodes` on each reques
 
 ---
 
-## WebApp → Settings
+## Settings
 
-**Route:** `/webapp/settings`
+**Route:** `/settings` (`/webapp/settings` redirects here for compatibility)
 
 Tabs:
 
 | Tab | Effect |
 |-----|--------|
-| **Runtime** | Maintenance mode; branding / links / free plan / log chat IDs. Saved values override `config.yml` without restart. |
+| **Branding** | Dashboard/MiniApp name and a validated PNG/SVG logo snapshot. Updates Dashboard, Login, favicon, PWA icons and giveaway exports. |
+| **Runtime** | Maintenance mode; links / free plan / log chat IDs. Saved values override `config.yml` without restart. |
 | **Remnawave** | Squad UUIDs + subscription base URL (panel URL/token stay in YAML). |
 | **Email / Android / Store / Web / Push·Play** | Non-secret scalars + encrypted credentials (`app_integrations`). |
 | **Payments** | Enable gateways and edit credentials (encrypted in DB). After Save, Dashboard is the source of truth for that provider. |
@@ -327,7 +329,8 @@ All endpoints require `Authorization: Bearer <JWT>` unless noted.
 | Store | `/api/store` | proxy to Store API |
 | Support | `/api/support` | tickets, reply, attachments |
 | WebApp menu | `/api/webapp-menu` | tree CRUD, providers |
-| Settings | `/api/settings` | feature flags, runtime overlay, payment integrations |
+| Settings | `/api/settings` | feature flags, runtime overlay, branding, payment integrations |
+| Public branding | `/api/branding` | safe metadata, logo/icons and dynamic PWA manifest (no auth) |
 | TG Admin | `/api/tg-admin` | broadcast, channel-post, clean tools |
 
 Health check (unauthenticated): `GET /health`.

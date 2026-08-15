@@ -39,6 +39,7 @@ CANONICAL_TABLES = frozenset({
     "crm_webhook_deliveries",
     "crm_webhook_rules",
     "credit_ledger",
+    "dashboard_branding_assets",
     "disabled_users",
     "email_verifications",
     "google_play_purchases",

@@ -3,6 +3,49 @@ import type { ApiAlertSettings, ManagedSubscription } from "../api/types";
 
 const API = "/bot/dashboard/api";
 
+let mockBranding = {
+  branding_name: "MockVPN",
+  branding_logo_url: "",
+  has_custom_logo: false,
+  updated_at: "2026-08-15T10:00:00Z",
+};
+
+const mockGiveaway = {
+  id: 42,
+  title: "Summer Connection Giveaway",
+  channel_text: "",
+  status: "drawn",
+  config: {
+    distribution: ["bot"],
+    entry_condition: "click_only",
+    ticket_sources: [],
+    chance_mode: "static",
+    winner_selection: "random",
+  },
+  winner_count: 9,
+  starts_at: "2026-08-01T10:00:00",
+  ends_at: "2026-08-14T20:00:00",
+  drawn_at: "2026-08-15T09:30:00",
+  created_at: "2026-08-01T08:00:00",
+  participants: 24,
+  tickets: 47,
+};
+
+const mockWinners = Array.from({ length: 9 }, (_, index) => ({
+  rank: index + 1,
+  tg_id: 7123456700 + index,
+  username: index === 4 ? null : `winner_${index + 1}_telegram`,
+  tickets: index + 2,
+  ticket_number: 101 + index * 3,
+}));
+
+const mockParticipants = Array.from({ length: 18 }, (_, index) => ({
+  tg_id: 7123456700 + index,
+  username: `participant_${index + 1}`,
+  joined_at: "2026-08-02T12:00:00",
+  ticket_count: index + 1,
+}));
+
 function paginate<T>(items: T[], url: URL) {
   const page = Number(url.searchParams.get("page") || 1);
   const perPage = Number(url.searchParams.get("per_page") || 20);
@@ -439,6 +482,31 @@ export const handlers: HttpHandler[] = [
     HttpResponse.json({ legacy_bot_constructor: false }),
   ),
   http.put(`${API}/settings/features`, () => HttpResponse.json({ ok: true })),
+  http.get(`${API}/branding`, () =>
+    HttpResponse.json({
+      branding_name: mockBranding.branding_name,
+      logo_url: `${API}/branding/logo`,
+      favicon_url: `${API}/branding/icon/64.png`,
+      manifest_url: `${API}/branding/manifest.webmanifest`,
+    }),
+  ),
+  http.get(`${API}/branding/logo`, () =>
+    HttpResponse.text(
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="24" fill="#7c6cff"/><path d="M25 32h14l11 32 11-32h14L57 76H43z" fill="white"/></svg>',
+      { headers: { "Content-Type": "image/svg+xml" } },
+    ),
+  ),
+  http.get(`${API}/settings/branding`, () => HttpResponse.json(mockBranding)),
+  http.put(`${API}/settings/branding`, async ({ request }) => {
+    const body = (await request.json()) as { branding_name: string; branding_logo_url: string | null };
+    mockBranding = {
+      branding_name: body.branding_name,
+      branding_logo_url: body.branding_logo_url || "",
+      has_custom_logo: !!body.branding_logo_url,
+      updated_at: new Date().toISOString(),
+    };
+    return HttpResponse.json(mockBranding);
+  }),
   http.get(`${API}/settings/runtime`, () =>
     HttpResponse.json({
       maintenance: { enabled: false, message: "" },
@@ -583,7 +651,22 @@ export const handlers: HttpHandler[] = [
   http.delete(`${API}/promos/:code`, () => new HttpResponse(null, { status: 204 })),
 
   http.get(`${API}/giveaways`, ({ request }) =>
-    HttpResponse.json(paginate([], new URL(request.url))),
+    HttpResponse.json(paginate([mockGiveaway], new URL(request.url))),
+  ),
+  http.get(`${API}/giveaways/:id`, () => HttpResponse.json(mockGiveaway)),
+  http.get(`${API}/giveaways/:id/participants`, () =>
+    HttpResponse.json({ items: mockParticipants, total: mockParticipants.length, page: 1, per_page: 100 }),
+  ),
+  http.get(`${API}/giveaways/:id/winners`, () => HttpResponse.json({ winners: mockWinners })),
+  http.post(`${API}/giveaways/:id/redraw`, () =>
+    HttpResponse.json({
+      winners: mockWinners.map((winner, index) => ({
+        ...winner,
+        tg_id: 7123456800 + index,
+        username: `replacement_${index + 1}`,
+        ticket_number: 201 + index,
+      })),
+    }),
   ),
   http.get(`${API}/store/order-params`, () => HttpResponse.json([])),
 

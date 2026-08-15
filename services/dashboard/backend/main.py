@@ -36,6 +36,7 @@ from .routers import (
     push,
     giveaways,
     api_health,
+    branding,
 )
 
 BASE_PATH = "/bot/dashboard"
@@ -137,6 +138,7 @@ app.include_router(crm.router, prefix=BASE_PATH)
 app.include_router(push.router, prefix=BASE_PATH)
 app.include_router(giveaways.router, prefix=BASE_PATH)
 app.include_router(api_health.router, prefix=BASE_PATH)
+app.include_router(branding.router, prefix=BASE_PATH)
 
 
 @app.get("/health")

@@ -35,7 +35,7 @@ from .menus import MenuButton, MenuScreen, WebAppMenuNode
 from .promo_redemptions import PromoRedemption
 from .promos import Promo, PromoSettings
 from .support import SupportAttachment, SupportMessage, SupportTicket
-from .runtime import AppRuntimeSettings, AppIntegration, PaymentIntegration
+from .runtime import AppRuntimeSettings, AppIntegration, DashboardBrandingAsset, PaymentIntegration
 from .system import BotFeatureFlags, CacheVersion, TelmtFreeParams
 from .transactions import Transaction
 from .users import DisabledUser, SubscriptionTransfer, User, UserSubscription
@@ -95,6 +95,7 @@ __all__ = [
     "TelmtFreeParams",
     # runtime
     "AppRuntimeSettings",
+    "DashboardBrandingAsset",
     "AppIntegration",
     "PaymentIntegration",
     "ApiMetricMinute",

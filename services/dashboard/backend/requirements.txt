@@ -8,3 +8,4 @@ httpx>=0.28.1
 arq>=0.26.1
 google-auth>=2.32.0
 requests>=2.32.0
+CairoSVG>=2.7.1
