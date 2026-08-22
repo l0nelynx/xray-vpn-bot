@@ -181,9 +181,11 @@ async def stats_users_active_ips(_: str = Depends(get_current_user)):
     return await _telemt_request("GET", "/v1/stats/users/active-ips")
 
 
-# Telemt GET/PATCH /v1/config only manages this whitelist (see telemt
-# src/api/config_store.rs EDITABLE_SECTIONS). network/server/access are
-# intentionally omitted by Telemt (per-node identity + secrets).
+# Telemt GET/PATCH /v1/config manages these full top-level sections plus a
+# field-level allowlist under ``server`` (see telemt PR #878).  Keep the nested
+# allowlist here as a defence in depth: the dashboard must never proxy
+# server.api credentials or per-node bind identity even if an upstream returns
+# more than its documented managed-config view.
 _EDITABLE_CONFIG_SECTIONS = frozenset(
     {
         "general",
@@ -191,15 +193,32 @@ _EDITABLE_CONFIG_SECTIONS = frozenset(
         "censorship",
         "upstreams",
         "dc_overrides",
+        "server",
     }
 )
+_EDITABLE_SERVER_FIELDS = frozenset({"listeners"})
 
 
 def _filter_editable_config(data: Any) -> Any:
     """Keep only Telemt-managed sections from a GET /v1/config payload."""
     if not isinstance(data, dict):
         return data
-    return {k: v for k, v in data.items() if k in _EDITABLE_CONFIG_SECTIONS}
+    filtered = {
+        key: value
+        for key, value in data.items()
+        if key in _EDITABLE_CONFIG_SECTIONS and key != "server"
+    }
+    server = data.get("server")
+    if isinstance(server, dict):
+        filtered_server = {
+            key: value
+            for key, value in server.items()
+            if key in _EDITABLE_SERVER_FIELDS
+        }
+        # Telemt omits the partial server view when it has no editable fields.
+        if filtered_server:
+            filtered["server"] = filtered_server
+    return filtered
 
 
 def _assert_editable_patch(payload: dict[str, Any]) -> None:
@@ -218,6 +237,39 @@ def _assert_editable_patch(payload: dict[str, Any]) -> None:
                 + ". Allowed: "
                 + ", ".join(sorted(_EDITABLE_CONFIG_SECTIONS))
             ),
+        )
+    if "server" not in payload:
+        return
+
+    server = payload["server"]
+    if not isinstance(server, dict):
+        raise HTTPException(status_code=400, detail="server patch must be a JSON object")
+    if not server:
+        raise HTTPException(
+            status_code=400,
+            detail="empty server patch: provide server.listeners",
+        )
+    unknown_server_fields = sorted(set(server) - _EDITABLE_SERVER_FIELDS)
+    if unknown_server_fields:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "field not editable via Telemt API: "
+                + ", ".join(f"server.{field}" for field in unknown_server_fields)
+                + ". Allowed under server: "
+                + ", ".join(sorted(_EDITABLE_SERVER_FIELDS))
+            ),
+        )
+    listeners = server.get("listeners")
+    if not isinstance(listeners, list):
+        raise HTTPException(
+            status_code=400,
+            detail="server.listeners must be an array (the array is replaced wholesale)",
+        )
+    if any(not isinstance(listener, dict) for listener in listeners):
+        raise HTTPException(
+            status_code=400,
+            detail="each server.listeners item must be a JSON object",
         )
 
 

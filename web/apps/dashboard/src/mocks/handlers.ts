@@ -786,8 +786,20 @@ export const handlers: HttpHandler[] = [
   http.get(`${API}/telemt/security/posture`, () => HttpResponse.json(okEnvelope({}))),
   http.get(`${API}/telemt/security/whitelist`, () => HttpResponse.json(okEnvelope({ entries: [] }))),
   http.get(`${API}/telemt/limits/effective`, () => HttpResponse.json(okEnvelope({}))),
-  http.get(`${API}/telemt/config`, () => HttpResponse.json(okEnvelope({}))),
-  http.patch(`${API}/telemt/config`, () => HttpResponse.json(okEnvelope({ applied: true }))),
+  http.get(`${API}/telemt/config`, () =>
+    HttpResponse.json(
+      okEnvelope({
+        server: {
+          listeners: [{ ip: "0.0.0.0", port: 8443, client_mss: "92" }],
+        },
+      }),
+    ),
+  ),
+  http.patch(`${API}/telemt/config`, () =>
+    HttpResponse.json(
+      okEnvelope({ revision: "mock-2", restart_required: true, changed: ["server"] }),
+    ),
+  ),
   http.get(`${API}/telemt/users`, () => HttpResponse.json(okEnvelope([]))),
   http.get(`${API}/telemt/free-params`, () =>
     HttpResponse.json({ enabled: false, days: 1, news_required: true }),

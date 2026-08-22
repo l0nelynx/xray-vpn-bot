@@ -288,13 +288,20 @@ Proxy to external Telemt server. Connection credentials
 (dual-source with `config.yml`). Returns
 503 if not configured.
 
-Three tabs:
+Six tabs:
 
 | Tab | Features |
 |-----|----------|
 | **Server** | System info, health, stats, runtime gates, security posture |
 | **Users** | CRUD Telemt users (limits, expiry, traffic) |
+| **Connection** | Telemt API URL and encrypted authorization header |
 | **Free Params** | DB-backed defaults for free Telemt access |
+| **Config** | Safe live config editing, including wholesale replacement of `server.listeners` |
+| **Operations** | Readiness, effective limits, connections, events, and TLS fingerprints |
+
+The Config tab mirrors Telemt's `GET/PATCH /v1/config` allowlist. Under
+`server`, only `listeners` is exposed; API credentials, bind identity, Unix
+sockets, and other server fields remain blocked.
 
 ---
 

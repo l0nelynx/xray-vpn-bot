@@ -449,19 +449,29 @@ export interface TelmtBulkResult {
   errors: TelmtBulkError[];
 }
 
-/** Sections Telemt exposes via GET/PATCH /v1/config (telemt EDITABLE_SECTIONS). */
+/** Top-level sections Telemt exposes via GET/PATCH /v1/config. */
 export const TELMT_EDITABLE_CONFIG_SECTIONS = [
   "general",
   "timeouts",
   "censorship",
   "upstreams",
   "dc_overrides",
+  "server",
 ] as const;
 
 export type TelmtConfigSectionName = (typeof TELMT_EDITABLE_CONFIG_SECTIONS)[number];
 
+export interface TelmtServerConfigData {
+  /** Replaced wholesale by PATCH. Other server fields are never exposed. */
+  listeners?: Record<string, unknown>[];
+}
+
 /** Telemt managed-config JSON (subset of config.toml). */
-export type TelmtConfigData = Partial<Record<TelmtConfigSectionName, unknown>>;
+export type TelmtConfigData = Partial<
+  Record<Exclude<TelmtConfigSectionName, "server">, unknown>
+> & {
+  server?: TelmtServerConfigData;
+};
 
 export interface TelmtPatchConfigResponse {
   revision: string;
