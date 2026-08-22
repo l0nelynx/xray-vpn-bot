@@ -57,31 +57,39 @@ jobs:
       release:     ${{ steps.mode.outputs.release }}
       publish:     ${{ steps.mode.outputs.publish }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.checkout_ref || github.ref }}
 
       - id: mode
         name: Resolve check/publish mode
         shell: bash
+        env:
+          REQUESTED_PUBLISH: ${{ inputs.publish }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
         run: |
           set -euo pipefail
 
-          if [[ "${{ github.event_name }}" == "workflow_call" ]]; then
-            echo "publish=${{ inputs.publish }}" >> "$GITHUB_OUTPUT"
-          elif [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/develop" ]]; then
+          # A reusable workflow inherits the caller event name (for example,
+          # workflow_dispatch), so workflow_call cannot be detected through
+          # github.event_name. Honour the explicit input first.
+          if [[ "$REQUESTED_PUBLISH" == "true" ]]; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          elif [[ "$EVENT_NAME" == "push" && "$REF" == "refs/heads/develop" ]]; then
             echo "publish=true" >> "$GITHUB_OUTPUT"
           else
             echo "publish=false" >> "$GITHUB_OUTPUT"
           fi
 
-          if [[ -n "${{ inputs.release_version }}" ]]; then
+          if [[ -n "$RELEASE_VERSION" ]]; then
             echo "release=true" >> "$GITHUB_OUTPUT"
           else
             echo "release=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@v4
         id: filter
         if: steps.mode.outputs.release != 'true'
         with:
@@ -134,7 +142,7 @@ jobs:
       base_tag:  ${{ steps.calc.outputs.base_tag }}
       base_pull_tag: ${{ steps.calc.outputs.base_pull_tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.checkout_ref || github.ref }}
 
@@ -205,7 +213,7 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.checkout_ref || github.ref }}
 
@@ -236,7 +244,7 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.checkout_ref || github.ref }}
 
@@ -263,7 +271,7 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.checkout_ref || github.ref }}
 
@@ -294,7 +302,7 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.checkout_ref || github.ref }}
 
@@ -321,7 +329,7 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.checkout_ref || github.ref }}
 
@@ -352,7 +360,7 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.checkout_ref || github.ref }}
 

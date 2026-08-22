@@ -4,11 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       bump:
-        description: Semver bump (applied to VERSION on main)
+        description: Semver bump, or republish the current release
         required: true
         type: choice
         default: patch
         options:
+          - current
           - patch
           - minor
           - major
@@ -32,7 +33,7 @@ jobs:
       version: ${{ steps.bump.outputs.version }}
       tag: ${{ steps.bump.outputs.tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: main
           fetch-depth: 0
@@ -48,6 +49,7 @@ jobs:
           IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE"
 
           case "$BUMP" in
+            current) ;;
             major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
             minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
             patch) PATCH=$((PATCH + 1)) ;;
@@ -57,19 +59,26 @@ jobs:
           NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
           TAG="v${NEW_VERSION}"
 
-          if git rev-parse "$TAG" >/dev/null 2>&1; then
-            echo "Tag $TAG already exists" >&2
-            exit 1
-          fi
+          if [[ "$BUMP" == "current" ]]; then
+            if ! git rev-parse "${TAG}^{commit}" >/dev/null 2>&1; then
+              echo "Tag $TAG does not exist and cannot be republished" >&2
+              exit 1
+            fi
+          else
+            if git rev-parse "$TAG" >/dev/null 2>&1; then
+              echo "Tag $TAG already exists" >&2
+              exit 1
+            fi
 
-          printf '%s\n' "$NEW_VERSION" > VERSION
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add VERSION
-          git commit -m "chore: release ${TAG}"
-          git tag -a "$TAG" -m "Release ${TAG}"
-          git push origin main
-          git push origin "$TAG"
+            printf '%s\n' "$NEW_VERSION" > VERSION
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add VERSION
+            git commit -m "chore: release ${TAG}"
+            git tag -a "$TAG" -m "Release ${TAG}"
+            git push origin main
+            git push origin "$TAG"
+          fi
 
           echo "version=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
