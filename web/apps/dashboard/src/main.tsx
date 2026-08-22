@@ -5,6 +5,7 @@ import { registerSW } from "virtual:pwa-register";
 import { Toaster } from "@xray/ui/components/sonner";
 import App from "./App";
 import ErrorBoundary from "./components/ErrorBoundary";
+import { BrandingProvider } from "./branding";
 import "./index.css";
 import "./theme.css";
 
@@ -28,10 +29,12 @@ prepare().then(() => {
   ReactDOM.createRoot(document.getElementById("root")!).render(
     <React.StrictMode>
       <BrowserRouter basename="/bot/dashboard">
-        <ErrorBoundary>
-          <App />
-        </ErrorBoundary>
-        <Toaster />
+        <BrandingProvider>
+          <ErrorBoundary>
+            <App />
+          </ErrorBoundary>
+          <Toaster />
+        </BrandingProvider>
       </BrowserRouter>
     </React.StrictMode>,
   );

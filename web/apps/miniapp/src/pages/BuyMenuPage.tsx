@@ -1,6 +1,6 @@
 import { Check, ChevronLeft } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { Alert, AlertTitle } from "@xray/ui/components/alert";
 import { Badge } from "@xray/ui/components/badge";
 import { Button } from "@xray/ui/components/button";
@@ -16,6 +16,7 @@ import {
 } from "../api/client";
 import { useT } from "../i18n/LocaleContext";
 import { hapticImpact, openLink, showAlert } from "../tg/webapp";
+import { trackUx } from "../ux";
 
 interface ViewResult {
   chipLevels: MenuNode[][];
@@ -48,6 +49,8 @@ function buildView(
 
 export default function BuyMenuPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const subscriptionId = Number(searchParams.get("subscription_id") || 0) || undefined;
   const { t } = useT();
   const [tree, setTree] = useState<MenuNode[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -108,9 +111,13 @@ export default function BuyMenuPage() {
       const res = await payments.createInvoice({
         node_id: selectedInvoice.id,
         description: selectedInvoice.text,
+        subscription_id: subscriptionId,
       });
+      trackUx({ name: "invoice_created", transaction_id: res.transaction_id, subscription_id: subscriptionId, source: "fiat" });
       openLink(res.url);
-      navigate("/buy/success", { state: { paymentUrl: res.url } });
+      const query = new URLSearchParams({ transaction_id: res.transaction_id });
+      if (subscriptionId) query.set("subscription_id", String(subscriptionId));
+      navigate(`/buy/success?${query}`, { state: { paymentUrl: res.url } });
     } catch (e) {
       showAlert(t("buy.alert.invoiceError", { message: (e as Error).message }));
     } finally {
@@ -122,12 +129,18 @@ export default function BuyMenuPage() {
     if (!selectedInvoice?.invoice || !canPayCredits) return;
     setBusyId(selectedInvoice.id);
     try {
-      const res = await payments.payWithCredits({ node_id: selectedInvoice.id });
-      if (res.ok) {
+      const res = await payments.payWithCredits({
+        node_id: selectedInvoice.id,
+        subscription_id: subscriptionId,
+      });
+      if (res.ok && res.transaction_id) {
         setPromoState((prev) =>
           prev ? { ...prev, balance: res.balance_after ?? prev.balance } : prev
         );
-        navigate("/buy/success", { state: { paidWithCredits: true } });
+        trackUx({ name: "invoice_created", transaction_id: res.transaction_id, subscription_id: subscriptionId, source: "credits" });
+        const query = new URLSearchParams({ transaction_id: res.transaction_id });
+        if (subscriptionId) query.set("subscription_id", String(subscriptionId));
+        navigate(`/buy/success?${query}`, { state: { paidWithCredits: true } });
       }
     } catch (e) {
       showAlert(t("buy.alert.creditsError", { message: (e as Error).message }));
@@ -171,25 +184,27 @@ export default function BuyMenuPage() {
     <>
       <div className="page">
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
-          <button
-            onClick={() => navigate("/")}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              width: 36,
-              height: 36,
-              borderRadius: 12,
-              background: "rgba(255,255,255,0.07)",
-              border: "1px solid rgba(255,255,255,0.13)",
-              color: "rgba(255,255,255,0.75)",
-              cursor: "pointer",
-              outline: "none",
-              flexShrink: 0,
-            }}
-          >
-            <ChevronLeft style={{ width: 16, height: 16 }} />
-          </button>
+          {subscriptionId && (
+            <button
+              onClick={() => navigate("/")}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 36,
+                height: 36,
+                borderRadius: 12,
+                background: "rgba(255,255,255,0.07)",
+                border: "1px solid rgba(255,255,255,0.13)",
+                color: "rgba(255,255,255,0.75)",
+                cursor: "pointer",
+                outline: "none",
+                flexShrink: 0,
+              }}
+            >
+              <ChevronLeft style={{ width: 16, height: 16 }} />
+            </button>
+          )}
           <span style={{ fontSize: 20, fontWeight: 700, color: "#FFFFFF", letterSpacing: "-0.3px" }}>
             {t("buy.title")}
           </span>

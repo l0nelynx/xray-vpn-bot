@@ -118,10 +118,6 @@ def link_by_url_app(with_app_db, fake_remnawave, monkeypatch):
 
     monkeypatch.setattr(mdb, "async_session", with_app_db)
     monkeypatch.setattr(lr, "async_session", with_app_db)
-    # The router imported update_user by name at module load; the
-    # fake_remnawave fixture patches the source module but the bound
-    # name in lr still points at the real client. Redirect it.
-    monkeypatch.setattr(lr, "update_user", fake_remnawave.update_user)
 
     notify_calls: list[str] = []
 
@@ -160,16 +156,17 @@ URL = f"https://sub.domain.com/{SHORT}"
 
 
 class TestLinkByUrlEndpoint:
-    def _seed_a(self, with_app_db, *, vless="a-uuid", email="a@x.io"):
+    def _seed_a(self, with_app_db, *, vless="a-uuid", email="a@x.io",
+                rw_id=1):
         async def go():
             async with with_app_db() as s:
-                s.add(User(id=100, email=email, vless_uuid=vless,
+                s.add(User(id=100, email=email, vless_uuid=vless, rw_id=rw_id,
                            password_hash="ph",
                            email_verified_at="2026-05-19T00:00:00"))
                 await s.commit()
         asyncio.run(go())
 
-    def test_merged_pro_returns_200_and_disables_loser(
+    def test_merged_pro_returns_200_and_preserves_profiles(
         self, link_by_url_client, link_by_url_app, with_app_db,
         fake_remnawave,
     ):
@@ -191,7 +188,7 @@ class TestLinkByUrlEndpoint:
             "a_tier": "pro",
             "b_tier": "free",
         }
-        assert "b-uuid" in fake_remnawave.disabled_calls
+        assert fake_remnawave.disabled_calls == []
         # A.vless_uuid unchanged (PRO A kept its uuid).
         async def fetch():
             async with with_app_db() as s:
@@ -242,7 +239,7 @@ class TestLinkByUrlEndpoint:
         assert resp.status_code == 404
         assert resp.json() == {"detail": {"code": "rw_not_found"}}
 
-    def test_both_pro_returns_200_with_support_code(
+    def test_both_pro_returns_200_and_preserves_profiles(
         self, link_by_url_client, link_by_url_app, with_app_db,
         fake_remnawave,
     ):
@@ -258,7 +255,7 @@ class TestLinkByUrlEndpoint:
         )
         assert resp.status_code == 200
         body = resp.json()
-        assert body["result"] == "both_pro_support_needed"
+        assert body["result"] == "merged_pro"
         assert body["a_tier"] == "pro"
         assert body["b_tier"] == "pro"
         # No DB change, no RW deactivate.
@@ -268,7 +265,7 @@ class TestLinkByUrlEndpoint:
                 return (await s.get(User, 100)).vless_uuid
         assert asyncio.run(fetch()) == "a-uuid"
         assert any(
-            "both_pro_support_needed" in m
+            "merged_pro" in m
             for m in link_by_url_app.state.notify_calls
         )
 
@@ -332,7 +329,7 @@ class TestLinkByUrlEndpoint:
         )
         assert resp.status_code == 401
 
-    def test_rw_deactivate_failure_does_not_break_merge(
+    def test_merge_never_attempts_rw_deactivation(
         self, link_by_url_client, link_by_url_app, with_app_db,
         fake_remnawave,
     ):
@@ -350,14 +347,14 @@ class TestLinkByUrlEndpoint:
         )
         assert resp.status_code == 200
         assert resp.json()["result"] == "merged_pro"
-        assert any(
-            "Failed to disable" in m
-            for m in link_by_url_app.state.notify_calls
+        assert fake_remnawave.disabled_calls == []
+        assert not any(
+            "Failed to disable" in m for m in link_by_url_app.state.notify_calls
         )
         # Final result notify must reflect the failed disable as
-        # disabled_uuid=— (not the still-live b-uuid).
+        # The notification reports only the retained numeric profile ID.
         assert any(
-            "merged_pro" in m and "disabled_uuid=<code>—</code>" in m
+            "merged_pro" in m and "chosen_rw_id=<code>" in m
             for m in link_by_url_app.state.notify_calls
         )
 

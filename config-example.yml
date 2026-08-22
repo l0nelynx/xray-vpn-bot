@@ -10,7 +10,8 @@
 # ║  CORE BOT IDENTITY                                                          ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
 
-branding_name: "YourVPN"                           # preferred: Dashboard → Settings → Runtime
+branding_name: "YourVPN"                           # preferred: Dashboard → Settings → Branding
+branding_logo_url: ""                              # preferred: Dashboard → Settings → Branding (PNG/SVG URL)
 token: "yourbottoken"                              # [REQUIRED] Main user-facing Telegram bot token (bootstrap — stays in YAML)
 bot_url: "https://t.me/YourBot"                   # [REQUIRED] Direct t.me link to your bot (used in notifications)
 miniapp_url: "https://example.com/bot/miniapp"    # [REQUIRED] Direct HTTPS URL of the MiniApp web page — used inside WebApp button (must be HTTPS, reachable by Telegram)
@@ -136,6 +137,11 @@ smtp_password: "your-smtp-password"                # preferred: Dashboard Email 
 # smtp_use_tls: false                              # preferred: Dashboard Email
 # email_code_ttl: 900                              # preferred: Dashboard Email
 # email_code_max_attempts: 5                       # preferred: Dashboard Email
+# Extra domains rejected at android/web register (merged with built-ins like
+# example.com, qzz.io). Local-part probes (probe123@…, test_…) are always blocked.
+# email_denied_domains:
+#   - mailinator.com
+#   - guerrillamail.com
 
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
@@ -158,6 +164,11 @@ fcm_service_account_path: "/app/fcm-sa.json"       # bootstrap fallback path (co
 
 # web_allowed_origins:
 #   - https://web.yourdomain.com
+
+# Exact callback allowlist for the Remnawave subscription-page account BFF.
+# subscription_page_oauth_redirect_uris:
+#   - https://sub.yourdomain.com/_account/callback
+# web_portal_url: "https://web.yourdomain.com"
 
 tg_client_secret: ""                               # preferred: Dashboard Web (encrypted)
 

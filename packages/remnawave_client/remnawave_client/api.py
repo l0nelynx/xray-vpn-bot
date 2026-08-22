@@ -13,17 +13,15 @@ Where app/ and miniapp historically diverged:
 - HWID device listing: app consumed the raw SDK DTO, miniapp wanted a list of
   plain dicts. Both shapes are exposed: `get_user_hwid_devices` (raw DTO) and
   `list_user_hwid_devices` (normalized list[dict]).
-- create_user email default: the underlying client already fills
-  `<username>@bot.local` when email is None; the miniapp-specific
-  `<username>@miniapp.xyz` is now passed explicitly by its single caller.
+- create_user email handling: omitted when the caller has no real email;
+  callers that intentionally use an application-specific address pass it
+  explicitly.
 """
 
 import asyncio
 import logging
 import time
 from typing import Any, Awaitable, Callable, Hashable, Optional
-
-from remnawave.models import UsersResponseDto
 
 from .client import HwidDevicesCompat, RemnawaveClient, configure, get_default_client
 
@@ -135,38 +133,42 @@ def _client() -> RemnawaveClient:
 # ---------------------------------------------------------------------------
 # User lookups
 # ---------------------------------------------------------------------------
-async def get_all_users() -> UsersResponseDto:
-    return await _client().get_all_users()
-
-
 async def get_all_users_for_crm() -> list[dict]:
     return await _client().get_all_users_for_crm()
 
 
-async def get_user_from_username(username: str) -> dict | None:
-    return await _client().get_user_by_username(username)
+async def get_user_from_username(
+    username: str, *, strict: bool = False,
+) -> dict | None:
+    return await _client().get_user_by_username(
+        username, raise_on_error=strict,
+    )
 
 
 async def get_user_from_email(email: str) -> dict | None:
     return await _client().get_user_by_email(email)
 
 
-async def get_user_from_uuid(user_uuid: str) -> dict | None:
-    return await _client().get_user_by_uuid(user_uuid)
+async def get_user_from_id(rw_id: int, *, strict: bool = False) -> dict | None:
+    return await _client().get_user_by_id(rw_id, raise_on_error=strict)
 
 
-async def get_user_by_short_uuid_raw(short_uuid: str) -> dict | None:
+async def get_user_by_short_uuid_raw(
+    short_uuid: str, *, strict: bool = True,
+) -> dict | None:
     """Return the raw Remnawave SDK DTO for the user owning ``short_uuid``.
 
     Preserves every field the SDK exposes — the Android subscription-URL import
     flow and account-recovery flows rely on the full payload.
     """
-    return await _client().get_user_by_short_uuid_raw(short_uuid)
+    return await _client().get_user_by_short_uuid_raw(
+        short_uuid, raise_on_error=strict,
+    )
 
 
 async def resolve_remnawave_user(
     *,
-    vless_uuid: str | None = None,
+    rw_id: int | None = None,
     email: str | None = None,
     username: str | None = None,
     expected_telegram_id: int | None = None,
@@ -174,18 +176,13 @@ async def resolve_remnawave_user(
     """Look up a Remnawave user via the strongest identifier available,
     falling back to weaker ones.
 
-    Priority: vless_uuid → email → username. The cached ``vless_uuid`` in our
-    local ``users`` row is authoritative — Remnawave can't rename a user's UUID
-    — so try it first. Only fall back when it's missing or the upstream record
-    was deleted/recreated out of band. Returns the normalized user dict, or
-    None when every identifier we were given missed.
+    Priority: rw_id → exact email → username. ``rw_id`` is canonical.
 
     ``username`` is the weakest match: a Telegram @username can coincide with a
     *different* person's panel account, which would leak their subscription URL.
     When ``expected_telegram_id`` is given, a username match is only trusted if
     the panel account is owned by that Telegram id (its ``telegram_id`` matches).
-    Accounts found by ``vless_uuid``/``email`` come from our own cached row and
-    are not re-checked; accounts whose panel ``telegram_id`` is unset are treated
+    Accounts whose panel ``telegram_id`` is unset are treated
     as unverifiable and rejected on the username path.
 
     Result is cached for _REMNAWAVE_USER_CACHE_TTL seconds (per identifier
@@ -194,11 +191,11 @@ async def resolve_remnawave_user(
     through it), so coalescing repeat/concurrent reads within a short window
     meaningfully cuts load on the panel.
     """
-    cache_key = (vless_uuid, email, username, expected_telegram_id)
+    cache_key = (rw_id, email, username, expected_telegram_id)
     return await _user_cache.get_or_compute(
         cache_key,
         lambda: _resolve_remnawave_user_uncached(
-            vless_uuid=vless_uuid,
+            rw_id=rw_id,
             email=email,
             username=username,
             expected_telegram_id=expected_telegram_id,
@@ -208,29 +205,28 @@ async def resolve_remnawave_user(
 
 async def _resolve_remnawave_user_uncached(
     *,
-    vless_uuid: str | None,
+    rw_id: int | None,
     email: str | None,
     username: str | None,
     expected_telegram_id: int | None,
 ) -> dict | None:
-    if vless_uuid:
-        user = await get_user_from_uuid(vless_uuid)
+    if rw_id is not None:
+        user = await get_user_from_id(rw_id, strict=True)
         if user:
             return user
     if email:
         user = await get_user_from_email(email)
         if user:
             return user
-    if username:
-        user = await get_user_from_username(username)
+    if username and expected_telegram_id is not None:
+        user = await get_user_from_username(username, strict=True)
         if user:
-            if expected_telegram_id is not None:
-                owner = user.get("telegram_id")
-                try:
-                    if owner is None or int(owner) != int(expected_telegram_id):
-                        return None
-                except (TypeError, ValueError):
+            owner = user.get("telegram_id")
+            try:
+                if owner is None or int(owner) != int(expected_telegram_id):
                     return None
+            except (TypeError, ValueError):
+                return None
             return user
     return None
 
@@ -268,48 +264,20 @@ async def create_user(
     )
 
 
-async def update_user(
-    user_uuid: str,
-    username: str | None = None,
-    days: int | None = None,
-    limit_gb: int | None = None,
-    descr: str | None = None,
-    email: str | None = None,
-    tag: str | None = None,
-    status: str | None = None,
-    squad_id: str | None = None,
-    internal_squad_ids: list[str] | None = None,
-    external_squad_id: str | None = None,
-    traffic_limit_bytes: int | None = None,
-    traffic_limit_strategy: str | None = None,
-) -> dict | None:
-    return await _client().update_user(
-        user_uuid=user_uuid,
-        username=username,
-        days=days,
-        limit_gb=limit_gb,
-        descr=descr,
-        email=email,
-        tag=tag,
-        status=status,
-        squad_id=squad_id,
-        internal_squad_ids=internal_squad_ids,
-        external_squad_id=external_squad_id,
-        traffic_limit_bytes=traffic_limit_bytes,
-        traffic_limit_strategy=traffic_limit_strategy,
-    )
+async def update_user_by_id(rw_id: int, **changes) -> dict | None:
+    return await _client().update_user_by_id(rw_id, **changes)
 
 
-async def reset_user_traffic(user_uuid: str) -> bool:
-    return await _client().reset_user_traffic(user_uuid)
+async def reset_user_traffic_by_id(rw_id: int) -> bool:
+    return await _client().reset_user_traffic_by_id(rw_id)
 
 
-async def delete_user(user_uuid: str) -> bool:
-    return await _client().delete_user(user_uuid)
+async def delete_user_by_id(rw_id: int) -> bool:
+    return await _client().delete_user_by_id(rw_id)
 
 
-async def get_user_subscription_link(user_uuid: str) -> str | None:
-    return await _client().get_subscription_link(user_uuid)
+async def get_user_subscription_link_by_id(rw_id: int) -> str | None:
+    return await _client().get_subscription_link_by_id(rw_id)
 
 
 # ---------------------------------------------------------------------------
@@ -333,37 +301,28 @@ def _normalize_device(device) -> dict:
     }
 
 
-async def get_user_hwid_devices(user_uuid: str) -> HwidDevicesCompat | None:
-    """Device list DTO (used by the seller bot, which reads ``.devices`` directly)."""
-    return await _client().get_user_hwid_devices(user_uuid)
+async def get_user_hwid_devices_by_id(rw_id: int) -> HwidDevicesCompat | None:
+    return await _client().get_user_hwid_devices_by_id(rw_id)
 
 
-async def list_user_hwid_devices(user_uuid: str) -> list[dict]:
-    """Normalized list of device dicts (used by the miniapp API responses)."""
-    response = await _client().get_user_hwid_devices(user_uuid)
+async def list_user_hwid_devices_by_id(rw_id: int) -> list[dict]:
+    response = await _client().get_user_hwid_devices_by_id(rw_id)
     if not response or not response.devices:
         return []
     return [_normalize_device(d) for d in response.devices]
 
 
-async def get_user_devices_count(user_uuid: str) -> int:
-    """Cached for _DEVICES_COUNT_CACHE_TTL seconds, with single-flight
-    de-duplication — this is display-only data (used in /me summaries),
-    never a limit-enforcement check: HWID device add/remove is enforced by
-    Remnawave itself, and add/remove endpoints here (list_user_hwid_devices,
-    delete_user_hwid_device) bypass this cache entirely, so they always see
-    live data."""
-
+async def get_user_devices_count_by_id(rw_id: int) -> int:
     async def _fetch() -> int:
-        response = await _client().get_user_hwid_devices(user_uuid)
+        response = await _client().get_user_hwid_devices_by_id(rw_id)
         if not response:
             return 0
         return int(response.total) if response.total else len(response.devices or [])
 
-    return await _devices_count_cache.get_or_compute(user_uuid, _fetch)
+    return await _devices_count_cache.get_or_compute(("rw_id", int(rw_id)), _fetch)
 
 
-async def delete_user_hwid_device(
-    user_uuid: str, hwid: str
+async def delete_user_hwid_device_by_id(
+    rw_id: int, hwid: str
 ) -> HwidDevicesCompat | None:
-    return await _client().delete_user_hwid_device(user_uuid, hwid)
+    return await _client().delete_user_hwid_device_by_id(rw_id, hwid)

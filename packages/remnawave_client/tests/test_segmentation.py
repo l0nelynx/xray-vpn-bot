@@ -17,7 +17,7 @@ from remnawave_client.segmentation import (
 
 def _crm_user(**overrides) -> dict:
     base = {
-        "uuid": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+        "rw_id": 42,
         "status": "active",
         "expire_ts": int((datetime.now(timezone.utc) + timedelta(days=10)).timestamp()),
         "days_left": 10,
@@ -38,7 +38,6 @@ def _crm_user(**overrides) -> dict:
 def test_normalize_user_for_crm_from_dict() -> None:
     expire = datetime.now(timezone.utc) + timedelta(days=5)
     raw = {
-        "uuid": "11111111-2222-3333-4444-555555555555",
         "status": "active",
         "expireAt": expire.isoformat(),
         "usedTrafficBytes": 8 * 1024 ** 3,
@@ -51,7 +50,6 @@ def test_normalize_user_for_crm_from_dict() -> None:
         "id": 9001,
     }
     out = normalize_user_for_crm(raw)
-    assert out["uuid"] == raw["uuid"]
     assert out["rw_id"] == 9001
     assert out["status"] == "active"
     assert out["days_left"] == 5
@@ -120,7 +118,7 @@ def test_normalize_status_from_sdk_strenum() -> None:
     expire = datetime.now(timezone.utc) + timedelta(days=5)
 
     class FakeUser:
-        uuid = "11111111-2222-3333-4444-555555555555"
+        id = 11
         status = UserStatus.LIMITED
         expire_at = expire
         used_traffic_bytes = 0
@@ -148,7 +146,7 @@ def test_normalize_first_connected_from_user_traffic() -> None:
         first_connected_at = connected
 
     class FakeUser:
-        uuid = "22222222-3333-4444-5555-666666666666"
+        id = 12
         status = UserStatus.ACTIVE
         expire_at = expire
         used_traffic_bytes = 0

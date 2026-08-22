@@ -21,7 +21,7 @@ edited in **Dashboard → Settings** without editing files or restarting.
 | Prefer Dashboard | Stay in YAML (bootstrap) |
 |------------------|--------------------------|
 | Maintenance mode | `token`, `admin_bot_token`, `admin_id` |
-| `branding_name`, news/support/legal links | Remnawave URL/token/webhook secret |
+| `branding_name`, `branding_logo_url`, news/support/legal links | Remnawave URL/token/webhook secret |
 | `free_days` / `free_traffic` | `dashboard_login` / `password` / `secret` |
 | Remnawave squad IDs + `subscription_url` | `miniapp_url`, `bot_url`, `miniapp_tg_url` |
 | Payment gateway credentials + enable | uvicorn / `log_level` / `expose_api_docs` |
@@ -59,6 +59,7 @@ postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTG
 | Key | Required | Description |
 |-----|----------|-------------|
 | `branding_name` | Yes | Service name shown to users |
+| `branding_logo_url` | No | PNG/SVG source URL imported and snapshotted from Dashboard → Settings → Branding |
 | `token` | Yes | Main Telegram bot token |
 | `bot_url` | Yes | `https://t.me/YourBot` — used in notifications |
 | `miniapp_url` | Yes | HTTPS URL of the MiniApp page (WebApp button) |

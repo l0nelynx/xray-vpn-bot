@@ -1,6 +1,50 @@
 import { http, HttpResponse, type HttpHandler } from "msw";
+import type { ApiAlertSettings, ManagedSubscription } from "../api/types";
 
 const API = "/bot/dashboard/api";
+
+let mockBranding = {
+  branding_name: "MockVPN",
+  branding_logo_url: "",
+  has_custom_logo: false,
+  updated_at: "2026-08-15T10:00:00Z",
+};
+
+const mockGiveaway = {
+  id: 42,
+  title: "Summer Connection Giveaway",
+  channel_text: "",
+  status: "drawn",
+  config: {
+    distribution: ["bot"],
+    entry_condition: "click_only",
+    ticket_sources: [],
+    chance_mode: "static",
+    winner_selection: "random",
+  },
+  winner_count: 9,
+  starts_at: "2026-08-01T10:00:00",
+  ends_at: "2026-08-14T20:00:00",
+  drawn_at: "2026-08-15T09:30:00",
+  created_at: "2026-08-01T08:00:00",
+  participants: 24,
+  tickets: 47,
+};
+
+const mockWinners = Array.from({ length: 9 }, (_, index) => ({
+  rank: index + 1,
+  tg_id: 7123456700 + index,
+  username: index === 4 ? null : `winner_${index + 1}_telegram`,
+  tickets: index + 2,
+  ticket_number: 101 + index * 3,
+}));
+
+const mockParticipants = Array.from({ length: 18 }, (_, index) => ({
+  tg_id: 7123456700 + index,
+  username: `participant_${index + 1}`,
+  joined_at: "2026-08-02T12:00:00",
+  ticket_count: index + 1,
+}));
 
 function paginate<T>(items: T[], url: URL) {
   const page = Number(url.searchParams.get("page") || 1);
@@ -31,6 +75,7 @@ const users = [
     vip: false,
     email: "alice@example.com",
     language: "ru",
+    subscriptions_count: 2,
   },
   {
     id: 2,
@@ -44,6 +89,7 @@ const users = [
     vip: true,
     email: null,
     language: "en",
+    subscriptions_count: 0,
   },
   {
     id: 3,
@@ -57,6 +103,7 @@ const users = [
     vip: false,
     email: "carol@example.com",
     language: "ru",
+    subscriptions_count: 1,
   },
 ];
 
@@ -86,6 +133,62 @@ const transactions = [
     expire_date: null,
   },
 ];
+
+let mockUserSubscriptions: ManagedSubscription[] = [
+  {
+    id: 1,
+    rw_id: 10,
+    label: "Main",
+    product_key: null,
+    source: "telegram",
+    is_primary: true,
+    tariff: "Premium",
+    status: "active",
+    days_left: 18,
+    expire_iso: "2026-08-13T00:00:00Z",
+    data_limit_gb: 200,
+    traffic_used_gb: 42.5,
+    devices_count: 2,
+    subscription_url: "https://example.com/sub/main",
+  },
+  {
+    id: 2,
+    rw_id: 12,
+    label: "Marketplace",
+    product_key: "marketplace",
+    source: "marketplace",
+    is_primary: false,
+    tariff: "Premium",
+    status: "active",
+    days_left: 61,
+    expire_iso: "2026-09-25T00:00:00Z",
+    data_limit_gb: null,
+    traffic_used_gb: 9.2,
+    devices_count: 1,
+    subscription_url: "https://example.com/sub/marketplace",
+  },
+];
+
+let apiAlertSettings: ApiAlertSettings = {
+  enabled: true,
+  server_error_threshold: 20,
+  latency_p95_ms: 2000,
+  latency_min_requests: 20,
+  health_failures: 3,
+  cooldown_minutes: 30,
+};
+
+const apiHealthSeries = Array.from({ length: 24 }, (_, index) => {
+  const date = new Date(Date.now() - (23 - index) * 60 * 60 * 1000);
+  const incident = index === 17 || index === 18;
+  return {
+    bucket: date.toISOString(), requests: 90 + index * 4,
+    status_2xx: 82 + index * 4, status_3xx: 2,
+    status_4xx: 5 + (index % 3), status_5xx: incident ? 14 : index === 19 ? 3 : 0,
+    error_rate: incident ? 12.4 : 2.1, p50_ms: 68 + index,
+    p95_ms: incident ? 2380 : 320 + index * 7, p99_ms: incident ? 6100 : 760 + index * 11,
+  };
+});
 
 const revenue = Array.from({ length: 14 }, (_, i) => {
   const d = new Date();
@@ -205,6 +308,42 @@ export const handlers: HttpHandler[] = [
   }),
 
   http.get(`${API}/users/:id/transactions`, () => HttpResponse.json(transactions)),
+  http.get(`${API}/users/:id/subscriptions`, ({ params }) =>
+    HttpResponse.json({ subscriptions: Number(params.id) === 1 ? mockUserSubscriptions : [] }),
+  ),
+  http.post(`${API}/users/:id/subscriptions`, async ({ request }) => {
+    const body = (await request.json()) as { rw_id: number; label?: string; make_primary?: boolean };
+    const next = {
+      ...mockUserSubscriptions[0],
+      id: Math.max(0, ...mockUserSubscriptions.map((item) => item.id)) + 1,
+      rw_id: body.rw_id,
+      label: body.label || null,
+      source: "dashboard",
+      is_primary: Boolean(body.make_primary),
+    };
+    if (next.is_primary) {
+      mockUserSubscriptions = mockUserSubscriptions.map((item) => ({ ...item, is_primary: false }));
+    }
+    mockUserSubscriptions.push(next);
+    return HttpResponse.json(next);
+  }),
+  http.patch(`${API}/users/:id/subscriptions/:subscriptionId`, async ({ params, request }) => {
+    const body = (await request.json()) as { label?: string | null };
+    const id = Number(params.subscriptionId);
+    mockUserSubscriptions = mockUserSubscriptions.map((item) =>
+      item.id === id ? { ...item, label: body.label || null } : item,
+    );
+    return HttpResponse.json(mockUserSubscriptions.find((item) => item.id === id));
+  }),
+  http.post(`${API}/users/:id/subscriptions/:subscriptionId/primary`, ({ params }) => {
+    const id = Number(params.subscriptionId);
+    mockUserSubscriptions = mockUserSubscriptions.map((item) => ({ ...item, is_primary: item.id === id }));
+    return HttpResponse.json(mockUserSubscriptions.find((item) => item.id === id));
+  }),
+  http.delete(`${API}/users/:id/subscriptions/:subscriptionId`, ({ params }) => {
+    mockUserSubscriptions = mockUserSubscriptions.filter((item) => item.id !== Number(params.subscriptionId));
+    return HttpResponse.json({ ok: true });
+  }),
 
   http.post(`${API}/users/:id/ban`, () => HttpResponse.json({ ok: true })),
   http.post(`${API}/users/:id/unban`, () => HttpResponse.json({ ok: true })),
@@ -213,7 +352,7 @@ export const handlers: HttpHandler[] = [
   http.delete(`${API}/users/:id`, () => new HttpResponse(null, { status: 204 })),
   http.patch(`${API}/users/:id/identifiers`, () => HttpResponse.json({ ok: true })),
   http.patch(`${API}/users/:id/email`, () =>
-    HttpResponse.json({ ok: true, rw_uuid: "mock-uuid", rw_id: 99 }),
+    HttpResponse.json({ ok: true, rw_id: 99 }),
   ),
   http.post(`${API}/users/:id/credits`, () => HttpResponse.json({ ok: true, balance: 250 })),
   http.post(`${API}/users/:id/send-message`, () => HttpResponse.json({ ok: true })),
@@ -343,6 +482,31 @@ export const handlers: HttpHandler[] = [
     HttpResponse.json({ legacy_bot_constructor: false }),
   ),
   http.put(`${API}/settings/features`, () => HttpResponse.json({ ok: true })),
+  http.get(`${API}/branding`, () =>
+    HttpResponse.json({
+      branding_name: mockBranding.branding_name,
+      logo_url: `${API}/branding/logo`,
+      favicon_url: `${API}/branding/icon/64.png`,
+      manifest_url: `${API}/branding/manifest.webmanifest`,
+    }),
+  ),
+  http.get(`${API}/branding/logo`, () =>
+    HttpResponse.text(
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="24" fill="#7c6cff"/><path d="M25 32h14l11 32 11-32h14L57 76H43z" fill="white"/></svg>',
+      { headers: { "Content-Type": "image/svg+xml" } },
+    ),
+  ),
+  http.get(`${API}/settings/branding`, () => HttpResponse.json(mockBranding)),
+  http.put(`${API}/settings/branding`, async ({ request }) => {
+    const body = (await request.json()) as { branding_name: string; branding_logo_url: string | null };
+    mockBranding = {
+      branding_name: body.branding_name,
+      branding_logo_url: body.branding_logo_url || "",
+      has_custom_logo: !!body.branding_logo_url,
+      updated_at: new Date().toISOString(),
+    };
+    return HttpResponse.json(mockBranding);
+  }),
   http.get(`${API}/settings/runtime`, () =>
     HttpResponse.json({
       maintenance: { enabled: false, message: "" },
@@ -487,7 +651,22 @@ export const handlers: HttpHandler[] = [
   http.delete(`${API}/promos/:code`, () => new HttpResponse(null, { status: 204 })),
 
   http.get(`${API}/giveaways`, ({ request }) =>
-    HttpResponse.json(paginate([], new URL(request.url))),
+    HttpResponse.json(paginate([mockGiveaway], new URL(request.url))),
+  ),
+  http.get(`${API}/giveaways/:id`, () => HttpResponse.json(mockGiveaway)),
+  http.get(`${API}/giveaways/:id/participants`, () =>
+    HttpResponse.json({ items: mockParticipants, total: mockParticipants.length, page: 1, per_page: 100 }),
+  ),
+  http.get(`${API}/giveaways/:id/winners`, () => HttpResponse.json({ winners: mockWinners })),
+  http.post(`${API}/giveaways/:id/redraw`, () =>
+    HttpResponse.json({
+      winners: mockWinners.map((winner, index) => ({
+        ...winner,
+        tg_id: 7123456800 + index,
+        username: `replacement_${index + 1}`,
+        ticket_number: 201 + index,
+      })),
+    }),
   ),
   http.get(`${API}/store/order-params`, () => HttpResponse.json([])),
 
@@ -607,13 +786,72 @@ export const handlers: HttpHandler[] = [
   http.get(`${API}/telemt/security/posture`, () => HttpResponse.json(okEnvelope({}))),
   http.get(`${API}/telemt/security/whitelist`, () => HttpResponse.json(okEnvelope({ entries: [] }))),
   http.get(`${API}/telemt/limits/effective`, () => HttpResponse.json(okEnvelope({}))),
-  http.get(`${API}/telemt/config`, () => HttpResponse.json(okEnvelope({}))),
-  http.patch(`${API}/telemt/config`, () => HttpResponse.json(okEnvelope({ applied: true }))),
+  http.get(`${API}/telemt/config`, () =>
+    HttpResponse.json(
+      okEnvelope({
+        server: {
+          listeners: [{ ip: "0.0.0.0", port: 8443, client_mss: "92" }],
+        },
+      }),
+    ),
+  ),
+  http.patch(`${API}/telemt/config`, () =>
+    HttpResponse.json(
+      okEnvelope({ revision: "mock-2", restart_required: true, changed: ["server"] }),
+    ),
+  ),
   http.get(`${API}/telemt/users`, () => HttpResponse.json(okEnvelope([]))),
   http.get(`${API}/telemt/free-params`, () =>
     HttpResponse.json({ enabled: false, days: 1, news_required: true }),
   ),
   http.put(`${API}/telemt/free-params`, () => HttpResponse.json({ ok: true })),
+
+  // ── API Health ────────────────────────────────────────
+  http.get(`${API}/api-health/summary`, () =>
+    HttpResponse.json({
+      requests: 3248, avg_rps: 0.038, success_rate: 97.84, client_errors: 38,
+      server_errors: 32, error_rate: 2.16, avg_ms: 142, p50_ms: 100,
+      p95_ms: 500, p99_ms: 2000, max_ms: 6284, client_error_rate: 1.17,
+      server_error_rate: .99, slow_requests: 18, dropped_events: 0,
+      last_telemetry_at: new Date().toISOString(),
+      services: [
+        { service: "miniapp", is_healthy: true, checked_at: new Date().toISOString(), last_ok_at: new Date().toISOString(), last_error: null, consecutive_failures: 0, response_time_ms: 24 },
+        { service: "bot", is_healthy: true, checked_at: new Date().toISOString(), last_ok_at: new Date().toISOString(), last_error: null, consecutive_failures: 0, response_time_ms: 18 },
+        { service: "dashboard", is_healthy: true, checked_at: new Date().toISOString(), last_ok_at: new Date().toISOString(), last_error: null, consecutive_failures: 0, response_time_ms: 12 },
+      ],
+    }),
+  ),
+  http.get(`${API}/api-health/series`, () => HttpResponse.json(apiHealthSeries)),
+  http.get(`${API}/api-health/endpoints`, () => HttpResponse.json([
+    { service: "miniapp", method: "GET", route: "/bot/miniapp/api/me", requests: 1240, success_rate: 99.4, client_errors: 5, server_errors: 2, error_rate: .56, client_error_rate: .4, server_error_rate: .16, slow_requests: 0, avg_ms: 118, p50_ms: 100, p95_ms: 500, p99_ms: 1000, max_ms: 1844, dropped_events: 0, last_error_at: new Date(Date.now() - 7200000).toISOString() },
+    { service: "miniapp", method: "POST", route: "/bot/miniapp/api/payments/invoice", requests: 284, success_rate: 92.3, client_errors: 8, server_errors: 14, error_rate: 7.74, client_error_rate: 2.82, server_error_rate: 4.93, slow_requests: 18, avg_ms: 740, p50_ms: 500, p95_ms: 2000, p99_ms: 5000, max_ms: 6284, dropped_events: 0, last_error_at: new Date(Date.now() - 1800000).toISOString() },
+    { service: "bot", method: "POST", route: "/bot/remnawave_webhook", requests: 604, success_rate: 98.7, client_errors: 4, server_errors: 4, error_rate: 1.32, client_error_rate: .66, server_error_rate: .66, slow_requests: 0, avg_ms: 94, p50_ms: 100, p95_ms: 250, p99_ms: 1000, max_ms: 1310, dropped_events: 0, last_error_at: new Date(Date.now() - 3600000).toISOString() },
+    { service: "dashboard", method: "GET", route: "/bot/dashboard/api/users", requests: 420, success_rate: 100, client_errors: 0, server_errors: 0, error_rate: 0, client_error_rate: 0, server_error_rate: 0, slow_requests: 0, avg_ms: 72, p50_ms: 50, p95_ms: 250, p99_ms: 500, max_ms: 612, dropped_events: 0, last_error_at: null },
+  ])),
+  http.get(`${API}/api-health/errors/:id`, ({ params }) => HttpResponse.json({
+    id: Number(params.id), occurred_at: new Date(Date.now() - 1800000).toISOString(), request_id: "e1703e7c-7f0f-49cd-8725-c868bfce2183",
+    service: "miniapp", method: "POST", route: "/bot/miniapp/api/payments/invoice", status_code: 500, duration_ms: 2384,
+    user_id: 1, tg_id: 100001, actor: null, client_ip: "203.0.113.42", client_channel: "telegram", user_agent: "TelegramBot (Android)", app_version: "2.4.1",
+    exception_type: "UpstreamTimeout", error_message: "Payment provider did not respond before the request deadline",
+    error_fingerprint: "78418ca69c7b5ae884b5e2c9beea8920", traceback: "Traceback (most recent call last):\n  File \"routers/payments.py\", line 224, in create_invoice\n    response = await provider.create_invoice(...)\nUpstreamTimeout: provider request timed out",
+  })),
+  http.get(`${API}/api-health/errors`, () => HttpResponse.json({
+    items: [
+      { id: 1, occurred_at: new Date(Date.now() - 1800000).toISOString(), request_id: "e1703e7c-7f0f-49cd-8725-c868bfce2183", service: "miniapp", method: "POST", route: "/bot/miniapp/api/payments/invoice", status_code: 500, duration_ms: 2384, user_id: 1, tg_id: 100001, actor: null, client_ip: "203.0.113.42", client_channel: "telegram", user_agent: "TelegramBot (Android)", app_version: "2.4.1", exception_type: "UpstreamTimeout", error_message: "Payment provider did not respond before the request deadline", error_fingerprint: "78418ca69c7b5ae884b5e2c9beea8920" },
+      { id: 2, occurred_at: new Date(Date.now() - 4200000).toISOString(), request_id: "07c445a0-e56f-4df7-8ce7-22af85ccda97", service: "bot", method: "POST", route: "/bot/remnawave_webhook", status_code: 502, duration_ms: 1304, user_id: null, tg_id: null, actor: null, client_ip: "198.51.100.17", client_channel: "webhook", user_agent: "Remnawave/3.0", app_version: null, exception_type: "HTTPStatusError", error_message: "Upstream returned HTTP 502", error_fingerprint: "529405b615a947377dcbdad13f18b3c2" },
+      { id: 3, occurred_at: new Date(Date.now() - 6300000).toISOString(), request_id: "1dbbda16-297b-481e-b5ca-2fae0d786acb", service: "miniapp", method: "GET", route: "/bot/miniapp/api/me", status_code: 401, duration_ms: 18, user_id: null, tg_id: null, actor: null, client_ip: "192.0.2.88", client_channel: "telegram", user_agent: "TelegramBot (iOS)", app_version: "2.4.1", exception_type: null, error_message: "HTTP 401", error_fingerprint: "b61812508515003f6d1e8f33551537a9" },
+    ],
+    groups: [
+      { fingerprint: "78418ca69c7b5ae884b5e2c9beea8920", service: "miniapp", route: "/bot/miniapp/api/payments/invoice", status_code: 500, exception_type: "UpstreamTimeout", message: "Payment provider did not respond", count: 21, affected_users: 14, last_seen_at: new Date(Date.now() - 1800000).toISOString() },
+      { fingerprint: "529405b615a947377dcbdad13f18b3c2", service: "bot", route: "/bot/remnawave_webhook", status_code: 502, exception_type: "HTTPStatusError", message: "Upstream returned HTTP 502", count: 7, affected_users: 0, last_seen_at: new Date(Date.now() - 4200000).toISOString() },
+    ],
+    total: 32, page: 1, per_page: 25,
+  })),
+  http.get(`${API}/api-health/settings`, () => HttpResponse.json(apiAlertSettings)),
+  http.put(`${API}/api-health/settings`, async ({ request }) => {
+    apiAlertSettings = await request.json() as ApiAlertSettings;
+    return HttpResponse.json(apiAlertSettings);
+  }),
 
   // ── Catch-all: keep unknown endpoints from crashing the UI ─
   http.all(`${API}/*`, ({ request }) => {

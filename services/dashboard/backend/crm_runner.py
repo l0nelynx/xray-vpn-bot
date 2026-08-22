@@ -8,11 +8,12 @@ import logging
 
 from common_db.repo import crm as crm_repo
 from common_db.repo.users import get_users_by_tg_ids
+from remnawave_client.segmentation import SEGMENT_ALL_USERS, SEGMENT_UNPAID_INVOICE
 
 from .config import get_remnawave_token, get_remnawave_url
 from .crm_actions import execute_user_actions
-from .crm_conditions import evaluate_conditions_full
-from .crm_model_adapter import get_actions, get_conditions
+from .crm_conditions import evaluate_conditions_full, segment_id_from_conditions
+from .crm_model_adapter import RW_CONDITION_TYPES, get_actions, get_conditions
 from .database.session import async_session
 from .telegram import tg_bot_username
 
@@ -43,7 +44,12 @@ async def resolve_targets(
     conditions = get_conditions(campaign)
     if not conditions:
         return []
-    rw = _rw_client()
+    segment_id = segment_id_from_conditions(conditions)
+    needs_rw = (
+        segment_id not in {SEGMENT_ALL_USERS, SEGMENT_UNPAID_INVOICE}
+        or any(c.get("type") in RW_CONDITION_TYPES for c in conditions)
+    )
+    rw = _rw_client() if needs_rw else None
     tg_ids, _ = await evaluate_conditions_full(session, rw, conditions)
     return tg_ids
 
@@ -54,7 +60,7 @@ async def execute_crm_campaign(
 ) -> None:
     """Run action pipeline for a queued campaign."""
     rw = _rw_client()
-    crm_by_uuid: dict[str, dict] = {}
+    crm_by_id: dict[int, dict] = {}
 
     try:
         async with async_session() as session:
@@ -89,8 +95,8 @@ async def execute_crm_campaign(
 
         try:
             for u in await rw.get_all_users_for_crm():
-                if u.get("uuid"):
-                    crm_by_uuid[u["uuid"]] = u
+                if u.get("rw_id") is not None:
+                    crm_by_id[int(u["rw_id"])] = u
         except Exception as exc:
             logger.error("CRM campaign %s: bulk RW fetch failed: %s", campaign_id, exc)
 
@@ -116,6 +122,7 @@ async def execute_crm_campaign(
                         session,
                         campaign_id=campaign_id,
                         tg_id=tg_id,
+                        rw_id=None,
                         vless_uuid=None,
                         perk_status="skipped",
                         message_status="failed",
@@ -124,7 +131,7 @@ async def execute_crm_campaign(
                     await session.commit()
                 continue
 
-            crm_user = crm_by_uuid.get(db_user.vless_uuid or "")
+            crm_user = crm_by_id.get(int(db_user.rw_id)) if db_user.rw_id is not None else None
 
             async def _on_sent(eid=event_id, uid=tg_id):
                 if not eid:
@@ -171,6 +178,7 @@ async def execute_crm_campaign(
                     session,
                     campaign_id=campaign_id,
                     tg_id=tg_id,
+                    rw_id=db_user.rw_id,
                     vless_uuid=db_user.vless_uuid,
                     perk_status=perk_status,
                     message_status=message_status,

@@ -5,7 +5,7 @@ import json
 import pytest
 
 from remnawave_client.webhooks import (
-    extract_vless_uuid,
+    extract_rw_id,
     is_torrent_block_report,
     parse_webhook,
     torrent_block_ip,
@@ -21,14 +21,14 @@ _SAMPLE_PAYLOAD = {
     "timestamp": "2026-03-07T16:02:50.564Z",
     "data": {
         "node": {},
-        "user": {"uuid": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"},
+        "user": {"id": 2},
         "report": {
             "actionReport": {
                 "blocked": True,
                 "ip": "203.0.113.42",
                 "blockDuration": 1800,
                 "willUnblockAt": "2026-03-07T16:32:48.986Z",
-                "userId": "2",
+                "userId": 2,
                 "processedAt": "2026-03-07T16:02:48.986Z",
             },
             "xrayReport": {
@@ -74,16 +74,16 @@ def test_parse_torrent_block_payload():
     assert is_torrent_block_report(payload) is True
 
 
-def test_extract_vless_uuid():
+def test_extract_rw_id():
     body = json.dumps(_SAMPLE_PAYLOAD).encode()
     payload = parse_webhook(body)
-    assert extract_vless_uuid(payload) == "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+    assert extract_rw_id(payload) == 2
 
 
-def test_extract_vless_uuid_missing_user():
+def test_extract_rw_id_missing_user():
     payload_data = {**_SAMPLE_PAYLOAD, "data": {"node": {}, "user": {}, "report": {}}}
     payload = parse_webhook(json.dumps(payload_data).encode())
-    assert extract_vless_uuid(payload) is None
+    assert extract_rw_id(payload) is None
 
 
 def test_torrent_block_minutes():
@@ -136,13 +136,13 @@ def test_extract_not_connected_after_hours():
         "event": "user.not_connected",
         "timestamp": "2026-03-07T16:02:50.564Z",
         "data": {
-            "uuid": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+            "id": 314,
             "telegramId": 12345,
             "meta": {"notConnectedAfterHours": 48},
         },
     }
     payload = parse_webhook(json.dumps(data).encode())
-    assert extract_vless_uuid(payload) == "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+    assert extract_rw_id(payload) == 314
     assert extract_not_connected_after_hours(payload) == 48
 
 
@@ -159,7 +159,7 @@ def test_extract_device_model():
         "event": "user_hwid_devices.added",
         "timestamp": "2026-03-07T16:02:50.564Z",
         "data": {
-            "user": {"uuid": "u-1", "telegramId": 99},
+            "user": {"id": 77, "telegramId": 99},
             "hwidUserDevice": {
                 "deviceModel": "Pixel 8",
                 "platform": "android",

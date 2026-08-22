@@ -1,4 +1,4 @@
-import { Inbox, Plus } from "lucide-react";
+import { BookOpen, ChevronRight, Inbox, LifeBuoy, Link2, MessageSquarePlus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { Alert, AlertTitle } from "@xray/ui/components/alert";
@@ -24,7 +24,27 @@ export default function SupportPage() {
   return (
     <div className="page">
       <div className="text-xl font-bold text-foreground mb-5">
-        {t("support.title")}
+        {t("support.helpTitle")}
+      </div>
+
+      <div className="help-actions">
+        <button className="home-row" onClick={() => navigate("/connect?source=help")}>
+          <span className="home-row__icon"><Link2 /></span><span><strong>{t("support.connectGuide")}</strong><small>{t("support.connectGuideBody")}</small></span><ChevronRight />
+        </button>
+        <button className="home-row" onClick={() => navigate("/onboarding?replay=1")}>
+          <span className="home-row__icon"><BookOpen /></span><span><strong>{t("support.replayOnboarding")}</strong><small>{t("support.replayOnboardingBody")}</small></span><ChevronRight />
+        </button>
+        <button className="home-row" onClick={() => navigate("/support/new")}>
+          <span className="home-row__icon"><LifeBuoy /></span><span><strong>{t("support.problem")}</strong><small>{t("support.problemBody")}</small></span><ChevronRight />
+        </button>
+      </div>
+
+      <div className="support-tickets-header">
+        <div className="section-label">{t("support.ticketsTitle")}</div>
+        <Button size="sm" variant="outline" onClick={() => navigate("/support/new")}>
+          <MessageSquarePlus />
+          {t("support.newTicket")}
+        </Button>
       </div>
 
       {error && (
@@ -57,15 +77,6 @@ export default function SupportPage() {
           />
         ))}
 
-      <Button
-        size="icon"
-        className="rounded-full fixed right-6 shadow-lg"
-        style={{ bottom: 88, width: 52, height: 52 }}
-        onClick={() => navigate("/support/new")}
-        aria-label={t("support.newAria")}
-      >
-        <Plus className="w-[22px] h-[22px]" />
-      </Button>
     </div>
   );
 }

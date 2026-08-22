@@ -26,7 +26,7 @@ def is_free_tier_user(crm_user: dict) -> bool:
 
 async def apply_crm_bonus_days(
     *,
-    user_uuid: str,
+    rw_id: int,
     username: str,
     bonus_days: int,
     crm_user: dict,
@@ -42,10 +42,10 @@ async def apply_crm_bonus_days(
     try:
         if status == "active":
             if is_free_tier_user(crm_user):
-                await rw.reset_user_traffic(user_uuid)
+                await rw.reset_user_traffic_by_id(rw_id)
             current_days = int(crm_user.get("days_left") or 0)
             result = await apply_extend(
-                user_uuid=user_uuid,
+                rw_id=rw_id,
                 username=username,
                 days=bonus_days,
                 current_days_left=current_days,
@@ -58,9 +58,9 @@ async def apply_crm_bonus_days(
             if limit_bytes > 0:
                 limit_gb = max(1, limit_bytes // (1024 ** 3))
             if status == "limited":
-                await rw.reset_user_traffic(user_uuid)
+                await rw.reset_user_traffic_by_id(rw_id)
             result = await apply_update(
-                user_uuid=user_uuid,
+                rw_id=rw_id,
                 username=username,
                 days=bonus_days,
                 limit_gb=limit_gb,
@@ -70,13 +70,13 @@ async def apply_crm_bonus_days(
             )
         return result is not None
     except Exception as exc:
-        logger.error("apply_crm_bonus_days uuid=%s failed: %s", user_uuid, exc)
+        logger.error("apply_crm_bonus_days rw_id=%s failed: %s", rw_id, exc)
         return False
 
 
 async def apply_crm_bonus_traffic(
     *,
-    user_uuid: str,
+    rw_id: int,
     username: str,
     bonus_gb: int,
     crm_user: dict,
@@ -93,10 +93,10 @@ async def apply_crm_bonus_traffic(
 
     try:
         if status == "limited":
-            await rw.reset_user_traffic(user_uuid)
+            await rw.reset_user_traffic_by_id(rw_id)
         days = max(1, int(crm_user.get("days_left") or 1))
         result = await apply_update(
-            user_uuid=user_uuid,
+            rw_id=rw_id,
             username=username,
             days=days,
             limit_gb=new_limit_gb,
@@ -106,5 +106,5 @@ async def apply_crm_bonus_traffic(
         )
         return result is not None
     except Exception as exc:
-        logger.error("apply_crm_bonus_traffic uuid=%s failed: %s", user_uuid, exc)
+        logger.error("apply_crm_bonus_traffic rw_id=%s failed: %s", rw_id, exc)
         return False

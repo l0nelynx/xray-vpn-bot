@@ -356,6 +356,22 @@ server {
 
 The edge nginx must join `backend-network` so container names resolve.
 
+### Client IP behind stream PROXY + docker-publish
+
+Rate limits and registration cooldowns key on `X-Real-IP` (see miniapp
+`real_client_ip`). If the edge uses `listen … proxy_protocol` after a host
+`stream` hop published into a container (`127.0.0.1:port` → docker), the TCP
+peer inside the container is a docker-bridge address (`172.16.0.0/12`), not
+`127.0.0.1`. Trust that CIDR (or use `$proxy_protocol_addr` in
+`proxy_set_header X-Real-IP`) so `$remote_addr` / `X-Real-IP` become the real
+client instead of a shared bridge IP.
+
+```nginx
+set_real_ip_from 127.0.0.1;
+set_real_ip_from 172.16.0.0/12;
+real_ip_header   proxy_protocol;
+```
+
 ### Web portal on separate host
 
 If the browser portal is on Vercel, route only `/bot/miniapp/api/` to miniapp
@@ -417,7 +433,6 @@ Migrations run automatically via the `migrate` container on each `up`.
 | Telemt 503 in Dashboard | `telemt_server` empty or unreachable |
 | Support image upload 413 | Raise `client_max_body_size` on edge nginx |
 | nginx upstream not found | Use variable + resolver pattern (see above) |
-| MiniApp 403 username required | User must have a Telegram @username |
 
 ## Documentation site
 

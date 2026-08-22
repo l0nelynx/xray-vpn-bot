@@ -126,6 +126,14 @@ def get_remnawave_token() -> str:
     return get_config().get("remnawave_token", "")
 
 
+def get_rw_pro_id() -> str:
+    return get_config().get("rw_pro_id", "")
+
+
+def get_rw_free_id() -> str:
+    return get_config().get("rw_free_id", "")
+
+
 def get_redis_url() -> str:
     return os.environ.get("REDIS_URL", "redis://redis:6379/0")
 

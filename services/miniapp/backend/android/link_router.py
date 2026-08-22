@@ -21,7 +21,6 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from ..config import get_bot_url, get_subscription_host
 from ..database.session import async_session
 from ..notify_log import esc, notify_log
-from remnawave_client.api import update_user
 from . import auth_router, deps, repo, security
 from .schemas_data import LinkByUrlRequest, LinkByUrlResponse, LinkStartResponse
 
@@ -127,9 +126,8 @@ async def link_by_url(
       1. Parse short_uuid from URL (422 on bad shape).
       2. Run import_subscription_by_uuid in a new session.
          - LookupNotFound  → 404 rw_not_found.
-         - MergeBlocked    → 200 both_pro_support_needed.
          - Any other exc   → 500 internal.
-      3. Commit, best-effort disable loser RW user.
+      3. Commit while preserving every linked Remnawave profile.
       4. notify_log.
 
     The URL is a bearer credential — anyone holding it can take the
@@ -172,11 +170,11 @@ async def link_by_url(
             pending_notify = _format_notify(
                 result="both_pro_support_needed",
                 user_id=user.id, email=user.email,
-                a_rw_uuid=blocked.details.get("a_rw_uuid"),
+                a_rw_id=blocked.details.get("a_rw_id"),
                 a_tier="pro",
-                b_rw_uuid=blocked.details.get("t_rw_uuid"),
+                b_rw_id=blocked.details.get("t_rw_id"),
                 b_tier="pro",
-                chosen=None, disabled=None,
+                chosen=None,
             )
             blocked_response = LinkByUrlResponse(
                 result="both_pro_support_needed",
@@ -213,33 +211,15 @@ async def link_by_url(
 
     assert merge is not None  # success path: merge was populated
 
-    # Best-effort RW deactivate. Failure does NOT roll back the DB.
-    disabled_uuid = merge.get("loser_rw_uuid")
-    if merge["result"] in ("merged_pro", "merged_free", "ok") and disabled_uuid:
-        try:
-            await update_user(user_uuid=disabled_uuid, status="disabled")
-        except Exception as exc:
-            logger.warning(
-                "Failed to disable old RW user %s: %s",
-                disabled_uuid, exc,
-            )
-            await notify_log(
-                f"⚠️ <b>Failed to disable old RW user</b>\n"
-                f"uuid: <code>{esc(disabled_uuid)}</code>\n"
-                f"error: <code>{esc(str(exc)[:300])}</code>"
-            )
-            disabled_uuid = None  # didn't actually disable; reflect in log
-
     await notify_log(
         _format_notify(
             result=merge["result"],
             user_id=user.id, email=user.email,
-            a_rw_uuid=merge.get("a_rw_uuid"),
+            a_rw_id=merge.get("a_rw_id"),
             a_tier=merge["a_tier"],
-            b_rw_uuid=merge["b_rw_uuid"],
+            b_rw_id=merge["b_rw_id"],
             b_tier=merge["b_tier"],
-            chosen=merge["chosen_uuid"],
-            disabled=disabled_uuid,
+            chosen=merge["chosen_rw_id"],
         )
     )
 
@@ -255,26 +235,24 @@ def _format_notify(
     result: str,
     user_id: int,
     email: str | None,
-    a_rw_uuid: str | None,
+    a_rw_id: int | None,
     a_tier: str,
-    b_rw_uuid: str | None,
+    b_rw_id: int | None,
     b_tier: str,
-    chosen: str | None,
-    disabled: str | None,
+    chosen: int | None,
 ) -> str:
     parts = [f"🔗 <b>Android sub-URL import: {esc(result)}</b>"]
     parts.append(
         f"user: <code>{user_id}</code> {esc(email or '—')} "
-        f"rw=<code>{esc(a_rw_uuid or '—')}</code> "
+        f"rw_id=<code>{esc(a_rw_id or '—')}</code> "
         f"tier=<code>{esc(a_tier)}</code>"
     )
     parts.append(
-        f"imported: rw=<code>{esc(b_rw_uuid or '—')}</code> "
+        f"imported: rw_id=<code>{esc(b_rw_id or '—')}</code> "
         f"tier=<code>{esc(b_tier)}</code>"
     )
     if result != "both_pro_support_needed":
         parts.append(
-            f"chosen_uuid=<code>{esc(chosen or '—')}</code> "
-            f"disabled_uuid=<code>{esc(disabled or '—')}</code>"
+            f"chosen_rw_id=<code>{esc(chosen or '—')}</code>"
         )
     return "\n".join(parts)

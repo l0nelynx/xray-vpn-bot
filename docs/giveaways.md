@@ -14,7 +14,14 @@ Rewards are **not** stored or issued by the system — admins distribute prizes 
 | **Giveaway** | Campaign with entry rules, ticket mode, and winner selection |
 | **Participant** | User who joined via bot (`?start=gw_{id}` or callback) |
 | **Ticket** | Lottery entry weight; one row per granted ticket |
-| **Winner** | Result row after admin runs draw |
+| **Winner** | Result row after admin runs draw, linked to the concrete winning ticket |
+
+### Schedule window
+
+`starts_at` / `ends_at` are optional **UTC-naive** ISO timestamps (`YYYY-MM-DDTHH:MM:SS`).
+Dashboard datetime inputs use the admin’s **local time** and convert to/from UTC on save/load.
+Participation checks compare against `datetime.now(UTC)`. Empty bounds mean no limit.
+Active giveaways can still update the schedule (dates only).
 
 ### Entry requirements (participant)
 
@@ -45,6 +52,8 @@ Static mode: only the `join` ticket is granted.
 - Activate, close, bot broadcast, channel post
 - View participants and ticket counts
 - Draw winners (random weighted or most tickets)
+- Re-draw a complete replacement set for a drawn giveaway; previous winners are excluded and the old result is preserved if there are too few candidates
+- Open a branded, privacy-masked winner certificate and export one 1080×1350 PNG per eight winners (multiple pages download as ZIP)
 
 API: `/bot/dashboard/api/giveaways/*`
 
@@ -63,6 +72,16 @@ After join in dynamic mode with invitee sources, bot shows the user's referral d
 ## Data model
 
 Tables: `giveaways`, `giveaway_participants`, `giveaway_tickets`, `giveaway_winners`.
+
+Tickets receive stable display numbers `1…N` within their giveaway ordered by
+`(created_at, id)`. Winner responses expose that value as `ticket_number`.
+Random selection stores the actual weighted winning ticket; `most_tickets`
+stores the participant's lowest-numbered ticket.
+
+Draw and re-draw lock the giveaway row for the transaction. Re-draw replaces
+the previous winner rows atomically and excludes only that immediately previous
+set. `POST /giveaways/{id}/redraw` returns `409` without changing the result if
+fewer than `winner_count` eligible participants remain.
 
 `giveaways.config_json`:
 

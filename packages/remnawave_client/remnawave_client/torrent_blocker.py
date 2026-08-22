@@ -30,19 +30,16 @@ def _parse_dt(value: Any) -> datetime | None:
     return None
 
 
-def _extract_user_uuid(record: dict) -> str | None:
-    """Best-effort UUID extraction from a torrent-blocker report row."""
-    for key in ("userUuid", "user_uuid"):
-        val = record.get(key)
-        if val:
-            return str(val)
-
+def _extract_user_id(record: dict) -> int | None:
+    """Extract the numeric Remnawave user id from a v3 report row."""
     user = record.get("user")
     if isinstance(user, dict):
-        for key in ("uuid", "userUuid"):
-            val = user.get(key)
-            if val:
-                return str(val)
+        value = user.get("id") or user.get("userId") or user.get("user_id")
+        if value is not None:
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                return None
 
     xray = record.get("xrayReport") or record.get("xray_report")
     if isinstance(xray, dict):
@@ -53,9 +50,12 @@ def _extract_user_uuid(record: dict) -> str | None:
 
     action = record.get("actionReport") or record.get("action_report")
     if isinstance(action, dict):
-        uid = action.get("userId") or action.get("user_id")
-        if uid:
-            return str(uid)
+        value = action.get("userId") or action.get("user_id")
+        if value is not None:
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                return None
 
     return None
 
@@ -105,15 +105,15 @@ async def fetch_torrent_blocker_reports(
     return [], 0
 
 
-async def collect_torrent_user_uuids(
+async def collect_torrent_user_ids(
     client,
     *,
     days: int = 7,
     page_size: int = 100,
-) -> set[str]:
-    """Distinct user UUIDs with torrent-blocker reports in the last ``days``."""
+) -> set[int]:
+    """Distinct numeric user IDs with reports in the last ``days``."""
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-    uuids: set[str] = set()
+    user_ids: set[int] = set()
     start = 0
 
     while True:
@@ -129,12 +129,12 @@ async def collect_torrent_user_uuids(
             ts = _record_timestamp(record)
             if ts and ts < cutoff:
                 continue
-            uid = _extract_user_uuid(record)
-            if uid and len(uid) >= 32:
-                uuids.add(uid)
+            rw_id = _extract_user_id(record)
+            if rw_id is not None:
+                user_ids.add(rw_id)
 
         start += len(records)
         if start >= total or len(records) < page_size:
             break
 
-    return uuids
+    return user_ids

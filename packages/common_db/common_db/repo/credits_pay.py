@@ -39,6 +39,8 @@ async def purchase_with_credits(
     days: int,
     tariff_slug: str,
     android_user_id: int | None = None,
+    target_rw_id: int | None = None,
+    purchase_source: str = "legacy_unknown",
 ) -> CreditPurchaseResult | None:
     """Debit RUB points and create a confirmed BONUS_CREDITS transaction.
 
@@ -87,6 +89,8 @@ async def purchase_with_credits(
             squad_id=squad_id,
             external_squad_id=external_squad_id,
             android_user_id=android_user_id,
+            target_rw_id=target_rw_id,
+            purchase_source=purchase_source,
         )
     )
     await session.flush()

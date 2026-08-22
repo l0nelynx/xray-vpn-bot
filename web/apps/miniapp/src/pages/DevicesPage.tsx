@@ -17,6 +17,7 @@ import {
 } from "@xray/ui/components/alert-dialog";
 import { api, DeviceItem, DevicesResponse } from "../api/client";
 import { useT } from "../i18n/LocaleContext";
+import StackPageHeader from "../components/StackPageHeader";
 
 function platformIcon(platform: string | null) {
   if (!platform) return <Laptop />;
@@ -74,11 +75,10 @@ export default function DevicesPage() {
 
   return (
     <div className="page">
-      <div className="page-header">
-        <span style={{ fontSize: 22, fontWeight: 700, color: "#FFFFFF", letterSpacing: "-0.3px" }}>
-          {t("devices.title")}
-        </span>
-        <Button
+      <StackPageHeader
+        title={t("devices.title")}
+        backTo="/"
+        action={<Button
           className="refresh-fab"
           size="icon"
           variant="outline"
@@ -86,8 +86,8 @@ export default function DevicesPage() {
           aria-label={t("devices.refreshAria")}
         >
           <RefreshCw />
-        </Button>
-      </div>
+        </Button>}
+      />
 
       {error && (
         <Alert variant="destructive" style={{ marginBottom: 16 }}>

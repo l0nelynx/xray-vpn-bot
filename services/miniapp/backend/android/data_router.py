@@ -27,9 +27,9 @@ from ..config import (
     get_support_bot_link,
 )
 from remnawave_client.api import (
-    delete_user_hwid_device,
-    get_user_devices_count,
-    list_user_hwid_devices,
+    delete_user_hwid_device_by_id,
+    get_user_devices_count_by_id,
+    list_user_hwid_devices_by_id,
     resolve_remnawave_user,
 )
 from . import deps, iap_repo, repo
@@ -97,22 +97,24 @@ def _user_summary(user: repo.UserRow) -> AndroidUserSummary:
     )
 
 
-async def _resolve_remnawave_uuid(user: repo.UserRow) -> str | None:
-    """Resolve the Remnawave UUID via the fallback chain
-    (vless_uuid → email → username-from-email). Going through
+async def _resolve_remnawave_id(user: repo.UserRow) -> int | None:
+    """Resolve the Remnawave user via the fallback chain
+    (rw_id → exact email → verified username). Going through
     `resolve_remnawave_user` guarantees the same lookup priority as
     `/me` so /devices doesn't disagree with what the user sees on the
     account screen."""
-    if not (user.vless_uuid or user.email):
+    if user.rw_id is None and not user.email:
         return None
     rem_user = await resolve_remnawave_user(
-        vless_uuid=user.vless_uuid,
+        rw_id=user.rw_id,
         email=user.email,
         username=email_to_username(user.email) if user.email else None,
+        expected_telegram_id=user.tg_id,
     )
     if not rem_user:
         return None
-    return rem_user.get("uuid")
+    value = rem_user.get("rw_id")
+    return int(value) if value is not None else None
 
 
 @router.get("/me", response_model=AndroidMeResponse)
@@ -124,7 +126,7 @@ async def get_me(
     links = _links()
     summary = _user_summary(user)
 
-    if not (user.vless_uuid or user.email):
+    if user.rw_id is None and not user.email:
         return AndroidMeResponse(user=summary, subscription=None, links=links)
 
     # This IAP lookup only needs user.id, so start it now and let it run
@@ -133,9 +135,10 @@ async def get_me(
     iap_task = asyncio.create_task(iap_repo.find_user_active_subscription(user.id))
 
     rem_user = await resolve_remnawave_user(
-        vless_uuid=user.vless_uuid,
+        rw_id=user.rw_id,
         email=user.email,
         username=email_to_username(user.email) if user.email else None,
+        expected_telegram_id=user.tg_id,
     )
 
     if not rem_user:
@@ -144,8 +147,11 @@ async def get_me(
         await iap_task
         return AndroidMeResponse(user=summary, subscription=None, links=links)
 
-    uuid = rem_user.get("uuid")
-    devices_count = await get_user_devices_count(uuid) if uuid else 0
+    resolved_rw_id = rem_user.get("rw_id")
+    devices_count = (
+        await get_user_devices_count_by_id(resolved_rw_id)
+        if resolved_rw_id is not None else 0
+    )
     rem_expire_ts = rem_user.get("expire")
 
     # If a Google Play subscription extends beyond the Remnawave expiry,
@@ -187,10 +193,10 @@ async def list_devices(
     request: Request,
     user: repo.UserRow = Depends(deps.get_current_user),
 ) -> AndroidDevicesResponse:
-    uuid = await _resolve_remnawave_uuid(user)
-    if not uuid:
+    rw_id = await _resolve_remnawave_id(user)
+    if rw_id is None:
         return AndroidDevicesResponse(total=0, devices=[])
-    devices = await list_user_hwid_devices(uuid)
+    devices = await list_user_hwid_devices_by_id(rw_id)
     items = [AndroidDeviceItem(**d) for d in devices]
     return AndroidDevicesResponse(total=len(items), devices=items)
 
@@ -200,10 +206,10 @@ async def remove_device(
     hwid: str,
     user: repo.UserRow = Depends(deps.get_current_user),
 ) -> None:
-    uuid = await _resolve_remnawave_uuid(user)
-    if not uuid:
+    rw_id = await _resolve_remnawave_id(user)
+    if rw_id is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail={"code": "no_subscription"})
-    ok = await delete_user_hwid_device(uuid, hwid)
+    ok = await delete_user_hwid_device_by_id(rw_id, hwid)
     if not ok:
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY, detail={"code": "device_delete_failed"}

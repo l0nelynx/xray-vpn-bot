@@ -227,13 +227,27 @@ async def list_participants(
 @router.post("/{giveaway_id}/draw")
 async def draw_giveaway(giveaway_id: int, _: str = Depends(get_current_user)):
     async with async_session() as session:
-        giveaway = await giveaway_repo.get_giveaway(session, giveaway_id)
+        giveaway = await giveaway_repo.get_giveaway_for_update(session, giveaway_id)
         if giveaway is None:
             raise HTTPException(404, "giveaway not found")
         try:
             winners = await giveaway_repo.draw_winners(session, giveaway)
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
+        await session.commit()
+    return {"winners": winners}
+
+
+@router.post("/{giveaway_id}/redraw")
+async def redraw_giveaway(giveaway_id: int, _: str = Depends(get_current_user)):
+    async with async_session() as session:
+        giveaway = await giveaway_repo.get_giveaway_for_update(session, giveaway_id)
+        if giveaway is None:
+            raise HTTPException(404, "giveaway not found")
+        try:
+            winners = await giveaway_repo.redraw_winners(session, giveaway)
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
         await session.commit()
     return {"winners": winners}
 

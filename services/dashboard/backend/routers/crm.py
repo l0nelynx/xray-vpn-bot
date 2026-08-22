@@ -164,7 +164,7 @@ class CreateCampaignRequest(LaunchCampaignRequest):
 class ScanUser(BaseModel):
     tg_id: int
     username: str | None
-    vless_uuid: str | None
+    rw_id: int | None
     meta: dict = Field(default_factory=dict)
 
 
@@ -395,11 +395,11 @@ async def preview_message(
         raise HTTPException(400, "message_text is required")
 
     rw = _rw_client()
-    crm_by_uuid: dict[str, dict] = {}
+    crm_by_id: dict[int, dict] = {}
     try:
         for u in await rw.get_all_users_for_crm():
-            if u.get("uuid"):
-                crm_by_uuid[u["uuid"]] = u
+            if u.get("rw_id") is not None:
+                crm_by_id[int(u["rw_id"])] = u
     except Exception as exc:
         logger.warning("Preview: RW fetch failed: %s", exc)
 
@@ -415,8 +415,8 @@ async def preview_message(
             if users:
                 db_user = users[0]
                 username = db_user.username
-                if db_user.vless_uuid:
-                    crm_user = crm_by_uuid.get(db_user.vless_uuid)
+                if db_user.rw_id is not None:
+                    crm_user = crm_by_id.get(int(db_user.rw_id))
 
     ctx = build_message_context(username=username, crm_user=crm_user, meta=meta)
     rendered = render_crm_message(body.message_text, ctx)

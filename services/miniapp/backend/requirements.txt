@@ -2,7 +2,7 @@
 # pyyaml, aiosqlite, alembic, asyncpg, psycopg2, remnawave) come from the shared
 # base image — see infra/docker/requirements-base.txt.
 aiohttp>=3.13.3
-aiosend>=3.0.5
+aiosend==3.0.7
 httpx
 slowapi>=0.1.9
 argon2-cffi>=23.1.0

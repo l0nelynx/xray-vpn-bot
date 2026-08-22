@@ -23,11 +23,14 @@ import html
 import logging
 import re
 import time
+from datetime import datetime, timezone
 from typing import Awaitable, Callable, Optional
 
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 
 from remnawave_client import (
+    RemnawaveOperationError,
     SubscriptionScenario,
     SubscriptionType,
     apply_extend,
@@ -39,7 +42,9 @@ from remnawave_client import api as rem
 
 logger = logging.getLogger(__name__)
 
-_USERNAME_RE = re.compile(r"[^a-zA-Z0-9_]")
+_USERNAME_RE = re.compile(r"[^a-zA-Z0-9_-]")
+_MAX_RW_USERNAME_LENGTH = 36
+_MAX_USERNAME_ATTEMPTS = 100
 
 SquadResolver = Callable[[str], Awaitable[Optional[dict]]]
 Notifier = Callable[[str], Awaitable[None]]
@@ -57,6 +62,74 @@ def email_to_username(email: str) -> str:
     raw = f"{local}_at_{domain}" if domain else local
     sanitized = _USERNAME_RE.sub("_", raw).strip("_")
     return sanitized or "user"
+
+
+def build_remnawave_username(
+    tg_username: str | None,
+    db_user_id: int,
+    ordinal: int = 0,
+) -> str:
+    """Build a stable, collision-resistant Remnawave username.
+
+    ``ordinal`` is zero for the first local subscription, one for the second,
+    and so on. Only the display-name component may be truncated.
+    """
+    if int(db_user_id) < 0 or int(ordinal) < 0:
+        raise ValueError("user id and ordinal must be non-negative")
+    base = _USERNAME_RE.sub("", (tg_username or "").lstrip("@").lower()) or "user"
+    suffix = f"_{int(db_user_id)}" + (f"_{int(ordinal)}" if ordinal else "")
+    available = _MAX_RW_USERNAME_LENGTH - len(suffix)
+    if available < 1:
+        raise ValueError("db user id and subscription number exceed username limit")
+    candidate = f"{base[:available]}{suffix}"
+    if len(candidate) < 3:
+        candidate = f"user{suffix}"
+    return candidate
+
+
+def provisioning_description(
+    *, transaction_id: str, db_user_id: int, tg_id: int | None,
+    source: str, original_tg_username: str | None, description: str | None,
+) -> str:
+    metadata = (
+        f"provisioning:{transaction_id}; db_user_id:{db_user_id}; "
+        f"tg_id:{tg_id if tg_id is not None else 'none'}; source:{source}; "
+        f"tg_username:{original_tg_username or 'none'}"
+    )
+    return f"{metadata}; {description}" if description else metadata
+
+
+def delivery_description(transaction_id: str, description: str | None) -> str:
+    """Attach an idempotency marker to a mutating delivery operation."""
+    marker = f"delivery:{transaction_id}"
+    if description and marker in description:
+        return description
+    return f"{marker}; {description}" if description else marker
+
+
+def _pending_result(reason: str, *, retryable: bool = False) -> dict:
+    result = {"status": "pending", "message": reason}
+    if retryable:
+        result["retryable"] = True
+    return result
+
+
+def _is_retryable_exception(exc: Exception) -> bool:
+    if isinstance(exc, RemnawaveOperationError):
+        return exc.retryable
+    return isinstance(exc, (TimeoutError, ConnectionError, OSError))
+
+
+def _rw_id(info: dict | None) -> int | None:
+    raw = (info or {}).get("rw_id")
+    try:
+        return int(raw) if raw is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 def _days_left(info: dict | None) -> int:
@@ -89,43 +162,199 @@ async def _notify(
     *,
     ok: bool,
     transaction_id: str,
-    android_user_id: int,
+    db_user_id: int,
+    tg_id: int | None,
+    tg_username: str | None,
     email: Optional[str],
     days: int,
     tariff_slug: Optional[str],
+    purchase_source: str,
+    rw_username: str | None = None,
+    rw_id: int | None = None,
+    subscription_number: int | None = None,
+    action: str | None = None,
     reason: Optional[str] = None,
 ) -> None:
     icon = "📦" if ok else "❌"
-    title = "Android subscription delivered" if ok else "Android delivery FAILED"
+    title = (
+        f"Subscription delivered ({purchase_source})"
+        if ok else f"Subscription delivery FAILED ({purchase_source})"
+    )
     extra = ""
     if not ok and reason:
         extra = f"\nerror: <code>{esc(reason[:300])}</code>"
+    identity = (
+        f"TG <code>{tg_id}</code> @{esc(tg_username or '—')}"
+        if tg_id is not None else esc(email or "—")
+    )
+    delivery = ""
+    if ok:
+        delivery = (
+            f"\nremnawave: <code>{esc(rw_username or '—')}</code> "
+            f"(<code>{rw_id if rw_id is not None else '—'}</code>)"
+            f"\nsubscription: <code>{subscription_number or '—'}</code>"
+            f"\naction: <code>{esc(action or '—')}</code>"
+        )
     await notifier(
         f"{icon} <b>{title}</b>\n"
-        f"user: <code>{android_user_id}</code> {esc(email or '—')}\n"
+        f"DB user: <code>{db_user_id}</code> {identity}\n"
         f"days: <code>{days}</code>\n"
         f"slug: <code>{esc(tariff_slug or '—')}</code>\n"
         f"tx: <code>{esc(transaction_id)}</code>"
+        f"{delivery}"
         f"{extra}"
     )
 
 
-async def _update_delivery_status(session_factory, transaction_id: str, status: int) -> None:
+async def _update_delivery_status(
+    session_factory,
+    transaction_id: str,
+    status: int,
+    *,
+    error: str | None = None,
+    pending: bool = False,
+) -> None:
+    order_status_sql = (
+        ", order_status = 'pending'"
+        if pending
+        else (", order_status = 'confirmed'" if status == 1 else "")
+    )
     async with session_factory() as session:
         await session.execute(
-            text("UPDATE transactions SET delivery_status = :s WHERE transaction_id = :t"),
-            {"s": status, "t": transaction_id},
+            text(
+                "UPDATE transactions SET delivery_status = :s, delivery_error = :e"
+                + order_status_sql
+                + " WHERE transaction_id = :t"
+            ),
+            {"s": status, "e": error, "t": transaction_id},
         )
         await session.commit()
 
 
-async def _save_vless_uuid(session_factory, user_id: int, vless_uuid: str) -> None:
+async def _local_context(session_factory, user_id: int) -> dict | None:
     async with session_factory() as session:
-        await session.execute(
-            text("UPDATE users SET vless_uuid = :u WHERE id = :i"),
-            {"u": vless_uuid, "i": user_id},
+        row = (
+            await session.execute(
+                text(
+                    "SELECT u.id, u.tg_id, u.username, u.email, u.rw_id, "
+                    "COUNT(s.id) AS subscription_count "
+                    "FROM users u LEFT JOIN user_subscriptions s ON s.user_id = u.id "
+                    "WHERE u.id = :u "
+                    "GROUP BY u.id, u.tg_id, u.username, u.email, u.rw_id"
+                ),
+                {"u": user_id},
+            )
+        ).mappings().first()
+        return dict(row) if row else None
+
+
+async def _subscription_owner(session_factory, rw_id: int) -> int | None:
+    async with session_factory() as session:
+        value = await session.scalar(
+            text(
+                "SELECT owner_id FROM ("
+                "SELECT user_id AS owner_id, 0 AS priority FROM user_subscriptions WHERE rw_id = :r "
+                "UNION ALL "
+                "SELECT id AS owner_id, 1 AS priority FROM users WHERE rw_id = :r"
+                ") owners ORDER BY priority LIMIT 1"
+            ),
+            {"r": rw_id},
         )
-        await session.commit()
+        return int(value) if value is not None else None
+
+
+async def _subscription_number(session_factory, user_id: int, rw_id: int) -> int:
+    async with session_factory() as session:
+        rows = (
+            await session.execute(
+                text(
+                    "SELECT rw_id FROM user_subscriptions WHERE user_id = :u "
+                    "ORDER BY id"
+                ),
+                {"u": user_id},
+            )
+        ).all()
+    for index, row in enumerate(rows, start=1):
+        if int(row[0]) == int(rw_id):
+            return index
+    return len(rows) + 1
+
+
+async def _attach_subscription(
+    session_factory,
+    *,
+    user_id: int,
+    rw_id: int,
+    transaction_id: str,
+    source: str,
+) -> tuple[str, int]:
+    """Attach rw_id atomically and return (action, one-based number)."""
+    action = "recovered"
+    try:
+        async with session_factory() as session:
+            subscription_owner = await session.scalar(
+                text("SELECT user_id FROM user_subscriptions WHERE rw_id = :r"),
+                {"r": rw_id},
+            )
+            legacy_owner = await session.scalar(
+                text("SELECT id FROM users WHERE rw_id = :r"), {"r": rw_id}
+            )
+            owner = subscription_owner if subscription_owner is not None else legacy_owner
+            if owner is not None:
+                if int(owner) != int(user_id):
+                    raise ValueError("target_owner_conflict")
+            if subscription_owner is not None:
+                action = "existing"
+            else:
+                count = int(
+                    await session.scalar(
+                        text("SELECT COUNT(*) FROM user_subscriptions WHERE user_id = :u"),
+                        {"u": user_id},
+                    ) or 0
+                )
+                now = _now_iso()
+                await session.execute(
+                    text(
+                        "INSERT INTO user_subscriptions "
+                        "(user_id, rw_id, source, is_primary, created_at, updated_at) "
+                        "VALUES (:u, :r, :source, :primary, :now, :now)"
+                    ),
+                    {
+                        "u": user_id,
+                        "r": rw_id,
+                        "source": f"purchase_{source}"[:30],
+                        "primary": count == 0,
+                        "now": now,
+                    },
+                )
+                if count == 0:
+                    await session.execute(
+                        text("UPDATE users SET rw_id = :r WHERE id = :u"),
+                        {"r": rw_id, "u": user_id},
+                    )
+            await session.execute(
+                text(
+                    "UPDATE transactions SET target_rw_id = :r, delivery_error = NULL "
+                    "WHERE transaction_id = :t"
+                ),
+                {"r": rw_id, "t": transaction_id},
+            )
+            await session.commit()
+    except IntegrityError:
+        owner = await _subscription_owner(session_factory, rw_id)
+        if owner != int(user_id):
+            raise ValueError("target_owner_conflict")
+        action = "existing"
+        async with session_factory() as session:
+            await session.execute(
+                text(
+                    "UPDATE transactions SET target_rw_id = :r, delivery_error = NULL "
+                    "WHERE transaction_id = :t"
+                ),
+                {"r": rw_id, "t": transaction_id},
+            )
+            await session.commit()
+    return action, await _subscription_number(session_factory, user_id, rw_id)
 
 
 async def deliver_android_paid(
@@ -139,19 +368,28 @@ async def deliver_android_paid(
     notifier: Notifier,
     delivery_target: Optional[dict] = None,
     squad_resolver: Optional[SquadResolver] = None,
+    target_rw_id: int | None = None,
+    tg_id: int | None = None,
+    tg_username: str | None = None,
+    purchase_source: str = "android",
 ) -> dict:
-    """Provision/extend a PAID Remnawave subscription for an Android user.
+    """Safely provision or extend a subscription for any account surface.
 
-    Returns {"status": "success", "scenario", "uuid", "subscription_url"} on
-    success, or {"status": "error", "message"} on failure. Never raises.
+    ``android_user_id`` is retained as the parameter name for API compatibility,
+    but it is always the local ``users.id``. Ownership is never inferred from a
+    Telegram username, email, or the Remnawave profile name.
     """
-    if not email:
-        await _notify(
-            notifier, ok=False, transaction_id=transaction_id,
-            android_user_id=android_user_id, email=email, days=days,
-            tariff_slug=tariff_slug, reason="android_user_missing_email",
+    db_user_id = int(android_user_id)
+    local = await _local_context(session_factory, db_user_id)
+    if local is None:
+        await _update_delivery_status(
+            session_factory, transaction_id, 0,
+            error="local_user_not_found", pending=True,
         )
-        return {"status": "error", "message": "android_user_missing_email"}
+        return {"status": "pending", "message": "local_user_not_found"}
+    tg_id = tg_id if tg_id is not None else local.get("tg_id")
+    tg_username = tg_username if tg_username is not None else local.get("username")
+    email = email or local.get("email")
 
     # tariff_slug is either the "sid:..:esid:.." form (Android invoice/IAP) or a
     # plain webapp slug — the latter is resolved by the injected squad_resolver.
@@ -167,71 +405,283 @@ async def deliver_android_paid(
         squad["external_squad_id"] if squad else None
     )
     if not internal_ids or not external_squad_id:
+        reason = f"bad tariff_slug: {tariff_slug!r}"
+        await _update_delivery_status(
+            session_factory, transaction_id, 0,
+            error=reason[:255], pending=True,
+        )
         await _notify(
             notifier, ok=False, transaction_id=transaction_id,
-            android_user_id=android_user_id, email=email, days=days,
-            tariff_slug=tariff_slug, reason=f"bad tariff_slug: {tariff_slug!r}",
+            db_user_id=db_user_id, tg_id=tg_id, tg_username=tg_username,
+            email=email, days=days, tariff_slug=tariff_slug,
+            purchase_source=purchase_source,
+            reason=reason,
         )
-        return {"status": "error", "message": f"bad tariff_slug: {tariff_slug!r}"}
+        return {"status": "pending", "message": reason}
 
-    username = email_to_username(email)
-
-    info = await rem.get_user_from_username(username)
-    scenario = resolve_scenario(info, SubscriptionType.PAID)
-
-    try:
-        if scenario == SubscriptionScenario.NEW_USER:
-            result = await apply_new_user(
-                username=username,
-                telegram_id=0,
-                days=days,
-                limit_gb=0,
-                email=email,
-                squad_id=internal_ids[0],
-                internal_squad_ids=internal_ids,
-                external_squad_id=external_squad_id,
-                traffic_limit_bytes=target.get("traffic_limit_bytes"),
-                traffic_limit_strategy=target.get("traffic_limit_strategy"),
-                tag=target.get("remnawave_tag"),
-                description=target.get("remnawave_description") or "Android paid subscription",
+    if target_rw_id is not None:
+        owner = await _subscription_owner(session_factory, int(target_rw_id))
+        if owner is not None and owner != db_user_id:
+            await _update_delivery_status(
+                session_factory, transaction_id, 0,
+                error="target_owner_conflict", pending=True,
             )
-        elif scenario == SubscriptionScenario.EXTEND:
-            uuid = (info or {}).get("uuid")
-            if not uuid:
+            await _notify(
+                notifier, ok=False, transaction_id=transaction_id,
+                db_user_id=db_user_id, tg_id=tg_id, tg_username=tg_username,
+                email=email, days=days, tariff_slug=tariff_slug,
+                purchase_source=purchase_source, reason="target_owner_conflict",
+            )
+            return {"status": "pending", "message": "target_owner_conflict"}
+        try:
+            info = await rem.get_user_from_id(int(target_rw_id), strict=True)
+        except RemnawaveOperationError as exc:
+            reason = str(exc)
+            await _update_delivery_status(
+                session_factory, transaction_id, 0,
+                error=reason[:255], pending=True,
+            )
+            await _notify(
+                notifier, ok=False, transaction_id=transaction_id,
+                db_user_id=db_user_id, tg_id=tg_id, tg_username=tg_username,
+                email=email, days=days, tariff_slug=tariff_slug,
+                purchase_source=purchase_source, reason=reason,
+            )
+            return _pending_result(reason, retryable=exc.retryable)
+    else:
+        owner = None
+        info = None
+
+    created = False
+    ordinal: int | None = None
+    marker = f"provisioning:{transaction_id}"
+    if info is None:
+        start = int(local.get("subscription_count") or 0)
+        info = None
+        for ordinal in range(start, start + _MAX_USERNAME_ATTEMPTS):
+            candidate = build_remnawave_username(tg_username, db_user_id, ordinal)
+            try:
+                occupied = await rem.get_user_from_username(
+                    candidate, strict=True,
+                )
+            except RemnawaveOperationError as exc:
+                reason = str(exc)
+                await _update_delivery_status(
+                    session_factory, transaction_id, 0,
+                    error=reason[:255], pending=True,
+                )
                 await _notify(
                     notifier, ok=False, transaction_id=transaction_id,
-                    android_user_id=android_user_id, email=email, days=days,
-                    tariff_slug=tariff_slug, reason="extend without uuid",
+                    db_user_id=db_user_id, tg_id=tg_id,
+                    tg_username=tg_username, email=email, days=days,
+                    tariff_slug=tariff_slug, purchase_source=purchase_source,
+                    reason=reason,
                 )
-                return {"status": "error", "message": "extend without uuid"}
+                return _pending_result(reason, retryable=exc.retryable)
+            if occupied:
+                if marker in str(occupied.get("description") or ""):
+                    info = occupied
+                    break
+                continue
+            description = provisioning_description(
+                transaction_id=transaction_id,
+                db_user_id=db_user_id,
+                tg_id=tg_id,
+                source=purchase_source,
+                original_tg_username=tg_username,
+                description=target.get("remnawave_description"),
+            )
+            try:
+                result = await apply_new_user(
+                    username=candidate,
+                    telegram_id=tg_id or 0,
+                    days=days,
+                    limit_gb=0,
+                    email=email,
+                    squad_id=internal_ids[0],
+                    internal_squad_ids=internal_ids,
+                    external_squad_id=external_squad_id,
+                    traffic_limit_bytes=target.get("traffic_limit_bytes"),
+                    traffic_limit_strategy=target.get("traffic_limit_strategy"),
+                    tag=target.get("remnawave_tag"),
+                    description=description,
+                    strict=True,
+                )
+            except Exception as exc:
+                logger.warning("create failed for %s, checking marker: %s", candidate, exc)
+                try:
+                    appeared = await rem.get_user_from_username(
+                        candidate, strict=True,
+                    )
+                except RemnawaveOperationError as verify_exc:
+                    reason = f"{exc}; verification_failed:{verify_exc}"
+                    await _update_delivery_status(
+                        session_factory, transaction_id, 0,
+                        error=reason[:255], pending=True,
+                    )
+                    await _notify(
+                        notifier, ok=False, transaction_id=transaction_id,
+                        db_user_id=db_user_id, tg_id=tg_id,
+                        tg_username=tg_username, email=email, days=days,
+                        tariff_slug=tariff_slug,
+                        purchase_source=purchase_source, reason=reason,
+                    )
+                    return _pending_result(
+                        reason,
+                        retryable=(
+                            _is_retryable_exception(exc)
+                            or verify_exc.retryable
+                        ),
+                    )
+                if appeared and marker in str(appeared.get("description") or ""):
+                    info = appeared
+                    break
+                if appeared:
+                    continue
+                await _update_delivery_status(
+                    session_factory, transaction_id, 0,
+                    error=str(exc)[:255], pending=True,
+                )
+                await _notify(
+                    notifier, ok=False, transaction_id=transaction_id,
+                    db_user_id=db_user_id, tg_id=tg_id, tg_username=tg_username,
+                    email=email, days=days, tariff_slug=tariff_slug,
+                    purchase_source=purchase_source, reason=str(exc),
+                )
+                return _pending_result(
+                    str(exc), retryable=_is_retryable_exception(exc),
+                )
+            try:
+                appeared = await rem.get_user_from_username(
+                    candidate, strict=True,
+                )
+            except RemnawaveOperationError:
+                # A successful create response already identifies the exact
+                # profile and carries our marker. Do not turn a follow-up read
+                # outage into a failed delivery.
+                appeared = None
+            if appeared:
+                if marker in str(appeared.get("description") or ""):
+                    info = appeared
+                    created = bool(result)
+                    break
+                # A concurrent foreign create won the name. Never attach it.
+                continue
+            if result:
+                info = dict(result)
+                info.setdefault("username", candidate)
+                info.setdefault("description", description)
+            else:
+                await _update_delivery_status(
+                    session_factory, transaction_id, 0,
+                    error="remnawave_apply_returned_none", pending=True,
+                )
+                return _pending_result(
+                    "remnawave_apply_returned_none", retryable=True,
+                )
+            created = True
+            break
+        if info is None:
+            await _update_delivery_status(
+                session_factory, transaction_id, 0,
+                error="rw_username_allocation_failed", pending=True,
+            )
+            await _notify(
+                notifier, ok=False, transaction_id=transaction_id,
+                db_user_id=db_user_id, tg_id=tg_id, tg_username=tg_username,
+                email=email, days=days, tariff_slug=tariff_slug,
+                purchase_source=purchase_source,
+                reason="rw_username_allocation_failed",
+            )
+            return {"status": "pending", "message": "rw_username_allocation_failed"}
+
+    actual_rw_id = _rw_id(info)
+    if actual_rw_id is None:
+        await _update_delivery_status(
+            session_factory, transaction_id, 0,
+            error="remnawave_missing_rw_id", pending=True,
+        )
+        return {"status": "pending", "message": "remnawave_missing_rw_id"}
+    try:
+        action, subscription_number = await _attach_subscription(
+            session_factory,
+            user_id=db_user_id,
+            rw_id=actual_rw_id,
+            transaction_id=transaction_id,
+            source=purchase_source,
+        )
+    except ValueError as exc:
+        await _update_delivery_status(
+            session_factory, transaction_id, 0,
+            error="target_owner_conflict", pending=True,
+        )
+        await _notify(
+            notifier, ok=False, transaction_id=transaction_id,
+            db_user_id=db_user_id, tg_id=tg_id, tg_username=tg_username,
+            email=email, days=days, tariff_slug=tariff_slug,
+            purchase_source=purchase_source, reason=str(exc),
+        )
+        return {"status": "pending", "message": "target_owner_conflict"}
+    if created:
+        action = "created"
+
+    username = str((info or {}).get("username") or build_remnawave_username(
+        tg_username, db_user_id, ordinal or 0
+    ))
+    scenario = resolve_scenario(info, SubscriptionType.PAID)
+    delivery_marker = f"delivery:{transaction_id}"
+    base_description = (
+        target.get("remnawave_description")
+        if has_delivery_target
+        else (
+            f"{purchase_source} paid extend"
+            if scenario == SubscriptionScenario.EXTEND
+            else f"{purchase_source} paid update"
+        )
+    )
+    operation_description = delivery_description(
+        transaction_id, base_description,
+    )
+
+    try:
+        current_description = str((info or {}).get("description") or "")
+        if (
+            created
+            or marker in current_description
+            or delivery_marker in current_description
+        ):
+            result = info
+        elif scenario == SubscriptionScenario.EXTEND:
+            if actual_rw_id is None:
+                await _update_delivery_status(
+                    session_factory, transaction_id, 0,
+                    error="extend_without_rw_id", pending=True,
+                )
+                return {"status": "pending", "message": "extend without rw_id"}
             result = await apply_extend(
-                user_uuid=uuid,
+                rw_id=actual_rw_id,
                 username=username,
                 days=days,
                 current_days_left=_days_left(info),
                 squad_id=internal_ids[0],
                 internal_squad_ids=internal_ids,
                 external_squad_id=external_squad_id,
-                description=(
-                    target.get("remnawave_description")
-                    if has_delivery_target
-                    else "Android paid extend"
-                ),
+                description=operation_description,
                 traffic_limit_bytes=target.get("traffic_limit_bytes"),
                 traffic_limit_strategy=target.get("traffic_limit_strategy"),
                 tag=target.get("remnawave_tag"),
+                strict=True,
             )
         else:  # UPDATE / LIMITED / ALREADY_ACTIVE all fall through to update.
-            uuid = (info or {}).get("uuid")
-            if not uuid:
-                await _notify(
-                    notifier, ok=False, transaction_id=transaction_id,
-                    android_user_id=android_user_id, email=email, days=days,
-                    tariff_slug=tariff_slug, reason=f"{scenario.value} without uuid",
+            if actual_rw_id is None:
+                reason = f"{scenario.value}_without_rw_id"
+                await _update_delivery_status(
+                    session_factory, transaction_id, 0,
+                    error=reason, pending=True,
                 )
-                return {"status": "error", "message": f"{scenario.value} without uuid"}
+                return {"status": "pending", "message": reason}
             result = await apply_update(
-                user_uuid=uuid,
+                rw_id=actual_rw_id,
                 username=username,
                 days=days,
                 limit_gb=0,
@@ -239,55 +689,108 @@ async def deliver_android_paid(
                 internal_squad_ids=internal_ids,
                 external_squad_id=external_squad_id,
                 status="active",
-                description=(
-                    target.get("remnawave_description")
-                    if has_delivery_target
-                    else "Android paid update"
-                ),
+                description=operation_description,
                 traffic_limit_bytes=target.get("traffic_limit_bytes"),
                 traffic_limit_strategy=target.get("traffic_limit_strategy"),
                 tag=target.get("remnawave_tag"),
+                strict=True,
             )
     except Exception as exc:
-        logger.error("android delivery for tx=%s failed: %s", transaction_id, exc)
-        await _notify(
-            notifier, ok=False, transaction_id=transaction_id,
-            android_user_id=android_user_id, email=email, days=days,
-            tariff_slug=tariff_slug, reason=str(exc),
+        logger.error(
+            "subscription delivery for tx=%s failed: %s",
+            transaction_id, exc,
         )
-        return {"status": "error", "message": str(exc)}
+        try:
+            appeared = await rem.get_user_from_id(actual_rw_id, strict=True)
+        except RemnawaveOperationError as verify_exc:
+            reason = f"{exc}; verification_failed:{verify_exc}"
+            await _update_delivery_status(
+                session_factory, transaction_id, 0,
+                error=reason[:255], pending=True,
+            )
+            await _notify(
+                notifier, ok=False, transaction_id=transaction_id,
+                db_user_id=db_user_id, tg_id=tg_id,
+                tg_username=tg_username, email=email, days=days,
+                tariff_slug=tariff_slug, purchase_source=purchase_source,
+                reason=reason,
+            )
+            return _pending_result(
+                reason,
+                retryable=(
+                    _is_retryable_exception(exc) or verify_exc.retryable
+                ),
+            )
+        if appeared and delivery_marker in str(
+            appeared.get("description") or ""
+        ):
+            info = appeared
+            result = appeared
+        else:
+            reason = str(exc)
+            await _update_delivery_status(
+                session_factory, transaction_id, 0,
+                error=reason[:255], pending=True,
+            )
+            await _notify(
+                notifier, ok=False, transaction_id=transaction_id,
+                db_user_id=db_user_id, tg_id=tg_id, tg_username=tg_username,
+                email=email, days=days, tariff_slug=tariff_slug,
+                purchase_source=purchase_source, reason=reason,
+            )
+            return _pending_result(
+                reason, retryable=_is_retryable_exception(exc),
+            )
 
     if not result:
-        await _notify(
-            notifier, ok=False, transaction_id=transaction_id,
-            android_user_id=android_user_id, email=email, days=days,
-            tariff_slug=tariff_slug, reason="remnawave_apply_returned_none",
-        )
-        return {"status": "error", "message": "remnawave_apply_returned_none"}
-
-    rw_uuid = result.get("uuid") or (info or {}).get("uuid")
-    if rw_uuid:
-        # Best-effort: persist vless_uuid so future flows can short-circuit.
         try:
-            await _save_vless_uuid(session_factory, android_user_id, rw_uuid)
-        except Exception as exc:
-            logger.warning("Failed to save vless_uuid for user %s: %s", android_user_id, exc)
+            appeared = await rem.get_user_from_id(actual_rw_id, strict=True)
+        except RemnawaveOperationError as verify_exc:
+            appeared = None
+            verification_reason = str(verify_exc)
+        else:
+            verification_reason = None
+        if appeared and delivery_marker in str(
+            appeared.get("description") or ""
+        ):
+            info = appeared
+            result = appeared
+        else:
+            reason = "remnawave_apply_returned_none"
+            if verification_reason:
+                reason = f"{reason}; verification_failed:{verification_reason}"
+            await _update_delivery_status(
+                session_factory, transaction_id, 0,
+                error=reason[:255], pending=True,
+            )
+            await _notify(
+                notifier, ok=False, transaction_id=transaction_id,
+                db_user_id=db_user_id, tg_id=tg_id, tg_username=tg_username,
+                email=email, days=days, tariff_slug=tariff_slug,
+                purchase_source=purchase_source,
+                reason=reason,
+            )
+            return _pending_result(reason, retryable=True)
 
     await _update_delivery_status(session_factory, transaction_id, 1)
     await _notify(
         notifier, ok=True, transaction_id=transaction_id,
-        android_user_id=android_user_id, email=email, days=days,
-        tariff_slug=tariff_slug,
+        db_user_id=db_user_id, tg_id=tg_id, tg_username=tg_username,
+        email=email, days=days, tariff_slug=tariff_slug,
+        purchase_source=purchase_source, rw_username=username, rw_id=actual_rw_id,
+        subscription_number=subscription_number, action=action,
     )
     return {
         "status": "success",
         "scenario": scenario.value,
-        "uuid": rw_uuid,
         "subscription_url": result.get("subscription_url"),
+        "rw_id": actual_rw_id,
+        "username": username,
+        "action": action,
     }
 
 
-async def deliver_telegram_paid(
+async def _deliver_telegram_paid_legacy(
     *,
     transaction_id: str,
     tg_id: int,
@@ -320,7 +823,7 @@ async def deliver_telegram_paid(
         )
         return {"status": "error", "message": f"bad tariff_slug: {tariff_slug!r}"}
 
-    info = await rem.get_user_from_username(username)
+    info = await rem.get_user_from_username(username, strict=True)
     scenario = resolve_scenario(info, SubscriptionType.PAID)
 
     try:
@@ -338,13 +841,14 @@ async def deliver_telegram_paid(
                 traffic_limit_bytes=target.get("traffic_limit_bytes"),
                 traffic_limit_strategy=target.get("traffic_limit_strategy"),
                 tag=target.get("remnawave_tag"),
+                strict=True,
             )
         elif scenario == SubscriptionScenario.EXTEND:
-            uuid = (info or {}).get("uuid")
-            if not uuid:
-                return {"status": "error", "message": "extend without uuid"}
+            rw_id = _rw_id(info)
+            if rw_id is None:
+                return {"status": "error", "message": "extend without rw_id"}
             result = await apply_extend(
-                user_uuid=uuid,
+                rw_id=rw_id,
                 username=username,
                 days=days,
                 current_days_left=_days_left(info),
@@ -359,13 +863,14 @@ async def deliver_telegram_paid(
                 traffic_limit_bytes=target.get("traffic_limit_bytes"),
                 traffic_limit_strategy=target.get("traffic_limit_strategy"),
                 tag=target.get("remnawave_tag"),
+                strict=True,
             )
         else:
-            uuid = (info or {}).get("uuid")
-            if not uuid:
-                return {"status": "error", "message": f"{scenario.value} without uuid"}
+            rw_id = _rw_id(info)
+            if rw_id is None:
+                return {"status": "error", "message": f"{scenario.value} without rw_id"}
             result = await apply_update(
-                user_uuid=uuid,
+                rw_id=rw_id,
                 username=username,
                 days=days,
                 limit_gb=0,
@@ -381,6 +886,7 @@ async def deliver_telegram_paid(
                 traffic_limit_bytes=target.get("traffic_limit_bytes"),
                 traffic_limit_strategy=target.get("traffic_limit_strategy"),
                 tag=target.get("remnawave_tag"),
+                strict=True,
             )
     except Exception as exc:
         logger.error("telegram delivery for tx=%s failed: %s", transaction_id, exc)
@@ -395,20 +901,6 @@ async def deliver_telegram_paid(
     if not result:
         return {"status": "error", "message": "remnawave_apply_returned_none"}
 
-    rw_uuid = result.get("uuid") or (info or {}).get("uuid")
-    if rw_uuid and tg_id:
-        try:
-            async with session_factory() as session:
-                await session.execute(
-                    text(
-                        "UPDATE users SET vless_uuid = :u WHERE tg_id = :t"
-                    ),
-                    {"u": rw_uuid, "t": tg_id},
-                )
-                await session.commit()
-        except Exception as exc:
-            logger.warning("Failed to save vless_uuid for tg_id %s: %s", tg_id, exc)
-
     await _update_delivery_status(session_factory, transaction_id, 1)
     await notifier(
         f"📦 <b>Subscription delivered (bonus credits)</b>\n"
@@ -420,6 +912,6 @@ async def deliver_telegram_paid(
     return {
         "status": "success",
         "scenario": scenario.value,
-        "uuid": rw_uuid,
+        "rw_id": result.get("rw_id") or (info or {}).get("rw_id"),
         "subscription_url": result.get("subscription_url"),
     }

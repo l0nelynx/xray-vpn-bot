@@ -6,12 +6,12 @@ import logging
 from typing import Any
 
 from common_db.repo import crm_webhooks as webhooks_repo
-from common_db.repo.users import get_user_by_tg_id, get_user_by_vless_uuid
+from common_db.repo.users import get_user_by_rw_id, get_user_by_tg_id
 from remnawave_client.segmentation import normalize_user_for_crm
 from remnawave_client.webhooks import (
     RemnawaveWebhookPayload,
     extract_telegram_id,
-    extract_vless_uuid,
+    extract_rw_id,
 )
 
 from .config import get_remnawave_token, get_remnawave_url
@@ -34,9 +34,9 @@ def _rw_client():
 
 
 async def _resolve_db_user(session, payload: RemnawaveWebhookPayload):
-    uuid = extract_vless_uuid(payload)
-    if uuid:
-        user = await get_user_by_vless_uuid(session, uuid)
+    rw_id = extract_rw_id(payload)
+    if rw_id is not None:
+        user = await get_user_by_rw_id(session, rw_id)
         if user is not None:
             return user
     tg_id = extract_telegram_id(payload)
@@ -45,16 +45,16 @@ async def _resolve_db_user(session, payload: RemnawaveWebhookPayload):
     return None
 
 
-async def _fetch_crm_user(rw_client, vless_uuid: str | None) -> dict | None:
-    if not vless_uuid:
+async def _fetch_crm_user(rw_client, rw_id: int | None) -> dict | None:
+    if rw_id is None:
         return None
     try:
-        raw = await rw_client.get_user_by_uuid(vless_uuid)
+        raw = await rw_client.get_user_by_id(rw_id)
         if not raw:
             return None
         return normalize_user_for_crm(raw)
     except Exception as exc:
-        logger.warning("CRM webhook: failed to fetch Remnawave user %s: %s", vless_uuid, exc)
+        logger.warning("CRM webhook: failed to fetch Remnawave user %s: %s", rw_id, exc)
         return None
 
 
@@ -87,10 +87,10 @@ async def execute_crm_webhook(payload_dict: dict[str, Any]) -> None:
         db_user = await _resolve_db_user(session, payload)
         if db_user is None:
             logger.info(
-                "CRM webhook: no local user for scope=%s event=%s uuid=%s tg=%s",
+                "CRM webhook: no local user for scope=%s event=%s rw_id=%s tg=%s",
                 scope,
                 event,
-                extract_vless_uuid(payload),
+                extract_rw_id(payload),
                 extract_telegram_id(payload),
             )
             await session.commit()
@@ -106,7 +106,7 @@ async def execute_crm_webhook(payload_dict: dict[str, Any]) -> None:
             await session.commit()
             return
 
-        crm_user = await _fetch_crm_user(rw, db_user.vless_uuid)
+        crm_user = await _fetch_crm_user(rw, db_user.rw_id)
         message_ctx = build_webhook_message_context(
             username=db_user.username,
             crm_user=crm_user,

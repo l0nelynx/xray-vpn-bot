@@ -61,49 +61,9 @@ async def get_user_by_username(username: str):
         return await _repo_users.get_user_by_username(session, username)
 
 
-async def get_user_by_vless_uuid(vless_uuid: str) -> dict | None:
-    """Lookup local user by Remnawave VLESS UUID (for inbound panel webhooks)."""
-    if not vless_uuid:
-        return None
-    async with async_session() as session:
-        user = await _repo_users.get_user_by_vless_uuid(session, vless_uuid)
-        if not user:
-            return None
-        return {
-            "tg_id": user.tg_id,
-            "is_banned": bool(user.is_banned),
-        }
-
-
-async def create_user_with_info(tg_id: int, username: str, vless_uuid: str = None, api_provider: str = "remnawave"):
-    """
-    Создает нового пользователя с полной информацией
-
-    Args:
-        tg_id (int): Telegram ID пользователя
-        username (str): Telegram username
-        vless_uuid (str): UUID для VLESS конфигурации
-        api_provider (str): Провайдер API (marzban или remnawave)
-
-    Returns:
-        User: Созданный объект пользователя
-    """
-    async with async_session() as session:
-        new_user = User(
-            tg_id=tg_id,
-            username=username,
-            vless_uuid=f"{vless_uuid}",
-            api_provider=api_provider
-        )
-        session.add(new_user)
-        await session.commit()
-        return new_user
-
-
 async def update_user_api_info(
     tg_id: int = 0,
     username: str = 0,
-    vless_uuid: str = None,
     api_provider: str = None,
     rw_id: int | None = None,
 ):
@@ -113,7 +73,6 @@ async def update_user_api_info(
     Args:
         tg_id: Telegram ID пользователя
         username (str): Telegram username
-        vless_uuid (str): UUID для VLESS конфигурации
         api_provider (str): Провайдер API (marzban или remnawave)
         rw_id: Remnawave panel numeric user id
 
@@ -127,8 +86,6 @@ async def update_user_api_info(
             return False
         if username is not None:
             user.username = username
-        if vless_uuid is not None:
-            user.vless_uuid = f"{vless_uuid}"
         if api_provider is not None:
             user.api_provider = api_provider
         if rw_id is not None:
@@ -136,22 +93,6 @@ async def update_user_api_info(
 
         await session.commit()
         return True
-
-
-async def update_user_vless_uuid(tg_id: int, username: str, vless_uuid: str):
-    """
-    Обновляет UUID пользователя
-
-    Args:
-        tg_id:
-        username (str): Telegram username
-        vless_uuid (str): Новый UUID для VLESS конфигурации
-
-    Returns:
-        bool: True если успешно, False если пользователь не найден
-    """
-    return await update_user_api_info(tg_id=tg_id, username=username, vless_uuid=vless_uuid)
-
 
 async def get_user_api_provider(username: str) -> str:
     """
@@ -189,6 +130,7 @@ async def get_full_username_info(username: str) -> dict:
             "tg_id": user.tg_id,
             "username": user.username,
             "vless_uuid": user.vless_uuid,
+            "rw_id": user.rw_id,
             "api_provider": user.api_provider,
             "vip": user.vip,
         }
@@ -259,7 +201,8 @@ async def create_transaction(user_tg_id: int, user_transaction: str, username: s
                              traffic_limit_bytes: int = 0,
                              traffic_limit_strategy: str = "NO_RESET",
                              remnawave_description: str | None = None,
-                             remnawave_tag: str | None = None):
+                             remnawave_tag: str | None = None,
+                             purchase_source: str = "bot"):
     async with async_session() as session:
         # Находим пользователя по tg_id
         user = await _repo_users.get_user_by_tg_id(session, user_tg_id)
@@ -278,6 +221,7 @@ async def create_transaction(user_tg_id: int, user_transaction: str, username: s
                 amount=amount,
                 created_at=datetime.now().isoformat(timespec='seconds'),
                 provider_invoice_id=provider_invoice_id,
+                purchase_source=purchase_source,
                 squad_id=squad_id,
                 internal_squad_ids=internal_squad_ids or ([squad_id] if squad_id else None),
                 external_squad_id=external_squad_id,
@@ -328,11 +272,15 @@ async def get_full_transaction_info(transaction_id: str):
                 "transaction_id": transaction.transaction_id,
                 "vless_uuid": transaction.vless_uuid,
                 "username": transaction.username,
+                "user_username": user.username,
                 "status": transaction.order_status,
                 "user_tg_id": user.tg_id,
                 "user_db_id": user.id,
                 "user_email": user.email,
                 "android_user_id": transaction.android_user_id,
+                "target_rw_id": transaction.target_rw_id,
+                "purchase_source": transaction.purchase_source,
+                "delivery_error": transaction.delivery_error,
                 "days_ordered": transaction.days_ordered,
                 "payment_method": transaction.payment_method,
                 "amount": transaction.amount,
@@ -426,9 +374,8 @@ async def update_order_status(transaction_id: str, new_status: str) -> bool:
 
 async def claim_order_for_processing(transaction_id: str) -> bool:
     """
-    Атомарно проверяет статус заказа и переводит его в 'confirmed'.
-    Возвращает True только если статус БЫЛ 'created' — гарантирует,
-    что только один обработчик получит право на доставку подписки.
+    Атомарно захватывает новый или ожидающий повтора заказ и переводит его в
+    ``confirmed``. Уже доставленная транзакция никогда не захватывается.
 
     Args:
         transaction_id: Идентификатор транзакции
@@ -437,22 +384,37 @@ async def claim_order_for_processing(transaction_id: str) -> bool:
         bool: True если заказ успешно захвачен для обработки, False если уже обработан
     """
     async with async_session() as session:
-        transaction = await session.scalar(
-            select(Transaction).where(
-                Transaction.transaction_id == transaction_id,
-                Transaction.order_status == "created"
+        claimed = (
+            await session.execute(
+                update(Transaction)
+                .where(
+                    Transaction.transaction_id == transaction_id,
+                    Transaction.order_status.in_(("created", "pending")),
+                    func.coalesce(Transaction.delivery_status, 0) != 1,
+                )
+                .values(order_status="confirmed")
+                .returning(Transaction.created_at, Transaction.days_ordered)
             )
-        )
-        if not transaction:
+        ).first()
+        if claimed is None:
+            await session.rollback()
             return False
 
+        created_at, days_ordered = claimed
         expire_date = None
-        if transaction.created_at and transaction.days_ordered:
-            created = datetime.fromisoformat(transaction.created_at)
-            expire_date = (created + timedelta(days=transaction.days_ordered)).isoformat(timespec='seconds')
-
-        transaction.order_status = "confirmed"
-        transaction.expire_date = expire_date
+        if created_at and days_ordered:
+            created = datetime.fromisoformat(created_at)
+            expire_date = (
+                created + timedelta(days=days_ordered)
+            ).isoformat(timespec="seconds")
+            await session.execute(
+                update(Transaction)
+                .where(
+                    Transaction.transaction_id == transaction_id,
+                    Transaction.order_status == "confirmed",
+                )
+                .values(expire_date=expire_date)
+            )
         await session.commit()
         return True
 
@@ -908,6 +870,7 @@ async def get_free_non_vip_remnawave_users() -> list[dict]:
                 ~has_any_tx,
                 (User.vip == 0) | (User.vip == None),  # noqa: E711
                 User.api_provider == "remnawave",
+                User.rw_id.is_not(None),
                 (User.is_banned == False) | (User.is_banned == None),  # noqa: E712
             )
         )
@@ -916,7 +879,8 @@ async def get_free_non_vip_remnawave_users() -> list[dict]:
             {
                 "tg_id": u.tg_id,
                 "username": u.username,
-                "vless_uuid": u.vless_uuid,
+                "rw_id": u.rw_id,
+                "email": u.email,
             }
             for u in users
         ]

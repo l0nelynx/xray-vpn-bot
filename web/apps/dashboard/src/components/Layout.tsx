@@ -20,6 +20,8 @@ import {
   Bell,
   Download,
   Trophy,
+  Activity,
+  Settings,
   ChevronDown,
   type LucideIcon,
 } from "lucide-react";
@@ -39,6 +41,7 @@ import {
 import { cn } from "@xray/ui/lib/utils";
 import { clearToken } from "../api/client";
 import useIsMobile from "../hooks/useIsMobile";
+import { useBranding } from "../branding";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -50,6 +53,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/users": "Users",
   "/transactions": "Transactions",
   "/stats": "Statistics",
+  "/api-health": "API Health",
   "/tariffs": "Tariffs",
   "/menus": "Bot Menus",
   "/squads": "Squads",
@@ -59,7 +63,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/promocodes": "Promocodes",
   "/giveaways": "Giveaways",
   "/webapp/tariffs": "Tariff Constructor",
-  "/webapp/settings": "Settings",
+  "/settings": "Settings",
   "/tg-admin": "TG Admin",
   "/crm": "CRM",
   "/push": "Push",
@@ -86,6 +90,7 @@ function buildMenuGroups(): NavGroup[] {
         { key: "/users", icon: Users, label: "Users" },
         { key: "/transactions", icon: ArrowRightLeft, label: "Transactions" },
         { key: "/stats", icon: BarChart3, label: "Statistics" },
+        { key: "/api-health", icon: Activity, label: "API Health" },
       ],
     },
   ];
@@ -114,14 +119,19 @@ function buildMenuGroups(): NavGroup[] {
     submenu: { key: "webapp", label: "WebApp", icon: Smartphone },
     children: [
       { key: "/webapp/tariffs", label: "Tariff Constructor" },
-      { key: "/webapp/settings", label: "Settings" },
     ],
+  });
+
+  groups.push({
+    label: "System",
+    children: [{ key: "/settings", icon: Settings, label: "Settings" }],
   });
 
   return groups;
 }
 
 export default function Layout() {
+  const branding = useBranding();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
@@ -185,11 +195,11 @@ export default function Layout() {
   const sidebarContent = (
     <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
       <div className="flex h-16 flex-shrink-0 items-center gap-3 border-b border-sidebar-border px-4">
-        <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-primary text-xs font-semibold text-primary-foreground">
-          VP
+        <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-background">
+          <img src={branding.logo_url} alt="" className="h-full w-full object-contain" />
         </div>
         {showLabels && (
-          <span className="truncate text-sm font-semibold tracking-tight">VPN Admin</span>
+          <span className="truncate text-sm font-semibold tracking-tight">{branding.branding_name}</span>
         )}
       </div>
 

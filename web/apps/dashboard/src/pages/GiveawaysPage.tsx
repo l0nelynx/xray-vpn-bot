@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Plus, RefreshCw, Trophy } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Eye, EyeOff, Plus, RefreshCw, RotateCcw, Trophy } from "lucide-react";
+import { toBlob } from "html-to-image";
+import JSZip from "jszip";
 import { Card, CardContent, CardHeader, CardTitle } from "@xray/ui/components/card";
 import { Button } from "@xray/ui/components/button";
 import { Input } from "@xray/ui/components/input";
@@ -9,6 +11,7 @@ import { Textarea } from "@xray/ui/components/textarea";
 import { Label } from "@xray/ui/components/label";
 import { Badge } from "@xray/ui/components/badge";
 import { Checkbox } from "@xray/ui/components/checkbox";
+import { Switch } from "@xray/ui/components/switch";
 import { cn } from "@xray/ui/lib/utils";
 import {
   Sheet,
@@ -24,6 +27,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@xray/ui/components/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@xray/ui/components/alert-dialog";
 import {
   Select,
   SelectContent,
@@ -43,6 +57,12 @@ import { api } from "../api/client";
 import useIsMobile from "../hooks/useIsMobile";
 import DataTable from "../components/DataTable";
 import TablePagination from "../components/TablePagination";
+import WinnerCertificate, {
+  ScaledWinnerCertificate,
+  formatWinnerTgId,
+  formatWinnerUsername,
+} from "../components/WinnerCertificate";
+import { useBranding } from "../branding";
 
 type GiveawayStatus = "draft" | "active" | "closed" | "drawn";
 
@@ -81,6 +101,7 @@ interface WinnerItem {
   tg_id: number;
   username: string | null;
   tickets: number;
+  ticket_number: number | null;
 }
 
 type BadgeVariant = "default" | "secondary" | "destructive" | "outline" | "success" | "warning";
@@ -93,16 +114,56 @@ const STATUS_VARIANT: Record<GiveawayStatus, BadgeVariant> = {
 };
 
 const PER_PAGE = 20;
+const WINNERS_PER_IMAGE = 8;
+
+function safeFileName(value: string): string {
+  return value
+    .trim()
+    .replace(/[^a-z0-9а-яё_-]+/gi, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80) || "giveaway";
+}
+
+function downloadBlob(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 
 function statusBadge(status: GiveawayStatus) {
   return <Badge variant={STATUS_VARIANT[status]}>{status}</Badge>;
 }
 
+/** Parse stored UTC-naive ISO as UTC for display. */
+function parseUtcIso(iso: string): Date {
+  const normalized = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(iso) ? iso : `${iso}Z`;
+  return new Date(normalized);
+}
+
 function formatShort(iso: string): string {
-  const d = new Date(iso);
+  const d = parseUtcIso(iso);
   if (Number.isNaN(d.getTime())) return iso;
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${pad(d.getDate())}.${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** datetime-local (browser local) → UTC-naive ISO `YYYY-MM-DDTHH:MM:SS`. */
+function localInputToUtcIso(local: string): string | null {
+  if (!local) return null;
+  const d = new Date(local);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString().slice(0, 19);
+}
+
+/** UTC-naive ISO → datetime-local value in browser local TZ. */
+function utcIsoToLocalInput(iso: string): string {
+  const d = parseUtcIso(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 interface GiveawayForm {
@@ -162,6 +223,7 @@ function RadioRow<T extends string>({
 }
 
 export default function GiveawaysPage() {
+  const branding = useBranding();
   const isMobile = useIsMobile();
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<GiveawayItem[]>([]);
@@ -174,9 +236,27 @@ export default function GiveawaysPage() {
   const [participants, setParticipants] = useState<ParticipantItem[]>([]);
   const [winners, setWinners] = useState<WinnerItem[]>([]);
   const [winnersOpen, setWinnersOpen] = useState(false);
+  const [showFullData, setShowFullData] = useState(false);
+  const [winnerPage, setWinnerPage] = useState(0);
+  const [exporting, setExporting] = useState(false);
+  const [redrawing, setRedrawing] = useState(false);
+  const exportRefs = useRef<Array<HTMLDivElement | null>>([]);
   const [form, setForm] = useState<GiveawayForm>(emptyForm);
 
   const patchForm = (patch: Partial<GiveawayForm>) => setForm((f) => ({ ...f, ...patch }));
+  const winnerPages = useMemo(() => {
+    const pages: WinnerItem[][] = [];
+    for (let i = 0; i < winners.length; i += WINNERS_PER_IMAGE) {
+      pages.push(winners.slice(i, i + WINNERS_PER_IMAGE));
+    }
+    return pages.length ? pages : [[]];
+  }, [winners]);
+
+  const openWinnersDialog = () => {
+    setShowFullData(false);
+    setWinnerPage(0);
+    setWinnersOpen(true);
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -216,8 +296,8 @@ export default function GiveawaysPage() {
       distribution_channel: item.config.distribution.includes("channel"),
       ticket_ref: item.config.ticket_sources.includes("invitee_ref_activation"),
       ticket_purchase: item.config.ticket_sources.includes("invitee_purchase"),
-      starts_at: item.starts_at ? item.starts_at.slice(0, 16) : "",
-      ends_at: item.ends_at ? item.ends_at.slice(0, 16) : "",
+      starts_at: item.starts_at ? utcIsoToLocalInput(item.starts_at) : "",
+      ends_at: item.ends_at ? utcIsoToLocalInput(item.ends_at) : "",
     });
     setDrawerOpen(true);
   };
@@ -245,18 +325,28 @@ export default function GiveawaysPage() {
       toast.error("Title is required");
       return;
     }
-    const payload = {
-      title: form.title,
-      channel_text: form.channel_text || "",
-      winner_count: form.winner_count,
-      starts_at: form.starts_at ? `${form.starts_at}:00` : null,
-      ends_at: form.ends_at ? `${form.ends_at}:00` : null,
-      config: buildConfig(),
-    };
+    const scheduleOnly = editing?.status === "active";
+    const payload = scheduleOnly
+      ? {
+          starts_at: localInputToUtcIso(form.starts_at),
+          ends_at: localInputToUtcIso(form.ends_at),
+          clear_starts_at: !form.starts_at,
+          clear_ends_at: !form.ends_at,
+        }
+      : {
+          title: form.title,
+          channel_text: form.channel_text || "",
+          winner_count: form.winner_count,
+          starts_at: localInputToUtcIso(form.starts_at),
+          ends_at: localInputToUtcIso(form.ends_at),
+          clear_starts_at: !form.starts_at,
+          clear_ends_at: !form.ends_at,
+          config: buildConfig(),
+        };
     try {
       if (editing) {
         await api.patch(`/giveaways/${editing.id}`, payload);
-        toast.success("Giveaway updated");
+        toast.success(scheduleOnly ? "Schedule updated" : "Giveaway updated");
       } else {
         await api.post("/giveaways", payload);
         toast.success("Giveaway created");
@@ -284,6 +374,8 @@ export default function GiveawaysPage() {
 
   const openDetail = async (item: GiveawayItem) => {
     setDetail(item);
+    setParticipants([]);
+    setWinners([]);
     try {
       const [pData, wData] = await Promise.all([
         api.get<{ items: ParticipantItem[] }>(`/giveaways/${item.id}/participants?per_page=100`),
@@ -301,7 +393,7 @@ export default function GiveawaysPage() {
     try {
       const data = await api.post<{ winners: WinnerItem[] }>(`/giveaways/${detail.id}/draw`);
       setWinners(data.winners);
-      setWinnersOpen(true);
+      openWinnersDialog();
       load();
       const updated = await api.get<GiveawayItem>(`/giveaways/${detail.id}`);
       setDetail(updated);
@@ -310,15 +402,73 @@ export default function GiveawaysPage() {
     }
   };
 
+  const onRedraw = async () => {
+    if (!detail) return;
+    setRedrawing(true);
+    try {
+      const data = await api.post<{ winners: WinnerItem[] }>(`/giveaways/${detail.id}/redraw`);
+      setWinners(data.winners);
+      openWinnersDialog();
+      toast.success("Winners re-drawn");
+      await load();
+      const updated = await api.get<GiveawayItem>(`/giveaways/${detail.id}`);
+      setDetail(updated);
+    } catch (e) {
+      toast.error((e as Error).message || "Re-draw failed");
+    } finally {
+      setRedrawing(false);
+    }
+  };
+
   const copyWinners = () => {
     const text = winners
       .map(
         (w) =>
-          `#${w.rank}: ${w.username ? `@${w.username}` : "—"} (${w.tg_id}) — ${w.tickets} tickets`,
+          `#${w.rank}: ${formatWinnerUsername(w.username, showFullData)} (${formatWinnerTgId(w.tg_id, showFullData)}) — ticket #${w.ticket_number ?? "—"} · ${w.tickets} tickets`,
       )
       .join("\n");
     navigator.clipboard.writeText(text);
     toast.success("Copied to clipboard");
+  };
+
+  const exportWinners = async () => {
+    if (!detail || winners.length === 0) return;
+    setExporting(true);
+    try {
+      await document.fonts.ready;
+      const blobs: Blob[] = [];
+      for (let i = 0; i < winnerPages.length; i += 1) {
+        const node = exportRefs.current[i];
+        if (!node) throw new Error(`Export page ${i + 1} is unavailable`);
+        const blob = await toBlob(node, {
+          width: 1080,
+          height: 1350,
+          canvasWidth: 1080,
+          canvasHeight: 1350,
+          pixelRatio: 1,
+          cacheBust: true,
+          backgroundColor: "#212121",
+        });
+        if (!blob) throw new Error(`Failed to render page ${i + 1}`);
+        blobs.push(blob);
+      }
+
+      const baseName = `${safeFileName(detail.title)}-winners`;
+      if (blobs.length === 1) {
+        downloadBlob(blobs[0], `${baseName}.png`);
+      } else {
+        const zip = new JSZip();
+        blobs.forEach((blob, index) => {
+          zip.file(`${baseName}-${String(index + 1).padStart(2, "0")}.png`, blob);
+        });
+        downloadBlob(await zip.generateAsync({ type: "blob" }), `${baseName}.zip`);
+      }
+      toast.success(blobs.length === 1 ? "PNG exported" : `${blobs.length} PNG files exported`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Export failed");
+    } finally {
+      setExporting(false);
+    }
   };
 
   const columns: ColumnDef<GiveawayItem, unknown>[] = [
@@ -336,7 +486,7 @@ export default function GiveawaysPage() {
           <Button size="sm" variant="outline" onClick={() => openDetail(row.original)}>
             Open
           </Button>
-          {row.original.status === "draft" && (
+          {(["draft", "active"] as GiveawayStatus[]).includes(row.original.status) && (
             <Button size="sm" variant="outline" onClick={() => openEdit(row.original)}>
               Edit
             </Button>
@@ -362,7 +512,7 @@ export default function GiveawaysPage() {
             {item.ends_at ? ` · Ends ${formatShort(item.ends_at)}` : ""}
           </div>
         </div>
-        {item.status === "draft" && (
+        {(["draft", "active"] as GiveawayStatus[]).includes(item.status) && (
           <Button
             size="sm"
             variant="outline"
@@ -440,19 +590,30 @@ export default function GiveawaysPage() {
       <Sheet open={drawerOpen} onOpenChange={(o: boolean) => setDrawerOpen(o)}>
         <SheetContent side="right" className="flex w-full flex-col overflow-y-auto sm:max-w-[520px]">
           <SheetHeader>
-            <SheetTitle>{editing ? `Edit #${editing.id}` : "New giveaway"}</SheetTitle>
+            <SheetTitle>
+              {editing
+                ? editing.status === "active"
+                  ? `Edit schedule #${editing.id}`
+                  : `Edit #${editing.id}`
+                : "New giveaway"}
+            </SheetTitle>
           </SheetHeader>
 
           <div className="flex-1 space-y-4 py-4">
             <div className="space-y-1.5">
               <Label>Title *</Label>
-              <Input value={form.title} onChange={(e) => patchForm({ title: e.target.value })} />
+              <Input
+                value={form.title}
+                disabled={editing?.status === "active"}
+                onChange={(e) => patchForm({ title: e.target.value })}
+              />
             </div>
             <div className="space-y-1.5">
               <Label>Post / broadcast text (HTML)</Label>
               <Textarea
                 rows={5}
                 value={form.channel_text}
+                disabled={editing?.status === "active"}
                 onChange={(e) => patchForm({ channel_text: e.target.value })}
               />
             </div>
@@ -463,11 +624,12 @@ export default function GiveawaysPage() {
                 min={1}
                 max={100}
                 value={form.winner_count}
+                disabled={editing?.status === "active"}
                 onChange={(e) => patchForm({ winner_count: Number(e.target.value) || 1 })}
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Starts at (optional)</Label>
+              <Label>Starts at (optional, your local time)</Label>
               <Input
                 type="datetime-local"
                 value={form.starts_at}
@@ -475,13 +637,21 @@ export default function GiveawaysPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Ends at (optional)</Label>
+              <Label>Ends at (optional, your local time)</Label>
               <Input
                 type="datetime-local"
                 value={form.ends_at}
                 onChange={(e) => patchForm({ ends_at: e.target.value })}
               />
             </div>
+            {editing?.status === "active" && (
+              <p className="text-xs text-muted-foreground">
+                Active giveaways can only change the schedule. Re-enter the intended local start/end
+                times (stored as UTC). Leave empty for no time limit.
+              </p>
+            )}
+            {editing?.status !== "active" && (
+              <>
             <div className="space-y-2">
               <Label>Distribution</Label>
               <label className="flex items-center gap-2 text-sm">
@@ -559,6 +729,8 @@ export default function GiveawaysPage() {
                 ]}
               />
             </div>
+              </>
+            )}
           </div>
 
           <SheetFooter>
@@ -625,14 +797,43 @@ export default function GiveawaysPage() {
                     Draw winners
                   </Button>
                 )}
-                {detail.status === "drawn" && winners.length > 0 && (
-                  <Button
-                    variant="outline"
-                    className={cn(isMobile && "w-full")}
-                    onClick={() => setWinnersOpen(true)}
-                  >
-                    Show winners
-                  </Button>
+                {detail.status === "drawn" && (
+                  <>
+                    <Button
+                      variant="outline"
+                      className={cn(isMobile && "w-full")}
+                      onClick={openWinnersDialog}
+                      disabled={!winners.length}
+                    >
+                      Show winners
+                    </Button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          variant="destructive"
+                          className={cn(isMobile && "w-full")}
+                          disabled={redrawing}
+                        >
+                          <RotateCcw className="h-4 w-4" />
+                          {redrawing ? "Re-drawing…" : "Re-Draw Winners"}
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Replace the current winners?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            The previous winners will be excluded and replaced. This action does not keep result history.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => void onRedraw()}>
+                            Re-draw winners
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </>
                 )}
               </div>
               <Card>
@@ -683,26 +884,104 @@ export default function GiveawaysPage() {
       </Sheet>
 
       <Dialog open={winnersOpen} onOpenChange={setWinnersOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[96vh] overflow-y-auto sm:max-w-4xl">
           <DialogHeader>
             <DialogTitle>Winners</DialogTitle>
           </DialogHeader>
-          <pre className="m-0 whitespace-pre-wrap text-sm">
-            {winners
-              .map(
-                (w) =>
-                  `#${w.rank}: ${w.username ? `@${w.username}` : "—"} (${w.tg_id}) — ${w.tickets} tickets`,
-              )
-              .join("\n") || "No winners yet"}
-          </pre>
-          <DialogFooter>
-            <Button variant="outline" onClick={copyWinners}>
+
+          <div className="flex flex-col gap-3 rounded-xl border border-border bg-muted/20 p-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2">
+              {showFullData ? <Eye className="h-4 w-4 text-primary" /> : <EyeOff className="h-4 w-4 text-muted-foreground" />}
+              <div>
+                <Label htmlFor="winner-privacy">Show full data</Label>
+                <p className="text-xs text-muted-foreground">Copy and export use the current privacy mode.</p>
+              </div>
+            </div>
+            <Switch id="winner-privacy" checked={showFullData} onCheckedChange={setShowFullData} />
+          </div>
+
+          {detail && winners.length > 0 ? (
+            <div
+              className="mx-auto w-full"
+              style={{ maxWidth: "min(620px, calc((96vh - 230px) * 0.8))" }}
+            >
+              <ScaledWinnerCertificate
+                brandName={branding.branding_name}
+                logoUrl={branding.logo_url}
+                giveawayTitle={detail.title}
+                drawnAt={detail.drawn_at}
+                winners={winnerPages[winnerPage]}
+                page={winnerPage + 1}
+                pageCount={winnerPages.length}
+                showFull={showFullData}
+              />
+              {winnerPages.length > 1 && (
+                <div className="mt-3 flex items-center justify-center gap-3">
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="outline"
+                    disabled={winnerPage === 0}
+                    onClick={() => setWinnerPage((page) => Math.max(0, page - 1))}
+                    aria-label="Previous image"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <span className="text-sm text-muted-foreground">
+                    Image {winnerPage + 1} of {winnerPages.length}
+                  </span>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="outline"
+                    disabled={winnerPage === winnerPages.length - 1}
+                    onClick={() => setWinnerPage((page) => Math.min(winnerPages.length - 1, page + 1))}
+                    aria-label="Next image"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="py-12 text-center text-sm text-muted-foreground">No winners yet</div>
+          )}
+
+          <DialogFooter className="!flex-col gap-2 sm:!flex-row sm:justify-between">
+            <Button variant="outline" onClick={copyWinners} disabled={!winners.length}>
               Copy list
             </Button>
-            <Button onClick={() => setWinnersOpen(false)}>Close</Button>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button variant="outline" onClick={exportWinners} disabled={!winners.length || exporting}>
+                <Download className="h-4 w-4" />
+                {exporting ? "Exporting…" : winnerPages.length > 1 ? "Export PNGs" : "Export PNG"}
+              </Button>
+              <Button onClick={() => setWinnersOpen(false)}>Close</Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {winnersOpen && detail && winners.length > 0 && (
+        <div aria-hidden="true" className="pointer-events-none fixed left-[-20000px] top-0">
+          {winnerPages.map((pageWinners, index) => (
+            <WinnerCertificate
+              key={index}
+              ref={(node) => {
+                exportRefs.current[index] = node;
+              }}
+              brandName={branding.branding_name}
+              logoUrl={branding.logo_url}
+              giveawayTitle={detail.title}
+              drawnAt={detail.drawn_at}
+              winners={pageWinners}
+              page={index + 1}
+              pageCount={winnerPages.length}
+              showFull={showFullData}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

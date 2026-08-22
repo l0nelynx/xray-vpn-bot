@@ -1719,11 +1719,25 @@ function OperationsTab() {
 // ======================== Config Tab ========================
 
 const EDITABLE_CONFIG_SET = new Set<string>(TELMT_EDITABLE_CONFIG_SECTIONS);
+const EDITABLE_SERVER_CONFIG_SET = new Set(["listeners"]);
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
 
 function filterEditableConfig(data: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(data)) {
-    if (EDITABLE_CONFIG_SET.has(k)) out[k] = v;
+    if (!EDITABLE_CONFIG_SET.has(k)) continue;
+    if (k !== "server") {
+      out[k] = v;
+      continue;
+    }
+    if (!isObject(v)) continue;
+    const server = Object.fromEntries(
+      Object.entries(v).filter(([field]) => EDITABLE_SERVER_CONFIG_SET.has(field)),
+    );
+    if (Object.keys(server).length) out.server = server;
   }
   return out;
 }
@@ -1732,6 +1746,23 @@ function validateConfigPatch(parsed: Record<string, unknown>): string | null {
   const unknown = Object.keys(parsed).filter((k) => !EDITABLE_CONFIG_SET.has(k));
   if (unknown.length) {
     return `Not editable via Telemt API: ${unknown.join(", ")}. Allowed: ${TELMT_EDITABLE_CONFIG_SECTIONS.join(", ")}`;
+  }
+  if (!("server" in parsed)) return null;
+
+  const server = parsed.server;
+  if (!isObject(server)) return "server must be a JSON object";
+  const unknownServerFields = Object.keys(server).filter(
+    (field) => !EDITABLE_SERVER_CONFIG_SET.has(field),
+  );
+  if (unknownServerFields.length) {
+    return `Not editable via Telemt API: ${unknownServerFields.map((field) => `server.${field}`).join(", ")}. Allowed under server: listeners`;
+  }
+  if (!("listeners" in server)) return "server patch must contain listeners";
+  if (!Array.isArray(server.listeners)) {
+    return "server.listeners must be an array (the array is replaced wholesale)";
+  }
+  if (server.listeners.some((listener) => !isObject(listener))) {
+    return "Each server.listeners item must be a JSON object";
   }
   return null;
 }
@@ -1837,11 +1868,14 @@ function ConfigTab() {
         <AlertTitle>Managed Telemt config sections</AlertTitle>
         <AlertDescription>
           Telemt <code>GET/PATCH /v1/config</code> exposes only:{" "}
-          <code>{TELMT_EDITABLE_CONFIG_SECTIONS.join(", ")}</code>. Empty sections (e.g. no{" "}
+          <code>general, timeouts, censorship, upstreams, dc_overrides</code>, and only{" "}
+          <code>server.listeners</code> from <code>server</code>. Empty sections (e.g. no{" "}
           <code>[timeouts]</code> in toml) are omitted until present. Not available via API:{" "}
-          <code>network</code>, <code>server</code> (incl. listeners/api), <code>access</code> (users —
-          use the Users tab), <code>logging</code>, and other top-level keys. Edit those on the host in{" "}
-          <code>config.toml</code>. Save uses <code>If-Match</code> revision.
+          <code>network</code>, all other <code>server</code> fields (including <code>api</code>,{" "}
+          <code>admin_api</code>, <code>port</code>, and Unix sockets), <code>access</code> (users — use
+          the Users tab), <code>logging</code>, and other top-level keys. Edit those on the host in{" "}
+          <code>config.toml</code>. The listeners array is replaced wholesale. Save uses{" "}
+          <code>If-Match</code> revision.
         </AlertDescription>
       </Alert>
 

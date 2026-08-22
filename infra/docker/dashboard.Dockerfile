@@ -9,6 +9,9 @@ FROM ${BASE_IMAGE}
 
 WORKDIR /app
 
+# Runtime libraries required by CairoSVG for SVG branding icon rasterization.
+RUN apk add --no-cache cairo pango gdk-pixbuf libffi
+
 # Dashboard-specific deps on top of the shared base.
 COPY services/dashboard/backend/requirements.txt .
 RUN apk add --no-cache --virtual .build-deps gcc musl-dev postgresql-dev \

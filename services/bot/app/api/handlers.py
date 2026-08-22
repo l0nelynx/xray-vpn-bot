@@ -54,7 +54,7 @@ async def payment_process_background(order_id: str):
 
         usrid = userdata.get("user_tg_id")
         local_transaction_id = userdata.get("transaction_id") or order_id
-        android_user_id = userdata.get("android_user_id")
+        db_user_id = userdata.get("user_db_id")
         # Пытаемся получить username из разных возможных полей
         usrname = userdata.get("username") or userdata.get("user_username") or f"user_{usrid}"
         tariff_days = userdata.get("days_ordered")
@@ -62,10 +62,10 @@ async def payment_process_background(order_id: str):
         # Определяем тип транзакции (FREE или PAID)
         is_free_transaction = userdata.get("is_free") or userdata.get("type") == "free" or userdata.get("payment_type") == "free"
 
-        # Android API: paid transaction created via miniapp/backend/android/payments_router.
-        # No tg_id ⇒ skip the Telegram-bound delivery path entirely.
-        if android_user_id and not usrid:
-            await _process_android_payment(order_id, userdata, android_user_id, tariff_days)
+        # Every persisted purchase has a local owner. Route by users.id and
+        # purchase_source; android_user_id is only an Android-origin marker.
+        if db_user_id:
+            await _process_account_payment(order_id, userdata, db_user_id, tariff_days)
             return
 
         if not usrid or not tariff_days:
@@ -189,71 +189,88 @@ async def payment_process_background(order_id: str):
         )
 
 
-async def _process_android_payment(order_id: str, userdata: dict, android_user_id: int, tariff_days: int) -> None:
-    """Deliver a PAID Android-API transaction via Remnawave.
-
-    Differs from the Telegram path: no bot messages, no localized templates,
-    no referral logic (Android doesn't expose promos yet). Admin still gets
-    a notification for visibility.
-    """
+async def _process_account_payment(order_id: str, userdata: dict, db_user_id: int, tariff_days: int) -> None:
+    """Deliver a paid transaction using local ownership, independent of UI."""
     from app.handlers.android_delivery import deliver_android_paid
 
-    if userdata.get('status') != 'created':
+    if userdata.get('status') not in {'created', 'pending'}:
         logging.warning(
-            f"Android payment {order_id} ignored — status={userdata.get('status')}"
+            f"Account payment {order_id} ignored — status={userdata.get('status')}"
         )
         return
     local_transaction_id = userdata.get("transaction_id") or order_id
     claimed = await rq.claim_order_for_processing(local_transaction_id)
     if not claimed:
-        logging.warning(f"Android payment {order_id} already claimed; skipping")
+        logging.warning(f"Account payment {order_id} already claimed; skipping")
         return
 
     payment_method_name = userdata.get("payment_method") or order_id
     tx_amount = userdata.get("amount")
     email = userdata.get("user_email")
+    tg_id = userdata.get("user_tg_id")
+    username = userdata.get("user_username") or userdata.get("username")
+    purchase_source = userdata.get("purchase_source") or "legacy_unknown"
 
     await send_alert(
         local_transaction_id,
-        usrname=email or f"android_{android_user_id}",
-        usrid=-int(android_user_id),
+        usrname=username or email or f"user_{db_user_id}",
+        usrid=int(tg_id) if tg_id is not None else -int(db_user_id),
         tariff_days=tariff_days,
         payment_method=payment_method_name,
         amount=tx_amount,
         transaction_id=local_transaction_id,
     )
 
-    result = await deliver_android_paid(
-        transaction_id=local_transaction_id,
-        android_user_id=android_user_id,
-        email=email,
-        days=tariff_days,
-        tariff_slug=userdata.get("tariff_slug"),
-        delivery_target={
-            "internal_squad_ids": userdata.get("internal_squad_ids") or [],
-            "external_squad_id": userdata.get("external_squad_id"),
-            "traffic_limit_bytes": userdata.get("traffic_limit_bytes") or 0,
-            "traffic_limit_strategy": userdata.get("traffic_limit_strategy") or "NO_RESET",
-            "remnawave_description": userdata.get("remnawave_description"),
-            "remnawave_tag": userdata.get("remnawave_tag"),
-        },
-    )
+    attempts = 0
+    while True:
+        attempts += 1
+        result = await deliver_android_paid(
+            transaction_id=local_transaction_id,
+            android_user_id=db_user_id,
+            email=email,
+            days=tariff_days,
+            tariff_slug=userdata.get("tariff_slug"),
+            delivery_target={
+                "internal_squad_ids": userdata.get("internal_squad_ids") or [],
+                "external_squad_id": userdata.get("external_squad_id"),
+                "traffic_limit_bytes": userdata.get("traffic_limit_bytes") or 0,
+                "traffic_limit_strategy": userdata.get("traffic_limit_strategy") or "NO_RESET",
+                "remnawave_description": userdata.get("remnawave_description"),
+                "remnawave_tag": userdata.get("remnawave_tag"),
+            },
+            target_rw_id=userdata.get("target_rw_id"),
+            tg_id=tg_id,
+            tg_username=username if tg_id is not None else None,
+            purchase_source=purchase_source,
+        )
+        if result["status"] == "success":
+            break
+        if not result.get("retryable") or attempts >= 3:
+            break
+        delay = 2 ** attempts  # 2s, then 4s
+        logging.warning(
+            "Transient account delivery failure order=%s attempt=%s/3: %s; "
+            "retrying in %ss",
+            order_id, attempts, result.get("message"), delay,
+        )
+        await asyncio.sleep(delay)
 
     if result["status"] != "success":
         await rq.update_order_status(local_transaction_id, 'pending')
         logging.error(
-            f"Android delivery failed for {order_id}: {result.get('message')}"
+            f"Account delivery failed for {order_id}: {result.get('message')}"
         )
         await _notify.send_message(
             chat_id=secrets.get('admin_id'),
             text=(
-                f"❌ Android delivery failed: {order_id}\n"
-                f"User: {email} (id={android_user_id})\n"
-                f"Error: {result.get('message')}"
+                f"❌ Subscription delivery failed ({purchase_source}): {order_id}\n"
+                f"User: {username or email} (db_id={db_user_id})\n"
+                f"Error: {result.get('message')}\n"
+                f"Attempts: {attempts}/3"
             ),
         )
         return
 
     logging.info(
-        f"✓ Android delivery success: order={order_id}, scenario={result.get('scenario')}"
+        f"✓ Account delivery success: order={order_id}, scenario={result.get('scenario')}"
     )

@@ -1,4 +1,4 @@
-import { Laptop, Wifi } from "lucide-react";
+import { ChevronRight, Layers3, Laptop, Wifi } from "lucide-react";
 import { Progress } from "@xray/ui/components/progress";
 import { Badge } from "@xray/ui/components/badge";
 import { SubscriptionInfo } from "../api/client";
@@ -6,6 +6,9 @@ import { useT } from "../i18n/LocaleContext";
 
 interface Props {
   sub: SubscriptionInfo;
+  compact?: boolean;
+  subscriptionsCount?: number;
+  onManageSubscriptions?: () => void;
 }
 
 const STATUS_KEYS: Record<string, string> = {
@@ -13,6 +16,7 @@ const STATUS_KEYS: Record<string, string> = {
   expired: "subscription.status.expired",
   disabled: "subscription.status.disabled",
   limited: "subscription.status.limited",
+  unavailable: "subscription.status.unavailable",
 };
 
 const STATUS_BADGE_VARIANT: Record<string, "success" | "destructive" | "secondary" | "warning"> = {
@@ -20,9 +24,15 @@ const STATUS_BADGE_VARIANT: Record<string, "success" | "destructive" | "secondar
   expired: "destructive",
   disabled: "secondary",
   limited: "warning",
+  unavailable: "destructive",
 };
 
-export default function SubscriptionCard({ sub }: Props) {
+export default function SubscriptionCard({
+  sub,
+  compact = false,
+  subscriptionsCount,
+  onManageSubscriptions,
+}: Props) {
   const { t, dateLocale } = useT();
 
   const statusKey = sub.status || "";
@@ -57,7 +67,7 @@ export default function SubscriptionCard({ sub }: Props) {
   };
 
   return (
-    <div className="sub-card">
+    <div className={`sub-card${compact ? " sub-card--compact" : ""}`}>
       {/* Header: tariff name + status badge */}
       <div className="sub-card__header">
         <span className="sub-card__tariff">{sub.tariff}</span>
@@ -81,13 +91,13 @@ export default function SubscriptionCard({ sub }: Props) {
 
       {/* Stats row */}
       <div className="sub-card__stats">
-        <div className="sub-card__stat">
+        {!compact && <div className="sub-card__stat">
           <div className="sub-card__stat-val">
             <Laptop style={{ marginRight: 5, width: 14, height: 14, opacity: 0.7 }} />
             {sub.devices_count}
           </div>
           <div className="sub-card__stat-label">{t("subscription.devices")}</div>
-        </div>
+        </div>}
 
         <div className="sub-card__stat">
           <div className="sub-card__stat-val">
@@ -106,6 +116,14 @@ export default function SubscriptionCard({ sub }: Props) {
           </div>
         )}
       </div>
+
+      {onManageSubscriptions && typeof subscriptionsCount === "number" && (
+        <button className="sub-card__manage" onClick={onManageSubscriptions}>
+          <Layers3 />
+          <span>{t("home.allSubscriptions", { count: subscriptionsCount })}</span>
+          <ChevronRight />
+        </button>
+      )}
     </div>
   );
 }

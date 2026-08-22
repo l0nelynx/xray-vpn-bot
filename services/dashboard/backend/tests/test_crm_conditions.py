@@ -102,13 +102,13 @@ def test_apply_rw_filters_traffic_limit() -> None:
     async def go() -> None:
         rw = MagicMock()
         users = [
-            {"tg_id": 1, "vless_uuid": "u1", "meta": {}},
-            {"tg_id": 2, "vless_uuid": "u2", "meta": {}},
+            {"tg_id": 1, "rw_id": 11, "meta": {}},
+            {"tg_id": 2, "rw_id": 22, "meta": {}},
         ]
         rw.get_all_users_for_crm = AsyncMock(
             return_value=[
-                {"uuid": "u1", "traffic_limit_gb": 5, "traffic_limit_bytes": 5 * 1024 ** 3},
-                {"uuid": "u2", "traffic_limit_gb": 0, "traffic_limit_bytes": 0},
+                {"rw_id": 11, "traffic_limit_gb": 5, "traffic_limit_bytes": 5 * 1024 ** 3},
+                {"rw_id": 22, "traffic_limit_gb": 0, "traffic_limit_bytes": 0},
             ]
         )
         filtered, warning = await _apply_rw_filters(
@@ -128,11 +128,11 @@ def test_apply_rw_filters_tag() -> None:
     async def go() -> None:
         rw = MagicMock()
         users = [
-            {"tg_id": 1, "vless_uuid": "u1", "meta": {}},
-            {"tg_id": 2, "vless_uuid": "u2", "meta": {}},
+            {"tg_id": 1, "rw_id": 11, "meta": {}},
+            {"tg_id": 2, "rw_id": 22, "meta": {}},
         ]
         rw.get_users_by_tag = AsyncMock(
-            return_value=[{"uuid": "u2", "tag": "PROMO_1"}]
+            return_value=[{"rw_id": 22, "tag": "PROMO_1"}]
         )
         filtered, _ = await _apply_rw_filters(
             rw,
@@ -142,4 +142,3 @@ def test_apply_rw_filters_tag() -> None:
         assert [u["tg_id"] for u in filtered] == [2]
 
     _run(go())
-

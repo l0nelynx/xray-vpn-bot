@@ -88,7 +88,6 @@ def test_get_user_by_tg_id_returns_user() -> None:
 
     _run(go())
 
-
 def test_get_user_by_tg_id_returns_none_for_unknown() -> None:
     async def go() -> None:
         engine = _make_engine()
@@ -368,62 +367,6 @@ def test_get_users_by_tg_ids_returns_matches() -> None:
             async with Session() as session:
                 result = await repo_users.get_users_by_tg_ids(session, [1001, 1003, 9999])
                 assert sorted(u.username for u in result) == ["a", "c"]
-        finally:
-            await engine.dispose()
-
-    _run(go())
-
-
-def test_persist_remnawave_uuid() -> None:
-    async def go() -> None:
-        engine = _make_engine()
-        try:
-            await _setup(engine)
-            Session = async_sessionmaker(engine, expire_on_commit=False)
-            async with Session() as session:
-                session.add(User(id=1, tg_id=100, username="free_user"))
-                await session.commit()
-            async with Session() as session:
-                ok = await repo_users.persist_remnawave_uuid(
-                    session,
-                    tg_id=100,
-                    vless_uuid="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
-                    username="free_user",
-                )
-                await session.commit()
-                assert ok is True
-                user = await repo_users.get_user_by_tg_id(session, 100)
-                assert user is not None
-                assert user.vless_uuid == "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
-                assert user.api_provider == "remnawave"
-        finally:
-            await engine.dispose()
-
-    _run(go())
-
-
-def test_persist_remnawave_uuid_with_rw_id() -> None:
-    async def go() -> None:
-        engine = _make_engine()
-        try:
-            await _setup(engine)
-            Session = async_sessionmaker(engine, expire_on_commit=False)
-            async with Session() as session:
-                session.add(User(id=1, tg_id=100, username="free_user"))
-                await session.commit()
-            async with Session() as session:
-                ok = await repo_users.persist_remnawave_uuid(
-                    session,
-                    tg_id=100,
-                    vless_uuid="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
-                    username="free_user",
-                    rw_id=4242,
-                )
-                await session.commit()
-                assert ok is True
-                user = await repo_users.get_user_by_tg_id(session, 100)
-                assert user is not None
-                assert user.rw_id == 4242
         finally:
             await engine.dispose()
 

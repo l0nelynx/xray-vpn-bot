@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 
-from .config import get_expose_api_docs, get_log_level, get_web_allowed_origins, get_yaml_config
+from .config import get_expose_api_docs, get_log_level, get_redis_url, get_web_allowed_origins, get_yaml_config
 from .security_config import validate_security_config
 from .maintenance import MaintenanceMiddleware
 
@@ -21,13 +21,15 @@ from .android import email_router as android_email_router
 from .android import fcm_router as android_fcm_router
 from .android import iap_router as android_iap_router
 from .android import link_router as android_link_router
+from .android import managed_subscriptions_router as android_managed_subscriptions_router
 from .android import payments_router as android_payments_router
 from .android import promo_router as android_promo_router
 from .android import subscription_router as android_subscription_router
 from .android import support_router as android_support_router
 from .connect.router import router as connect_router
-from .routers import devices, free, me, menu, payments, promo, support
+from .routers import devices, free, link_email, me, menu, payments, promo, subscriptions, support, ux
 from .web import web_router
+from .web import subscription_sso_router
 
 BASE_PATH = "/bot/miniapp"
 
@@ -98,6 +100,14 @@ app = FastAPI(
 )
 app.state.limiter = limiter
 app.add_middleware(MaintenanceMiddleware)
+from common_db.api_health import ApiHealthMiddleware
+from .database.session import async_session as _telemetry_session
+app.add_middleware(
+    ApiHealthMiddleware,
+    service="miniapp",
+    redis_url=get_redis_url(),
+    session_factory=_telemetry_session,
+)
 
 # CORS for the external web portal (separate static hosting)
 _cors_origins = get_web_allowed_origins()
@@ -116,31 +126,52 @@ async def _rate_limit_handler(request, exc):
     return JSONResponse(status_code=429, content={"detail": {"code": "rate_limited"}})
 
 
+@app.exception_handler(Exception)
+async def _unhandled_error(request, exc):
+    request.state.api_exception = exc
+    logging.getLogger(__name__).exception("Unhandled MiniApp API error request_id=%s", getattr(request.state, "request_id", None))
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "internal_server_error", "request_id": getattr(request.state, "request_id", None)},
+        headers={"X-Request-ID": getattr(request.state, "request_id", "")},
+    )
+
+
 app.include_router(me.router, prefix=BASE_PATH)
 app.include_router(support.router, prefix=BASE_PATH)
 app.include_router(devices.router, prefix=BASE_PATH)
 app.include_router(payments.router, prefix=BASE_PATH)
+app.include_router(subscriptions.router, prefix=BASE_PATH)
 app.include_router(menu.router, prefix=BASE_PATH)
 app.include_router(promo.router, prefix=BASE_PATH)
 app.include_router(free.router, prefix=BASE_PATH)
+app.include_router(link_email.router, prefix=BASE_PATH)
+app.include_router(ux.router, prefix=BASE_PATH)
 app.include_router(android_auth_router.router, prefix=BASE_PATH)
 app.include_router(android_email_router.router, prefix=BASE_PATH)
 app.include_router(android_payments_router.router, prefix=BASE_PATH)
 app.include_router(android_iap_router.router, prefix=BASE_PATH)
 app.include_router(android_data_router.router, prefix=BASE_PATH)
 app.include_router(android_link_router.router, prefix=BASE_PATH)
+app.include_router(android_managed_subscriptions_router.router, prefix=BASE_PATH)
 app.include_router(android_subscription_router.router, prefix=BASE_PATH)
 app.include_router(android_claim_router.router, prefix=BASE_PATH)
 app.include_router(android_promo_router.router, prefix=BASE_PATH)
 app.include_router(android_support_router.router, prefix=BASE_PATH)
 app.include_router(android_fcm_router.router, prefix=BASE_PATH)
 app.include_router(web_router.router, prefix=BASE_PATH)
+app.include_router(subscription_sso_router.router, prefix=BASE_PATH)
 app.include_router(connect_router, prefix=BASE_PATH)
 
 
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get(f"{BASE_PATH}/api/health", include_in_schema=False)
+async def public_health():
+    return {"status": "ok", "service": "miniapp"}
 
 
 # The React SPA (Telegram MiniApp + web portal) is built and served by the

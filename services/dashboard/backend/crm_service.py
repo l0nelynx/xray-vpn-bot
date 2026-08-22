@@ -29,7 +29,7 @@ from remnawave_client.segmentation import (
     matches_rw_segment,
     segment_meta,
 )
-from remnawave_client.torrent_blocker import collect_torrent_user_uuids
+from remnawave_client.torrent_blocker import collect_torrent_user_ids
 
 logger = logging.getLogger(__name__)
 
@@ -38,30 +38,30 @@ def _scan_user_row(user: User, meta: dict | None = None) -> dict:
     return {
         "tg_id": user.tg_id,
         "username": user.username,
-        "vless_uuid": user.vless_uuid,
+        "rw_id": user.rw_id,
         "meta": meta or {},
     }
 
 
 async def _enrich_device_counts(
     rw_client,
-    crm_by_uuid: dict[str, dict],
-    uuids: list[str],
+    crm_by_id: dict[int, dict],
+    rw_ids: list[int],
 ) -> None:
     """Fill device_count for users missing it (segment device_limit)."""
     sem = asyncio.Semaphore(20)
 
-    async def _one(uuid: str) -> None:
+    async def _one(rw_id: int) -> None:
         async with sem:
             try:
-                resp = await rw_client.get_user_hwid_devices(uuid)
-                if resp and uuid in crm_by_uuid:
+                resp = await rw_client.get_user_hwid_devices_by_id(rw_id)
+                if resp and rw_id in crm_by_id:
                     count = int(resp.total) if resp.total else len(resp.devices or [])
-                    crm_by_uuid[uuid]["device_count"] = count
+                    crm_by_id[rw_id]["device_count"] = count
             except Exception as exc:
-                logger.debug("HWID count failed uuid=%s: %s", uuid, exc)
+                logger.debug("HWID count failed rw_id=%s: %s", rw_id, exc)
 
-    await asyncio.gather(*[_one(u) for u in uuids], return_exceptions=True)
+    await asyncio.gather(*[_one(rw_id) for rw_id in rw_ids], return_exceptions=True)
 
 
 async def scan_segment(
@@ -99,13 +99,13 @@ async def scan_segment(
     if not local_users:
         return [], 0, None
 
-    by_uuid = {u.vless_uuid: u for u in local_users if u.vless_uuid}
+    by_id = {int(u.rw_id): u for u in local_users if u.rw_id is not None}
     warning: str | None = None
 
-    torrent_uuids: set[str] | None = None
+    torrent_rw_ids: set[int] | None = None
     if segment_id == SEGMENT_TORRENT:
-        torrent_uuids = await collect_torrent_user_uuids(rw_client, days=torrent_days)
-        if not torrent_uuids:
+        torrent_rw_ids = await collect_torrent_user_ids(rw_client, days=torrent_days)
+        if not torrent_rw_ids:
             warning = (
                 "Torrent-blocker API returned an empty list — check panel version "
                 "or API token permissions."
@@ -117,25 +117,25 @@ async def scan_segment(
         logger.error("CRM scan: Remnawave bulk fetch failed: %s", exc)
         return [], 0, f"Failed to load Remnawave users: {exc}"
 
-    crm_by_uuid = {u["uuid"]: u for u in crm_users if u.get("uuid")}
+    crm_by_id = {int(u["rw_id"]): u for u in crm_users if u.get("rw_id") is not None}
 
     if segment_id == SEGMENT_DEVICE_LIMIT:
         missing = [
-            uuid
-            for uuid, cu in crm_by_uuid.items()
-            if uuid in by_uuid and cu.get("device_count") is None
+            rw_id
+            for rw_id, cu in crm_by_id.items()
+            if rw_id in by_id and cu.get("device_count") is None
         ]
         if missing:
-            await _enrich_device_counts(rw_client, crm_by_uuid, missing)
+            await _enrich_device_counts(rw_client, crm_by_id, missing)
 
     matched: list[dict] = []
-    for uuid, db_user in by_uuid.items():
-        crm_user = crm_by_uuid.get(uuid)
+    for rw_id, db_user in by_id.items():
+        crm_user = crm_by_id.get(rw_id)
         if not crm_user:
             continue
 
         if segment_id == SEGMENT_TORRENT:
-            if torrent_uuids and uuid in torrent_uuids:
+            if torrent_rw_ids and rw_id in torrent_rw_ids:
                 matched.append(_scan_user_row(db_user, segment_meta(crm_user)))
             continue
 
@@ -168,8 +168,8 @@ async def apply_campaign_perks(
     bonus_traffic_gb: int | None,
 ) -> tuple[bool, str | None]:
     """Apply CRM perks. Returns (success, error_message)."""
-    if not user.vless_uuid:
-        return False, "no vless_uuid"
+    if user.rw_id is None:
+        return False, "no rw_id"
     if not crm_user:
         return False, "remnawave user not found"
 
@@ -183,7 +183,7 @@ async def apply_campaign_perks(
 
     if bonus_days and bonus_days > 0:
         if not await apply_crm_bonus_days(
-            user_uuid=user.vless_uuid,
+            rw_id=int(user.rw_id),
             username=username,
             bonus_days=bonus_days,
             crm_user=crm_user,
@@ -194,7 +194,7 @@ async def apply_campaign_perks(
 
     if bonus_traffic_gb and bonus_traffic_gb > 0:
         if not await apply_crm_bonus_traffic(
-            user_uuid=user.vless_uuid,
+            rw_id=int(user.rw_id),
             username=username,
             bonus_gb=bonus_traffic_gb,
             crm_user=crm_user,

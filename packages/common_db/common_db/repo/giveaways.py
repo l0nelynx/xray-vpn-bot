@@ -4,10 +4,10 @@ from __future__ import annotations
 import json
 import random
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import Giveaway, GiveawayParticipant, GiveawayTicket, GiveawayWinner, User
@@ -28,8 +28,21 @@ from ..models.giveaways import (
 )
 
 
+def _now_naive_utc() -> datetime:
+    """Current UTC as naive datetime (matches stored starts_at/ends_at)."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 def _now_iso() -> str:
-    return datetime.now().isoformat(timespec="seconds")
+    return _now_naive_utc().isoformat(timespec="seconds")
+
+
+def _parse_window_dt(raw: str) -> datetime:
+    """Parse ISO window bound; normalize aware values to naive UTC."""
+    dt = datetime.fromisoformat(raw)
+    if dt.tzinfo is not None:
+        return dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
 
 
 def parse_config(raw: str | None) -> dict[str, Any]:
@@ -88,16 +101,19 @@ def normalize_config(data: dict[str, Any] | None) -> dict[str, Any]:
 
 
 def _is_in_window(giveaway: Giveaway, now: datetime | None = None) -> bool:
-    now = now or datetime.now()
+    """True if ``now`` (UTC naive) is within optional starts_at/ends_at bounds."""
+    now = now or _now_naive_utc()
+    if now.tzinfo is not None:
+        now = now.astimezone(timezone.utc).replace(tzinfo=None)
     if giveaway.starts_at:
         try:
-            if now < datetime.fromisoformat(giveaway.starts_at):
+            if now < _parse_window_dt(giveaway.starts_at):
                 return False
         except ValueError:
             pass
     if giveaway.ends_at:
         try:
-            if now > datetime.fromisoformat(giveaway.ends_at):
+            if now > _parse_window_dt(giveaway.ends_at):
                 return False
         except ValueError:
             pass
@@ -106,6 +122,13 @@ def _is_in_window(giveaway: Giveaway, now: datetime | None = None) -> bool:
 
 async def get_giveaway(session: AsyncSession, giveaway_id: int) -> Giveaway | None:
     return await session.get(Giveaway, giveaway_id)
+
+
+async def get_giveaway_for_update(session: AsyncSession, giveaway_id: int) -> Giveaway | None:
+    """Load and lock a giveaway for an atomic draw/redraw transaction."""
+    return await session.scalar(
+        select(Giveaway).where(Giveaway.id == giveaway_id).with_for_update()
+    )
 
 
 async def list_giveaways(
@@ -167,16 +190,23 @@ async def update_giveaway(
     clear_starts_at: bool = False,
     clear_ends_at: bool = False,
 ) -> Giveaway:
-    if giveaway.status != GIVEAWAY_STATUS_DRAFT:
-        raise ValueError("only draft giveaways can be edited")
-    if title is not None:
-        giveaway.title = title.strip()
-    if channel_text is not None:
-        giveaway.channel_text = channel_text
-    if config is not None:
-        giveaway.config_json = json.dumps(normalize_config(config))
-    if winner_count is not None:
-        giveaway.winner_count = max(1, winner_count)
+    is_draft = giveaway.status == GIVEAWAY_STATUS_DRAFT
+    is_active = giveaway.status == GIVEAWAY_STATUS_ACTIVE
+    if not is_draft and not is_active:
+        raise ValueError("only draft or active giveaways can be edited")
+    if not is_draft and any(
+        v is not None for v in (title, channel_text, config, winner_count)
+    ):
+        raise ValueError("active giveaways can only change starts_at/ends_at")
+    if is_draft:
+        if title is not None:
+            giveaway.title = title.strip()
+        if channel_text is not None:
+            giveaway.channel_text = channel_text
+        if config is not None:
+            giveaway.config_json = json.dumps(normalize_config(config))
+        if winner_count is not None:
+            giveaway.winner_count = max(1, winner_count)
     if clear_starts_at:
         giveaway.starts_at = None
     elif starts_at is not None:
@@ -209,7 +239,7 @@ async def list_active_giveaways(session: AsyncSession) -> list[Giveaway]:
     result = await session.execute(
         select(Giveaway).where(Giveaway.status == GIVEAWAY_STATUS_ACTIVE)
     )
-    now = datetime.now()
+    now = _now_naive_utc()
     return [g for g in result.scalars().all() if _is_in_window(g, now)]
 
 
@@ -475,6 +505,90 @@ def _most_tickets_winners(
     return random.sample(top, winner_count)
 
 
+async def _ticket_inventory(
+    session: AsyncSession,
+    giveaway_id: int,
+) -> tuple[dict[int, list[int]], dict[int, int]]:
+    rows = await session.execute(
+        select(GiveawayTicket.id, GiveawayTicket.participant_tg_id)
+        .where(GiveawayTicket.giveaway_id == giveaway_id)
+        .order_by(GiveawayTicket.created_at, GiveawayTicket.id)
+    )
+    by_participant: dict[int, list[int]] = {}
+    ticket_numbers: dict[int, int] = {}
+    for number, (ticket_id, tg_id) in enumerate(rows.all(), start=1):
+        ticket_id = int(ticket_id)
+        tg_id = int(tg_id)
+        ticket_numbers[ticket_id] = number
+        by_participant.setdefault(tg_id, []).append(ticket_id)
+    return by_participant, ticket_numbers
+
+
+async def _pick_winners(
+    session: AsyncSession,
+    giveaway: Giveaway,
+    *,
+    excluded_tg_ids: set[int] | None = None,
+) -> tuple[list[tuple[int, int, int]], dict[int, int]]:
+    ticket_ids_by_user, ticket_numbers = await _ticket_inventory(session, giveaway.id)
+    excluded = excluded_tg_ids or set()
+    entries = [
+        (tg_id, len(ticket_ids))
+        for tg_id, ticket_ids in ticket_ids_by_user.items()
+        if tg_id not in excluded and ticket_ids
+    ]
+
+    config = normalize_config(parse_config(giveaway.config_json))
+    if config["winner_selection"] == WINNER_MOST_TICKETS:
+        picked = _most_tickets_winners(entries, giveaway.winner_count)
+    else:
+        picked = _weighted_random_winners(entries, giveaway.winner_count)
+
+    result: list[tuple[int, int, int]] = []
+    for tg_id, ticket_count in picked:
+        owned_ticket_ids = ticket_ids_by_user[tg_id]
+        winning_ticket_id = (
+            owned_ticket_ids[0]
+            if config["winner_selection"] == WINNER_MOST_TICKETS
+            else random.choice(owned_ticket_ids)
+        )
+        result.append((tg_id, ticket_count, winning_ticket_id))
+    return result, ticket_numbers
+
+
+async def _store_winners(
+    session: AsyncSession,
+    giveaway: Giveaway,
+    picked: list[tuple[int, int, int]],
+    ticket_numbers: dict[int, int],
+) -> list[dict]:
+    result: list[dict] = []
+    for rank, (tg_id, tickets, winning_ticket_id) in enumerate(picked, start=1):
+        session.add(
+            GiveawayWinner(
+                giveaway_id=giveaway.id,
+                tg_id=tg_id,
+                rank=rank,
+                tickets=tickets,
+                winning_ticket_id=winning_ticket_id,
+            )
+        )
+        user = await session.scalar(select(User).where(User.tg_id == tg_id))
+        result.append(
+            {
+                "rank": rank,
+                "tg_id": tg_id,
+                "username": user.username if user else None,
+                "tickets": tickets,
+                "ticket_number": ticket_numbers.get(winning_ticket_id),
+            }
+        )
+    giveaway.status = GIVEAWAY_STATUS_DRAWN
+    giveaway.drawn_at = _now_iso()
+    await session.flush()
+    return result
+
+
 async def draw_winners(session: AsyncSession, giveaway: Giveaway) -> list[dict]:
     if giveaway.status not in (GIVEAWAY_STATUS_ACTIVE, GIVEAWAY_STATUS_CLOSED):
         raise ValueError("giveaway cannot be drawn")
@@ -490,69 +604,59 @@ async def draw_winners(session: AsyncSession, giveaway: Giveaway) -> list[dict]:
     if existing:
         raise ValueError("already drawn")
 
-    rows = await session.execute(
-        select(
-            GiveawayParticipant.tg_id,
-            func.count(GiveawayTicket.id),
-        )
-        .outerjoin(
-            GiveawayTicket,
-            (GiveawayTicket.giveaway_id == GiveawayParticipant.giveaway_id)
-            & (GiveawayTicket.participant_tg_id == GiveawayParticipant.tg_id),
-        )
-        .where(GiveawayParticipant.giveaway_id == giveaway.id)
-        .group_by(GiveawayParticipant.tg_id)
+    picked, ticket_numbers = await _pick_winners(session, giveaway)
+    return await _store_winners(session, giveaway, picked, ticket_numbers)
+
+
+async def redraw_winners(session: AsyncSession, giveaway: Giveaway) -> list[dict]:
+    if giveaway.status != GIVEAWAY_STATUS_DRAWN:
+        raise ValueError("only drawn giveaways can be redrawn")
+
+    previous_rows = await session.execute(
+        select(GiveawayWinner.tg_id).where(GiveawayWinner.giveaway_id == giveaway.id)
     )
-    entries = [(int(tg_id), int(ticket_count or 0)) for tg_id, ticket_count in rows.all()]
+    previous_tg_ids = {int(tg_id) for tg_id in previous_rows.scalars().all()}
+    picked, ticket_numbers = await _pick_winners(
+        session,
+        giveaway,
+        excluded_tg_ids=previous_tg_ids,
+    )
+    if len(picked) < giveaway.winner_count:
+        raise ValueError("not enough eligible participants for redraw")
 
-    config = normalize_config(parse_config(giveaway.config_json))
-    if config["winner_selection"] == WINNER_MOST_TICKETS:
-        picked = _most_tickets_winners(entries, giveaway.winner_count)
-    else:
-        picked = _weighted_random_winners(entries, giveaway.winner_count)
-
-    result: list[dict] = []
-    for rank, (tg_id, tickets) in enumerate(picked, start=1):
-        session.add(
-            GiveawayWinner(
-                giveaway_id=giveaway.id,
-                tg_id=tg_id,
-                rank=rank,
-                tickets=tickets,
-            )
-        )
-        user = await session.scalar(select(User).where(User.tg_id == tg_id))
-        result.append(
-            {
-                "rank": rank,
-                "tg_id": tg_id,
-                "username": user.username if user else None,
-                "tickets": tickets,
-            }
-        )
-
-    giveaway.status = GIVEAWAY_STATUS_DRAWN
-    giveaway.drawn_at = _now_iso()
+    await session.execute(
+        delete(GiveawayWinner).where(GiveawayWinner.giveaway_id == giveaway.id)
+    )
     await session.flush()
-    return result
+    return await _store_winners(session, giveaway, picked, ticket_numbers)
 
 
 async def get_winners(session: AsyncSession, giveaway_id: int) -> list[dict]:
+    ticket_ids_by_user, ticket_numbers = await _ticket_inventory(session, giveaway_id)
     rows = await session.execute(
         select(GiveawayWinner, User.username)
         .outerjoin(User, GiveawayWinner.tg_id == User.tg_id)
         .where(GiveawayWinner.giveaway_id == giveaway_id)
         .order_by(GiveawayWinner.rank)
     )
-    return [
-        {
-            "rank": w.rank,
-            "tg_id": w.tg_id,
-            "username": username,
-            "tickets": w.tickets,
-        }
-        for w, username in rows.all()
-    ]
+    result: list[dict] = []
+    for winner, username in rows.all():
+        winning_ticket_id = winner.winning_ticket_id
+        if winning_ticket_id is None:
+            owned = ticket_ids_by_user.get(int(winner.tg_id), [])
+            winning_ticket_id = owned[0] if owned else None
+        result.append(
+            {
+                "rank": winner.rank,
+                "tg_id": winner.tg_id,
+                "username": username,
+                "tickets": winner.tickets,
+                "ticket_number": ticket_numbers.get(int(winning_ticket_id))
+                if winning_ticket_id is not None
+                else None,
+            }
+        )
+    return result
 
 
 def serialize_giveaway(giveaway: Giveaway, counts: dict | None = None) -> dict:
@@ -581,7 +685,9 @@ __all__ = [
     "create_giveaway",
     "default_config",
     "draw_winners",
+    "redraw_winners",
     "get_giveaway",
+    "get_giveaway_for_update",
     "get_winners",
     "giveaway_summary_counts",
     "join_participant",

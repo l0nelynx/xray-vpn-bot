@@ -22,6 +22,11 @@ import common_db.models  # noqa: F401  -- side-effect: populate metadata
 
 
 CANONICAL_TABLES = frozenset({
+    "api_alert_state",
+    "api_error_events",
+    "api_metric_hours",
+    "api_metric_minutes",
+    "api_service_status",
     "android_fcm_tokens",
     "app_runtime_settings",
     "app_integrations",
@@ -34,6 +39,7 @@ CANONICAL_TABLES = frozenset({
     "crm_webhook_deliveries",
     "crm_webhook_rules",
     "credit_ledger",
+    "dashboard_branding_assets",
     "disabled_users",
     "email_verifications",
     "google_play_purchases",
@@ -44,7 +50,9 @@ CANONICAL_TABLES = frozenset({
     "giveaways",
     "menu_buttons",
     "menu_screens",
+    "miniapp_ux_events",
     "payment_integrations",
+    "pending_subscription_onboardings",
     "promo_redemptions",
     "promo_settings",
     "promos",
@@ -54,11 +62,14 @@ CANONICAL_TABLES = frozenset({
     "support_attachments",
     "support_messages",
     "support_tickets",
+    "subscription_transfers",
     "telegram_link_codes",
     "telemt_free_params",
     "transactions",
     "users",
+    "user_subscriptions",
     "webapp_menu_nodes",
+    "web_authorization_codes",
 })
 
 # Tables created by alembic but intentionally NOT modelled in common_db.

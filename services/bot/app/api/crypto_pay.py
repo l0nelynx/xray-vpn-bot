@@ -53,7 +53,7 @@ async def cryptopay_webhook_handler(
         logger.info("CryptoPay webhook: unknown invoice %s, ignoring", invoice_id)
         return {"ok": True, "skipped": True}
 
-    if tx.get("status") != "created":
+    if tx.get("status") not in {"created", "pending"}:
         logger.info(
             "CryptoPay webhook: invoice %s already processed (status=%s)",
             invoice_id, tx.get("status"),

@@ -69,7 +69,7 @@ export interface CrmAction {
 export interface ScanUser {
   tg_id: number;
   username: string | null;
-  vless_uuid: string | null;
+  rw_id: number | null;
   meta: Record<string, unknown>;
 }
 

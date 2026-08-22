@@ -2,7 +2,7 @@ import hmac
 from datetime import datetime, timedelta, timezone
 
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
@@ -83,6 +83,7 @@ def verify_credentials(login: str, password: str) -> bool:
 
 
 def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
 ) -> str:
     token = credentials.credentials
@@ -91,6 +92,7 @@ def get_current_user(
         subject: str = payload.get("sub")
         if subject is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+        request.state.api_actor = subject
         return subject
     except jwt.InvalidTokenError:
         # Covers bad signature, malformed token, and expiry

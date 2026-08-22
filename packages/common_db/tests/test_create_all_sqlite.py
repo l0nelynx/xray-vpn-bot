@@ -21,7 +21,20 @@ def test_create_all_succeeds() -> None:
         tables = set(insp.get_table_names())
 
         # Spot-check critical tables made it in.
-        assert {"users", "support_tickets", "support_messages", "transactions"} <= tables
+        assert {
+            "users",
+            "user_subscriptions",
+            "subscription_transfers",
+            "web_authorization_codes",
+            "support_tickets",
+            "support_messages",
+            "transactions",
+            "api_metric_minutes",
+            "api_metric_hours",
+            "api_error_events",
+            "api_service_status",
+            "api_alert_state",
+        } <= tables
 
         # Spot-check critical indexes survived create_all.
         ticket_indexes = {ix["name"] for ix in insp.get_indexes("support_tickets")}
@@ -34,6 +47,19 @@ def test_create_all_succeeds() -> None:
         user_indexes = {ix["name"] for ix in insp.get_indexes("users")}
         assert "ix_user_username" in user_indexes
         assert "ix_users_email_unique" in user_indexes
+        assert "ux_users_rw_id" in user_indexes
+
+        subscription_indexes = {
+            ix["name"] for ix in insp.get_indexes("user_subscriptions")
+        }
+        assert "ux_user_subscriptions_rw_id" in subscription_indexes
+        assert "ux_user_subscriptions_primary" in subscription_indexes
+
+        transfer_indexes = {
+            ix["name"] for ix in insp.get_indexes("subscription_transfers")
+        }
+        assert "ux_subscription_transfers_source_rw_id" in transfer_indexes
+        assert "ix_subscription_transfers_user_id" in transfer_indexes
 
         # FK from support_messages.ticket_id -> support_tickets.id with CASCADE.
         fks = insp.get_foreign_keys("support_messages")
@@ -63,6 +89,7 @@ def test_metadata_round_trip_reflects_columns() -> None:
             "tg_id",
             "username",
             "vless_uuid",
+            "rw_id",
             "api_provider",
             "email",
             "is_banned",
@@ -73,6 +100,39 @@ def test_metadata_round_trip_reflects_columns() -> None:
             "email_verified_at",
         ):
             assert required in users_cols, f"missing column users.{required}"
+
+        subscription_cols = {
+            c["name"] for c in insp.get_columns("user_subscriptions")
+        }
+        assert subscription_cols == {
+            "id",
+            "user_id",
+            "rw_id",
+            "product_key",
+            "label",
+            "source",
+            "is_primary",
+            "created_at",
+            "updated_at",
+        }
+
+        transfer_cols = {
+            c["name"] for c in insp.get_columns("subscription_transfers")
+        }
+        assert transfer_cols == {
+            "id",
+            "user_id",
+            "source_rw_id",
+            "target_rw_id",
+            "days_transferred",
+            "status",
+            "error_code",
+            "created_at",
+            "updated_at",
+        }
+
+        transaction_cols = {c["name"] for c in insp.get_columns("transactions")}
+        assert "target_rw_id" in transaction_cols
 
         ticket_cols = {c["name"] for c in insp.get_columns("support_tickets")}
         assert ticket_cols == {

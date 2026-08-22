@@ -49,6 +49,7 @@ and Android app — all on a shared PostgreSQL database.
 | [Payment gateways](payment-gateways.md) | Built-in gateways + **how to add your own** |
 | [Database](database.md) | `common_db`, schema, Alembic migrations |
 | [Integrations](integrations.md) | Remnawave webhooks, Telemt monitoring |
+| [Remnawave v3 rollout](remnawave-v3-rollout.md) | Safe panel/API v3 maintenance window and smoke tests |
 | [Connect page](connect-page.md) | VPN app install catalog override |
 
 ## Quick reference

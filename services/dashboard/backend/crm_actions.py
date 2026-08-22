@@ -162,9 +162,9 @@ async def execute_user_actions(
         for a in enabled
     )
 
-    if has_rw and not db_user.vless_uuid:
+    if has_rw and db_user.rw_id is None:
         result.perks_failed = True
-        result.errors.append("no vless_uuid for remnawave actions")
+        result.errors.append("no rw_id for remnawave actions")
     elif has_rw and not crm_user:
         result.perks_failed = True
         result.errors.append("remnawave user not found")
@@ -173,9 +173,9 @@ async def execute_user_actions(
         atype = act.get("type")
         if atype == ACTION_RW_BONUS_DAYS:
             days = int(act.get("days") or 0)
-            if days > 0 and db_user.vless_uuid and crm_user:
+            if days > 0 and db_user.rw_id is not None and crm_user:
                 ok = await apply_crm_bonus_days(
-                    user_uuid=db_user.vless_uuid,
+                    rw_id=int(db_user.rw_id),
                     username=username,
                     bonus_days=days,
                     crm_user=crm_user,
@@ -205,9 +205,9 @@ async def execute_user_actions(
                     result.errors.append(f"credit_balance: {exc}")
         elif atype == ACTION_RW_BONUS_TRAFFIC:
             gb = int(act.get("gb") or 0)
-            if gb > 0 and db_user.vless_uuid and crm_user:
+            if gb > 0 and db_user.rw_id is not None and crm_user:
                 ok = await apply_crm_bonus_traffic(
-                    user_uuid=db_user.vless_uuid,
+                    rw_id=int(db_user.rw_id),
                     username=username,
                     bonus_gb=gb,
                     crm_user=crm_user,
@@ -219,9 +219,9 @@ async def execute_user_actions(
                     result.perks_failed = True
                     result.errors.append("bonus_traffic failed")
         elif atype == ACTION_RW_RESET_TRAFFIC:
-            if db_user.vless_uuid:
+            if db_user.rw_id is not None:
                 try:
-                    ok = await rw_client.reset_user_traffic(db_user.vless_uuid)
+                    ok = await rw_client.reset_user_traffic_by_id(int(db_user.rw_id))
                     if ok:
                         result.perks_applied = True
                     else:

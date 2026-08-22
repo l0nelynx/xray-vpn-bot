@@ -50,14 +50,17 @@ async def admin_sub_clean_scan(message: Message):
             )
             if not is_subscribed:
                 # Get current status from RemnaWave
-                rw_user = None
-                if user.get("username"):
-                    rw_user = await rem.get_user_from_username(user["username"])
+                rw_user = await rem.resolve_remnawave_user(
+                    rw_id=user.get("rw_id"),
+                    email=user.get("email"),
+                    username=user.get("username"),
+                    expected_telegram_id=user.get("tg_id"),
+                )
                 if rw_user and rw_user.get("status") != "disabled":
                     to_disable.append({
                         "tg_id": user["tg_id"],
                         "username": user["username"],
-                        "vless_uuid": user["vless_uuid"],
+                        "rw_id": rw_user.get("rw_id"),
                         "current_status": rw_user["status"],
                     })
         except Exception as e:
@@ -115,12 +118,12 @@ async def admin_confirm_sub_clean(callback: CallbackQuery):
 
     for user in to_disable:
         tg_id = user["tg_id"]
-        vless_uuid = user["vless_uuid"]
+        rw_id = user["rw_id"]
         current_status = user["current_status"]
 
         try:
             # Disable in RemnaWave first; only persist to DB on success
-            result = await rem.update_user(vless_uuid, status="disabled")
+            result = await rem.update_user_by_id(int(rw_id), status="disabled")
             if not result:
                 error_count += 1
                 continue

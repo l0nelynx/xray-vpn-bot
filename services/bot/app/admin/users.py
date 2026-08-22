@@ -143,7 +143,7 @@ async def _build_user_card(tg_id: int) -> tuple[str, InlineKeyboardMarkup] | Non
         f"TG ID: <code>{info['tg_id']}</code>\n"
         f"Email: {email_text}\n"
         f"API: {info['api_provider'] or '—'}\n"
-        f"UUID: <code>{info['vless_uuid'] or '—'}</code>\n"
+        f"Legacy panel UUID: <code>{info['vless_uuid'] or '—'}</code>\n"
         f"Забанен: {banned_text}\n"
         f"VIP: {vip_text}"
     )

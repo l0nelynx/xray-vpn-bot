@@ -9,21 +9,27 @@ Anti-enumeration:
     "no active code" and "wrong code" cases.
 
 Verifying an email also eagerly provisions a FREE Remnawave subscription so
-the Android client can immediately fetch a `vless_uuid` from /me.
+the Android client can immediately fetch the numeric Remnawave `rw_id` and
+subscription URL from /me.
 """
 from __future__ import annotations
 
 import logging
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr, Field
+from sqlalchemy.exc import IntegrityError
+
+from common_db.repo import subscription_onboarding, subscriptions
 
 from ..config import (
     get_email_code_max_attempts,
     get_email_code_ttl_seconds,
 )
 from ..notify_log import esc, notify_log
-from . import deps, mailer, provisioning, repo, security
+from ..database.session import async_session
+from . import deps, email_send_guard, mailer, provisioning, repo, security
 from .auth_router import limiter
 from .schemas import SimpleStatus
 
@@ -37,6 +43,18 @@ router = APIRouter(prefix="/api/android/auth", tags=["android-auth-email"])
 
 class EmailVerifyConfirmRequest(BaseModel):
     code: str = Field(min_length=4, max_length=12)
+
+
+class EmailVerifyResponse(BaseModel):
+    status: str = "ok"
+    subscription_status: Literal[
+        "attached",
+        "awaiting_oauth",
+        "already_attached",
+        "skipped_nonempty",
+        "conflict",
+        "none",
+    ] = "none"
 
 
 class PasswordResetRequest(BaseModel):
@@ -72,9 +90,12 @@ async def _send_code(
     to_email: str,
     payload: str | None,
     template,
+    request: Request | None = None,
 ) -> None:
     """Generate, persist, and send a code. Old codes for the purpose are
     invalidated atomically so only the freshest code is valid."""
+    ip = deps.real_client_ip(request) if request is not None else None
+    email_send_guard.check(email=to_email, ip=ip)
     code = security.new_email_code()
     code_hash = security.hash_email_code(code)
     await repo.invalidate_pending_codes(user_id, purpose)
@@ -85,6 +106,7 @@ async def _send_code(
         payload=payload,
         ttl_seconds=get_email_code_ttl_seconds(),
     )
+    email_send_guard.record(email=to_email, ip=ip)
     rendered = template(code) if payload is None else template(code, payload)
     subject, body = rendered
     try:
@@ -104,6 +126,7 @@ async def _consume_code(
     user_id: int,
     purpose: str,
     presented_code: str,
+    email: str | None = None,
 ) -> repo.VerificationRow:
     """Locate the active code for (user, purpose), check expiry/attempts,
     constant-time compare, and mark used on success. Raises HTTPException on
@@ -127,6 +150,8 @@ async def _consume_code(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail={"code": "code_invalid"})
 
     await repo.mark_code_used(row.id)
+    if email:
+        email_send_guard.clear_consecutive(email=email)
     return row
 
 
@@ -149,46 +174,88 @@ async def email_send_code(
         to_email=user.email,
         payload=None,
         template=mailer.render_verify,
+        request=request,
     )
     return SimpleStatus()
 
 
-@router.post("/email/verify", response_model=SimpleStatus)
+async def _finalize_subscription_onboarding(user_id: int) -> str:
+    # A concurrent OAuth callback may win the first-profile race. Retry once
+    # after the unique constraint settles so the response is idempotent.
+    for attempt in range(2):
+        async with async_session() as session:
+            try:
+                result = await subscription_onboarding.finalize_email_verification(
+                    session, user_id=user_id
+                )
+                await session.commit()
+                return result
+            except IntegrityError:
+                await session.rollback()
+                if attempt:
+                    raise
+    return "none"
+
+
+@router.post("/email/verify", response_model=EmailVerifyResponse)
 @limiter.limit("10/minute")
 async def email_verify(
     req: EmailVerifyConfirmRequest,
     request: Request,
     user: repo.UserRow = Depends(deps.get_current_user),
-) -> SimpleStatus:
-    if user.email_verified_at:
-        return SimpleStatus(status="already_verified")
+) -> EmailVerifyResponse:
+    was_verified = bool(user.email_verified_at)
     if not user.email:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail={"code": "email_missing"})
 
-    await _consume_code(
-        user_id=user.id,
-        purpose=repo.PURPOSE_VERIFY,
-        presented_code=req.code,
-    )
-    await repo.mark_email_verified(user.id)
-    await notify_log(
-        f"✅ <b>Email verified</b>\n"
-        f"ID: <code>{user.id}</code>\n"
-        f"email: <code>{esc(user.email)}</code>"
-    )
+    if not was_verified:
+        await _consume_code(
+            user_id=user.id,
+            purpose=repo.PURPOSE_VERIFY,
+            presented_code=req.code,
+            email=user.email,
+        )
+
+    subscription_status = await _finalize_subscription_onboarding(user.id)
+
+    if not was_verified:
+        await notify_log(
+            f"✅ <b>Email verified</b>\n"
+            f"ID: <code>{user.id}</code>\n"
+            f"email: <code>{esc(user.email)}</code>"
+        )
 
     # Eagerly hand the user a FREE Remnawave subscription. Failures here
     # don't block verification — the client can retry via /me later.
     # Skip when the user already owns a Remnawave subscription (the
-    # `/migrate` flow pre-fills `vless_uuid`) so we don't overwrite a
-    # paid plan with the free tier.
-    if not user.vless_uuid:
+    # `/migrate` flow pre-fills ``rw_id``) so we don't overwrite a paid plan.
+    should_provision_free = not was_verified and subscription_status in {
+        "none",
+        "conflict",
+    }
+    if should_provision_free:
+        async with async_session() as session:
+            has_subscriptions = await subscriptions.count_for_user(session, user.id)
+        fresh_user = await repo.find_user_by_id(user.id)
+    else:
+        has_subscriptions = 1
+        fresh_user = None
+
+    if (
+        should_provision_free
+        and has_subscriptions == 0
+        and fresh_user is not None
+        and fresh_user.rw_id is None
+    ):
         try:
             await provisioning.ensure_free_subscription(user.id, user.email)
         except Exception as exc:
             logger.warning("Free provisioning for user %s failed: %s", user.id, exc)
 
-    return SimpleStatus()
+    return EmailVerifyResponse(
+        status="already_verified" if was_verified else "ok",
+        subscription_status=subscription_status,
+    )
 
 
 # --- Password reset --------------------------------------------------------
@@ -210,6 +277,7 @@ async def password_reset_request(
                 to_email=user.email or str(req.email),
                 payload=None,
                 template=mailer.render_password_reset,
+                request=request,
             )
         except HTTPException:
             # Swallow SMTP errors so we don't reveal user existence; logged
@@ -233,6 +301,7 @@ async def password_reset_confirm(
         user_id=user.id,
         purpose=repo.PURPOSE_PASSWORD_RESET,
         presented_code=req.code,
+        email=user.email or str(req.email),
     )
     await repo.set_password(user.id, await security.hash_password(req.new_password))
     await repo.revoke_all_user_tokens(user.id)
@@ -259,6 +328,8 @@ async def email_change_request(
         # client must know it failed before storing the candidate locally.
         raise HTTPException(status.HTTP_409_CONFLICT, detail={"code": "email_taken"})
 
+    ip = deps.real_client_ip(request)
+    email_send_guard.check(email=new_email, ip=ip)
     code = security.new_email_code()
     code_hash = security.hash_email_code(code)
     await repo.invalidate_pending_codes(user.id, repo.PURPOSE_EMAIL_CHANGE)
@@ -269,6 +340,7 @@ async def email_change_request(
         payload=new_email,
         ttl_seconds=get_email_code_ttl_seconds(),
     )
+    email_send_guard.record(email=new_email, ip=ip)
     subject, body = mailer.render_email_change(code, new_email)
     try:
         await mailer.send_email(to=new_email, subject=subject, text=body)
@@ -296,6 +368,7 @@ async def email_change_confirm(
     new_email = (row.payload or "").strip().lower()
     if not new_email:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail={"code": "code_invalid"})
+    email_send_guard.clear_consecutive(email=new_email)
 
     # Last-second collision check: someone may have registered the address
     # in the window between request and confirm.

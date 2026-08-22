@@ -14,6 +14,7 @@ from .crm_runner import execute_crm_campaign as run_campaign
 from .crm_webhook_runner import execute_crm_webhook as run_webhook
 from .giveaway_runner import execute_giveaway_broadcast as run_giveaway_broadcast
 from .push_runner import execute_push_campaign as run_push_campaign
+from .api_health_worker import api_health_tick
 
 
 async def execute_crm_campaign(ctx, campaign_id: int) -> None:
@@ -43,10 +44,12 @@ class WorkerSettings:
         execute_push_campaign,
         execute_crm_webhook,
         execute_giveaway_broadcast,
+        api_health_tick,
     ]
     redis_settings = RedisSettings.from_dsn(os.environ.get("REDIS_URL", get_redis_url()))
     job_timeout = 3600
     max_tries = 1
     cron_jobs = [
         cron(tick_crm_events, minute={0, 15, 30, 45}),
+        cron(api_health_tick, minute=set(range(60))),
     ]

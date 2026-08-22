@@ -82,15 +82,13 @@ async def get_user_by_username(
     return await session.scalar(select(User).where(User.username == username))
 
 
-async def get_user_by_vless_uuid(
-    session: AsyncSession, vless_uuid: str
+async def get_user_by_rw_id(
+    session: AsyncSession, rw_id: int
 ) -> User | None:
-    """Reverse lookup: Remnawave user UUID → local User row."""
-    if not vless_uuid:
+    """Reverse lookup by the canonical Remnawave numeric user id."""
+    if rw_id is None:
         return None
-    return await session.scalar(
-        select(User).where(User.vless_uuid == vless_uuid)
-    )
+    return await session.scalar(select(User).where(User.rw_id == int(rw_id)))
 
 
 # --- "is paid" predicates -------------------------------------------------
@@ -206,30 +204,6 @@ async def get_users_by_tg_ids(
     return list(result)
 
 
-async def persist_remnawave_uuid(
-    session: AsyncSession,
-    *,
-    tg_id: int,
-    vless_uuid: str,
-    username: str | None = None,
-    rw_id: int | None = None,
-) -> bool:
-    """Write Remnawave uuid (and optional panel id) onto the local user row."""
-    if not vless_uuid:
-        return False
-    user = await get_user_by_tg_id(session, tg_id)
-    if not user:
-        return False
-    user.vless_uuid = str(vless_uuid)
-    user.api_provider = "remnawave"
-    if rw_id is not None:
-        user.rw_id = rw_id
-    if username:
-        user.username = username
-    await session.flush()
-    return True
-
-
 __all__ = [
     "PAID_ORDER_STATUSES",
     "active_paid_user_ids_subquery",
@@ -238,10 +212,10 @@ __all__ = [
     "get_all_tg_ids",
     "get_user_by_email",
     "get_user_by_id",
+    "get_user_by_rw_id",
     "get_user_by_tg_id",
     "get_user_by_username",
     "get_users_by_tg_ids",
-    "persist_remnawave_uuid",
     "user_has_active_paid_transaction",
     "user_has_any_transaction",
 ]

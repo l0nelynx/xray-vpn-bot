@@ -464,7 +464,7 @@ async def subcheck_reactivate(callback: CallbackQuery):
     from remnawave_client import api as rem
 
     user_ctx = await rq.get_user_full_context(tg_id)
-    if not user_ctx or not user_ctx.get("vless_uuid"):
+    if not user_ctx or user_ctx.get("rw_id") is None:
         await callback.message.edit_text(
             text=lang.msg_sub_clean_reactivation_error,
             parse_mode='HTML',
@@ -473,7 +473,7 @@ async def subcheck_reactivate(callback: CallbackQuery):
         return
 
     original_status = disabled_info["original_status"]
-    result = await rem.update_user(user_ctx["vless_uuid"], status=original_status)
+    result = await rem.update_user_by_id(int(user_ctx["rw_id"]), status=original_status)
 
     if result:
         await rq.delete_disabled_user(tg_id)

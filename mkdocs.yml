@@ -76,6 +76,8 @@ nav:
   - Operations:
       - Database: database.md
       - Integrations: integrations.md
+      - Remnawave 2.8 ID backfill: remnawave-v3-id-backfill.md
+      - Remnawave v3 rollout: remnawave-v3-rollout.md
       - Connect page: connect-page.md
 
 extra:

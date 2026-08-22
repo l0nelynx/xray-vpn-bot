@@ -15,9 +15,14 @@ export interface UserInfo {
   tg_id: number;
   username: string | null;
   language: string | null;
+  has_email?: boolean;
+  email?: string | null;
+  onboarding_version: number;
 }
 
 export interface SubscriptionInfo {
+  subscription_id: number | null;
+  label: string | null;
   tariff: string;
   status: string | null;
   days_left: number;
@@ -26,6 +31,7 @@ export interface SubscriptionInfo {
   traffic_used_gb: number;
   devices_count: number;
   subscription_url: string | null;
+  connection_state: "never_connected" | "connected" | "unknown";
 }
 
 export interface LinksInfo {
@@ -41,6 +47,7 @@ export interface MeResponse {
   registered: boolean;
   user?: UserInfo;
   subscription?: SubscriptionInfo;
+  subscriptions_count: number;
   links: LinksInfo;
 }
 
@@ -49,6 +56,52 @@ export type UiLanguage = "ru" | "en";
 export const me = {
   setLanguage: (language: UiLanguage) =>
     api.patch<UserInfo>("/me/language", { language }),
+  setOnboarding: (version: number, outcome: "completed" | "skipped") =>
+    api.patch<{ onboarding_version: number }>("/me/onboarding", { version, outcome }),
+};
+
+export type UxEventName =
+  | "email_link_started"
+  | "email_link_succeeded"
+  | "email_link_failed"
+  | "onboarding_started"
+  | "onboarding_completed"
+  | "onboarding_skipped"
+  | "invoice_created"
+  | "payment_awaiting"
+  | "payment_processing"
+  | "payment_succeeded"
+  | "payment_failed"
+  | "connect_started"
+  | "app_install_opened"
+  | "subscription_add_opened"
+  | "connection_verified"
+  | "connection_help_opened";
+
+export interface UxEvent {
+  name: UxEventName;
+  onboarding_version?: number;
+  subscription_id?: number;
+  transaction_id?: string;
+  session_id?: string;
+  platform?: string;
+  source?: string;
+  app?: string;
+  outcome?: string;
+}
+
+export const ux = {
+  track: (event: UxEvent) => api.post<void>("/ux/events", event),
+};
+
+export interface LinkEmailResponse {
+  result: string;
+  survivor_id: number;
+}
+
+export const linkEmail = {
+  link: (email: string, password: string) =>
+    api.post<LinkEmailResponse>("/link/email", { email, password }),
 };
 
 export interface TicketSummary {
@@ -135,6 +188,7 @@ export interface ProvidersResponse {
 export interface InvoiceCreateRequest {
   node_id: number;
   description?: string;
+  subscription_id?: number;
 }
 
 export interface InvoiceResponse {
@@ -147,13 +201,49 @@ export interface InvoiceResponse {
   payment_method: string;
 }
 
+export type PaymentState = "awaiting_payment" | "processing" | "succeeded" | "failed";
+
+export interface TransactionStatusResponse {
+  transaction_id: string;
+  state: PaymentState;
+  delivery_status: number;
+}
+
 export const payments = {
   listProviders: () => api.get<ProvidersResponse>("/payments/providers"),
   getBalance: () => api.get<{ balance: number }>("/payments/balance"),
   createInvoice: (body: InvoiceCreateRequest) =>
     api.post<InvoiceResponse>("/payments/invoice", body),
-  payWithCredits: (body: { node_id: number }) =>
+  payWithCredits: (body: { node_id: number; subscription_id?: number }) =>
     api.post<PayCreditsResponse>("/payments/pay-credits", body),
+  getTransaction: (transactionId: string) =>
+    api.get<TransactionStatusResponse>(`/payments/transactions/${encodeURIComponent(transactionId)}`),
+};
+
+export interface ManagedSubscription {
+  id: number;
+  rw_id: number;
+  label: string | null;
+  product_key: string | null;
+  source: string;
+  is_primary: boolean;
+  tariff: string;
+  status: string | null;
+  days_left: number;
+  expire_iso: string | null;
+  data_limit_gb: number | null;
+  traffic_used_gb: number;
+  devices_count: number;
+  subscription_url: string | null;
+  connection_state: "never_connected" | "connected" | "unknown";
+}
+
+export const subscriptions = {
+  list: () => api.get<{ subscriptions: ManagedSubscription[] }>("/subscriptions"),
+  makePrimary: (subscriptionId: number) =>
+    api.post<{ status: string; subscription_id: number }>(
+      `/subscriptions/${subscriptionId}/primary`,
+    ),
 };
 
 export type MenuNodeAction = "buttons" | "invoice";

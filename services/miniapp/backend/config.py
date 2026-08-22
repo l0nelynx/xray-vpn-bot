@@ -21,7 +21,11 @@ _config: DualSourceConfig | None = None
 
 
 def _load_yaml() -> dict:
-    with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+    # Tests and local launchers may set CONFIG_PATH after this module was first
+    # imported by a router. Resolve the environment at load time rather than
+    # freezing `/app/config.yml` at import time.
+    path = os.environ.get("CONFIG_PATH", CONFIG_PATH)
+    with open(path, "r", encoding="utf-8") as f:
         return yaml.safe_load(f) or {}
 
 
@@ -66,6 +70,10 @@ def get_log_level() -> int:
 
 def get_bot_token() -> str:
     return get_config().get("token", "")
+
+
+def get_redis_url() -> str:
+    return os.environ.get("REDIS_URL", "redis://redis:6379/0")
 
 
 def get_admin_bot_token() -> str:
@@ -332,6 +340,17 @@ def get_email_code_max_attempts() -> int:
     return int(get_config().get("email_code_max_attempts", 5) or 5)
 
 
+def get_email_denied_domains() -> list[str]:
+    """Extra email domains rejected at registration (merged with built-in list).
+
+    Config key: ``email_denied_domains`` — YAML list or comma-separated string.
+    """
+    raw = get_config().get("email_denied_domains") or []
+    if isinstance(raw, str):
+        return [d.strip().lower() for d in raw.split(",") if d.strip()]
+    return [str(d).strip().lower() for d in raw if d]
+
+
 # --- Web portal ------------------------------------------------------------
 
 def get_tg_client_secret() -> str:
@@ -356,6 +375,26 @@ def get_web_allowed_origins() -> list[str]:
     if isinstance(raw, str):
         return [o.strip() for o in raw.split(",") if o.strip()]
     return [str(o).strip() for o in raw if o]
+
+
+def get_subscription_page_oauth_redirect_uris() -> list[str]:
+    """Exact OAuth callback allowlist for the subscription-page BFF."""
+    raw = (
+        get_config().get("subscription_page_oauth_redirect_uris")
+        or os.environ.get("SUBSCRIPTION_PAGE_OAUTH_REDIRECT_URIS")
+        or []
+    )
+    if isinstance(raw, str):
+        return [value.strip() for value in raw.split(",") if value.strip()]
+    return [str(value).strip() for value in raw if value]
+
+
+def get_web_portal_url() -> str:
+    return (
+        get_config().get("web_portal_url")
+        or os.environ.get("WEB_PORTAL_URL")
+        or ""
+    ).rstrip("/")
 
 
 def get_web_id() -> int | None:

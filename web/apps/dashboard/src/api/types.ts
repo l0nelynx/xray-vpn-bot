@@ -10,6 +10,24 @@ export interface UserItem {
   vip: boolean;
   email: string | null;
   language: string | null;
+  subscriptions_count: number;
+}
+
+export interface ManagedSubscription {
+  id: number;
+  rw_id: number;
+  label: string | null;
+  product_key: string | null;
+  source: string;
+  is_primary: boolean;
+  tariff: string;
+  status: string | null;
+  days_left: number;
+  expire_iso: string | null;
+  data_limit_gb: number | null;
+  traffic_used_gb: number;
+  devices_count: number;
+  subscription_url: string | null;
 }
 
 export interface UserDetail extends UserItem {
@@ -31,6 +49,8 @@ export interface TransactionItem {
   days_ordered: number;
   created_at: string | null;
   expire_date: string | null;
+  purchase_source: "bot" | "miniapp" | "android" | "web" | "legacy_unknown";
+  delivery_error: string | null;
 }
 
 export interface PaginatedResponse<T> {
@@ -86,6 +106,99 @@ export interface PaymentMethodStat {
 export interface OrderStatusStat {
   status: string;
   count: number;
+}
+
+export interface ApiServiceHealth {
+  service: "miniapp" | "bot" | "dashboard";
+  is_healthy: boolean;
+  checked_at: string;
+  last_ok_at: string | null;
+  last_error: string | null;
+  consecutive_failures: number;
+  response_time_ms: number | null;
+}
+
+export interface ApiHealthSummary {
+  requests: number;
+  avg_rps: number;
+  success_rate: number;
+  client_errors: number;
+  server_errors: number;
+  error_rate: number;
+  avg_ms: number;
+  p50_ms: number;
+  p95_ms: number;
+  p99_ms: number;
+  max_ms: number;
+  client_error_rate: number;
+  server_error_rate: number;
+  slow_requests: number;
+  dropped_events: number;
+  last_telemetry_at: string | null;
+  services: ApiServiceHealth[];
+}
+
+export interface ApiHealthSeriesPoint {
+  bucket: string;
+  requests: number;
+  status_2xx: number;
+  status_3xx: number;
+  status_4xx: number;
+  status_5xx: number;
+  error_rate: number;
+  p50_ms: number;
+  p95_ms: number;
+  p99_ms: number;
+}
+
+export interface ApiEndpointHealth extends Omit<ApiHealthSummary, "avg_rps" | "last_telemetry_at" | "services"> {
+  service: string;
+  method: string;
+  route: string;
+  last_error_at: string | null;
+}
+
+export interface ApiErrorEvent {
+  id: number;
+  occurred_at: string;
+  request_id: string;
+  service: string;
+  method: string;
+  route: string;
+  status_code: number;
+  duration_ms: number;
+  user_id: number | null;
+  tg_id: number | null;
+  actor: string | null;
+  client_ip: string | null;
+  client_channel: string | null;
+  user_agent: string | null;
+  app_version: string | null;
+  exception_type: string | null;
+  error_message: string | null;
+  error_fingerprint: string;
+  traceback?: string | null;
+}
+
+export interface ApiErrorGroup {
+  fingerprint: string;
+  service: string;
+  route: string;
+  status_code: number;
+  exception_type: string | null;
+  message: string | null;
+  count: number;
+  affected_users: number;
+  last_seen_at: string;
+}
+
+export interface ApiAlertSettings {
+  enabled: boolean;
+  server_error_threshold: number;
+  latency_p95_ms: number;
+  latency_min_requests: number;
+  health_failures: number;
+  cooldown_minutes: number;
 }
 
 export interface PromoItem {
@@ -336,19 +449,29 @@ export interface TelmtBulkResult {
   errors: TelmtBulkError[];
 }
 
-/** Sections Telemt exposes via GET/PATCH /v1/config (telemt EDITABLE_SECTIONS). */
+/** Top-level sections Telemt exposes via GET/PATCH /v1/config. */
 export const TELMT_EDITABLE_CONFIG_SECTIONS = [
   "general",
   "timeouts",
   "censorship",
   "upstreams",
   "dc_overrides",
+  "server",
 ] as const;
 
 export type TelmtConfigSectionName = (typeof TELMT_EDITABLE_CONFIG_SECTIONS)[number];
 
+export interface TelmtServerConfigData {
+  /** Replaced wholesale by PATCH. Other server fields are never exposed. */
+  listeners?: Record<string, unknown>[];
+}
+
 /** Telemt managed-config JSON (subset of config.toml). */
-export type TelmtConfigData = Partial<Record<TelmtConfigSectionName, unknown>>;
+export type TelmtConfigData = Partial<
+  Record<Exclude<TelmtConfigSectionName, "server">, unknown>
+> & {
+  server?: TelmtServerConfigData;
+};
 
 export interface TelmtPatchConfigResponse {
   revision: string;

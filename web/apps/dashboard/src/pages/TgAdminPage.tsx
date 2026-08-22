@@ -21,7 +21,7 @@ import ConfirmButton from "../components/ConfirmButton";
 interface ScanUser {
   tg_id: number;
   username: string | null;
-  vless_uuid?: string;
+  rw_id?: number;
 }
 
 interface ScanResult {

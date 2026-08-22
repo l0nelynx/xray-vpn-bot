@@ -116,6 +116,7 @@ class CrmCampaignDelivery(Base):
         BigInteger, ForeignKey("crm_campaigns.id", ondelete="CASCADE")
     )
     tg_id: Mapped[int] = mapped_column(BigInteger)
+    rw_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     vless_uuid: Mapped[str | None] = mapped_column(String(64), nullable=True)
     perk_status: Mapped[str] = mapped_column(
         String(20), default="skipped", server_default="skipped"
@@ -130,6 +131,7 @@ class CrmCampaignDelivery(Base):
     __table_args__ = (
         Index("ix_crm_campaign_deliveries_campaign_id", "campaign_id"),
         Index("ix_crm_campaign_deliveries_tg_id", "tg_id"),
+        Index("ix_crm_campaign_deliveries_rw_id", "rw_id"),
     )
 
 

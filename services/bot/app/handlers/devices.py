@@ -4,7 +4,6 @@ from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 
-import app.database.requests as rq
 from remnawave_client import api as rem
 from app.locale.utils import get_user_lang
 
@@ -15,32 +14,12 @@ router = Router()
 DEVICES_PER_PAGE = 5
 
 
-async def _get_user_uuid(tg_id: int, username: str) -> str | None:
-    """Получает vless_uuid пользователя из БД, при отсутствии пытается найти по email в RemnaWave."""
-    user_info = await rq.get_full_username_info(username)
-    if user_info and user_info.get("vless_uuid"):
-        return user_info["vless_uuid"]
+async def _get_user_rw_id(tg_id: int, username: str) -> int | None:
+    """Resolve through stable local ownership; never trust username alone."""
+    from app.handlers.tools import resolve_remnawave_account
 
-    # uuid нет — пробуем найти пользователя в RemnaWave по email, затем по username
-    rw_user = None
-    email = await rq.get_user_email(tg_id)
-    if email:
-        rw_user = await rem.get_user_from_email(email)
-    if not rw_user:
-        rw_user = await rem.get_user_from_username(username)
-
-    if rw_user and rw_user.get("uuid"):
-        await rq.update_user_api_info(
-            tg_id=tg_id,
-            username=username,
-            vless_uuid=rw_user["uuid"],
-            api_provider="remnawave",
-            rw_id=rw_user.get("rw_id"),
-        )
-        logger.info("Resolved and saved uuid for user %s (tg_id=%s)", username, tg_id)
-        return rw_user["uuid"]
-
-    return None
+    rw_id, _ = await resolve_remnawave_account(tg_id, username)
+    return rw_id
 
 
 def _build_devices_keyboard(devices: list, lang, page: int = 0) -> InlineKeyboardMarkup:
@@ -105,8 +84,8 @@ def _format_datetime(dt) -> str:
 
 async def _show_devices(message_func, tg_id: int, username: str, lang, page: int = 0):
     """Общая логика показа списка устройств."""
-    user_uuid = await _get_user_uuid(tg_id, username)
-    if not user_uuid:
+    rw_id = await _get_user_rw_id(tg_id, username)
+    if rw_id is None:
         await message_func(
             text=lang.msg_devices_no_subscription,
             parse_mode='HTML',
@@ -116,7 +95,7 @@ async def _show_devices(message_func, tg_id: int, username: str, lang, page: int
         )
         return
 
-    response = await rem.get_user_hwid_devices(user_uuid)
+    response = await rem.get_user_hwid_devices_by_id(rw_id)
     if response is None:
         await message_func(
             text=lang.msg_devices_error,
@@ -178,12 +157,12 @@ async def cb_device_info(callback: CallbackQuery):
     lang = await get_user_lang(callback.from_user.id)
     device_index = int(callback.data.split(':')[1])
 
-    user_uuid = await _get_user_uuid(callback.from_user.id, callback.from_user.username)
-    if not user_uuid:
+    rw_id = await _get_user_rw_id(callback.from_user.id, callback.from_user.username)
+    if rw_id is None:
         await callback.answer(lang.msg_devices_no_subscription, show_alert=True)
         return
 
-    response = await rem.get_user_hwid_devices(user_uuid)
+    response = await rem.get_user_hwid_devices_by_id(rw_id)
     if response is None or not response.devices or device_index >= len(response.devices):
         await callback.answer(lang.msg_devices_error, show_alert=True)
         return
@@ -216,18 +195,18 @@ async def cb_device_delete(callback: CallbackQuery):
     lang = await get_user_lang(callback.from_user.id)
     device_index = int(callback.data.split(':')[1])
 
-    user_uuid = await _get_user_uuid(callback.from_user.id, callback.from_user.username)
-    if not user_uuid:
+    rw_id = await _get_user_rw_id(callback.from_user.id, callback.from_user.username)
+    if rw_id is None:
         await callback.answer(lang.msg_devices_no_subscription, show_alert=True)
         return
 
-    response = await rem.get_user_hwid_devices(user_uuid)
+    response = await rem.get_user_hwid_devices_by_id(rw_id)
     if response is None or not response.devices or device_index >= len(response.devices):
         await callback.answer(lang.msg_devices_error, show_alert=True)
         return
 
     device = response.devices[device_index]
-    result = await rem.delete_user_hwid_device(user_uuid, device.hwid)
+    result = await rem.delete_user_hwid_device_by_id(rw_id, device.hwid)
 
     if result is not None:
         await callback.answer(lang.msg_device_deleted, show_alert=True)

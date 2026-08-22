@@ -4,6 +4,7 @@ import {
   FileText,
   Gift,
   Languages,
+  Link2,
   Shield,
   Users,
   UserPlus,
@@ -25,9 +26,12 @@ import { useLocale } from "../i18n/LocaleContext";
 import { translate, type Locale } from "../i18n";
 import { POINTS_ICON, formatPoints } from "../points";
 import { showAlert } from "../tg/webapp";
+import StackPageHeader from "../components/StackPageHeader";
 
 interface Props {
   username: string;
+  hasEmail: boolean;
+  email: string | null;
 }
 
 interface SettingsItemDef {
@@ -40,7 +44,7 @@ interface SettingsItemDef {
 
 const LANG_OPTIONS: Locale[] = ["ru", "en"];
 
-export default function SettingsPage({ username }: Props) {
+export default function SettingsPage({ username, hasEmail, email }: Props) {
   const navigate = useNavigate();
   const { t, locale, setLocale } = useLocale();
   const [promoState, setPromoState] = useState<PromoState | null>(null);
@@ -97,7 +101,7 @@ export default function SettingsPage({ username }: Props) {
       key: "invite",
       icon: <UserPlus />,
       label: t("settings.inviteFriends"),
-      onClick: () => navigate("/invite"),
+      onClick: () => navigate("/invite", { state: { returnTo: "/settings" } }),
     },
     {
       key: "rules",
@@ -137,15 +141,28 @@ export default function SettingsPage({ username }: Props) {
 
   return (
     <div className="page">
-      <div className="text-[22px] font-bold text-foreground tracking-tight mb-5">
-        {t("settings.title")}
-      </div>
+      <StackPageHeader title={t("settings.title")} backTo="/" />
 
       {username && (
         <div className="flex items-center justify-between bg-card border border-border rounded-2xl px-4 py-3.5 mb-3">
           <span className="text-muted-foreground text-sm">{t("settings.telegram")}</span>
           <Badge>@{username}</Badge>
         </div>
+      )}
+
+      {hasEmail && email ? (
+        <div className="flex items-center justify-between gap-3 bg-card border border-border rounded-2xl px-4 py-3.5 mb-3">
+          <span className="text-muted-foreground text-sm">{t("settings.email")}</span>
+          <Badge className="max-w-[70%] truncate font-normal normal-case tracking-normal">
+            {email}
+          </Badge>
+        </div>
+      ) : (
+        <button className="email-recovery-card mb-3" onClick={() => navigate("/account/link?returnTo=%2Fsettings")}>
+          <Link2 />
+          <span><strong>{t("settings.linkEmail.title")}</strong><small>{t("settings.linkEmail.body")}</small></span>
+          <ChevronRight />
+        </button>
       )}
 
       {(promoState?.balance ?? 0) > 0 && (
@@ -163,7 +180,7 @@ export default function SettingsPage({ username }: Props) {
             <Languages />
           </div>
           <span className="settings-item__text">{t("settings.language")}</span>
-          <div className="flex gap-1.5 ml-auto">
+          <div className="settings-language-options flex gap-1.5 ml-auto">
             {LANG_OPTIONS.map((code) => {
               const active = locale === code;
               return (

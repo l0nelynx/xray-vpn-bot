@@ -4,6 +4,9 @@ import uuid
 from remnawave_client import api as rem
 # import app.marzban.marzban as mz  # DISABLED: Marzban removed, Remnawave is primary API
 import app.database.requests as rq
+from app.database.models import async_session
+from common_db.repo import subscriptions as _repo_subscriptions
+from common_db.repo import users as _repo_users
 
 from aiogram.types import Message, CallbackQuery
 
@@ -45,11 +48,9 @@ async def resolve_user(tg_id: int, username: str) -> tuple[str, dict | int]:
     # Пробуем RemnaWave (основной и единственный провайдер)
     info = await get_user_info(username, api="remnawave")
     if info != 404:
-        uuid = info.get("uuid")
         await rq.update_user_api_info(
             tg_id=tg_id,
             username=username,
-            vless_uuid=str(uuid) if uuid else None,
             api_provider="remnawave",
             rw_id=info.get("rw_id"),
         )
@@ -113,15 +114,14 @@ async def get_user_info(username, api: str = "remnawave"):
         #         user_info = await marz.get_user(name=username)
         #     return user_info
         if api == "remnawave" or api == "marzban":
-            # REMNAWAVE INTEGRATION — fallback на email если есть
-            user_info = None
+            # Stable resolver: rw_id, exact email, then guarded username.
             db_user = await rq.get_full_username_info(username)
-            if db_user and db_user.get("tg_id"):
-                email = await rq.get_user_email(db_user["tg_id"])
-                if email:
-                    user_info = await rem.get_user_from_email(email)
-            if not user_info:
-                user_info = await rem.get_user_from_username(username)
+            tg_id = db_user.get("tg_id") if db_user else None
+            email = await rq.get_user_email(tg_id) if tg_id else None
+            user_info = await rem.resolve_remnawave_user(
+                rw_id=(db_user or {}).get("rw_id"), email=email,
+                username=username, expected_telegram_id=tg_id,
+            )
             if user_info:
                 # Преобразуем expire в UNIX timestamp если это datetime объект
                 expire = user_info.get("expire")
@@ -135,7 +135,6 @@ async def get_user_info(username, api: str = "remnawave"):
 
                 # Нормализуем ответ для совместимости
                 return {
-                    "uuid": user_info.get("uuid"),
                     "rw_id": user_info.get("rw_id"),
                     "status": user_info.get("status", "active"),
                     "expire": expire,
@@ -155,84 +154,76 @@ async def get_user_info(username, api: str = "remnawave"):
 async def resolve_remnawave_account(
     tg_id: int,
     username: str,
-) -> tuple[str | None, dict | None]:
-    """Resolve which Remnawave account belongs to (tg_id, username).
+) -> tuple[int | None, dict | None]:
+    """Resolve by stable local ownership; username is only a guarded fallback."""
+    async with async_session() as session:
+        db_user = await _repo_users.get_user_by_tg_id(session, tg_id)
+        if db_user is None:
+            return None, None
+        primary = await _repo_subscriptions.get_primary(session, db_user.id)
+        canonical_rw_id = primary.rw_id if primary else db_user.rw_id
+        db_user_id = db_user.id
+        email = db_user.email
 
-    Lookup order: users.vless_uuid in local DB -> users.email -> username.
-    First match wins; that account's uuid is the single source of truth for
-    subsequent subscription updates. When the resolution falls back to email
-    or username, the discovered uuid is written back to users.vless_uuid so
-    the next purchase takes the direct path.
-
-    Returns (uuid, user_info) where user_info is the normalized Remnawave
-    dict (same shape as `get_user_info`'s normalized output). Returns
-    (None, None) when no Remnawave account exists yet.
-    """
-    db_user = await rq.get_full_username_info(username)
-    db_uuid = (db_user or {}).get("vless_uuid")
-
-    if db_uuid:
-        info = await rem.get_user_from_uuid(db_uuid)
-        if info:
-            rw_id = info.get("rw_id")
+    info = await rem.resolve_remnawave_user(
+        rw_id=canonical_rw_id,
+        email=email,
+        username=username,
+        expected_telegram_id=tg_id,
+    )
+    if info and info.get("rw_id") is not None:
+        rw_id = info.get("rw_id")
+        link = None
+        is_primary = True
+        async with async_session() as session:
             if rw_id is not None:
-                await rq.update_user_api_info(
-                    tg_id=tg_id, username=username, rw_id=rw_id,
-                )
-            try:
-                by_name = await rem.get_user_from_username(username)
-                if (by_name and by_name.get("uuid")
-                        and str(by_name["uuid"]) != str(db_uuid)):
-                    await notify_log(
-                        f"⚠️ <b>Remnawave account mismatch</b>\n"
-                        f"user: <code>{tg_id}</code> @{esc(username or '—')}\n"
-                        f"db.vless_uuid: <code>{esc(str(db_uuid))}</code>\n"
-                        f"by_username.uuid: <code>{esc(str(by_name['uuid']))}</code>\n"
-                        f"using db.vless_uuid for delivery"
+                try:
+                    link = await _repo_subscriptions.attach(
+                        session,
+                        user_id=db_user_id,
+                        rw_id=int(rw_id),
+                        source="legacy_resolver",
                     )
-            except Exception as mismatch_err:
-                logger.warning(
-                    "resolve_remnawave_account: mismatch check failed for %s: %s",
-                    username, mismatch_err,
-                )
-            return _normalize_info_uuid(info), _normalize_info(info)
-        logger.warning(
-            "resolve_remnawave_account: db.vless_uuid=%s for tg_id=%s @%s "
-            "not found in Remnawave, falling back to email/username",
-            db_uuid, tg_id, username,
-        )
-
-    email = await rq.get_user_email(tg_id) if tg_id else None
-    if email:
-        info = await rem.get_user_from_email(email)
-        if info and info.get("uuid"):
+                except ValueError:
+                    await session.rollback()
+                    await notify_log(
+                        f"🚨 <b>Remnawave ownership conflict</b>\n"
+                        f"DB user: <code>{db_user_id}</code>\n"
+                        f"rw_id: <code>{rw_id}</code>"
+                    )
+                    return None, None
+                # The bot sessionmaker uses SQLAlchemy's default
+                # expire_on_commit=True.  Keep the scalar decision while the
+                # ORM instance is still attached; reading link.is_primary
+                # after commit/session close raises DetachedInstanceError.
+                is_primary = bool(link.is_primary)
+            await session.commit()
+        if link is None or is_primary:
             await rq.update_user_api_info(
-                tg_id=tg_id, username=username,
-                vless_uuid=str(info["uuid"]), api_provider="remnawave",
-                rw_id=info.get("rw_id"),
+                tg_id=tg_id,
+                username=username,
+                api_provider="remnawave",
+                rw_id=rw_id,
             )
-            return _normalize_info_uuid(info), _normalize_info(info)
+        return int(rw_id), _normalize_info(info)
 
-    info = await rem.get_user_from_username(username)
-    if info and info.get("uuid"):
-        await rq.update_user_api_info(
-            tg_id=tg_id, username=username,
-            vless_uuid=str(info["uuid"]), api_provider="remnawave",
-            rw_id=info.get("rw_id"),
-        )
-        return _normalize_info_uuid(info), _normalize_info(info)
-
+    # An identically named profile is not ownership evidence. Surface the
+    # legacy collision, then let provisioning create a DB-id-qualified name.
+    if username:
+        by_name = await rem.get_user_from_username(username, strict=True)
+        if by_name:
+            await notify_log(
+                f"⚠️ <b>legacy_username_collision</b>\n"
+                f"DB user: <code>{db_user_id}</code>\n"
+                f"TG: <code>{tg_id}</code> @{esc(username)}\n"
+                f"matched rw_id: <code>{by_name.get('rw_id') or '—'}</code>"
+            )
     return None, None
-
-
-def _normalize_info_uuid(info: dict) -> str | None:
-    raw = info.get("uuid")
-    return str(raw) if raw else None
 
 
 def _normalize_info(info: dict) -> dict:
     """Bring a raw remnawave_client dict into the same shape get_user_info
-    returns (uuid + expire as int timestamp). Mirrors the normalization in
+    returns (numeric rw_id + expire as int timestamp). Mirrors the normalization in
     `get_user_info` so resolve_remnawave_account is interchangeable with it."""
     expire = info.get("expire")
     if expire is not None:
@@ -241,12 +232,14 @@ def _normalize_info(info: dict) -> dict:
         else:
             expire = int(expire) if expire else None
     return {
-        "uuid": _normalize_info_uuid(info),
         "rw_id": info.get("rw_id"),
         "status": info.get("status", "active"),
         "expire": expire,
         "subscription_url": info.get("subscription_url"),
         "data_limit": info.get("data_limit"),
+        "username": info.get("username"),
+        "description": info.get("description"),
+        "tag": info.get("tag"),
     }
 
 
@@ -319,12 +312,10 @@ async def add_new_user_info(
                 external_squad_id=external_squad_id
             )
 
-            if buyer_nfo and buyer_nfo.get("uuid"):
-                # Сохраняем информацию об API провайдере и UUID в БД
+            if buyer_nfo and buyer_nfo.get("rw_id") is not None:
                 await rq.update_user_api_info(
                     tg_id=userid,
                     username=name,
-                    vless_uuid=buyer_nfo.get("uuid"),
                     api_provider="remnawave",
                     rw_id=buyer_nfo.get("rw_id"),
                 )
@@ -391,21 +382,22 @@ async def set_user_info(
             # REMNAWAVE INTEGRATION
             db_userdata = await rq.get_full_username_info(name)
 
-            if not db_userdata or not db_userdata.get("vless_uuid"):
-                logger.warning(f"User {name} not found in database or missing UUID")
+            if not db_userdata or db_userdata.get("rw_id") is None:
+                logger.warning(f"User {name} not found in database or missing rw_id")
                 return None
 
-            useruid = db_userdata["vless_uuid"]
-            logger.debug(f"Updating RemnaWave user - uuid from db: {useruid}")
+            rw_id = int(db_userdata["rw_id"])
+            logger.debug(f"Updating RemnaWave user rw_id={rw_id}")
 
-            buyer_nfo = await rem.update_user(
-                user_uuid=useruid,
+            buyer_nfo = await rem.update_user_by_id(
+                rw_id,
                 days=expire_days,
                 limit_gb=limit,
                 username=name,
                 descr=description,
                 squad_id=squad_id,
-                external_squad_id=external_squad_id
+                external_squad_id=external_squad_id,
+                status="active",
             )
             return buyer_nfo
         else:
@@ -432,24 +424,10 @@ async def detect_user_api_provider(tg_id: int,username: str) -> str:
     if api_provider:
         return api_provider
 
-    # Если в БД нет информации, пытаемся определить по API
+    # Если в БД нет информации, используем тот же ownership-safe resolver.
     try:
-        # Проверяем RemnaWave — сначала по email, потом по username
-        user_info = None
-        email = await rq.get_user_email(tg_id)
-        if email:
-            user_info = await rem.get_user_from_email(email)
-        if not user_info:
-            user_info = await rem.get_user_from_username(username)
+        _, user_info = await resolve_remnawave_account(tg_id, username)
         if user_info:
-            uuid = user_info.get("uuid")
-            await rq.update_user_api_info(
-                tg_id,
-                username,
-                vless_uuid=str(uuid) if uuid else None,
-                api_provider="remnawave",
-                rw_id=user_info.get("rw_id"),
-            )
             return "remnawave"
     except Exception as e:
         logger.warning("RemnaWave provider detection failed for tg_id=%s: %s", tg_id, e)
@@ -496,22 +474,22 @@ async def startup_user_dialog(message):
             expire_days = await get_user_days(user_info)
             raw_data_limit = user_info.get("data_limit")
 
-            # Получаем uuid для подсчёта устройств
+            # Получаем numeric rw_id для подсчёта устройств
             db_user = await rq.get_full_username_info(username)
-            user_uuid = db_user.get("vless_uuid") if db_user else None
+            rw_id = db_user.get("rw_id") if db_user else None
 
             # Для RemnaWave пользователей используем стандартное меню
             if is_pro:
                 logger.debug("User has an active Pro subscription on RemnaWave")
                 await main_menu(message_func, menu_type="pro", user_id=user_id,
                                 days=expire_days, data_limit=raw_data_limit,
-                                link=user_info.get("subscription_url"), user_uuid=user_uuid)
+                                link=user_info.get("subscription_url"), rw_id=rw_id)
             else:
                 if status == "active":
                     logger.debug("User has an active Free subscription on RemnaWave")
                     await main_menu(message_func, menu_type="free", user_id=user_id,
                                     days=expire_days, data_limit=raw_data_limit,
-                                    link=user_info.get("subscription_url"), user_uuid=user_uuid)
+                                    link=user_info.get("subscription_url"), rw_id=rw_id)
                 else:
                     logger.debug("User has no active subscription on RemnaWave")
                     await main_menu(message_func, menu_type="new", user_id=user_id)

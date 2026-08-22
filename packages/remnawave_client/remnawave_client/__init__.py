@@ -15,8 +15,14 @@ Public API:
 
 from . import api
 from .api import set_config_provider
-from .client import RemnawaveClient, configure, get_default_client
+from .client import (
+    RemnawaveClient,
+    RemnawaveOperationError,
+    configure,
+    get_default_client,
+)
 from .operations import apply_extend, apply_new_user, apply_update
+from .managed_subscriptions import serialize_managed_subscription
 from .perks import apply_crm_bonus_days, apply_crm_bonus_traffic, is_free_tier_user
 from .scenarios import SubscriptionScenario, SubscriptionType, resolve_scenario
 from .segmentation import (
@@ -38,7 +44,7 @@ from .segmentation import (
     normalize_user_for_crm,
     segment_meta,
 )
-from .torrent_blocker import collect_torrent_user_uuids, fetch_torrent_blocker_reports
+from .torrent_blocker import collect_torrent_user_ids, fetch_torrent_blocker_reports
 from . import webhooks
 from .webhooks import (
     RemnawaveWebhookPayload,
@@ -47,7 +53,7 @@ from .webhooks import (
     extract_device_platform,
     extract_not_connected_after_hours,
     extract_telegram_id,
-    extract_vless_uuid,
+    extract_rw_id,
     is_known_webhook_pair,
     is_torrent_block_report,
     parse_webhook,
@@ -59,6 +65,7 @@ from .webhooks import (
 
 __all__ = [
     "RemnawaveClient",
+    "RemnawaveOperationError",
     "configure",
     "get_default_client",
     "api",
@@ -69,6 +76,7 @@ __all__ = [
     "apply_new_user",
     "apply_extend",
     "apply_update",
+    "serialize_managed_subscription",
     "apply_crm_bonus_days",
     "apply_crm_bonus_traffic",
     "is_free_tier_user",
@@ -89,13 +97,13 @@ __all__ = [
     "matches_rw_segment",
     "normalize_user_for_crm",
     "segment_meta",
-    "collect_torrent_user_uuids",
+    "collect_torrent_user_ids",
     "fetch_torrent_blocker_reports",
     "webhooks",
     "RemnawaveWebhookPayload",
     "verify_webhook_signature",
     "parse_webhook",
-    "extract_vless_uuid",
+    "extract_rw_id",
     "extract_telegram_id",
     "extract_not_connected_after_hours",
     "extract_device_model",

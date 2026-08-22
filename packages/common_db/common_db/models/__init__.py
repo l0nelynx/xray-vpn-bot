@@ -6,7 +6,13 @@ All classes are registered on common_db.base.Base.metadata.
 Import any class you need from here:
     from common_db.models import User, SupportTicket, SupportMessage
 """
-from .auth import EmailVerification, RefreshToken, TelegramLinkCode
+from .auth import (
+    EmailVerification,
+    PendingSubscriptionOnboarding,
+    RefreshToken,
+    TelegramLinkCode,
+    WebAuthorizationCode,
+)
 from .credit_ledger import CreditLedger
 from .crm import (
     CrmCampaign,
@@ -29,14 +35,18 @@ from .menus import MenuButton, MenuScreen, WebAppMenuNode
 from .promo_redemptions import PromoRedemption
 from .promos import Promo, PromoSettings
 from .support import SupportAttachment, SupportMessage, SupportTicket
-from .runtime import AppRuntimeSettings, AppIntegration, PaymentIntegration
+from .runtime import AppRuntimeSettings, AppIntegration, DashboardBrandingAsset, PaymentIntegration
 from .system import BotFeatureFlags, CacheVersion, TelmtFreeParams
 from .transactions import Transaction
-from .users import DisabledUser, User
+from .users import DisabledUser, SubscriptionTransfer, User, UserSubscription
+from .api_health import ApiAlertState, ApiErrorEvent, ApiMetricHour, ApiMetricMinute, ApiServiceStatus
+from .miniapp_ux import MiniappUxEvent
 
 __all__ = [
     # users
     "User",
+    "UserSubscription",
+    "SubscriptionTransfer",
     "DisabledUser",
     # promos
     "Promo",
@@ -68,6 +78,8 @@ __all__ = [
     "RefreshToken",
     "EmailVerification",
     "TelegramLinkCode",
+    "WebAuthorizationCode",
+    "PendingSubscriptionOnboarding",
     # credits
     "CreditLedger",
     # google play
@@ -83,6 +95,13 @@ __all__ = [
     "TelmtFreeParams",
     # runtime
     "AppRuntimeSettings",
+    "DashboardBrandingAsset",
     "AppIntegration",
     "PaymentIntegration",
+    "ApiMetricMinute",
+    "ApiMetricHour",
+    "ApiErrorEvent",
+    "ApiServiceStatus",
+    "ApiAlertState",
+    "MiniappUxEvent",
 ]

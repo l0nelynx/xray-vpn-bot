@@ -6,7 +6,7 @@ JSON for overlay settings).
 """
 from __future__ import annotations
 
-from sqlalchemy import Boolean, Integer, String, Text
+from sqlalchemy import Boolean, Integer, LargeBinary, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..base import Base
@@ -20,6 +20,20 @@ class AppRuntimeSettings(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     config_json: Mapped[str] = mapped_column(Text, default="{}", server_default="{}")
     updated_at: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    updated_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+
+class DashboardBrandingAsset(Base):
+    """Validated logo snapshot used by the Dashboard and its public PWA assets."""
+
+    __tablename__ = "dashboard_branding_assets"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    source_url: Mapped[str] = mapped_column(Text, default="", server_default="")
+    mime_type: Mapped[str] = mapped_column(String(40))
+    content: Mapped[bytes] = mapped_column(LargeBinary)
+    sha256: Mapped[str] = mapped_column(String(64))
+    updated_at: Mapped[str] = mapped_column(String(30))
     updated_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
 

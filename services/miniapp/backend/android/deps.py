@@ -42,6 +42,7 @@ def _client_meta(request: Request) -> tuple[str | None, str | None]:
 
 
 async def get_current_user(
+    request: Request,
     authorization: str | None = Header(default=None),
 ) -> repo.UserRow:
     if not authorization or not authorization.lower().startswith("bearer "):
@@ -56,6 +57,8 @@ async def get_current_user(
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "user not found")
     if user.is_banned:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "account banned")
+    request.state.api_user_id = user.id
+    request.state.api_tg_id = user.tg_id
     return user
 
 

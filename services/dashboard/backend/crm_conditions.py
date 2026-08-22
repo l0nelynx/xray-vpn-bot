@@ -166,7 +166,7 @@ async def _apply_rw_filters(
         return users, None
 
     warning: str | None = None
-    tag_uuids: set[str] | None = None
+    tag_rw_ids: set[int] | None = None
 
     for cond in rw_conditions:
         if cond.get("type") == CONDITION_RW_TAG:
@@ -176,8 +176,8 @@ async def _apply_rw_filters(
             except Exception as exc:
                 logger.error("CRM tag filter failed tag=%s: %s", tag, exc)
                 return [], f"Failed to load users by tag {tag}: {exc}"
-            tag_uuids = {u["uuid"] for u in tagged if u.get("uuid")}
-            if not tag_uuids:
+            tag_rw_ids = {int(u["rw_id"]) for u in tagged if u.get("rw_id") is not None}
+            if not tag_rw_ids:
                 return [], f"No users found with tag {tag}"
 
     need_crm_meta = any(
@@ -185,12 +185,12 @@ async def _apply_rw_filters(
         for c in rw_conditions
     )
 
-    crm_by_uuid: dict[str, dict] = {}
+    crm_by_id: dict[int, dict] = {}
     if need_crm_meta:
-        uuids = {u.get("vless_uuid") for u in users if u.get("vless_uuid")}
-        if tag_uuids is not None:
-            uuids &= tag_uuids
-        if not uuids:
+        rw_ids = {int(u["rw_id"]) for u in users if u.get("rw_id") is not None}
+        if tag_rw_ids is not None:
+            rw_ids &= tag_rw_ids
+        if not rw_ids:
             return [], warning
 
         try:
@@ -199,17 +199,18 @@ async def _apply_rw_filters(
             logger.error("CRM rw filter bulk fetch failed: %s", exc)
             return [], f"Failed to load Remnawave data: {exc}"
 
-        crm_by_uuid = {u["uuid"]: u for u in all_crm if u.get("uuid") in uuids}
+        crm_by_id = {int(u["rw_id"]): u for u in all_crm if u.get("rw_id") in rw_ids}
 
     filtered: list[dict] = []
     for row in users:
-        uuid = row.get("vless_uuid")
-        if not uuid:
+        rw_id = row.get("rw_id")
+        if rw_id is None:
             continue
-        if tag_uuids is not None and uuid not in tag_uuids:
+        rw_id = int(rw_id)
+        if tag_rw_ids is not None and rw_id not in tag_rw_ids:
             continue
 
-        crm_user = crm_by_uuid.get(uuid) if need_crm_meta else None
+        crm_user = crm_by_id.get(rw_id) if need_crm_meta else None
         if need_crm_meta and not crm_user:
             continue
 

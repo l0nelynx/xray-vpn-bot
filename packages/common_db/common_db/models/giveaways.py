@@ -116,10 +116,16 @@ class GiveawayWinner(Base):
     tg_id: Mapped[int] = mapped_column(BigInteger)
     rank: Mapped[int] = mapped_column(Integer)
     tickets: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    winning_ticket_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("giveaway_tickets.id", ondelete="SET NULL"),
+        nullable=True,
+    )
 
     giveaway: Mapped["Giveaway"] = relationship(back_populates="winners")
 
     __table_args__ = (
         UniqueConstraint("giveaway_id", "rank", name="uq_giveaway_winner_rank"),
         Index("ix_giveaway_winners_giveaway_id", "giveaway_id"),
+        Index("ix_giveaway_winners_winning_ticket_id", "winning_ticket_id"),
     )

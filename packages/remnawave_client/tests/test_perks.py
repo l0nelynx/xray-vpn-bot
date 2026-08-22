@@ -15,7 +15,7 @@ def test_is_free_tier_user_with_traffic_limit() -> None:
 def test_apply_crm_bonus_days_resets_traffic_for_active_free_user() -> None:
     async def go() -> None:
         rw = MagicMock()
-        rw.reset_user_traffic = AsyncMock(return_value=True)
+        rw.reset_user_traffic_by_id = AsyncMock(return_value=True)
 
         with patch(
             "remnawave_client.perks.apply_extend",
@@ -23,7 +23,7 @@ def test_apply_crm_bonus_days_resets_traffic_for_active_free_user() -> None:
             return_value={"ok": True},
         ) as extend:
             ok = await apply_crm_bonus_days(
-                user_uuid="uuid-1",
+                rw_id=101,
                 username="alice",
                 bonus_days=3,
                 crm_user={
@@ -35,7 +35,7 @@ def test_apply_crm_bonus_days_resets_traffic_for_active_free_user() -> None:
             )
 
         assert ok is True
-        rw.reset_user_traffic.assert_awaited_once_with("uuid-1")
+        rw.reset_user_traffic_by_id.assert_awaited_once_with(101)
         extend.assert_awaited_once()
 
     asyncio.run(go())
@@ -44,7 +44,7 @@ def test_apply_crm_bonus_days_resets_traffic_for_active_free_user() -> None:
 def test_apply_crm_bonus_days_no_reset_for_unlimited_paid() -> None:
     async def go() -> None:
         rw = MagicMock()
-        rw.reset_user_traffic = AsyncMock(return_value=True)
+        rw.reset_user_traffic_by_id = AsyncMock(return_value=True)
 
         with patch(
             "remnawave_client.perks.apply_extend",
@@ -52,7 +52,7 @@ def test_apply_crm_bonus_days_no_reset_for_unlimited_paid() -> None:
             return_value={"ok": True},
         ):
             ok = await apply_crm_bonus_days(
-                user_uuid="uuid-2",
+                rw_id=102,
                 username="bob",
                 bonus_days=3,
                 crm_user={
@@ -64,6 +64,6 @@ def test_apply_crm_bonus_days_no_reset_for_unlimited_paid() -> None:
             )
 
         assert ok is True
-        rw.reset_user_traffic.assert_not_awaited()
+        rw.reset_user_traffic_by_id.assert_not_awaited()
 
     asyncio.run(go())

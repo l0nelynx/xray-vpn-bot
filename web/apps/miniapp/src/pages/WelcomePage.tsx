@@ -8,6 +8,14 @@ interface Props {
   links: LinksInfo;
 }
 
+function botStartUrl(botUrl: string): string {
+  if (!botUrl) return "";
+
+  const url = new URL(botUrl);
+  url.searchParams.set("start", "");
+  return url.toString();
+}
+
 export default function WelcomePage({ links }: Props) {
   const { t } = useT();
   return (
@@ -20,7 +28,11 @@ export default function WelcomePage({ links }: Props) {
         <p style={{ color: "rgba(255,255,255,0.52)", marginBottom: 24, lineHeight: 1.5 }}>
           {t("welcome.body")}
         </p>
-        <Button size="lg" className="w-full" onClick={() => openTelegramLink(links.bot_url)}>
+        <Button
+          size="lg"
+          className="w-full"
+          onClick={() => openTelegramLink(botStartUrl(links.bot_url))}
+        >
           {t("welcome.cta")}
         </Button>
       </div>

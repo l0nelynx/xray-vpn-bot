@@ -31,7 +31,7 @@ Every API request includes the `X-Telegram-Init-Data` header.
 
 1. HMAC-SHA256 signature per [Telegram WebApp spec](https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app)
 2. TTL: 24 hours
-3. Requires `user.id` and **`user.username`** (403 if username missing)
+3. Requires `user.id`. Telegram `@username` is optional (Remnawave names fall back to `user_{db_id}`).
 
 **Frontend** (`web/apps/miniapp/src/tg/webapp.ts`):
 
@@ -45,9 +45,8 @@ Bottom tab navigation:
 | Tab | Route | Page |
 |-----|-------|------|
 | Home | `/` | Subscription status, quick actions |
-| Devices | `/devices` | HWID device list |
-| Support | `/support` | Ticket inbox |
-| Account | `/settings` | Promo, referral, legal links |
+| Connection | `/connect` | Guided three-step VPN setup |
+| Help | `/support` | Setup help and ticket inbox |
 
 Additional routes (stack navigation):
 
@@ -56,6 +55,10 @@ Additional routes (stack navigation):
 | `/buy` | BuyMenuPage | Tree-based tariff picker |
 | `/buy/success` | BuySuccessPage | Post-payment polling |
 | `/connect` | ConnectPage | VPN app install guide |
+| `/onboarding` | OnboardingPage | Versioned first-run education |
+| `/account/link` | AccountLinkPage | Link an existing email account |
+| `/settings` | SettingsPage | Account, promo, referral, legal links |
+| `/devices` | DevicesPage | HWID device list from Home |
 | `/free/:mode` | FreeTrialPage | Free VPN or Telemt proxy |
 | `/support/new` | SupportCreatePage | New ticket |
 | `/support/:id` | SupportTicketPage | Ticket thread |
@@ -74,10 +77,15 @@ Shows the user's subscription card:
 - Traffic usage
 - Connected devices count
 
-**Actions:**
+The page deliberately has one primary action, selected from account state:
 
-- **Connect** — opens the Connect page (VPN app catalog)
-- **Buy / Extend** — navigates to `/buy`
+- no subscription → **Choose a plan**;
+- active and never connected → **Set up VPN**;
+- previously connected → **Connect another device**;
+- expired → **Restore access**.
+
+Renewal is available inside subscription management rather than beside the
+connection action. Devices and Settings remain deep links from Home.
 - **Free proxy** — entry to free Telemt trial (if configured)
 
 Data from `GET /api/me` — resolves Remnawave subscription via `vless_uuid`.
@@ -111,8 +119,10 @@ sequenceDiagram
     PAY->>BOT: POST /bot/*_webhook
     BOT->>RW: deliver_subscription()
     U->>SPA: /buy/success
-    SPA->>API: Poll GET /me
-    API-->>SPA: Updated subscription
+    SPA->>API: Poll GET /payments/transactions/{transaction_id}
+    API-->>SPA: awaiting_payment / processing / succeeded / failed
+    SPA->>API: GET /me after succeeded
+    SPA->>U: Open /connect for the target subscription
 ```
 
 ### Security rule
@@ -129,8 +139,11 @@ codes for **bonus credits** and can pay with the wallet separately. See
 
 ### Post-payment
 
-`BuySuccessPage` polls `GET /me` every 3 seconds for up to 3 minutes, watching
-for `expire_iso` / `days_left` changes.
+`BuySuccessPage` restores `transaction_id` from the URL and polls only that
+owned transaction every 3 seconds for up to 3 minutes. Returning from a payment
+provider, a changed expiry date, or the presence of a subscription URL never
+counts as success. Success requires `delivery_status == 1`; credit payments use
+the same verification path.
 
 ### Available providers
 
@@ -156,6 +169,12 @@ subscription page.
 - Fetches app catalog: `GET /api/connect/app-config`
 - Substitutes `{{SUBSCRIPTION_LINK}}` with the user's subscription URL from `/me`
 - Per-platform install steps and deep-links
+- Automatic platform detection with manual switching
+- A three-step progress rail: install app → add subscription → enable VPN
+- Connection verification using `firstConnectedAt` every 3 seconds for up to
+  60 seconds while the page is visible
+- A distinct unavailable state when Remnawave cannot be queried
+- Subscription URL hidden under **Manual setup**
 
 Customize the catalog without rebuilding: see [connect-page.md](connect-page.md).
 
@@ -229,9 +248,13 @@ All routes require `X-Telegram-Init-Data` unless noted.
 
 ```
 GET  /api/me
+PATCH /api/me/onboarding             # monotonic { version, outcome }
+POST /api/link/email                 # link/merge existing email account
+POST /api/ux/events                  # allowlisted, privacy-limited events
 GET  /api/menu/tree
 GET  /api/payments/providers
 POST /api/payments/invoice          # body: { "node_id": <int> }
+GET  /api/payments/transactions/{transaction_id}
 GET  /api/promo
 POST /api/promo
 GET  /api/promo/referral

@@ -7,8 +7,8 @@ Provides three groups of endpoints:
        rate-limited (5/min per IP) + in-memory brute-force guard.
 
 2. Web registration
-   POST /api/web/register — create account + auto-activate promo discount;
-       requires a valid invite code; rate-limited (3/min per IP).
+   POST /api/web/register — create account; optional invite code is redeemed
+       when provided; rate-limited (3/min per IP).
 
 3. Discount-aware payment endpoints
    GET  /api/web/payments/menu    — tariff tree with prices discounted for
@@ -47,6 +47,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
 from ..android import deps
+from ..android import email_policy, register_ip_guard
 from ..android import repo as android_repo
 from ..android import security as android_security
 from ..android.auth_router import _issue_pair, _user_summary, limiter
@@ -58,7 +59,6 @@ from ..database.models import Transaction
 from ..config import get_bot_token, get_config, get_tg_client_secret
 from payments.rub_pricing import get_rub_rates_for_currencies
 from ..notify_log import esc, notify_log, notify_web
-from remnawave_client.api import get_user_from_username as _rw_get_by_username
 from payments import (
     InvoiceRequest,
     PaymentError,
@@ -68,7 +68,10 @@ from payments import (
 from . import brute_force
 from common_db.repo import balance as _repo_balance
 from common_db.repo import promos as _repo_promos
+from common_db.repo import subscription_onboarding as _repo_onboarding
 from common_db.repo import system as _repo_system
+from common_db.repo import subscriptions as _repo_subscriptions
+from common_db.models import User
 
 logger = logging.getLogger(__name__)
 
@@ -145,7 +148,9 @@ class ValidateInviteResponse(BaseModel):
 class WebRegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
-    invite_code: str = Field(min_length=1, max_length=20)
+    invite_code: str | None = Field(default=None, min_length=1, max_length=20)
+    subscription_context: str | None = Field(default=None, min_length=20, max_length=4096)
+    subscription_flow: bool = False
 
 
 class PartnershipInquiryRequest(BaseModel):
@@ -186,6 +191,7 @@ class WebMenuResponse(BaseModel):
 class WebInvoiceRequest(BaseModel):
     node_id: int = Field(..., ge=1)
     description: str | None = None
+    subscription_id: int | None = Field(default=None, ge=1)
 
 
 class TelegramExchangeRequest(BaseModel):
@@ -206,6 +212,7 @@ class WebInvoiceResponse(BaseModel):
 
 class WebPayCreditsRequest(BaseModel):
     node_id: int = Field(..., ge=1)
+    subscription_id: int | None = Field(default=None, ge=1)
 
 
 class WebPayCreditsResponse(BaseModel):
@@ -222,6 +229,24 @@ class WebPayCreditsResponse(BaseModel):
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
+
+
+async def _purchase_target_rw_id(
+    *, user_id: int, subscription_id: int | None
+) -> int | None:
+    async with async_session() as session:
+        if subscription_id is not None:
+            target = await _repo_subscriptions.get_for_user(
+                session, user_id=user_id, subscription_id=subscription_id
+            )
+            if target is None:
+                raise HTTPException(
+                    status.HTTP_404_NOT_FOUND,
+                    detail={"code": "subscription_not_found"},
+                )
+        else:
+            target = await _repo_subscriptions.get_primary(session, user_id)
+    return target.rw_id if target is not None else None
 
 @router.post("/validate-invite", response_model=ValidateInviteResponse)
 @limiter.limit("5/minute")
@@ -288,55 +313,111 @@ async def web_register(
     body: WebRegisterRequest,
     request: Request,
 ) -> AuthResponse:
-    """Register a new account requiring a valid invite code.
+    """Register a new web account.
 
-    Flow:
-      1. Brute-force + rate-limit check.
-      2. Validate invite code (code must exist; any type accepted).
-      3. Create user with hashed password.
-      4. Record a PromoRedemption with tg_id = -user.id so the discount
-         is applied when the user creates their first payment invoice.
-      5. Issue access + refresh token pair.
+    Invite code is optional. A subscription-page registration stores only a
+    short-lived onboarding marker; ownership is finalized after email
+    verification or by the subscription-page OAuth callback.
     """
     ip = _client_ip(request)
     brute_force.check(ip)
+    register_ip_guard.check(ip)
+    email_policy.assert_email_allowed(str(body.email))
 
-    code = body.invite_code.strip().upper()
-
-    async with async_session() as session:
-        promo = await _repo_promos.get_promo_by_code(session, code)
-        if promo is None:
+    code = body.invite_code.strip().upper() if body.invite_code else None
+    claim_rw_id: int | None = None
+    if body.subscription_context:
+        try:
+            claim_rw_id, _ = android_security.decode_subscription_context(
+                body.subscription_context
+            )
+        except android_security.JWTError as exc:
             brute_force.record_fail(ip)
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST,
-                detail={"code": "invalid_invite"},
-            )
-        grant = await _resolve_credit_grant_for_promo(promo)
+                detail={"code": "invalid_subscription_context"},
+            ) from exc
+
+        grant = 0
+    elif body.subscription_flow:
+        grant = 0
+    elif code:
+        async with async_session() as session:
+            promo = await _repo_promos.get_promo_by_code(session, code)
+            if promo is None:
+                brute_force.record_fail(ip)
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    detail={"code": "invalid_invite"},
+                )
+            grant = await _resolve_credit_grant_for_promo(promo)
+    else:
+        grant = 0
 
     brute_force.clear(ip)
 
+    subscription_flow = body.subscription_flow or claim_rw_id is not None
     pwd_hash = await android_security.hash_password(body.password)
-    try:
-        user_id = await android_repo.create_user_with_password(str(body.email), pwd_hash)
-    except IntegrityError:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            detail={"code": "email_taken"},
-        )
+    if subscription_flow:
+        # Keep the user empty until ownership has been verified. This marker
+        # also suppresses eager FREE provisioning between verification and the
+        # subscription-page OAuth callback.
+        try:
+            async with async_session() as session:
+                db_user = User(
+                    tg_id=None,
+                    email=str(body.email).strip().lower(),
+                    password_hash=pwd_hash,
+                    password_updated_at=_now_iso(),
+                    api_provider="remnawave",
+                )
+                session.add(db_user)
+                await session.flush()
+                user_id = int(db_user.id)
+                await _repo_onboarding.create(
+                    session,
+                    user_id=user_id,
+                    rw_id=claim_rw_id,
+                )
+                await session.commit()
+        except IntegrityError:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                detail={"code": "email_taken"},
+            )
+    else:
+        try:
+            user_id = await android_repo.create_user_with_password(
+                str(body.email), pwd_hash
+            )
+        except IntegrityError:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                detail={"code": "email_taken"},
+            )
 
     user = await android_repo.find_user_by_id(user_id)
     assert user is not None
+    register_ip_guard.record(ip)
 
-    fake_tg = _fake_tg_id(user_id)
-    async with async_session() as session:
-        redeem_result = await _repo_promos.redeem_promo(session, fake_tg, code)
-        if not redeem_result.ok:
-            await session.rollback()
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST,
-                detail={"code": "invalid_invite"},
-            )
-        await session.commit()
+    if not subscription_flow and code is not None:
+        fake_tg = _fake_tg_id(user_id)
+        async with async_session() as session:
+            redeem_result = await _repo_promos.redeem_promo(session, fake_tg, code)
+            if not redeem_result.ok:
+                await session.rollback()
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    detail={"code": "invalid_invite"},
+                )
+            await session.commit()
+
+    if subscription_flow:
+        source = "subscription"
+    elif code is not None:
+        source = "invite"
+    else:
+        source = "open"
 
     tokens = await _issue_pair(user_id, request)
     _, ip_log = deps.client_meta(request)
@@ -344,7 +425,8 @@ async def web_register(
         f"🌐 <b>Web registration</b>\n"
         f"ID: <code>{user_id}</code>\n"
         f"email: <code>{esc(user.email)}</code>\n"
-        f"invite: <code>{esc(code)}</code> (+{grant} credits)\n"
+        f"source: <code>{source}</code>\n"
+        f"credits: <code>{grant}</code>\n"
         f"IP: <code>{esc(ip_log or '—')}</code>"
     )
     return AuthResponse(tokens=tokens, user=_user_summary(user))
@@ -424,6 +506,9 @@ async def web_invoice(
     user: android_repo.UserRow = Depends(deps.require_verified_email),
 ) -> WebInvoiceResponse:
     """Create a payment invoice at full price (no promo discount)."""
+    target_rw_id = await _purchase_target_rw_id(
+        user_id=user.id, subscription_id=body.subscription_id
+    )
     node = await _load_node(body.node_id)
     if node is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail={"code": "node_not_found"})
@@ -491,7 +576,9 @@ async def web_invoice(
                 remnawave_description=invoice_data["remnawave_description"],
                 remnawave_tag=invoice_data["remnawave_tag"],
                 user_id=user.id,
-                android_user_id=user.id,
+                android_user_id=None,
+                target_rw_id=target_rw_id,
+                purchase_source="web",
             )
         )
         await session.commit()
@@ -525,6 +612,9 @@ async def web_pay_credits(
 ) -> WebPayCreditsResponse:
     from ..credits_delivery import pay_and_deliver
 
+    target_rw_id = await _purchase_target_rw_id(
+        user_id=user.id, subscription_id=body.subscription_id
+    )
     node = await _load_node(body.node_id)
     if node is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail={"code": "node_not_found"})
@@ -552,9 +642,11 @@ async def web_pay_credits(
         days=days,
         tariff_slug=invoice_data["tariff_slug"],
         delivery_target=invoice_data,
-        android_user_id=user.id if user.tg_id is None else None,
+        android_user_id=None,
+        purchase_source="web",
         email=user.email,
         referral_tg_id=_promo_tg_id(user),
+        target_rw_id=target_rw_id,
     )
     if result.get("status") != "success":
         raise HTTPException(
@@ -711,31 +803,6 @@ async def telegram_auth_exchange(
         if user:
             logger.info("Telegram OIDC: found user_id=%s by tg_id=%s", user.id, tg_id)
 
-    # ── 2. Fallback: Telegram @username (case-insensitive) in users.username.
-    #       Covers web-portal users whose tg_id column is still NULL.
-    if user is None and tg_username:
-        user = await android_repo.find_user_by_username_ci(tg_username)
-        if user:
-            logger.info(
-                "Telegram OIDC: found user_id=%s by @username=%s", user.id, tg_username
-            )
-
-    # ── 3. Last resort: Remnawave lookup by @username → vless_uuid → users row.
-    if user is None and tg_username:
-        try:
-            _rw = await _rw_get_by_username(tg_username)
-        except Exception:
-            _rw = None
-        if _rw:
-            _uuid = _rw.get("uuid")
-            if _uuid:
-                user = await android_repo.find_user_by_vless_uuid(_uuid)
-                if user:
-                    logger.info(
-                        "Telegram OIDC: found user_id=%s via Remnawave uuid=%s",
-                        user.id, _uuid,
-                    )
-
     if user is None:
         logger.warning(
             "Telegram OIDC: no user found — tg_id=%s username=%s",
@@ -751,14 +818,6 @@ async def telegram_auth_exchange(
             status.HTTP_403_FORBIDDEN,
             detail={"code": "banned"},
         )
-
-    # Fallback paths 2/3 find the user by username/Remnawave-uuid without
-    # tg_id being set on the row yet — persist the link now. Telegram's own
-    # OIDC signature already proves ownership of this tg_id, so this is safe;
-    # never overwrite an existing link (path 1 already handles that case).
-    if tg_id is not None and user.tg_id is None:
-        await android_repo.set_user_tg_id(user.id, tg_id)
-        user.tg_id = tg_id
 
     if user.email_verified_at is None:
         await android_repo.mark_email_verified(user.id)
@@ -823,12 +882,14 @@ async def setup_email_request(
     if other is not None and other.id != user.id:
         raise HTTPException(status.HTTP_409_CONFLICT, detail={"code": "email_taken"})
 
-    from ..android import mailer, security as _sec
+    from ..android import email_send_guard, mailer, security as _sec
     from ..config import get_email_code_ttl_seconds
 
     password_hash = await _sec.hash_password(body.new_password)
     payload = _json.dumps({"email": new_email, "ph": password_hash})
 
+    ip = _client_ip(request)
+    email_send_guard.check(email=new_email, ip=ip)
     code = _sec.new_email_code()
     code_hash = _sec.hash_email_code(code)
     await android_repo.invalidate_pending_codes(user.id, android_repo.PURPOSE_SETUP_EMAIL)
@@ -839,6 +900,7 @@ async def setup_email_request(
         payload=payload,
         ttl_seconds=get_email_code_ttl_seconds(),
     )
+    email_send_guard.record(email=new_email, ip=ip)
     try:
         subject, text_body = mailer.render_verify(code)
         await mailer.send_email(to=new_email, subject=subject, text=text_body)

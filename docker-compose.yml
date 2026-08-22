@@ -63,6 +63,28 @@ services:
       dockerfile: infra/docker/base.Dockerfile
     profiles: ["build"]
     command: ["true"]
+  # One-off Remnawave 2.8 UUID -> numeric ID migration. It is isolated behind
+  # a profile and never starts during normal `docker compose up`.
+  rw-id-backfill:
+    image: ${REGISTRY:-ghcr.io/l0nelynx/}rw-id-backfill:${IMAGE_TAG:-staging}
+    build:
+      context: .
+      dockerfile: infra/docker/remnawave_backfill.Dockerfile
+      args:
+        BASE_IMAGE: ${REGISTRY:-ghcr.io/l0nelynx/}python-base:${IMAGE_TAG:-staging}
+    profiles: ["maintenance"]
+    volumes:
+      - ./config.yml:/app/config.yml:ro
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-xray}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-xray_vpn_bot}
+      - CONFIG_PATH=/app/config.yml
+    networks:
+      - data-network
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    logging: *default-logging
   migrate:
     container_name: xray-migrate
     image: ${REGISTRY:-ghcr.io/l0nelynx/}bot:${IMAGE_TAG:-staging}
@@ -110,6 +132,7 @@ services:
     environment:
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-xray}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-xray_vpn_bot}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - API_HEALTH_ENABLED=${API_HEALTH_ENABLED:-1}
     restart: unless-stopped
     depends_on:
       migrate:
@@ -181,6 +204,7 @@ services:
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-xray}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-xray_vpn_bot}
       - CONFIG_PATH=/app/config.yml
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - API_HEALTH_ENABLED=${API_HEALTH_ENABLED:-1}
     restart: unless-stopped
     depends_on:
       migrate:
@@ -213,6 +237,7 @@ services:
       - ./fcm-sa.json:/app/fcm-sa.json:ro
     networks:
       - data-network
+      - backend-network
     environment:
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-xray}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-xray_vpn_bot}
       - CONFIG_PATH=/app/config.yml
@@ -256,12 +281,16 @@ services:
     environment:
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-xray}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-xray_vpn_bot}
       - CONFIG_PATH=/app/config.yml
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - API_HEALTH_ENABLED=${API_HEALTH_ENABLED:-1}
     restart: unless-stopped
     depends_on:
       migrate:
         condition: service_completed_successfully
       bot:
         condition: service_started
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
       interval: 60s

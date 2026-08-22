@@ -2,7 +2,7 @@ import { AlertTriangle } from "lucide-react";
 import { Spinner } from "@xray/ui/components/spinner";
 import { Alert, AlertTitle } from "@xray/ui/components/alert";
 import { useCallback } from "react";
-import { Navigate, Route, Routes } from "react-router";
+import { Navigate, Route, Routes, useLocation } from "react-router";
 import { me as meApi, type MeResponse } from "./api/client";
 import BottomTabs from "./components/BottomTabs";
 import { useMe } from "./hooks/useMe";
@@ -19,10 +19,13 @@ import InvitePage from "./pages/InvitePage";
 import PolicyPage from "./pages/PolicyPage";
 import ReferralRulesPage from "./pages/ReferralRulesPage";
 import SettingsPage from "./pages/SettingsPage";
+import SubscriptionsPage from "./pages/SubscriptionsPage";
 import SupportCreatePage from "./pages/SupportCreatePage";
 import SupportPage from "./pages/SupportPage";
 import SupportTicketPage from "./pages/SupportTicketPage";
 import WelcomePage from "./pages/WelcomePage";
+import AccountLinkPage from "./pages/AccountLinkPage";
+import OnboardingPage, { ONBOARDING_VERSION } from "./pages/OnboardingPage";
 
 function AppRoutes({
   data,
@@ -34,10 +37,11 @@ function AppRoutes({
   data: MeResponse | null;
   loading: boolean;
   error: string | null;
-  reload: () => void;
-  refresh: () => void;
+  reload: () => Promise<MeResponse | null>;
+  refresh: () => Promise<MeResponse | null>;
 }) {
   const { t } = useT();
+  const { pathname } = useLocation();
 
   if (loading) {
     return (
@@ -48,18 +52,17 @@ function AppRoutes({
   }
 
   if (error) {
-    const isUsername = error === "username required";
     return (
       <div className="page page-centered">
         <div style={{ textAlign: "center", maxWidth: 320 }}>
           <AlertTriangle
-            style={{ width: 48, height: 48, color: isUsername ? "#FFD479" : "#FF8A8A", margin: "0 auto 16px" }}
+            style={{ width: 48, height: 48, color: "#FF8A8A", margin: "0 auto 16px" }}
           />
           <div style={{ fontSize: 18, fontWeight: 700, color: "#FFFFFF", marginBottom: 8 }}>
-            {isUsername ? t("app.error.usernameTitle") : t("app.error.genericTitle")}
+            {t("app.error.genericTitle")}
           </div>
           <div style={{ fontSize: 14, color: "rgba(255,255,255,0.52)", lineHeight: 1.5 }}>
-            {isUsername ? t("app.error.usernameBody") : error}
+            {error}
           </div>
         </div>
       </div>
@@ -80,6 +83,14 @@ function AppRoutes({
     return <WelcomePage links={data.links} />;
   }
 
+  const onboardingRequired = (data.user?.onboarding_version ?? 0) < ONBOARDING_VERSION;
+  const onboardingRoute = pathname === "/onboarding" || pathname === "/account/link";
+  if (onboardingRequired && !onboardingRoute) {
+    return <Navigate to="/onboarding" replace />;
+  }
+
+  const showTabs = pathname === "/" || pathname === "/connect" || pathname === "/buy" || pathname === "/support";
+
   return (
     <div className="app">
       <Routes>
@@ -87,6 +98,9 @@ function AppRoutes({
         <Route path="/buy" element={<BuyMenuPage />} />
         <Route path="/buy/success" element={<BuySuccessPage />} />
         <Route path="/connect" element={<ConnectPage />} />
+        <Route path="/onboarding" element={<OnboardingPage me={data} reload={reload} />} />
+        <Route path="/account/link" element={<AccountLinkPage hasEmail={Boolean(data.user?.has_email)} email={data.user?.email || null} reload={reload} />} />
+        <Route path="/subscriptions" element={<SubscriptionsPage refresh={refresh} />} />
         <Route path="/devices" element={<DevicesPage />} />
         <Route path="/free/:mode" element={<FreeTrialPage />} />
         <Route path="/support" element={<SupportPage />} />
@@ -94,7 +108,13 @@ function AppRoutes({
         <Route path="/support/:id" element={<SupportTicketPage />} />
         <Route
           path="/settings"
-          element={<SettingsPage username={data.user?.username || ""} />}
+          element={
+            <SettingsPage
+              username={data.user?.username || ""}
+              hasEmail={Boolean(data.user?.has_email)}
+              email={data.user?.email || null}
+            />
+          }
         />
         <Route path="/invite" element={<InvitePage />} />
         <Route path="/policy" element={<PolicyPage links={data.links} />} />
@@ -102,7 +122,7 @@ function AppRoutes({
         <Route path="/agreement" element={<AgreementPage links={data.links} />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-      <BottomTabs />
+      {showTabs && <BottomTabs />}
     </div>
   );
 }

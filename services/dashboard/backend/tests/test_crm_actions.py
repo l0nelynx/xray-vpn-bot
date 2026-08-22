@@ -51,19 +51,19 @@ def test_execute_user_actions_rw_only() -> None:
     from dashboard.backend.crm_actions import execute_user_actions
 
     async def go() -> None:
-        user = User(id=1, tg_id=101, username="alice", vless_uuid="uuid-1")
-        crm_user = {"uuid": "uuid-1", "status": "active"}
+        user = User(id=1, tg_id=101, username="alice", rw_id=1011)
+        crm_user = {"rw_id": 1011, "status": "active"}
         actions = [{"type": "rw_reset_traffic", "enabled": True, "order": 12}]
 
         rw = MagicMock()
-        rw.reset_user_traffic = AsyncMock(return_value=True)
+        rw.reset_user_traffic_by_id = AsyncMock(return_value=True)
 
         with patch("dashboard.backend.crm_actions.tg_send", new_callable=AsyncMock) as send:
             result = await execute_user_actions(rw, user, crm_user, actions)
             assert result.perks_applied is True
             assert result.message_skipped is True
             send.assert_not_awaited()
-            rw.reset_user_traffic.assert_awaited_once_with("uuid-1")
+            rw.reset_user_traffic_by_id.assert_awaited_once_with(1011)
 
     _run(go())
 

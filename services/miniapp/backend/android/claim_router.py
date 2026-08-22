@@ -23,8 +23,8 @@ Statuses:
   - ready_login    — DB row with email + password → /claim/login (password
                      only; email is already bound to the short_uuid).
   - needs_password — DB row with email, no password → OTP → set password.
-  - rw_only        — Remnawave user without usable DB credentials → register
-                     acc_email + password and bind vless_uuid. If a real
+    - rw_only        — Remnawave user without usable DB credentials → register
+                      acc_email + password and bind numeric rw_id. If a real
                      owner email exists (RW/DB), OTP to that address first;
                      otherwise possession of the subscription URL is enough
                      and the new email is verified via the normal flow.
@@ -115,9 +115,7 @@ class _Resolved:
         self.short_uuid = short_uuid
         self.rw_data = rw_data
         self.user = user
-        # Legacy: users.vless_uuid stores Remnawave panel `uuid`, not protocol
-        # `vlessUuid` (those differ). Match the rest of the codebase.
-        self.vless_uuid = str(rw_data.get("uuid") or rw_data.get("vlessUuid") or "")
+        self.rw_id = int(rw_data["id"])
         # Username is often the real mailbox when the dedicated email field
         # is empty or filled with a synthetic placeholder.
         self.rw_email = _usable_email(rw_data.get("email")) or _usable_email(
@@ -150,29 +148,14 @@ async def _resolve_state(short_uuid: str) -> _Resolved:
     if rw_data is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail={"code": "not_found"})
 
-    vless_uuid = rw_data.get("uuid") or rw_data.get("vlessUuid")
-    if not vless_uuid:
-        logger.error("Remnawave DTO missing uuid for short_uuid=%s", short_uuid)
+    rw_id = rw_data.get("id")
+    if rw_id is None:
+        logger.error("Remnawave DTO missing id for short_uuid=%s", short_uuid)
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY, detail={"code": "upstream_invalid"}
         )
 
-    # Prefer the row already bound to this Remnawave user. Username/email
-    # fallbacks must not attach a foreign portal account that already owns a
-    # different vless_uuid (otherwise ready_login would hijack the wrong row).
-    user = await repo.find_user_by_vless_uuid(str(vless_uuid))
-    if user is None and rw_data.get("username"):
-        candidate = await repo.find_user_by_remnawave_username(rw_data["username"])
-        if candidate is not None and (
-            not candidate.vless_uuid or candidate.vless_uuid == str(vless_uuid)
-        ):
-            user = candidate
-    if user is None and rw_data.get("email"):
-        candidate = await repo.find_user_by_email(rw_data["email"])
-        if candidate is not None and (
-            not candidate.vless_uuid or candidate.vless_uuid == str(vless_uuid)
-        ):
-            user = candidate
+    user = await repo.find_user_by_rw_id(int(rw_id))
 
     if user is not None and user.is_banned:
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail={"code": "banned"})
@@ -312,9 +295,8 @@ async def claim_otp_request(req: ClaimOtpRequest, request: Request) -> SimpleSta
     """Send the ownership code to the canonical owner email.
 
     For `rw_only` with no DB row yet, a bare credential-less row bound to
-    the vless_uuid is created first — verification codes need a user_id
-    anchor, and the row is exactly what a Telegram-created user looks like
-    (idempotent: found by vless_uuid on every subsequent resolve).
+    the numeric rw_id is created first — verification codes need a user_id
+    anchor. Subsequent attempts resolve it through the same rw_id.
     """
     short_uuid = _short_uuid_from_claim_token(req.claim_token)
     resolved = await _resolve_state(short_uuid)
@@ -330,7 +312,7 @@ async def claim_otp_request(req: ClaimOtpRequest, request: Request) -> SimpleSta
 
     user = resolved.user
     if user is None:
-        user_id = await repo.create_bare_user_with_vless(resolved.vless_uuid)
+        user_id = await repo.create_bare_user_with_rw_id(resolved.rw_id)
         user = await repo.find_user_by_id(user_id)
         assert user is not None
 
@@ -340,6 +322,7 @@ async def claim_otp_request(req: ClaimOtpRequest, request: Request) -> SimpleSta
         to_email=resolved.owner_email,
         payload=resolved.owner_email.lower(),
         template=lambda code, _payload: mailer.render_verify(code),
+        request=request,
     )
     return SimpleStatus()
 
@@ -357,7 +340,7 @@ async def claim_complete(req: ClaimCompleteRequest, request: Request) -> AuthRes
     - rw_only without owner email: register + bind using subscription URL
       possession as ownership proof; new email stays unverified until the
       standard verify step. An abandoned (unverified) prior bind on the same
-      vless_uuid is overwritten so a mistyped email can be corrected.
+      rw_id is overwritten so a mistyped email can be corrected.
     - ready_login + unverified + acc_email: same overwrite without OTP
       (claim_token already proves subscription URL possession).
     """
@@ -394,10 +377,11 @@ async def claim_complete(req: ClaimCompleteRequest, request: Request) -> AuthRes
             user_id=user.id,
             purpose=repo.PURPOSE_CLAIM,
             presented_code=req.code,
+            email=resolved.owner_email,
         )
         otp_email = (code_row.payload or "").strip().lower()
     elif user is None:
-        user_id = await repo.create_bare_user_with_vless(resolved.vless_uuid)
+        user_id = await repo.create_bare_user_with_rw_id(resolved.rw_id)
         user = await repo.find_user_by_id(user_id)
         assert user is not None
 
@@ -420,7 +404,7 @@ async def claim_complete(req: ClaimCompleteRequest, request: Request) -> AuthRes
             )
         try:
             await repo.adopt_user_for_migration(
-                user.id, acc_email, pwd_hash, resolved.vless_uuid
+                user.id, acc_email, pwd_hash, resolved.rw_id
             )
         except IntegrityError:
             raise HTTPException(
@@ -437,7 +421,7 @@ async def claim_complete(req: ClaimCompleteRequest, request: Request) -> AuthRes
         f"🧀 <b>Subscription claim ({esc(resolved.status)})</b>\n"
         f"ID: <code>{user.id}</code>\n"
         f"email: <code>{esc(user_row.email or '—')}</code>\n"
-        f"vless: <code>{esc(resolved.vless_uuid)}</code>\n"
+        f"rw_id: <code>{resolved.rw_id}</code>\n"
         f"IP: <code>{esc(ip or '—')}</code>\n"
         f"UA: <code>{esc((ua or '—')[:120])}</code>"
     )

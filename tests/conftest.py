@@ -39,14 +39,11 @@ def session_factory(engine):
 
 
 class FakeRemnawave:
-    """In-memory stand-in for app.api.remnawave.api.
+    """In-memory stand-in for the numeric-ID Remnawave facade.
 
-    State: a dict {uuid: {"status": str, "data_limit": int | None,
-                          "email": str | None, "username": str | None,
-                          "subscription_url": str | None,
-                          "short_uuid": str | None}}.
-    `update_user(uuid, status=...)` records the call in `disabled_calls`
-    when status == "disabled".
+    ``uuid`` is accepted only as a convenient fixture label. Application
+    lookups and mutations use ``rw_id``; short-UUID wire responses expose
+    the v3 ``id`` field.
     """
 
     def __init__(self):
@@ -54,22 +51,32 @@ class FakeRemnawave:
         self.by_email: dict[str, str] = {}
         self.by_username: dict[str, str] = {}
         self.by_short_uuid: dict[str, str] = {}
-        self.disabled_calls: list[str] = []
+        self.disabled_calls: list[int] = []
         self.update_should_raise: Exception | None = None
 
     def add_user(self, *, uuid: str, status: str = "active",
                  data_limit=None, email: str | None = None,
                  username: str | None = None,
                  subscription_url: str | None = None,
-                 short_uuid: str | None = None) -> None:
+                 short_uuid: str | None = None,
+                 rw_id: int | None = None,
+                 telegram_id: int | None = None,
+                 description: str | None = None,
+                 tag: str | None = None) -> None:
+        rw_id = rw_id if rw_id is not None else len(self.by_uuid) + 1
         rec = {
             "uuid": uuid,
+            "id": rw_id,
+            "rw_id": rw_id,
             "status": status,
             "data_limit": data_limit,
             "email": email,
             "username": username,
             "subscription_url": subscription_url,
             "short_uuid": short_uuid,
+            "telegram_id": telegram_id,
+            "description": description,
+            "tag": tag,
         }
         self.by_uuid[uuid] = rec
         if email:
@@ -83,26 +90,34 @@ class FakeRemnawave:
         uuid = self.by_email.get(email)
         return self.by_uuid.get(uuid) if uuid else None
 
-    async def get_user_from_username(self, username: str):
+    async def get_user_from_username(
+        self, username: str, *, strict: bool = False,
+    ):
         uuid = self.by_username.get(username)
         return self.by_uuid.get(uuid) if uuid else None
 
-    async def get_user_from_uuid(self, uuid: str):
-        return self.by_uuid.get(uuid)
+    async def get_user_from_id(self, rw_id: int, *, strict: bool = False):
+        return next(
+            (record for record in self.by_uuid.values() if record.get("rw_id") == rw_id),
+            None,
+        )
 
-    async def get_user_by_short_uuid_raw(self, short_uuid: str):
+    async def get_user_by_short_uuid_raw(
+        self, short_uuid: str, *, strict: bool = True,
+    ):
         uuid = self.by_short_uuid.get(short_uuid)
         return self.by_uuid.get(uuid) if uuid else None
 
-    async def update_user(self, *, user_uuid: str, status: str | None = None,
+    async def update_user(self, *, rw_id: int, status: str | None = None,
                           **_ignored):
         if self.update_should_raise is not None:
             raise self.update_should_raise
+        record = await self.get_user_from_id(rw_id)
         if status == "disabled":
-            self.disabled_calls.append(user_uuid)
-        if user_uuid in self.by_uuid and status:
-            self.by_uuid[user_uuid]["status"] = status
-        return self.by_uuid.get(user_uuid)
+            self.disabled_calls.append(rw_id)
+        if record is not None and status:
+            record["status"] = status
+        return record
 
 
 @pytest.fixture
@@ -117,10 +132,9 @@ def fake_remnawave(monkeypatch) -> FakeRemnawave:
     import remnawave_client.api as rem
     monkeypatch.setattr(rem, "get_user_from_email", fake.get_user_from_email)
     monkeypatch.setattr(rem, "get_user_from_username", fake.get_user_from_username)
-    monkeypatch.setattr(rem, "get_user_from_uuid", fake.get_user_from_uuid)
+    monkeypatch.setattr(rem, "get_user_from_id", fake.get_user_from_id)
     monkeypatch.setattr(rem, "get_user_by_short_uuid_raw",
                         fake.get_user_by_short_uuid_raw)
-    monkeypatch.setattr(rem, "update_user", fake.update_user)
     return fake
 
 
