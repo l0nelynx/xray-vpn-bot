@@ -18,6 +18,7 @@ on:
 
 permissions:
   contents: write
+  packages: write
 
 concurrency:
   group: release-pipeline
@@ -73,16 +74,15 @@ jobs:
           echo "version=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
-  release:
+  meta:
     needs: bump
     if: always() && (needs.bump.result == 'success' || needs.bump.result == 'skipped')
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      tag: ${{ steps.resolve.outputs.tag }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - id: meta
+      - id: resolve
         shell: bash
         run: |
           set -euo pipefail
@@ -103,14 +103,28 @@ jobs:
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
+  publish:
+    needs: meta
+    uses: ./.github/workflows/build.yml
+    with:
+      checkout_ref: refs/tags/${{ needs.meta.outputs.tag }}
+      release_version: ${{ needs.meta.outputs.version }}
+      publish: true
+    secrets: inherit
+
+  release:
+    needs: [meta, publish]
+    runs-on: ubuntu-latest
+    steps:
+
       - name: Skip if GitHub Release already exists
         id: check
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view "${{ steps.meta.outputs.tag }}" >/dev/null 2>&1; then
+          if gh release view "${{ needs.meta.outputs.tag }}" >/dev/null 2>&1; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo "Release ${{ steps.meta.outputs.tag }} already exists — skipping."
+            echo "Release ${{ needs.meta.outputs.tag }} already exists — skipping."
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
@@ -119,21 +133,21 @@ jobs:
         if: steps.check.outputs.exists == 'false'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.meta.outputs.tag }}
-          name: Release ${{ steps.meta.outputs.tag }}
+          tag_name: ${{ needs.meta.outputs.tag }}
+          name: Release ${{ needs.meta.outputs.tag }}
           generate_release_notes: true
           body: |
             ## Container images
 
-            Tag `${{ steps.meta.outputs.version }}` is published to GHCR and Docker Hub for all services.
+            Tag `${{ needs.meta.outputs.version }}` is published to GHCR and Docker Hub for all services.
 
             | Service | Pull (GHCR) | Pull (Docker Hub) |
             |---------|-------------|-------------------|
-            | bot | `ghcr.io/${{ github.repository_owner }}/bot:${{ steps.meta.outputs.version }}` | `docker.io/${{ secrets.DOCKERHUB_USERNAME }}/bot:${{ steps.meta.outputs.version }}` |
-            | support-bot | `ghcr.io/${{ github.repository_owner }}/support-bot:${{ steps.meta.outputs.version }}` | `docker.io/${{ secrets.DOCKERHUB_USERNAME }}/support-bot:${{ steps.meta.outputs.version }}` |
-            | dashboard | `ghcr.io/${{ github.repository_owner }}/dashboard:${{ steps.meta.outputs.version }}` | `docker.io/${{ secrets.DOCKERHUB_USERNAME }}/dashboard:${{ steps.meta.outputs.version }}` |
-            | miniapp | `ghcr.io/${{ github.repository_owner }}/miniapp:${{ steps.meta.outputs.version }}` | `docker.io/${{ secrets.DOCKERHUB_USERNAME }}/miniapp:${{ steps.meta.outputs.version }}` |
-            | frontend | `ghcr.io/${{ github.repository_owner }}/frontend:${{ steps.meta.outputs.version }}` | `docker.io/${{ secrets.DOCKERHUB_USERNAME }}/frontend:${{ steps.meta.outputs.version }}` |
-            | python-base | `ghcr.io/${{ github.repository_owner }}/python-base:${{ steps.meta.outputs.version }}` | `docker.io/${{ secrets.DOCKERHUB_USERNAME }}/python-base:${{ steps.meta.outputs.version }}` |
+            | bot | `ghcr.io/${{ github.repository_owner }}/bot:${{ needs.meta.outputs.version }}` | `docker.io/${{ secrets.DOCKERHUB_USERNAME }}/bot:${{ needs.meta.outputs.version }}` |
+            | support-bot | `ghcr.io/${{ github.repository_owner }}/support-bot:${{ needs.meta.outputs.version }}` | `docker.io/${{ secrets.DOCKERHUB_USERNAME }}/support-bot:${{ needs.meta.outputs.version }}` |
+            | dashboard | `ghcr.io/${{ github.repository_owner }}/dashboard:${{ needs.meta.outputs.version }}` | `docker.io/${{ secrets.DOCKERHUB_USERNAME }}/dashboard:${{ needs.meta.outputs.version }}` |
+            | miniapp | `ghcr.io/${{ github.repository_owner }}/miniapp:${{ needs.meta.outputs.version }}` | `docker.io/${{ secrets.DOCKERHUB_USERNAME }}/miniapp:${{ needs.meta.outputs.version }}` |
+            | frontend | `ghcr.io/${{ github.repository_owner }}/frontend:${{ needs.meta.outputs.version }}` | `docker.io/${{ secrets.DOCKERHUB_USERNAME }}/frontend:${{ needs.meta.outputs.version }}` |
+            | python-base | `ghcr.io/${{ github.repository_owner }}/python-base:${{ needs.meta.outputs.version }}` | `docker.io/${{ secrets.DOCKERHUB_USERNAME }}/python-base:${{ needs.meta.outputs.version }}` |
 
-            **Deploy:** set `IMAGE_TAG=${{ steps.meta.outputs.version }}` in `.env` and run `docker compose pull`.
+            **Deploy:** set `IMAGE_TAG=${{ needs.meta.outputs.version }}` in `.env` and run `docker compose pull`.

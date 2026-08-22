@@ -1,20 +1,49 @@
 # .github/workflows/build.yml
-name: Build and Push Docker
+name: Docker CI
 
 on:
-  push:
+  pull_request:
     branches:
       - main
       - develop
-    tags:
-      - 'v*.*.*'
     paths-ignore:
       - 'docs/**'
       - '**.md'
+  push:
+    branches:
+      - develop
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+  workflow_call:
+    inputs:
+      checkout_ref:
+        description: Git ref containing the exact sources to publish
+        required: false
+        type: string
+        default: ''
+      release_version:
+        description: Release version without the v prefix; forces a full build
+        required: false
+        type: string
+        default: ''
+      publish:
+        description: Push images to GHCR and Docker Hub
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-${{ github.event.pull_request.number || inputs.checkout_ref || github.ref }}
+  # New PR commits and newer develop pushes make their older image builds obsolete.
+  # Release calls are never cancelled halfway through publication.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/develop') }}
 
 jobs:
   detect:
-    if: "!startsWith(github.event.head_commit.message, 'docs:')"
     runs-on: ubuntu-latest
     outputs:
       bot:         ${{ steps.filter.outputs.bot }}
@@ -25,13 +54,28 @@ jobs:
       base:        ${{ steps.filter.outputs.base }}
       shared:      ${{ steps.filter.outputs.shared }}
       meta:        ${{ steps.filter.outputs.meta }}
-      release:     ${{ steps.release.outputs.release }}
+      release:     ${{ steps.mode.outputs.release }}
+      publish:     ${{ steps.mode.outputs.publish }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.checkout_ref || github.ref }}
 
-      - id: release
+      - id: mode
+        name: Resolve check/publish mode
+        shell: bash
         run: |
-          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+          set -euo pipefail
+
+          if [[ "${{ github.event_name }}" == "workflow_call" ]]; then
+            echo "publish=${{ inputs.publish }}" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/develop" ]]; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if [[ -n "${{ inputs.release_version }}" ]]; then
             echo "release=true" >> "$GITHUB_OUTPUT"
           else
             echo "release=false" >> "$GITHUB_OUTPUT"
@@ -39,6 +83,7 @@ jobs:
 
       - uses: dorny/paths-filter@v3
         id: filter
+        if: steps.mode.outputs.release != 'true'
         with:
           filters: |
             shared:
@@ -90,24 +135,32 @@ jobs:
       base_pull_tag: ${{ steps.calc.outputs.base_pull_tag }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.checkout_ref || github.ref }}
 
       - id: calc
         shell: bash
+        env:
+          BUILD: ${{ github.run_number }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_REF: ${{ github.head_ref }}
+          BASE_REF: ${{ github.base_ref }}
         run: |
           set -euo pipefail
 
           VERSION="$(tr -d '[:space:]' < VERSION)"
-          BUILD="${{ github.run_number }}"
-          SHORT_SHA="${GITHUB_SHA::7}"
-          REF="${{ github.ref }}"
+          SHORT_SHA="$(git rev-parse --short=7 HEAD)"
 
           TAGS_META=""
           add_tag() {
             TAGS_META+="type=raw,value=${1}"$'\n'
           }
 
-          if [[ "$REF" == refs/tags/v* ]]; then
-            VER="${REF#refs/tags/v}"
+          if [[ -n "$RELEASE_VERSION" ]]; then
+            VER="$RELEASE_VERSION"
             MINOR="${VER%.*}"
             MAJOR="${VER%%.*}"
             BASE_TAG="$VER"
@@ -116,18 +169,21 @@ jobs:
             add_tag "$MINOR"
             add_tag "$MAJOR"
             add_tag "latest"
-          elif [[ "$REF" == refs/heads/main ]]; then
-            BASE_TAG="latest"
-            BASE_PULL_TAG="latest"
-            add_tag "$VERSION"
-            add_tag "latest"
           elif [[ "$REF" == refs/heads/develop ]]; then
             BASE_TAG="staging"
             BASE_PULL_TAG="staging"
             add_tag "${VERSION}.${BUILD}"
             add_tag "staging"
+          elif [[ "$EVENT_NAME" == "pull_request" ]]; then
+            BASE_TAG="check-${PR_NUMBER}-${BUILD}"
+            if [[ "$HEAD_REF" == "develop" || "$BASE_REF" == "develop" ]]; then
+              BASE_PULL_TAG="staging"
+            else
+              BASE_PULL_TAG="latest"
+            fi
+            add_tag "pr-${PR_NUMBER}"
           else
-            echo "Unsupported ref: $REF" >&2
+            echo "Unsupported workflow mode: event=$EVENT_NAME ref=$REF" >&2
             exit 1
           fi
 
@@ -143,13 +199,15 @@ jobs:
 
   build-base:
     needs: [detect, version]
-    if: needs.detect.outputs.base == 'true'
+    if: needs.detect.outputs.release == 'true' || needs.detect.outputs.base == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.checkout_ref || github.ref }}
 
       - uses: ./.github/actions/docker-build
         with:
@@ -160,63 +218,7 @@ jobs:
           ghcr_owner: ${{ github.repository_owner }}
           dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}
           dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}
-
-  # Release tags list python-base:<version>; when base inputs did not change,
-  # point version tags at the already-published moving tag without rebuilding.
-  retag-base:
-    needs: [detect, version, build-base]
-    if: >-
-      ${{ !cancelled()
-          && needs.detect.outputs.release == 'true'
-          && needs.detect.outputs.base != 'true'
-          && needs['build-base'].result != 'failure' }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ github.token }}
-
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Retag python-base for release
-        shell: bash
-        env:
-          GHCR_OWNER: ${{ github.repository_owner }}
-          DH_USER: ${{ secrets.DOCKERHUB_USERNAME }}
-          REF: ${{ github.ref }}
-          BASE_PULL_TAG: ${{ needs.version.outputs.base_pull_tag }}
-        run: |
-          set -euo pipefail
-
-          VER="${REF#refs/tags/v}"
-          MINOR="${VER%.*}"
-          MAJOR="${VER%%.*}"
-
-          retag() {
-            local registry="$1" image="$2"
-            local source="${registry}/${image}:${BASE_PULL_TAG}"
-            docker buildx imagetools create \
-              -t "${registry}/${image}:${VER}" \
-              -t "${registry}/${image}:${MINOR}" \
-              -t "${registry}/${image}:${MAJOR}" \
-              "${source}"
-          }
-
-          retag "ghcr.io/${GHCR_OWNER}" "python-base"
-          retag "docker.io/${DH_USER}" "python-base"
+          push: ${{ needs.detect.outputs.publish }}
 
   build-bot:
     needs: [detect, version, build-base]
@@ -235,6 +237,8 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.checkout_ref || github.ref }}
 
       - uses: ./.github/actions/docker-build
         with:
@@ -245,7 +249,8 @@ jobs:
           ghcr_owner: ${{ github.repository_owner }}
           dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}
           dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}
-          base_image: ghcr.io/${{ github.repository_owner }}/python-base:${{ needs.build-base.result == 'success' && needs.version.outputs.base_tag || needs.version.outputs.base_pull_tag }}
+          push: ${{ needs.detect.outputs.publish }}
+          base_image: ghcr.io/${{ github.repository_owner }}/python-base:${{ needs.detect.outputs.publish == 'true' && needs.build-base.result == 'success' && needs.version.outputs.base_tag || needs.version.outputs.base_pull_tag }}
 
   build-support-bot:
     needs: [detect, version]
@@ -259,6 +264,8 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.checkout_ref || github.ref }}
 
       - uses: ./.github/actions/docker-build
         with:
@@ -269,6 +276,7 @@ jobs:
           ghcr_owner: ${{ github.repository_owner }}
           dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}
           dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}
+          push: ${{ needs.detect.outputs.publish }}
 
   build-dashboard:
     needs: [detect, version, build-base]
@@ -287,6 +295,8 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.checkout_ref || github.ref }}
 
       - uses: ./.github/actions/docker-build
         with:
@@ -297,7 +307,8 @@ jobs:
           ghcr_owner: ${{ github.repository_owner }}
           dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}
           dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}
-          base_image: ghcr.io/${{ github.repository_owner }}/python-base:${{ needs.build-base.result == 'success' && needs.version.outputs.base_tag || needs.version.outputs.base_pull_tag }}
+          push: ${{ needs.detect.outputs.publish }}
+          base_image: ghcr.io/${{ github.repository_owner }}/python-base:${{ needs.detect.outputs.publish == 'true' && needs.build-base.result == 'success' && needs.version.outputs.base_tag || needs.version.outputs.base_pull_tag }}
 
   build-frontend:
     needs: [detect, version]
@@ -311,6 +322,8 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.checkout_ref || github.ref }}
 
       - uses: ./.github/actions/docker-build
         with:
@@ -321,6 +334,7 @@ jobs:
           ghcr_owner: ${{ github.repository_owner }}
           dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}
           dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}
+          push: ${{ needs.detect.outputs.publish }}
 
   build-miniapp:
     needs: [detect, version, build-base]
@@ -339,6 +353,8 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.checkout_ref || github.ref }}
 
       - uses: ./.github/actions/docker-build
         with:
@@ -349,4 +365,5 @@ jobs:
           ghcr_owner: ${{ github.repository_owner }}
           dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}
           dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}
-          base_image: ghcr.io/${{ github.repository_owner }}/python-base:${{ needs.build-base.result == 'success' && needs.version.outputs.base_tag || needs.version.outputs.base_pull_tag }}
+          push: ${{ needs.detect.outputs.publish }}
+          base_image: ghcr.io/${{ github.repository_owner }}/python-base:${{ needs.detect.outputs.publish == 'true' && needs.build-base.result == 'success' && needs.version.outputs.base_tag || needs.version.outputs.base_pull_tag }}
