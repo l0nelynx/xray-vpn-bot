@@ -7,6 +7,7 @@ const STATUS_KEYS: Record<string, string> = {
   open: "tickets.status.open",
   in_progress: "tickets.status.inProgress",
   closed: "tickets.status.closed",
+  waiting_user: "tickets.status.waitingUser",
 };
 
 const STATUS_VARIANT: Record<string, "default" | "warning" | "secondary"> = {
@@ -41,7 +42,7 @@ export default function TicketListItem({ ticket, onClick }: Props) {
   return (
     <Card className="mb-3 cursor-pointer" onClick={onClick}>
       <CardContent className="p-4">
-        <div className="text-base font-semibold text-foreground">{ticket.subject}</div>
+        <div className="text-base font-semibold text-foreground">{ticket.subject}{ticket.unread && <Badge className="ml-2">{t("support.newReply")}</Badge>}</div>
         <p
           className="text-muted-foreground mt-1 mb-2 overflow-hidden"
           style={{
@@ -50,7 +51,7 @@ export default function TicketListItem({ ticket, onClick }: Props) {
             WebkitBoxOrient: "vertical",
           }}
         >
-          {ticket.last_message_preview}
+          {ticket.last_sender === "admin" ? `${t("supportTicket.sender.admin")}: ` : ""}{ticket.last_message_preview}
         </p>
         <div className="flex justify-between items-center">
           <Badge variant={STATUS_VARIANT[ticket.status] || "secondary"}>

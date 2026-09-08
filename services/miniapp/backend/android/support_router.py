@@ -10,12 +10,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
-from common_db.support_delivery import send_notification
+from common_db.support_delivery import send_notification, ticket_keyboard
 from common_db.support_workflow import metadata, record_message
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
 
-from ..config import get_admin_bot_token, get_admin_id, get_support_uploads_dir
+from ..config import get_config, get_admin_bot_token, get_admin_id, get_support_uploads_dir
 from ..database.models import SupportMessage, SupportTicket
 from ..database.session import async_session
 from ..schemas.support import AttachmentOut, MessageItem, TicketCreate, TicketDetail, TicketSummary
@@ -48,7 +48,7 @@ async def _notify_admin(ticket_id: int, display_name: str | None, subject: str) 
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     try:
         async with httpx.AsyncClient(timeout=NOTIFY_TIMEOUT) as client:
-            await send_notification(client, url, {"chat_id": admin_id, "text": text})
+            await send_notification(client, url, {"chat_id": admin_id, "text": text, **ticket_keyboard(get_config(), ticket_id, admin=True)})
     except Exception as e:
         logger.warning("admin notification failed for ticket %s: %s", ticket_id, e)
 
@@ -73,7 +73,7 @@ async def _notify_admin_reply(
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     try:
         async with httpx.AsyncClient(timeout=NOTIFY_TIMEOUT) as client:
-            await send_notification(client, url, {"chat_id": admin_id, "text": body})
+            await send_notification(client, url, {"chat_id": admin_id, "text": body, **ticket_keyboard(get_config(), ticket_id, admin=True)})
     except Exception as e:
         logger.warning("admin reply notification failed for ticket %s: %s", ticket_id, e)
 
@@ -277,3 +277,6 @@ async def get_attachment(
 
 from ..support_actions import register_actions
 register_actions(router, deps.get_current_user, telegram=False, notify=_notify_admin_reply)
+
+from ..support_create import register_creation
+register_creation(router, deps.get_current_user, telegram=False, notify=_notify_admin)

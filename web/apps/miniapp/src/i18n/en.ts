@@ -1,6 +1,13 @@
 import type { Messages } from "./types";
 
+
 export const en: Messages = {
+  "support.refresh": "Retry",
+  "support.active": "Active",
+  "support.archive": "Closed",
+  "support.newReply": "New reply",
+  "tickets.status.waitingUser": "Your reply needed",
+
   // tabs
   "tabs.home": "Home",
   "tabs.devices": "Devices",

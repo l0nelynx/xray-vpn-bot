@@ -1,6 +1,13 @@
 import type { Messages } from "./types";
 
+
 export const ru: Messages = {
+  "support.refresh": "Повторить",
+  "support.active": "Активные",
+  "support.archive": "Закрытые",
+  "support.newReply": "Новый ответ",
+  "tickets.status.waitingUser": "Ждём вашего ответа",
+
   // tabs
   "tabs.home": "Главная",
   "tabs.devices": "Устройства",

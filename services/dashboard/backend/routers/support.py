@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime, timezone
 from html import escape
-from common_db.support_delivery import send_notification
+from common_db.support_delivery import send_notification, ticket_keyboard
 from pathlib import Path
 
 import httpx
@@ -13,7 +13,7 @@ from common_db.support_workflow import metadata, record_message
 from sqlalchemy.orm import selectinload
 
 from ..auth import get_current_user
-from ..config import get_bot_token, get_support_uploads_dir
+from ..config import get_config, get_bot_token, get_support_uploads_dir
 from ..database.models import SupportTicket, SupportMessage, User
 from ..database.session import async_session
 
@@ -216,7 +216,7 @@ async def reply_ticket(
                 async with httpx.AsyncClient(timeout=10.0) as client:
                     await send_notification(client,
                         f"https://api.telegram.org/bot{token}/sendMessage",
-                        {"chat_id": tg_id, "text": notify, "parse_mode": "HTML"},
+                        {"chat_id": tg_id, "text": notify, "parse_mode": "HTML", **ticket_keyboard(get_config(), ticket_id)},
                     )
             except Exception:
                 logger.warning("support notification could not be sent for ticket %s", ticket_id)

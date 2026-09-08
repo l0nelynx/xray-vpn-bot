@@ -1,5 +1,6 @@
 import { BookOpen, ChevronRight, Inbox, LifeBuoy, Link2, MessageSquarePlus } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useSupportPolling } from "@xray/ui/hooks/useSupportPolling";
 import { useNavigate } from "react-router";
 import { Alert, AlertTitle } from "@xray/ui/components/alert";
 import { Button } from "@xray/ui/components/button";
@@ -11,15 +12,8 @@ import { useT } from "../i18n/LocaleContext";
 export default function SupportPage() {
   const navigate = useNavigate();
   const { t } = useT();
-  const [tickets, setTickets] = useState<TicketSummary[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    api
-      .get<TicketSummary[]>("/support/tickets")
-      .then(setTickets)
-      .catch((e) => setError(e?.detail || String(e)));
-  }, []);
+  const [showClosed, setShowClosed] = useState(false);
+  const { data: tickets, error, reload } = useSupportPolling<TicketSummary[]>("support-list", () => api.get("/support/tickets"));
 
   return (
     <div className="page">
@@ -34,7 +28,7 @@ export default function SupportPage() {
         <button className="home-row" onClick={() => navigate("/onboarding?replay=1")}>
           <span className="home-row__icon"><BookOpen /></span><span><strong>{t("support.replayOnboarding")}</strong><small>{t("support.replayOnboardingBody")}</small></span><ChevronRight />
         </button>
-        <button className="home-row" onClick={() => navigate("/support/new")}>
+        <button className="home-row" onClick={() => navigate("/support/new?category=connection")}>
           <span className="home-row__icon"><LifeBuoy /></span><span><strong>{t("support.problem")}</strong><small>{t("support.problemBody")}</small></span><ChevronRight />
         </button>
       </div>
@@ -49,7 +43,7 @@ export default function SupportPage() {
 
       {error && (
         <Alert variant="destructive" className="mb-4">
-          <AlertTitle>{error}</AlertTitle>
+          <AlertTitle>{error}</AlertTitle><Button variant="ghost" onClick={() => void reload()}>{t("support.refresh")}</Button>
         </Alert>
       )}
 
@@ -68,8 +62,9 @@ export default function SupportPage() {
         </div>
       )}
 
+      {tickets && <div className="flex gap-2 mb-4"><Button size="sm" variant={!showClosed ? "default" : "outline"} onClick={() => setShowClosed(false)}>{t("support.active")} ({tickets.filter(t => t.status !== "closed").length})</Button><Button size="sm" variant={showClosed ? "default" : "outline"} onClick={() => setShowClosed(true)}>{t("support.archive")} ({tickets.filter(t => t.status === "closed").length})</Button></div>}
       {tickets &&
-        tickets.map((ticket) => (
+        tickets.filter(ticket => showClosed ? ticket.status === "closed" : ticket.status !== "closed").map((ticket) => (
           <TicketListItem
             key={ticket.id}
             ticket={ticket}
