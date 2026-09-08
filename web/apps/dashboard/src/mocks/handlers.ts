@@ -1,4 +1,4 @@
-import { http, HttpResponse, type HttpHandler } from "msw";
+import { passthrough, http, HttpResponse, type HttpHandler } from "msw";
 import type { ApiAlertSettings, ManagedSubscription } from "../api/types";
 
 const API = "/bot/dashboard/api";
@@ -269,6 +269,7 @@ const menuTree = [
 ];
 
 export const handlers: HttpHandler[] = [
+  http.all(`${API}/support/*`, () => passthrough()),
   // ── Auth ──────────────────────────────────────────────
   http.post(`${API}/auth/login`, async ({ request }) => {
     const body = (await request.json()) as { login?: string; password?: string };

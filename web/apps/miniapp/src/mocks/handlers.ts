@@ -1,4 +1,4 @@
-import { http, HttpResponse, type HttpHandler } from "msw";
+import { passthrough, http, HttpResponse, type HttpHandler } from "msw";
 
 const API = "/bot/miniapp/api";
 
@@ -132,6 +132,7 @@ const tickets = [
 ];
 
 export const handlers: HttpHandler[] = [
+  http.all(`${API}/support/*`, () => passthrough()),
   http.get(`${API}/me`, ({ request }) => {
     const { name: scenario, language } = scenarioFrom(request);
     const empty = (scenario === "onboarding" && !mockHasEmail) || scenario === "empty";

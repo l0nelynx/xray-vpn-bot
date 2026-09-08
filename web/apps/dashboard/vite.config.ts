@@ -4,7 +4,7 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { VitePWA } from "vite-plugin-pwa";
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
     tailwindcss(),
@@ -32,10 +32,11 @@ export default defineConfig({
   base: "/bot/dashboard/",
   server: {
     proxy: {
+      ...(mode === "mock" ? { "/bot/dashboard/api/support": "http://127.0.0.1:8790" } : {}),
       "/bot/dashboard/api": "http://localhost:8000",
     },
   },
   build: {
     outDir: "dist",
   },
-});
+}));

@@ -29,5 +29,8 @@
   },
   "devDependencies": {
     "playwright": "^1.52.0"
+  },
+  "scripts": {
+    "dev:support": "node scripts/start-support-preview.mjs"
   }
 }
