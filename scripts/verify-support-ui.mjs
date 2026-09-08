@@ -10,7 +10,7 @@ const errors = [];
 dashboard.on("pageerror", (e) => errors.push(e.message));
 await dashboard.goto("http://127.0.0.1:5173/bot/dashboard/support?ticket=1");
 await dashboard
-  .getByRole("textbox", { name: "Ответ пользователю", exact: true })
+  .getByRole("textbox", { name: "Reply to customer", exact: true })
   .waitFor();
 fs.mkdirSync("docs/screenshots/support-workflow", { recursive: true });
 await dashboard.screenshot({
@@ -40,24 +40,24 @@ await mini.screenshot({
 });
 // Draft survives navigation and full reload.
 await dashboard
-  .getByRole("textbox", { name: "Ответ пользователю", exact: true })
+  .getByRole("textbox", { name: "Reply to customer", exact: true })
   .fill("QA draft preserved");
 await dashboard.reload();
 await dashboard
-  .getByRole("textbox", { name: "Ответ пользователю", exact: true })
+  .getByRole("textbox", { name: "Reply to customer", exact: true })
   .waitFor();
 if (
   (await dashboard
-    .getByRole("textbox", { name: "Ответ пользователю", exact: true })
+    .getByRole("textbox", { name: "Reply to customer", exact: true })
     .inputValue()) !== "QA draft preserved"
 )
   throw new Error("Lost dashboard draft");
 await mini.goto("http://127.0.0.1:5174/bot/miniapp/support/1");
 await mini.getByRole("textbox").waitFor();
 await dashboard
-  .getByRole("textbox", { name: "Ответ пользователю", exact: true })
+  .getByRole("textbox", { name: "Reply to customer", exact: true })
   .fill("QA live reply");
-await dashboard.getByRole("button", { name: "Ответить", exact: true }).click();
+await dashboard.getByRole("button", { name: "Reply", exact: true }).click();
 await mini
   .getByText("QA live reply", { exact: true })
   .waitFor({ timeout: 15000 });
@@ -67,12 +67,12 @@ await dashboard
   .locator(".support-messages")
   .getByText("QA user reply", { exact: true })
   .waitFor({ timeout: 15000 });
-await dashboard.getByRole("button", { name: "Заметка", exact: true }).click();
+await dashboard.getByRole("button", { name: "Note", exact: true }).click();
 await dashboard
-  .getByRole("textbox", { name: "Внутренняя заметка", exact: true })
+  .getByRole("textbox", { name: "Internal note", exact: true })
   .fill("QA private note");
 await dashboard
-  .getByRole("button", { name: "Сохранить заметку", exact: true })
+  .getByRole("button", { name: "Save note", exact: true })
   .click();
 await dashboard.getByText("QA private note", { exact: true }).waitFor();
 await mini.reload();
@@ -80,13 +80,13 @@ await mini.getByRole("textbox").waitFor();
 if (await mini.getByText("QA private note", { exact: true }).count())
   throw new Error("Private note leaked");
 await dashboard
-  .getByRole("button", { name: "Ответ пользователю", exact: true })
+  .getByRole("button", { name: "Reply to customer", exact: true })
   .click();
 await dashboard
-  .getByRole("textbox", { name: "Ответ пользователю", exact: true })
+  .getByRole("textbox", { name: "Reply to customer", exact: true })
   .fill("QA resolved");
 await dashboard
-  .getByRole("button", { name: "Ответить и закрыть", exact: true })
+  .getByRole("button", { name: "Reply and close", exact: true })
   .click();
 await mini
   .getByText("Request closed", { exact: true })

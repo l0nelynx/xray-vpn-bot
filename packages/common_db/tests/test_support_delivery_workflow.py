@@ -24,6 +24,8 @@ def test_links_are_scoped_to_ticket():
     config = {"miniapp_url": "https://vpn.example/bot/miniapp/"}
     user = ticket_keyboard(config, 123)["reply_markup"]["inline_keyboard"][0][0]
     admin = ticket_keyboard(config, 123, admin=True)["reply_markup"]["inline_keyboard"][0][0]
+    assert admin["text"] == "Open ticket"
+    assert user["text"] == "Открыть обращение"
     assert user["web_app"]["url"] == "https://vpn.example/bot/miniapp/support/123"
     assert admin["url"] == "https://vpn.example/bot/dashboard/support?ticket=123"
     assert ticket_keyboard({}, 123) == {}

@@ -29,27 +29,27 @@ import ConfirmButton from "../components/ConfirmButton";
 import "./support.css";
 
 const labels: Record<string, string> = {
-  open: "Нужен ответ",
-  in_progress: "Проверяем",
-  waiting_user: "Ждём пользователя",
-  closed: "Закрыт",
+  open: "Needs reply",
+  in_progress: "Investigating",
+  waiting_user: "Waiting for customer",
+  closed: "Closed",
 };
 const categories: Record<string, string> = {
-  connection: "Подключение",
-  speed: "Скорость",
-  payment: "Оплата",
-  subscription: "Подписка",
-  other: "Другое",
+  connection: "Connection",
+  speed: "Speed",
+  payment: "Payment",
+  subscription: "Subscription",
+  other: "Other",
 };
 const queues = [
-  ["needs_reply", "Нужен ответ"],
-  ["waiting_user", "Ждём пользователя"],
-  ["active", "Все активные"],
-  ["closed", "Закрытые"],
-  ["all", "Все"],
+  ["needs_reply", "Needs reply"],
+  ["waiting_user", "Waiting for customer"],
+  ["active", "All active"],
+  ["closed", "Closed"],
+  ["all", "All"],
 ];
 const date = (value: string) =>
-  new Date(value).toLocaleString("ru-RU", {
+  new Date(value).toLocaleString("en-GB", {
     day: "numeric",
     month: "short",
     hour: "2-digit",
@@ -62,10 +62,10 @@ function waiting(value?: string | null) {
     Math.floor((Date.now() - new Date(value).getTime()) / 60000),
   );
   return minutes < 60
-    ? `${minutes} мин`
+    ? `${minutes} min`
     : minutes < 1440
-      ? `${Math.floor(minutes / 60)} ч`
-      : `${Math.floor(minutes / 1440)} д`;
+      ? `${Math.floor(minutes / 60)} h`
+      : `${Math.floor(minutes / 1440)} d`;
 }
 function Thumb({ item }: { item: SupportAttachmentOut }) {
   const url = useAuthedImage(item.url);
@@ -78,7 +78,7 @@ function Thumb({ item }: { item: SupportAttachmentOut }) {
       />
     </a>
   ) : (
-    <span className="text-xs text-muted-foreground">Фото загружается…</span>
+    <span className="text-xs text-muted-foreground">Loading photo…</span>
   );
 }
 type QueueResult = {
@@ -116,28 +116,24 @@ export default function SupportPage() {
     setParams(next);
   };
   return (
-    <div className="support-workspace">
+    <div className={`support-workspace ${id ? "ticket-selected" : ""}`}>
       <div className="flex items-start justify-between gap-3 mb-5">
         <div>
-          <h1 className="text-xl font-semibold">Поддержка</h1>
+          <h1 className="text-xl font-semibold">Support</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            {data?.counts.needs_reply ?? "—"} обращений ждут вашего ответа
+            {data?.counts.needs_reply ?? "—"} tickets need your reply
           </p>
         </div>
         <Button
           variant="outline"
           size="sm"
           onClick={() => void reload()}
-          aria-label="Обновить"
+          aria-label="Refresh"
         >
           <RefreshCw size={16} />
         </Button>
       </div>
-      <div
-        className="support-queues"
-        role="tablist"
-        aria-label="Очереди обращений"
-      >
+      <div className="support-queues" role="tablist" aria-label="Ticket queues">
         {queues.map(([key, title]) => (
           <button
             key={key}
@@ -156,7 +152,7 @@ export default function SupportPage() {
       </div>
       {error && (
         <div role="alert" className="text-destructive text-sm mb-2">
-          Не удалось обновить обращения. {error}
+          Could not refresh tickets. {error}
         </div>
       )}
       <div className={`support-columns ${id ? "has-ticket" : ""}`}>
@@ -168,15 +164,15 @@ export default function SupportPage() {
                 size={15}
               />
               <Input
-                aria-label="Поиск обращений"
-                placeholder="Тема, #номер, username или Telegram ID"
+                aria-label="Search tickets"
+                placeholder="Subject, #ticket, username or Telegram ID"
                 className="pl-9"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
             <select
-              aria-label="Сортировка"
+              aria-label="Sort tickets"
               className="support-select w-full"
               disabled={queue === "needs_reply"}
               value={sort}
@@ -187,23 +183,23 @@ export default function SupportPage() {
             >
               <option value="updated_at">
                 {queue === "needs_reply"
-                  ? "Сначала самое долгое ожидание"
-                  : "По последней активности"}
+                  ? "Longest waiting first"
+                  : "Last activity"}
               </option>
-              <option value="created_at">Сначала новые обращения</option>
-              <option value="id">По номеру</option>
+              <option value="created_at">Newest tickets first</option>
+              <option value="id">Ticket number</option>
             </select>
           </div>
           <div className="support-inbox-list">
             {!data && !error && (
-              <p className="p-5 text-muted-foreground">Загружаем обращения…</p>
+              <p className="p-5 text-muted-foreground">Loading tickets…</p>
             )}
             {data?.items.length === 0 && (
               <div className="p-8 text-center text-muted-foreground">
                 <Check className="mx-auto mb-3" />
                 {query
-                  ? "Ничего не найдено. Измените запрос."
-                  : "В этой очереди нет обращений"}
+                  ? "No results. Try a different search."
+                  : "No tickets in this queue"}
               </div>
             )}
             {data?.items.map((ticket) => (
@@ -217,17 +213,15 @@ export default function SupportPage() {
                     #{ticket.id} ·{" "}
                     {ticket.username
                       ? `@${ticket.username}`
-                      : ticket.tg_id || "Пользователь"}
+                      : ticket.tg_id || "Customer"}
                   </span>
-                  {ticket.unread && (
-                    <span className="support-unread">Новое</span>
-                  )}
+                  {ticket.unread && <span className="support-unread">New</span>}
                 </div>
                 <div className="font-medium mt-1 truncate">
                   {ticket.subject}
                 </div>
                 <p className="text-sm text-muted-foreground line-clamp-2 mt-1">
-                  {ticket.last_sender === "admin" ? "Вы: " : ""}
+                  {ticket.last_sender === "admin" ? "You: " : ""}
                   {ticket.last_message_preview}
                 </p>
                 <div className="flex justify-between gap-2 mt-3 text-xs">
@@ -240,13 +234,13 @@ export default function SupportPage() {
                     }
                   >
                     {ticket.status === "open" || ticket.status === "in_progress"
-                      ? `Ждёт ${waiting(ticket.waiting_since)}`
+                      ? `Waiting ${waiting(ticket.waiting_since)}`
                       : date(ticket.updated_at)}
                   </span>
                 </div>
                 {ticket.assignee && (
                   <div className="text-xs text-muted-foreground mt-1">
-                    Ответственный: {ticket.assignee}
+                    Assigned to: {ticket.assignee}
                   </div>
                 )}
               </button>
@@ -259,7 +253,7 @@ export default function SupportPage() {
               disabled={page === 1}
               onClick={() => setPage(page - 1)}
             >
-              Назад
+              Previous
             </Button>
             <span>
               {page} / {Math.max(1, Math.ceil((data?.total || 0) / 20))}
@@ -270,7 +264,7 @@ export default function SupportPage() {
               disabled={page * 20 >= (data?.total || 0)}
               onClick={() => setPage(page + 1)}
             >
-              Далее
+              Next
             </Button>
           </div>
         </aside>
@@ -284,8 +278,10 @@ export default function SupportPage() {
         ) : (
           <div className="support-empty">
             <MessageSquare size={32} />
-            <p>Выберите обращение</p>
-            <small>Переписка и данные пользователя появятся здесь</small>
+            <p>Select a ticket</p>
+            <small>
+              The conversation and customer details will appear here
+            </small>
           </div>
         )}
       </div>
@@ -309,6 +305,22 @@ function Conversation({
   } = useSupportPolling<SupportTicketDetail>(String(id), () =>
     api.get(`/support/tickets/${id}`),
   );
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    const update = () =>
+      document.documentElement.style.setProperty(
+        "--dashboard-support-height",
+        `${viewport?.height || window.innerHeight}px`,
+      );
+    update();
+    viewport?.addEventListener("resize", update);
+    return () => {
+      viewport?.removeEventListener("resize", update);
+      document.documentElement.style.removeProperty(
+        "--dashboard-support-height",
+      );
+    };
+  }, []);
   const [reply, setReply] = useSupportDraft(`dashboard:${id}:reply`);
   const [note, setNote] = useSupportDraft(`dashboard:${id}:note`);
   const [internal, setInternal] = useState(false);
@@ -393,13 +405,13 @@ function Conversation({
       <section className="p-5">
         <Button variant="ghost" onClick={onClose}>
           <ArrowLeft size={16} />
-          Назад
+          Previous
         </Button>
         <p role={error ? "alert" : undefined}>
-          {error || "Загружаем переписку…"}
+          {error || "Loading conversation…"}
         </p>
         <Button variant="outline" onClick={() => void reload()}>
-          Повторить
+          Retry
         </Button>
       </section>
     );
@@ -410,7 +422,7 @@ function Conversation({
           <Button
             variant="ghost"
             size="icon"
-            aria-label="Закрыть обращение на экране"
+            aria-label="Back to inbox"
             onClick={onClose}
           >
             <ArrowLeft size={18} />
@@ -424,12 +436,12 @@ function Conversation({
           <Button
             variant="ghost"
             size="icon"
-            aria-label="Скопировать ссылку"
+            aria-label="Copy ticket link"
             onClick={() =>
               navigator.clipboard
                 .writeText(location.href)
-                .then(() => toast.success("Ссылка скопирована"))
-                .catch(() => toast.error("Не удалось скопировать ссылку"))
+                .then(() => toast.success("Link copied"))
+                .catch(() => toast.error("Could not copy the link"))
             }
           >
             <Copy size={16} />
@@ -437,7 +449,7 @@ function Conversation({
         </div>
         <div className="flex flex-wrap items-center gap-2 mt-3">
           <select
-            aria-label="Статус обращения"
+            aria-label="Ticket status"
             className="support-select"
             disabled={busy}
             value={ticket.status}
@@ -465,17 +477,17 @@ function Conversation({
               )
             }
           >
-            {ticket.assignee ? `Снять: ${ticket.assignee}` : "Взять в работу"}
+            {ticket.assignee ? `Unassign: ${ticket.assignee}` : "Assign to me"}
           </Button>
           <Button size="sm" variant="ghost" onClick={() => setUserOpen(true)}>
             <User size={14} />
-            {ticket.username || ticket.tg_id || "Пользователь"}
+            {ticket.username || ticket.tg_id || "Customer"}
           </Button>
         </div>
         {Object.keys(ticket.context || {}).length > 0 && (
           <details className="mt-3 text-xs text-muted-foreground">
             <summary className="cursor-pointer">
-              Устройство, подписка и платёж
+              Device, subscription and payment
             </summary>
             <div className="grid gap-1 mt-2">
               {Object.entries(ticket.context || {}).map(([key, value]) => (
@@ -483,10 +495,10 @@ function Conversation({
                   <strong>
                     {(
                       {
-                        platform: "Устройство",
-                        subscription: "Подписка",
-                        payment: "Платёж",
-                        language: "Язык",
+                        platform: "Device",
+                        subscription: "Subscription",
+                        payment: "Payment",
+                        language: "Language",
                       } as Record<string, string>
                     )[key] || key}
                     :{" "}
@@ -504,7 +516,7 @@ function Conversation({
       </header>
       {error && (
         <div role="alert" className="text-xs text-destructive px-4 py-2">
-          Обновление не удалось. Переписка сохранена на экране.
+          Could not refresh. The last loaded conversation is still shown.
         </div>
       )}
       <div
@@ -525,25 +537,25 @@ function Conversation({
             <div className="flex justify-between gap-2 text-xs text-muted-foreground mb-2">
               <span>
                 {m.sender === "note"
-                  ? "Внутренняя заметка"
+                  ? "Internal note"
                   : m.sender === "admin"
-                    ? m.author || "Поддержка"
-                    : "Пользователь"}{" "}
+                    ? m.author || "Support"
+                    : "Customer"}{" "}
                 · {date(m.created_at)}
               </span>
               {m.sender === "admin" && (
                 <ConfirmButton
-                  title="Удалить ответ?"
-                  description="Ответ исчезнет из переписки. Уже доставленное Telegram-уведомление останется."
+                  title="Delete this reply?"
+                  description="The reply will be removed from this conversation. Telegram notifications already delivered will remain."
                   destructive
-                  confirmText="Удалить"
+                  confirmText="Delete"
                   onConfirm={() =>
                     mutate(() =>
                       api.delete(`/support/tickets/${id}/messages/${m.id}`),
                     )
                   }
                 >
-                  <button aria-label="Удалить ответ" disabled={busy}>
+                  <button aria-label="Delete reply" disabled={busy}>
                     <X size={12} />
                   </button>
                 </ConfirmButton>
@@ -565,7 +577,7 @@ function Conversation({
           className="mx-auto"
           onClick={jump}
         >
-          Новые сообщения ↓
+          New messages ↓
         </Button>
       )}
       <footer className={`support-composer ${internal ? "is-note" : ""}`}>
@@ -579,7 +591,7 @@ function Conversation({
               setFiles([]);
             }}
           >
-            Ответ пользователю
+            Reply to customer
           </Button>
           <Button
             size="sm"
@@ -590,19 +602,20 @@ function Conversation({
               setFiles([]);
             }}
           >
-            Заметка
+            Note
           </Button>
         </div>
         {ticket.status === "closed" && !internal ? (
           <div className="text-sm text-muted-foreground">
-            Обращение закрыто. Чтобы ответить, измените статус на «Нужен ответ».
+            This ticket is closed. Change its status to “Needs reply” to
+            respond.
           </div>
         ) : (
           <>
             {!internal && (
               <details className="mb-2 text-xs">
                 <summary className="cursor-pointer text-muted-foreground">
-                  Шаблоны ответов
+                  Reply templates
                 </summary>
                 <div className="space-y-1 max-h-32 overflow-auto py-2">
                   {templates.map((value, i) => (
@@ -617,7 +630,7 @@ function Conversation({
                         {value}
                       </button>
                       <button
-                        aria-label="Удалить шаблон"
+                        aria-label="Delete template"
                         onClick={() => {
                           const next = templates.filter((_, j) => i !== j);
                           setTemplates(next);
@@ -643,24 +656,22 @@ function Conversation({
                       "support-templates",
                       JSON.stringify(next),
                     );
-                    toast.success("Ответ сохранён как шаблон в этом браузере");
+                    toast.success("Reply saved as a template in this browser");
                   }}
                 >
-                  Сохранить текущий ответ
+                  Save current reply
                 </Button>
               </details>
             )}
             <Textarea
-              aria-label={
-                internal ? "Внутренняя заметка" : "Ответ пользователю"
-              }
+              aria-label={internal ? "Internal note" : "Reply to customer"}
               disabled={busy}
               value={text}
               onChange={(e) => setText(e.target.value)}
               rows={3}
               maxLength={4000}
               placeholder={
-                internal ? "Видно только администраторам" : "Напишите ответ…"
+                internal ? "Only administrators can see this" : "Write a reply…"
               }
               onKeyDown={(e) => {
                 if (
@@ -674,16 +685,14 @@ function Conversation({
               }}
             />
             <div className="flex justify-between text-xs text-muted-foreground my-2">
-              <span>
-                {text ? "Черновик сохранён" : "Ctrl / ⌘ + Enter — отправить"}
-              </span>
+              <span>{text ? "Draft saved" : "Ctrl / ⌘ + Enter to send"}</span>
               <span>{text.length}/4000</span>
             </div>
             <SupportImages
               files={files}
               onChange={setFiles}
               onError={toast.error}
-              label="Фото"
+              label="Photo"
               disabled={busy}
             />
             <div className="flex flex-wrap gap-2 mt-3">
@@ -691,11 +700,7 @@ function Conversation({
                 disabled={busy || (!text.trim() && !files.length)}
                 onClick={() => void send()}
               >
-                {busy
-                  ? "Отправляем…"
-                  : internal
-                    ? "Сохранить заметку"
-                    : "Ответить"}
+                {busy ? "Sending…" : internal ? "Save note" : "Reply"}
               </Button>
               {!internal && (
                 <Button
@@ -703,7 +708,7 @@ function Conversation({
                   disabled={busy || (!text.trim() && !files.length)}
                   onClick={() => void send(true)}
                 >
-                  Ответить и закрыть
+                  Reply and close
                 </Button>
               )}
             </div>

@@ -16,7 +16,7 @@ def ticket_keyboard(config, ticket_id, *, admin=False):
     parsed = urlsplit(base)
     path = parsed.path.rstrip("/") + ("/support" if admin else f"/support/{ticket_id}")
     url = urlunsplit((parsed.scheme, parsed.netloc, path, f"ticket={ticket_id}" if admin else "", ""))
-    button = {"text": "Открыть обращение", **({"url": url} if admin else {"web_app": {"url": url}})}
+    button = {"text": "Open ticket" if admin else "Открыть обращение", **({"url": url} if admin else {"web_app": {"url": url}})}
     return {"reply_markup": {"inline_keyboard": [[button]]}}
 
 
