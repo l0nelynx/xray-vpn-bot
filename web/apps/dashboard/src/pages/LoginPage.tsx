@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { Lock, User } from "lucide-react";
 import { Input } from "@xray/ui/components/input";
@@ -18,6 +18,7 @@ import { useBranding } from "../branding";
 export default function LoginPage() {
   const branding = useBranding();
   const navigate = useNavigate();
+  const [params] = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
@@ -30,9 +31,13 @@ export default function LoginPage() {
     }
     setLoading(true);
     try {
-      const res = await api.post<{ access_token: string }>("/auth/login", { login, password });
+      const res = await api.post<{ access_token: string }>("/auth/login", {
+        login,
+        password,
+      });
       setToken(res.access_token);
-      navigate("/", { replace: true });
+      const next = params.get("next") || "/";
+      navigate(/^\/(?!\/|login)/.test(next) ? next : "/", { replace: true });
     } catch {
       toast.error("Invalid credentials");
     } finally {
@@ -45,7 +50,11 @@ export default function LoginPage() {
       <Card className="w-full max-w-sm shadow-sm">
         <CardHeader className="space-y-1 text-center">
           <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl border border-border bg-background">
-            <img src={branding.logo_url} alt="" className="h-full w-full object-contain" />
+            <img
+              src={branding.logo_url}
+              alt=""
+              className="h-full w-full object-contain"
+            />
           </div>
           <CardTitle className="text-xl">{branding.branding_name}</CardTitle>
           <CardDescription>Sign in to your account</CardDescription>

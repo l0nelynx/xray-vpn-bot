@@ -92,7 +92,7 @@ function AppRoutes({
   const showTabs = pathname === "/" || pathname === "/connect" || pathname === "/buy" || pathname === "/support";
 
   return (
-    <div className="app">
+    <div className={`app ${/^\/support\/\d+$/.test(pathname) ? "support-chat-shell" : ""}`}>
       <Routes>
         <Route path="/" element={<HomePage me={data} reload={reload} refresh={refresh} />} />
         <Route path="/buy" element={<BuyMenuPage />} />

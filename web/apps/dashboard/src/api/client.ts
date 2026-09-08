@@ -33,7 +33,10 @@ export const api = createJsonClient({
       clearToken();
       if (!_redirecting) {
         _redirecting = true;
-        window.location.href = "/bot/dashboard/login";
+        const next =
+          window.location.pathname.replace(/^\/bot\/dashboard/, "") +
+          window.location.search;
+        window.location.href = `/bot/dashboard/login?next=${encodeURIComponent(next || "/")}`;
       }
     }
   },

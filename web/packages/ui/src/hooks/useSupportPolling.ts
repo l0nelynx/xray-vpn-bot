@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 /** Quiet background refresh, latest-request wins, refresh on foreground. */
-export function useSupportPolling<T>(key: string, fetcher: () => Promise<T>, interval = 8000) {
+export function useSupportPolling<T>(
+  key: string,
+  fetcher: () => Promise<T>,
+  interval = 8000,
+) {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fetchRef = useRef(fetcher);
@@ -13,10 +17,14 @@ export function useSupportPolling<T>(key: string, fetcher: () => Promise<T>, int
     pending.current = true;
     try {
       const next = await fetchRef.current();
-      if (request === generation.current) { setData(next); setError(null); }
+      if (request === generation.current) {
+        setData(next);
+        setError(null);
+      }
       return next;
     } catch (e) {
-      if (request === generation.current) setError(e instanceof Error ? e.message : String(e));
+      if (request === generation.current)
+        setError(e instanceof Error ? e.message : String(e));
       return null;
     } finally {
       if (request === generation.current) pending.current = false;
@@ -26,7 +34,9 @@ export function useSupportPolling<T>(key: string, fetcher: () => Promise<T>, int
     setData(null);
     setError(null);
     void reload();
-    const refresh = () => { if (!document.hidden && !pending.current) void reload(); };
+    const refresh = () => {
+      if (!document.hidden && !pending.current) void reload();
+    };
     const timer = window.setInterval(refresh, interval);
     window.addEventListener("focus", refresh);
     document.addEventListener("visibilitychange", refresh);

@@ -1,1 +1,155 @@
-.support-queues{display:flex;gap:6px;overflow-x:auto;margin-bottom:16px}.support-queues button{white-space:nowrap;padding:9px 12px;border-radius:8px;color:var(--muted-foreground);font-size:13px}.support-queues button.selected{background:var(--secondary);color:var(--foreground)}.support-queues span{margin-left:8px;font-size:11px;opacity:.7}.support-columns{display:grid;grid-template-columns:330px minmax(0,1fr);height:calc(100dvh - 240px);min-height:600px;border:1px solid var(--border);border-radius:12px;overflow:hidden}.support-inbox{display:flex;flex-direction:column;min-height:0;border-right:1px solid var(--border)}.support-inbox-list{flex:1;overflow:auto}.support-inbox-item{display:block;width:100%;text-align:left;padding:16px;border-bottom:1px solid var(--border);border-left:3px solid transparent}.support-inbox-item:hover{background:var(--accent)}.support-inbox-item.selected{background:var(--secondary);border-left-color:var(--primary)}.support-unread{color:var(--foreground);font-weight:600}.support-conversation{display:flex;flex-direction:column;min-width:0;min-height:0}.support-messages{overflow:auto;flex:1;padding:20px;display:flex;flex-direction:column;gap:12px;min-height:140px;overscroll-behavior:contain}.support-message{max-width:88%;padding:12px 14px;border-radius:12px;background:var(--muted);flex-shrink:0;align-self:flex-start}.support-message.admin{align-self:flex-end;background:var(--secondary);border:1px solid var(--border)}.support-message.note{max-width:100%;width:100%;background:rgba(190,140,30,.09);border:1px dashed rgba(190,140,30,.35)}.support-composer{border-top:1px solid var(--border);padding:14px;background:var(--background);max-height:50%;overflow:auto}.support-composer.is-note{border-top-color:rgba(190,140,30,.5)}.support-empty{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;color:var(--muted-foreground)}.support-select{border:1px solid var(--border);background:var(--background);border-radius:6px;padding:6px 8px;font-size:12px;color:var(--foreground)}@media(max-width:1100px){.support-columns{grid-template-columns:280px minmax(0,1fr)}}@media(max-width:767px){.support-columns{display:block;height:calc(100dvh - 220px);min-height:500px}.support-inbox,.support-conversation{height:100%}.support-columns.has-ticket .support-inbox{display:none}.support-empty{display:none}.support-message{max-width:95%}.support-composer{padding:12px}.support-messages{padding:12px}.support-inbox{border-right:0}}
+.support-queues {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  margin-bottom: 16px;
+}
+.support-queues button {
+  white-space: nowrap;
+  padding: 9px 12px;
+  border-radius: 8px;
+  color: var(--muted-foreground);
+  font-size: 13px;
+}
+.support-queues button.selected {
+  background: var(--secondary);
+  color: var(--foreground);
+}
+.support-queues span {
+  margin-left: 8px;
+  font-size: 11px;
+  opacity: 0.7;
+}
+.support-columns {
+  display: grid;
+  grid-template-columns: 330px minmax(0, 1fr);
+  height: calc(100dvh - 240px);
+  min-height: 600px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.support-inbox {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--border);
+}
+.support-inbox-list {
+  flex: 1;
+  overflow: auto;
+}
+.support-inbox-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+  border-left: 3px solid transparent;
+}
+.support-inbox-item:hover {
+  background: var(--accent);
+}
+.support-inbox-item.selected {
+  background: var(--secondary);
+  border-left-color: var(--primary);
+}
+.support-unread {
+  color: var(--foreground);
+  font-weight: 600;
+}
+.support-conversation {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.support-messages {
+  overflow: auto;
+  flex: 1;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 140px;
+  overscroll-behavior: contain;
+}
+.support-message {
+  max-width: 88%;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--muted);
+  flex-shrink: 0;
+  align-self: flex-start;
+}
+.support-message.admin {
+  align-self: flex-end;
+  background: var(--secondary);
+  border: 1px solid var(--border);
+}
+.support-message.note {
+  max-width: 100%;
+  width: 100%;
+  background: rgba(190, 140, 30, 0.09);
+  border: 1px dashed rgba(190, 140, 30, 0.35);
+}
+.support-composer {
+  border-top: 1px solid var(--border);
+  padding: 14px;
+  background: var(--background);
+  max-height: 50%;
+  overflow: auto;
+}
+.support-composer.is-note {
+  border-top-color: rgba(190, 140, 30, 0.5);
+}
+.support-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 12px;
+  color: var(--muted-foreground);
+}
+.support-select {
+  border: 1px solid var(--border);
+  background: var(--background);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 12px;
+  color: var(--foreground);
+}
+@media (max-width: 1100px) {
+  .support-columns {
+    grid-template-columns: 280px minmax(0, 1fr);
+  }
+}
+@media (max-width: 767px) {
+  .support-columns {
+    display: block;
+    height: calc(100dvh - 220px);
+    min-height: 500px;
+  }
+  .support-inbox,
+  .support-conversation {
+    height: 100%;
+  }
+  .support-columns.has-ticket .support-inbox {
+    display: none;
+  }
+  .support-empty {
+    display: none;
+  }
+  .support-message {
+    max-width: 95%;
+  }
+  .support-composer {
+    padding: 12px;
+  }
+  .support-messages {
+    padding: 12px;
+  }
+  .support-inbox {
+    border-right: 0;
+  }
+}
