@@ -489,6 +489,16 @@ export interface OrderParam {
 }
 
 export interface SupportTicketSummary {
+  category?: string;
+  context?: Record<string, unknown>;
+  last_sender?: string;
+  waiting_since?: string | null;
+  unread?: boolean;
+  last_message_id?: number;
+  can_reopen?: boolean;
+  assignee?: string | null;
+  last_message_preview?: string;
+
   id: number;
   user_id: number;
   tg_id: number | null;
@@ -508,6 +518,7 @@ export interface SupportAttachmentOut {
 }
 
 export interface SupportMessageItem {
+  author?: string | null;
   id: number;
   sender: string;
   text: string;

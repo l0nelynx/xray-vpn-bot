@@ -1,540 +1,107 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router";
+import { ArrowLeft, Check, Copy, MessageSquare, RefreshCw, Search, User, X } from "lucide-react";
 import { toast } from "sonner";
-import type { ColumnDef } from "@tanstack/react-table";
-import { Paperclip, Trash2, User } from "lucide-react";
-import { Card, CardContent } from "@xray/ui/components/card";
 import { Button } from "@xray/ui/components/button";
 import { Input } from "@xray/ui/components/input";
 import { Textarea } from "@xray/ui/components/textarea";
 import { Badge } from "@xray/ui/components/badge";
-import { Spinner } from "@xray/ui/components/spinner";
-import { cn } from "@xray/ui/lib/utils";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@xray/ui/components/sheet";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@xray/ui/components/select";
+import { SupportImages } from "@xray/ui/components/support-images";
+import { useSupportPolling } from "@xray/ui/hooks/useSupportPolling";
+import { useSupportDraft } from "@xray/ui/hooks/useSupportDraft";
 import { api } from "../api/client";
-import {
-  PaginatedResponse,
-  SupportAttachmentOut,
-  SupportTicketDetail,
-  SupportTicketSummary,
-} from "../api/types";
-import useIsMobile from "../hooks/useIsMobile";
+import type { SupportTicketDetail, SupportTicketSummary, SupportAttachmentOut } from "../api/types";
 import { useAuthedImage } from "../hooks/useAuthedImage";
-import MobileSortControl, { type SortOrder } from "../components/MobileSortControl";
 import UserDrawer from "../components/UserDrawer";
-import DataTable from "../components/DataTable";
-import TablePagination from "../components/TablePagination";
 import ConfirmButton from "../components/ConfirmButton";
-import { makeSortToggle } from "../utils/tableChange";
+import "./support.css";
 
-const MAX_IMAGES = 3;
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-
-function AttachmentThumb({ attachment }: { attachment: SupportAttachmentOut }) {
-  const objectUrl = useAuthedImage(attachment.url);
-  if (!objectUrl) {
-    return <div className="h-20 w-20 rounded-md bg-white/5" />;
-  }
-  return (
-    <a href={objectUrl} target="_blank" rel="noreferrer">
-      <img src={objectUrl} className="h-20 w-20 rounded-md object-cover" alt="attachment" />
-    </a>
-  );
-}
-
-const SORT_OPTIONS = [
-  { value: "updated_at", label: "Updated" },
-  { value: "created_at", label: "Created" },
-  { value: "id", label: "ID" },
-  { value: "subject", label: "Subject" },
-  { value: "username", label: "User" },
-  { value: "status", label: "Status" },
-];
-
-type BadgeVariant = "default" | "secondary" | "destructive" | "outline" | "success" | "warning";
-
-const STATUS_VARIANT: Record<string, BadgeVariant> = {
-  open: "default",
-  in_progress: "warning",
-  closed: "outline",
-};
-
-const STATUS_LABEL: Record<string, string> = {
-  open: "Open",
-  in_progress: "In progress",
-  closed: "Closed",
-};
-
-const STATUS_OPTIONS = [
-  { value: "all", label: "All" },
-  { value: "open", label: "Open" },
-  { value: "in_progress", label: "In progress" },
-  { value: "closed", label: "Closed" },
-];
+const labels: Record<string, string> = { open: "Нужен ответ", in_progress: "Проверяем", waiting_user: "Ждём пользователя", closed: "Закрыт" };
+const categories: Record<string, string> = { connection: "Подключение", speed: "Скорость", payment: "Оплата", subscription: "Подписка", other: "Другое" };
+const queues = [["needs_reply", "Нужен ответ"], ["waiting_user", "Ждём пользователя"], ["active", "Все активные"], ["closed", "Закрытые"], ["all", "Все"]];
+const date = (value: string) => new Date(value).toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+function waiting(value?: string | null) { if (!value) return ""; const minutes = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 60000)); return minutes < 60 ? `${minutes} мин` : minutes < 1440 ? `${Math.floor(minutes / 60)} ч` : `${Math.floor(minutes / 1440)} д`; }
+function Thumb({ item }: { item: SupportAttachmentOut }) { const url = useAuthedImage(item.url); return url ? <a href={url} target="_blank" rel="noreferrer"><img className="h-20 w-20 rounded-md object-cover" src={url} alt={item.filename} /></a> : <span className="text-xs text-muted-foreground">Фото загружается…</span>; }
+type QueueResult = { items: SupportTicketSummary[]; total: number; counts: Record<string, number> };
 
 export default function SupportPage() {
-  const isMobile = useIsMobile();
-  const [items, setItems] = useState<SupportTicketSummary[]>([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const perPage = 20;
-  const [status, setStatus] = useState("all");
+  const [params, setParams] = useSearchParams();
+  const id = Number(params.get("ticket")) || null;
+  const [queue, setQueue] = useState("needs_reply");
   const [search, setSearch] = useState("");
+  const [query, setQuery] = useState("");
+  const [page, setPage] = useState(1);
   const [sort, setSort] = useState("updated_at");
-  const [order, setOrder] = useState<SortOrder>("desc");
-  const [loading, setLoading] = useState(false);
-
-  const [openId, setOpenId] = useState<number | null>(null);
-  const [detail, setDetail] = useState<SupportTicketDetail | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [reply, setReply] = useState("");
-  const [pendingImages, setPendingImages] = useState<File[]>([]);
-  const [sending, setSending] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const pendingPreviewUrls = useMemo(
-    () => pendingImages.map((f) => URL.createObjectURL(f)),
-    [pendingImages],
-  );
-  useEffect(() => {
-    return () => pendingPreviewUrls.forEach((u) => URL.revokeObjectURL(u));
-  }, [pendingPreviewUrls]);
-
-  const [userDrawerId, setUserDrawerId] = useState<number | null>(null);
-  const [userOpen, setUserOpen] = useState(false);
-
-  const load = async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({
-        page: String(page),
-        per_page: String(perPage),
-        status,
-        search,
-        sort,
-        order,
-      });
-      const data = await api.get<PaginatedResponse<SupportTicketSummary>>(
-        `/support/tickets?${params}`,
-      );
-      setItems(data.items);
-      setTotal(data.total);
-    } catch (e) {
-      toast.error((e as Error)?.message || "Failed to load tickets");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, status, sort, order]);
-
-  const loadDetail = async (id: number) => {
-    setDetailLoading(true);
-    setDetail(null);
-    try {
-      const d = await api.get<SupportTicketDetail>(`/support/tickets/${id}`);
-      setDetail(d);
-    } catch (e) {
-      toast.error((e as Error)?.message || "Failed to load ticket");
-    } finally {
-      setDetailLoading(false);
-    }
-  };
-
-  const openTicket = (id: number) => {
-    setOpenId(id);
-    setReply("");
-    setPendingImages([]);
-    loadDetail(id);
-  };
-
-  const closeDrawer = () => {
-    setOpenId(null);
-    setDetail(null);
-    setReply("");
-    setPendingImages([]);
-  };
-
-  const onFilesSelected = (files: FileList | null) => {
-    if (!files || files.length === 0) return;
-    const incoming = Array.from(files);
-    const combined = [...pendingImages, ...incoming];
-    if (combined.length > MAX_IMAGES) {
-      toast.error(`Up to ${MAX_IMAGES} images per message`);
-      return;
-    }
-    for (const f of incoming) {
-      if (f.size > MAX_IMAGE_BYTES) {
-        toast.error(`File too large (max 5MB): ${f.name}`);
-        return;
-      }
-    }
-    setPendingImages(combined);
-  };
-
-  const removePendingImage = (idx: number) => {
-    setPendingImages((prev) => prev.filter((_, i) => i !== idx));
-  };
-
-  const sendReply = async () => {
-    if (!openId) return;
-    const text = reply.trim();
-    if (!text && pendingImages.length === 0) return;
-    setSending(true);
-    try {
-      const form = new FormData();
-      form.append("text", text);
-      for (const img of pendingImages) form.append("images", img);
-      await api.postForm(`/support/tickets/${openId}/reply`, form);
-      setReply("");
-      setPendingImages([]);
-      await loadDetail(openId);
-      await load();
-    } catch (e) {
-      toast.error((e as Error)?.message || "Failed to send reply");
-    } finally {
-      setSending(false);
-    }
-  };
-
-  const deleteMessage = async (messageId: number) => {
-    if (!openId) return;
-    try {
-      await api.delete(`/support/tickets/${openId}/messages/${messageId}`);
-      toast.success("Message deleted");
-      await loadDetail(openId);
-      await load();
-    } catch (e) {
-      toast.error((e as Error)?.message || "Failed to delete message");
-    }
-  };
-
-  const changeStatus = async (newStatus: string) => {
-    if (!openId) return;
-    try {
-      await api.patch(`/support/tickets/${openId}`, { status: newStatus });
-      await loadDetail(openId);
-      await load();
-    } catch (e) {
-      toast.error((e as Error)?.message || "Failed to update status");
-    }
-  };
-
-  const onSortChange = makeSortToggle({ sort, order, setSort, setOrder, setPage });
-
-  const columns: ColumnDef<SupportTicketSummary, unknown>[] = [
-    { id: "id", header: "ID", meta: { sortKey: "id" }, cell: ({ row }) => row.original.id },
-    {
-      id: "subject",
-      header: "Subject",
-      meta: { sortKey: "subject" },
-      cell: ({ row }) => <span className="line-clamp-1">{row.original.subject}</span>,
-    },
-    {
-      id: "username",
-      header: "User",
-      meta: { sortKey: "username" },
-      cell: ({ row }) =>
-        row.original.username
-          ? `@${row.original.username}`
-          : row.original.tg_id
-            ? String(row.original.tg_id)
-            : "—",
-    },
-    {
-      id: "status",
-      header: "Status",
-      meta: { sortKey: "status" },
-      cell: ({ row }) => (
-        <Badge variant={STATUS_VARIANT[row.original.status] || "outline"}>
-          {STATUS_LABEL[row.original.status] || row.original.status}
-        </Badge>
-      ),
-    },
-    {
-      id: "created_at",
-      header: "Created",
-      meta: { sortKey: "created_at" },
-      cell: ({ row }) => row.original.created_at,
-    },
-    {
-      id: "updated_at",
-      header: "Updated",
-      meta: { sortKey: "updated_at" },
-      cell: ({ row }) => row.original.updated_at,
-    },
-  ];
-
-  const renderMobileCard = (t: SupportTicketSummary) => {
-    const who = t.username ? `@${t.username}` : t.tg_id ? String(t.tg_id) : "—";
-    return (
-      <Card key={t.id} className="mb-2 cursor-pointer" onClick={() => openTicket(t.id)}>
-        <CardContent className="flex items-start justify-between gap-2 p-3">
-          <div className="min-w-0 flex-1">
-            <div className="mb-1 line-clamp-2 font-semibold text-foreground/85">
-              #{t.id} · {t.subject}
-            </div>
-            <div className="text-xs text-muted-foreground">
-              {who} · {t.updated_at}
-            </div>
-          </div>
-          <Badge variant={STATUS_VARIANT[t.status] || "outline"} className="flex-shrink-0">
-            {STATUS_LABEL[t.status] || t.status}
-          </Badge>
-        </CardContent>
-      </Card>
-    );
-  };
-
-  return (
-    <div>
-      <h1 className="mb-5 text-lg font-semibold text-foreground md:text-xl">Support</h1>
-
-      <div className="mb-4 flex flex-wrap gap-2">
-        <Select
-          value={status}
-          onValueChange={(v: string) => {
-            setPage(1);
-            setStatus(v);
-          }}
-        >
-          <SelectTrigger className="w-full md:w-[160px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {STATUS_OPTIONS.map((o) => (
-              <SelectItem key={o.value} value={o.value}>
-                {o.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Input
-          placeholder="Search by subject"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              setPage(1);
-              load();
-            }
-          }}
-          className="w-full md:w-[280px]"
-        />
-        <Button
-          variant="outline"
-          onClick={() => {
-            setPage(1);
-            load();
-          }}
-          className="w-full md:w-auto"
-        >
-          Refresh
-        </Button>
-      </div>
-
-      {isMobile ? (
-        <>
-          <MobileSortControl
-            options={SORT_OPTIONS}
-            sort={sort}
-            order={order}
-            onChange={(s, o) => {
-              setSort(s);
-              setOrder(o);
-              setPage(1);
-            }}
-          />
-          {loading ? (
-            <div className="py-10 text-center text-muted-foreground">Loading…</div>
-          ) : items.length === 0 ? (
-            <div className="py-10 text-center text-muted-foreground">No tickets</div>
-          ) : (
-            items.map(renderMobileCard)
-          )}
-          <TablePagination page={page} perPage={perPage} total={total} onPageChange={setPage} />
-        </>
-      ) : (
-        <>
-          <DataTable
-            columns={columns}
-            data={items}
-            loading={loading}
-            rowKey={(r) => r.id}
-            sort={sort}
-            order={order}
-            onSortChange={onSortChange}
-            empty="No tickets"
-            onRowClick={(r) => openTicket(r.id)}
-          />
-          <TablePagination page={page} perPage={perPage} total={total} onPageChange={setPage} />
-        </>
-      )}
-
-      <Sheet open={openId !== null} onOpenChange={(o: boolean) => !o && closeDrawer()}>
-        <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-[560px]">
-          <SheetHeader className="flex-row items-center justify-between gap-2 space-y-0">
-            <SheetTitle className="truncate">
-              {detail ? `#${detail.id} — ${detail.subject}` : "Loading…"}
-            </SheetTitle>
-            {detail && (
-              <Select value={detail.status} onValueChange={(v: string) => changeStatus(v)}>
-                <SelectTrigger className="w-[150px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="open">Open</SelectItem>
-                  <SelectItem value="in_progress">In progress</SelectItem>
-                  <SelectItem value="closed">Closed</SelectItem>
-                </SelectContent>
-              </Select>
-            )}
-          </SheetHeader>
-
-          <div className="py-4">
-            {detailLoading && <Spinner className="h-6 w-6" />}
-            {detail && (
-              <>
-                <div className="mb-3 flex flex-wrap items-center gap-2">
-                  <span className="text-muted-foreground">
-                    {detail.username ? `@${detail.username}` : detail.tg_id} · {detail.created_at}
-                  </span>
-                  {detail.user_id != null && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        setUserDrawerId(detail.user_id);
-                        setUserOpen(true);
-                      }}
-                    >
-                      <User className="h-4 w-4" />
-                      Карточка пользователя
-                    </Button>
-                  )}
-                </div>
-
-                <div className="mb-4 flex flex-col gap-2">
-                  {detail.messages.map((m) => (
-                    <div
-                      key={m.id}
-                      className={cn(
-                        "rounded-lg border border-white/5 px-3 py-2",
-                        m.sender === "admin" ? "bg-primary/15" : "bg-white/5",
-                      )}
-                    >
-                      <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
-                        <span>
-                          {m.sender === "admin" ? "Admin" : "User"} · {m.created_at}
-                        </span>
-                        {m.sender === "admin" && (
-                          <ConfirmButton
-                            title="Delete this reply?"
-                            description="This cannot be undone."
-                            destructive
-                            confirmText="Delete"
-                            onConfirm={() => deleteMessage(m.id)}
-                          >
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-6 w-6"
-                              aria-label="Delete reply"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </ConfirmButton>
-                        )}
-                      </div>
-                      {m.text && <div className="whitespace-pre-wrap">{m.text}</div>}
-                      {m.attachments && m.attachments.length > 0 && (
-                        <div className={cn("flex flex-wrap gap-2", m.text && "mt-2")}>
-                          {m.attachments.map((a) => (
-                            <AttachmentThumb key={a.id} attachment={a} />
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-
-                <Textarea
-                  value={reply}
-                  onChange={(e) => setReply(e.target.value)}
-                  rows={4}
-                  maxLength={4000}
-                  placeholder="Reply to user…"
-                />
-                {pendingImages.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {pendingImages.map((f, idx) => (
-                      <div key={idx} className="relative">
-                        <img
-                          src={pendingPreviewUrls[idx]}
-                          className="h-16 w-16 rounded-md object-cover"
-                          alt={f.name}
-                        />
-                        <Button
-                          variant="destructive"
-                          size="icon"
-                          className="absolute -right-2 -top-2 h-5 w-5 rounded-full"
-                          onClick={() => removePendingImage(idx)}
-                        >
-                          ×
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  className="hidden"
-                  onChange={(e) => {
-                    onFilesSelected(e.target.files);
-                    e.target.value = "";
-                  }}
-                />
-                <div className="mt-3 flex gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={pendingImages.length >= MAX_IMAGES}
-                  >
-                    <Paperclip className="h-4 w-4" />
-                    Attach
-                  </Button>
-                  <Button
-                    className="flex-1 md:flex-none"
-                    disabled={sending || (!reply.trim() && pendingImages.length === 0)}
-                    onClick={sendReply}
-                  >
-                    Send reply
-                  </Button>
-                </div>
-              </>
-            )}
-          </div>
-        </SheetContent>
-      </Sheet>
-
-      <UserDrawer userId={userDrawerId} open={userOpen} onClose={() => setUserOpen(false)} />
+  useEffect(() => { const timer = setTimeout(() => { setQuery(search); setPage(1); }, 300); return () => clearTimeout(timer); }, [search]);
+  const { data, error, reload } = useSupportPolling<QueueResult>(`${queue}:${query}:${page}:${sort}`, () => api.get(`/support/tickets?${new URLSearchParams({ queue, search: query, page: String(page), per_page: "20", sort, order: "desc" })}`));
+  const select = (ticket: number | null) => { const next = new URLSearchParams(params); if (ticket) next.set("ticket", String(ticket)); else next.delete("ticket"); setParams(next); };
+  return <div className="support-workspace">
+    <div className="flex items-start justify-between gap-3 mb-5"><div><h1 className="text-xl font-semibold">Поддержка</h1><p className="text-sm text-muted-foreground mt-1">{data?.counts.needs_reply ?? "—"} обращений ждут вашего ответа</p></div><Button variant="outline" size="sm" onClick={() => void reload()} aria-label="Обновить"><RefreshCw size={16} /></Button></div>
+    <div className="support-queues" role="tablist" aria-label="Очереди обращений">{queues.map(([key, title]) => <button key={key} role="tab" aria-selected={queue === key} className={queue === key ? "selected" : ""} onClick={() => { setQueue(key); setPage(1); }}>{title}{data?.counts[key] != null && <span>{data.counts[key]}</span>}</button>)}</div>
+    {error && <div role="alert" className="text-destructive text-sm mb-2">Не удалось обновить обращения. {error}</div>}
+    <div className={`support-columns ${id ? "has-ticket" : ""}`}>
+      <aside className="support-inbox">
+        <div className="p-3 border-b border-border space-y-2"><div className="relative"><Search className="absolute left-3 top-3 text-muted-foreground" size={15}/><Input aria-label="Поиск обращений" placeholder="Тема, #номер, username или Telegram ID" className="pl-9" value={search} onChange={e => setSearch(e.target.value)} /></div>
+          <select aria-label="Сортировка" className="support-select w-full" disabled={queue === "needs_reply"} value={sort} onChange={e => { setSort(e.target.value); setPage(1); }}><option value="updated_at">{queue === "needs_reply" ? "Сначала самое долгое ожидание" : "По последней активности"}</option><option value="created_at">Сначала новые обращения</option><option value="id">По номеру</option></select></div>
+        <div className="support-inbox-list">{!data && !error && <p className="p-5 text-muted-foreground">Загружаем обращения…</p>}{data?.items.length === 0 && <div className="p-8 text-center text-muted-foreground"><Check className="mx-auto mb-3" />{query ? "Ничего не найдено. Измените запрос." : "В этой очереди нет обращений"}</div>}
+          {data?.items.map(ticket => <button key={ticket.id} className={`support-inbox-item ${id === ticket.id ? "selected" : ""}`} onClick={() => select(ticket.id)}>
+            <div className="flex justify-between gap-2 text-xs text-muted-foreground"><span>#{ticket.id} · {ticket.username ? `@${ticket.username}` : ticket.tg_id || "Пользователь"}</span>{ticket.unread && <span className="support-unread">Новое</span>}</div>
+            <div className="font-medium mt-1 truncate">{ticket.subject}</div><p className="text-sm text-muted-foreground line-clamp-2 mt-1">{ticket.last_sender === "admin" ? "Вы: " : ""}{ticket.last_message_preview}</p>
+            <div className="flex justify-between gap-2 mt-3 text-xs"><span>{labels[ticket.status]}</span><span className={ticket.status === "open" ? "text-amber-400" : "text-muted-foreground"}>{ticket.status === "open" || ticket.status === "in_progress" ? `Ждёт ${waiting(ticket.waiting_since)}` : date(ticket.updated_at)}</span></div>
+            {ticket.assignee && <div className="text-xs text-muted-foreground mt-1">Ответственный: {ticket.assignee}</div>}
+          </button>)}
+        </div><div className="flex items-center justify-between p-3 border-t border-border text-xs"><Button variant="ghost" size="sm" disabled={page === 1} onClick={() => setPage(page - 1)}>Назад</Button><span>{page} / {Math.max(1, Math.ceil((data?.total || 0) / 20))}</span><Button variant="ghost" size="sm" disabled={page * 20 >= (data?.total || 0)} onClick={() => setPage(page + 1)}>Далее</Button></div>
+      </aside>
+      {id ? <Conversation key={id} id={id} onClose={() => select(null)} onChange={() => void reload()} /> : <div className="support-empty"><MessageSquare size={32}/><p>Выберите обращение</p><small>Переписка и данные пользователя появятся здесь</small></div>}
     </div>
-  );
+  </div>;
+}
+
+function Conversation({ id, onClose, onChange }: { id: number; onClose: () => void; onChange: () => void }) {
+  const { data: ticket, error, reload } = useSupportPolling<SupportTicketDetail>(String(id), () => api.get(`/support/tickets/${id}`));
+  const [reply, setReply] = useSupportDraft(`dashboard:${id}:reply`);
+  const [note, setNote] = useSupportDraft(`dashboard:${id}:note`);
+  const [internal, setInternal] = useState(false);
+  const [files, setFiles] = useState<File[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [userOpen, setUserOpen] = useState(false);
+  const [hasNew, setHasNew] = useState(false);
+  const scroll = useRef<HTMLDivElement>(null);
+  const atBottom = useRef(true);
+  const lastRead = useRef(0);
+  const [templates, setTemplates] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem("support-templates") || "null") || ["Здравствуйте! Уточните, пожалуйста, на каком устройстве возникает проблема и какое приложение вы используете. Пришлите скриншот ошибки.", "Попробуйте переключиться между Wi-Fi и мобильной сетью и подключиться повторно. Напишите, изменился ли результат.", "Уточните номер платежа и время оплаты. Проверим поступление и активацию подписки."]; } catch { return []; } });
+  const [templateName, setTemplateName] = useState("");
+  const text = internal ? note : reply;
+  const setText = internal ? setNote : setReply;
+  const markRead = () => { const cursor = ticket?.last_message_id || 0; if (cursor <= lastRead.current || document.hidden) return; lastRead.current = cursor; void api.post(`/support/tickets/${id}/read`, { message_id: cursor }).then(onChange).catch(() => { lastRead.current = 0; }); };
+  useEffect(() => { if (!ticket) return; if (atBottom.current) { scroll.current?.scrollTo({ top: scroll.current.scrollHeight }); markRead(); } else setHasNew(true); }, [ticket?.messages.length, ticket?.last_message_id]);
+  const jump = () => { atBottom.current = true; scroll.current?.scrollTo({ top: scroll.current.scrollHeight, behavior: "smooth" }); setHasNew(false); markRead(); };
+  const mutate = async (action: () => Promise<unknown>) => { if (busy) return; setBusy(true); try { await action(); await reload(); onChange(); } catch (e) { toast.error((e as Error).message); } finally { setBusy(false); } };
+  const send = async (close = false) => {
+    const sent = text;
+    await mutate(async () => { const form = new FormData(); form.append("text", sent.trim()); form.append("close", String(close)); form.append("internal", String(internal)); files.forEach(f => form.append("images", f)); await api.postForm(`/support/tickets/${id}/reply`, form); setText(""); setFiles([]); atBottom.current = true; });
+  };
+  if (!ticket) return <section className="p-5"><Button variant="ghost" onClick={onClose}><ArrowLeft size={16}/>Назад</Button><p role={error ? "alert" : undefined}>{error || "Загружаем переписку…"}</p><Button variant="outline" onClick={() => void reload()}>Повторить</Button></section>;
+  return <section className="support-conversation">
+    <header className="p-4 border-b border-border"><div className="flex items-start gap-2"><Button variant="ghost" size="icon" aria-label="Закрыть обращение на экране" onClick={onClose}><ArrowLeft size={18}/></Button><div className="min-w-0 flex-1"><div className="text-xs text-muted-foreground">#{id} · {categories[ticket.category || "other"]}</div><h2 className="font-semibold break-words">{ticket.subject}</h2></div><Button variant="ghost" size="icon" aria-label="Скопировать ссылку" onClick={() => navigator.clipboard.writeText(location.href).then(() => toast.success("Ссылка скопирована")).catch(() => toast.error("Не удалось скопировать ссылку"))}><Copy size={16}/></Button></div>
+      <div className="flex flex-wrap items-center gap-2 mt-3"><select aria-label="Статус обращения" className="support-select" disabled={busy} value={ticket.status} onChange={e => void mutate(() => api.patch(`/support/tickets/${id}`, { status: e.target.value }))}>{Object.entries(labels).map(([k,v]) => <option value={k} key={k}>{v}</option>)}</select><Button size="sm" variant="outline" disabled={busy} onClick={() => void mutate(() => ticket.assignee ? api.delete(`/support/tickets/${id}/claim`) : api.post(`/support/tickets/${id}/claim`, {}))}>{ticket.assignee ? `Снять: ${ticket.assignee}` : "Взять в работу"}</Button><Button size="sm" variant="ghost" onClick={() => setUserOpen(true)}><User size={14}/>{ticket.username || ticket.tg_id || "Пользователь"}</Button></div>
+      {Object.keys(ticket.context || {}).length > 0 && <details className="mt-3 text-xs text-muted-foreground"><summary className="cursor-pointer">Устройство, подписка и платёж</summary><div className="grid gap-1 mt-2">{Object.entries(ticket.context || {}).map(([key,value]) => <div key={key}><strong>{({ platform: "Устройство", subscription: "Подписка", payment: "Платёж", language: "Язык" } as Record<string,string>)[key] || key}: </strong>{typeof value === "object" ? Object.entries(value as object).map(([k,v]) => `${k}: ${v}`).join(" · ") : String(value)}</div>)}</div></details>}
+    </header>
+    {error && <div role="alert" className="text-xs text-destructive px-4 py-2">Обновление не удалось. Переписка сохранена на экране.</div>}
+    <div ref={scroll} className="support-messages" onScroll={() => { const el = scroll.current!; atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80; if (atBottom.current) { setHasNew(false); markRead(); } }}>
+      {ticket.messages.map(m => <article key={m.id} className={`support-message ${m.sender}`}><div className="flex justify-between gap-2 text-xs text-muted-foreground mb-2"><span>{m.sender === "note" ? "Внутренняя заметка" : m.sender === "admin" ? m.author || "Поддержка" : "Пользователь"} · {date(m.created_at)}</span>{m.sender === "admin" && <ConfirmButton title="Удалить ответ?" description="Ответ исчезнет из переписки. Уже доставленное Telegram-уведомление останется." destructive confirmText="Удалить" onConfirm={() => mutate(() => api.delete(`/support/tickets/${id}/messages/${m.id}`))}><button aria-label="Удалить ответ" disabled={busy}><X size={12}/></button></ConfirmButton>}</div><p className="whitespace-pre-wrap break-words text-sm">{m.text}</p><div className="flex gap-2 flex-wrap mt-2">{m.attachments?.map(a => <Thumb key={a.id} item={a}/>)}</div></article>)}
+    </div>
+    {hasNew && <Button variant="secondary" size="sm" className="mx-auto" onClick={jump}>Новые сообщения ↓</Button>}
+    <footer className={`support-composer ${internal ? "is-note" : ""}`}>
+      <div className="flex gap-2 mb-2"><Button size="sm" variant={internal ? "ghost" : "secondary"} disabled={busy} onClick={() => { setInternal(false); setFiles([]); }}>Ответ пользователю</Button><Button size="sm" variant={internal ? "secondary" : "ghost"} disabled={busy} onClick={() => { setInternal(true); setFiles([]); }}>Заметка</Button></div>
+      {ticket.status === "closed" && !internal ? <div className="text-sm text-muted-foreground">Обращение закрыто. Чтобы ответить, измените статус на «Нужен ответ».</div> : <>
+        {!internal && <details className="mb-2 text-xs"><summary className="cursor-pointer text-muted-foreground">Шаблоны ответов</summary><div className="space-y-1 max-h-32 overflow-auto py-2">{templates.map((value,i) => <div className="flex gap-2" key={i}><button disabled={busy} className="text-left truncate flex-1 hover:underline" onClick={() => setReply(reply ? `${reply}\n\n${value}` : value)}>{value}</button><button aria-label="Удалить шаблон" onClick={() => { const next=templates.filter((_,j) => i!==j); setTemplates(next); localStorage.setItem("support-templates", JSON.stringify(next)); }}><X size={12}/></button></div>)}</div><Button size="sm" variant="outline" disabled={!reply.trim()} onClick={() => { const next=[...templates, reply.trim()]; setTemplates(next); localStorage.setItem("support-templates",JSON.stringify(next)); toast.success("Ответ сохранён как шаблон в этом браузере"); }}>Сохранить текущий ответ</Button></details>}
+        <Textarea aria-label={internal ? "Внутренняя заметка" : "Ответ пользователю"} disabled={busy} value={text} onChange={e => setText(e.target.value)} rows={3} maxLength={4000} placeholder={internal ? "Видно только администраторам" : "Напишите ответ…"} onKeyDown={e => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && (text.trim() || files.length)) { e.preventDefault(); void send(); } }}/>
+        <div className="flex justify-between text-xs text-muted-foreground my-2"><span>{text ? "Черновик сохранён" : "Ctrl / ⌘ + Enter — отправить"}</span><span>{text.length}/4000</span></div>
+        <SupportImages files={files} onChange={setFiles} onError={toast.error} label="Фото" disabled={busy}/>
+        <div className="flex flex-wrap gap-2 mt-3"><Button disabled={busy || (!text.trim() && !files.length)} onClick={() => void send()}>{busy ? "Отправляем…" : internal ? "Сохранить заметку" : "Ответить"}</Button>{!internal && <Button variant="outline" disabled={busy || (!text.trim() && !files.length)} onClick={() => void send(true)}>Ответить и закрыть</Button>}</div>
+      </>}
+    </footer>
+    <UserDrawer userId={ticket.user_id} open={userOpen} onClose={() => setUserOpen(false)}/>
+  </section>;
 }

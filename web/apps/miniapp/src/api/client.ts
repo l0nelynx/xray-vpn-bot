@@ -105,6 +105,15 @@ export const linkEmail = {
 };
 
 export interface TicketSummary {
+  category?: string;
+  context?: Record<string, unknown>;
+  last_sender?: string;
+  waiting_since?: string | null;
+  unread?: boolean;
+  last_message_id?: number;
+  can_reopen?: boolean;
+  assignee?: string | null;
+
   id: number;
   subject: string;
   status: string;
@@ -130,6 +139,16 @@ export interface MessageItem {
 }
 
 export interface TicketDetail {
+  category?: string;
+  context?: Record<string, unknown>;
+  last_sender?: string;
+  waiting_since?: string | null;
+  unread?: boolean;
+  last_message_id?: number;
+  can_reopen?: boolean;
+  assignee?: string | null;
+  last_message_preview?: string;
+
   id: number;
   subject: string;
   status: string;
