@@ -48,6 +48,7 @@ class SupportTicket(Base):
     __table_args__ = (
         Index("ix_support_tickets_user_id", "user_id"),
         Index("ix_support_tickets_status", "status"),
+        Index("ix_support_queue", "status", "waiting_since"),
     )
 
 

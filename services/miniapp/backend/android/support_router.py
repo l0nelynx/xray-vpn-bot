@@ -16,7 +16,8 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from fastapi.responses import FileResponse
 
 from ..config import get_config, get_admin_bot_token, get_admin_id, get_support_uploads_dir
-from ..database.models import SupportMessage, SupportTicket
+from ..database.models import SupportMessage, SupportTicket, User
+from sqlalchemy import select
 from ..database.session import async_session
 from ..schemas.support import AttachmentOut, MessageItem, TicketCreate, TicketDetail, TicketSummary
 from . import deps
@@ -104,7 +105,7 @@ async def get_ticket(
     user: android_repo.UserRow = Depends(deps.get_current_user),
 ) -> TicketDetail:
     async with async_session() as session:
-        ticket = await _repo_support.get_ticket_by_id(session, ticket_id)
+        ticket = await _repo_support.get_ticket_by_id(session, ticket_id, for_update=True)
         if not ticket or ticket.user_id != user.id:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "ticket not found")
         msgs = await _repo_support.list_messages_for_ticket(session, ticket.id)
@@ -141,6 +142,7 @@ async def create_ticket(
     now = _now_iso()
     display_name = user.email
     async with async_session() as session:
+        await session.execute(select(User.id).where(User.id == user.id).with_for_update())
         open_count = await _repo_support.count_open_tickets_for_user(session, user.id)
         if open_count >= MAX_OPEN_TICKETS:
             raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "too many open tickets")
@@ -205,7 +207,7 @@ async def add_user_message(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "empty message")
     now = _now_iso()
     async with async_session() as session:
-        ticket = await _repo_support.get_ticket_by_id(session, ticket_id)
+        ticket = await _repo_support.get_ticket_by_id(session, ticket_id, for_update=True)
         if not ticket or ticket.user_id != user.id:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "ticket not found")
         if ticket.status == "closed":
@@ -267,7 +269,7 @@ async def get_attachment(
 ):
     async with async_session() as session:
         row = await _repo_support.get_attachment_with_ticket(session, attachment_id)
-        if not row or row.ticket_id != ticket_id or row.ticket_user_id != user.id:
+        if not row or row.message_sender == "note" or row.ticket_id != ticket_id or row.ticket_user_id != user.id:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "attachment not found")
     full_path = Path(get_support_uploads_dir()) / row.attachment.stored_path
     if not full_path.is_file():

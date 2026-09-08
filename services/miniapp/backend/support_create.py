@@ -1,5 +1,5 @@
 """Guided creation with initial photos; old JSON creation remains compatible."""
-from fastapi import Depends, File, Form, HTTPException, UploadFile
+from fastapi import BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy import select
 from common_db.models import User, UserSubscription, Transaction, SupportTicket, SupportMessage
 from common_db.repo import support as repo
@@ -29,6 +29,7 @@ def register_creation(router, authenticate, *, telegram, notify):
 
     @router.post("/tickets/create", response_model=TicketDetail, status_code=201)
     async def create(
+        background_tasks: BackgroundTasks,
         category: str = Form("other"), platform: str = Form(""), message: str = Form(""),
         subject: str = Form(""), subscription_id: int | None = Form(None), payment_id: str = Form(""),
         images: list[UploadFile] = File(default=[]), identity=Depends(authenticate),
@@ -68,5 +69,5 @@ def register_creation(router, authenticate, *, telegram, notify):
             prefix = "/support" if telegram else "/android/support"
             result = TicketDetail(**metadata(ticket), id=ticket.id, subject=ticket.subject, status=ticket.status, created_at=now, updated_at=now, messages=[MessageItem(id=msg.id, sender="user", text=msg.text, created_at=now, attachments=[AttachmentOut(id=a.id, filename=a.original_filename, mime_type=a.mime_type, size_bytes=a.size_bytes, url=f"{prefix}/tickets/{ticket.id}/attachments/{a.id}") for a in attachments])])
         # Delivery is bounded and checked; creation stays committed if Telegram is unavailable.
-        await notify(result.id, user.username, result.subject)
+        background_tasks.add_task(notify, result.id, user.username, result.subject)
         return result

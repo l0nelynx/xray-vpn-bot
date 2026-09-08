@@ -169,7 +169,7 @@ async def reply_ticket(
     if not text and not images:
         raise HTTPException(400, "empty text")
     async with async_session() as session:
-        ticket = await _repo_support.get_ticket_by_id(session, ticket_id)
+        ticket = await _repo_support.get_ticket_by_id(session, ticket_id, for_update=True)
         if not ticket:
             raise HTTPException(404, "ticket not found")
         if ticket.status == "closed" and not internal:
@@ -244,7 +244,7 @@ async def update_status(ticket_id: int, body: StatusBody, _: str = Depends(get_c
     if body.status not in VALID_STATUSES:
         raise HTTPException(400, "invalid status")
     async with async_session() as session:
-        ticket = await _repo_support.get_ticket_by_id(session, ticket_id)
+        ticket = await _repo_support.get_ticket_by_id(session, ticket_id, for_update=True)
         if not ticket:
             raise HTTPException(404, "ticket not found")
         ticket.status = body.status
@@ -270,7 +270,7 @@ async def delete_admin_message(
     or a user-authored message).
     """
     async with async_session() as session:
-        ticket = await _repo_support.get_ticket_by_id(session, ticket_id)
+        ticket = await _repo_support.get_ticket_by_id(session, ticket_id, for_update=True)
         if not ticket:
             raise HTTPException(404, "ticket not found")
         result = await _repo_support.delete_admin_message(
@@ -278,6 +278,15 @@ async def delete_admin_message(
         )
         if not result.deleted:
             raise HTTPException(404, "message not found")
+        remaining = await _repo_support.list_messages_for_ticket(session, ticket_id)
+        ticket.last_admin_message_id = max((m.id for m in remaining if m.sender == "admin"), default=0)
+        ticket.last_user_message_id = max((m.id for m in remaining if m.sender == "user"), default=0)
+        if remaining:
+            latest = remaining[-1]
+            ticket.last_sender = latest.sender
+            if ticket.status != "closed":
+                ticket.status = "waiting_user" if latest.sender == "admin" else "open"
+                ticket.waiting_since = latest.created_at
         ticket.updated_at = _now_iso()
         await session.commit()
 
@@ -293,7 +302,7 @@ async def delete_admin_message(
 @router.post("/tickets/{ticket_id}/read")
 async def mark_read(ticket_id: int, body: ReadBody, _: str = Depends(get_current_user)):
     async with async_session() as session:
-        ticket = await _repo_support.get_ticket_by_id(session, ticket_id)
+        ticket = await _repo_support.get_ticket_by_id(session, ticket_id, for_update=True)
         if not ticket:
             raise HTTPException(404, "ticket not found")
         cursor = min(body.message_id, ticket.last_user_message_id)

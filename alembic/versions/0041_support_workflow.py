@@ -12,6 +12,9 @@ depends_on = None
 
 
 def upgrade():
+    zone = os.environ.get("SUPPORT_LEGACY_TIMEZONE", "UTC")
+    legacy_tz = (timezone.utc if zone == "UTC" else
+                 datetime.fromisoformat("2000-01-01T00:00:00" + zone).tzinfo if zone.startswith(("+", "-")) else ZoneInfo(zone))
     with op.batch_alter_table("support_tickets") as batch:
         for name, default, size in [("category", "other", 30), ("last_sender", "user", 20)]:
             batch.add_column(sa.Column(name, sa.String(size), nullable=False, server_default=default))
@@ -27,7 +30,6 @@ def upgrade():
     bind = op.get_bind()
     # Old dashboard dates had no offset. Docker defaults to UTC; deployments
     # that used another TZ can supply SUPPORT_LEGACY_TIMEZONE during migration.
-    legacy_tz = ZoneInfo(os.environ.get("SUPPORT_LEGACY_TIMEZONE", "UTC"))
     for table in ("support_tickets", "support_messages", "support_attachments"):
         columns = ("created_at", "updated_at") if table == "support_tickets" else ("created_at",)
         for column in columns:

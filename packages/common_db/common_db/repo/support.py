@@ -26,11 +26,11 @@ from ..models import SupportAttachment, SupportMessage, SupportTicket
 
 
 async def get_ticket_by_id(
-    session: AsyncSession, ticket_id: int
+    session: AsyncSession, ticket_id: int, *, for_update: bool = False
 ) -> SupportTicket | None:
     """Get a ticket by its primary key, or None."""
     return await session.scalar(
-        select(SupportTicket).where(SupportTicket.id == ticket_id)
+        select(SupportTicket).where(SupportTicket.id == ticket_id).with_for_update() if for_update else select(SupportTicket).where(SupportTicket.id == ticket_id)
     )
 
 
@@ -199,6 +199,7 @@ class AttachmentWithTicket:
     attachment: SupportAttachment
     ticket_id: int
     ticket_user_id: int
+    message_sender: str = "user"
 
 
 async def get_attachment_with_ticket(
@@ -207,7 +208,7 @@ async def get_attachment_with_ticket(
     """Fetch an attachment plus its parent ticket's id/owner in one query."""
     row = (
         await session.execute(
-            select(SupportAttachment, SupportMessage.ticket_id, SupportTicket.user_id)
+            select(SupportAttachment, SupportMessage.ticket_id, SupportTicket.user_id, SupportMessage.sender)
             .join(SupportMessage, SupportMessage.id == SupportAttachment.message_id)
             .join(SupportTicket, SupportTicket.id == SupportMessage.ticket_id)
             .where(SupportAttachment.id == attachment_id)
@@ -215,8 +216,8 @@ async def get_attachment_with_ticket(
     ).first()
     if not row:
         return None
-    att, ticket_id, user_id = row
-    return AttachmentWithTicket(attachment=att, ticket_id=ticket_id, ticket_user_id=user_id)
+    att, ticket_id, user_id, sender = row
+    return AttachmentWithTicket(attachment=att, ticket_id=ticket_id, ticket_user_id=user_id, message_sender=sender)
 
 
 # --- mutations ------------------------------------------------------------

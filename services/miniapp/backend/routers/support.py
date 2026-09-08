@@ -91,7 +91,7 @@ async def get_ticket(
         user = await _repo_users.get_user_by_tg_id(session, tg.tg_id)
         if not user:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "user not found")
-        ticket = await _repo_support.get_ticket_by_id(session, ticket_id)
+        ticket = await _repo_support.get_ticket_by_id(session, ticket_id, for_update=True)
         if not ticket or ticket.user_id != user.id:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "ticket not found")
         msgs = await _repo_support.list_messages_for_ticket(session, ticket.id)
@@ -131,6 +131,7 @@ async def create_ticket(
         if not user:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "user not registered")
 
+        await session.execute(select(User.id).where(User.id == user.id).with_for_update())
         open_count = await _repo_support.count_open_tickets_for_user(
             session, user.id
         )
@@ -223,7 +224,7 @@ async def add_user_message(
         user = await _repo_users.get_user_by_tg_id(session, tg.tg_id)
         if not user:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "user not registered")
-        ticket = await _repo_support.get_ticket_by_id(session, ticket_id)
+        ticket = await _repo_support.get_ticket_by_id(session, ticket_id, for_update=True)
         if not ticket or ticket.user_id != user.id:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "ticket not found")
         if ticket.status == "closed":
@@ -289,7 +290,7 @@ async def get_attachment(
         if not user:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "not found")
         row = await _repo_support.get_attachment_with_ticket(session, attachment_id)
-        if not row or row.ticket_id != ticket_id or row.ticket_user_id != user.id:
+        if not row or row.message_sender == "note" or row.ticket_id != ticket_id or row.ticket_user_id != user.id:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "attachment not found")
     full_path = Path(get_support_uploads_dir()) / row.attachment.stored_path
     if not full_path.is_file():
