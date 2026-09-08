@@ -5,6 +5,7 @@ from pathlib import Path
 
 import httpx
 from common_db.support_delivery import send_notification
+from common_db.support_workflow import metadata, record_message
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy import desc, func, select
@@ -69,6 +70,7 @@ async def list_tickets(tg: TgUser = Depends(get_tg_user)) -> list[TicketSummary]
         )
         return [
             TicketSummary(
+                **metadata(row.ticket),
                 id=row.ticket.id,
                 subject=row.ticket.subject,
                 status=row.ticket.status,
@@ -108,6 +110,7 @@ async def get_ticket(
             for m in msgs
         ]
         return TicketDetail(
+            **metadata(ticket),
             id=ticket.id,
             subject=ticket.subject,
             status=ticket.status,
@@ -153,6 +156,8 @@ async def create_ticket(
             created_at=now,
         )
         session.add(first_message)
+        await session.flush()
+        record_message(ticket, first_message)
         await session.commit()
 
         ticket_id = ticket.id
@@ -254,7 +259,7 @@ async def add_user_message(
         ]
         await session.flush()
 
-        ticket.updated_at = now
+        record_message(ticket, msg)
         await session.commit()
         msg_id = msg.id
         attachments_out = [
@@ -290,3 +295,7 @@ async def get_attachment(
     if not full_path.is_file():
         raise HTTPException(status.HTTP_404_NOT_FOUND, "file missing")
     return FileResponse(full_path, media_type=row.attachment.mime_type)
+
+
+from ..support_actions import register_actions
+register_actions(router, get_tg_user, telegram=True, notify=_notify_admin_reply)

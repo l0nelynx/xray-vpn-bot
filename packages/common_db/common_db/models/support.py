@@ -10,7 +10,7 @@ Schema canon (after alembic 0007 BigInteger pass):
 """
 from __future__ import annotations
 
-from sqlalchemy import BigInteger, ForeignKey, Index, String, Text
+from sqlalchemy import BigInteger, ForeignKey, Index, String, Text, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..base import Base
@@ -29,6 +29,17 @@ class SupportTicket(Base):
     )
     created_at: Mapped[str] = mapped_column(String(30))
     updated_at: Mapped[str] = mapped_column(String(30))
+
+    category: Mapped[str] = mapped_column(String(30), default="other", server_default="other")
+    context: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    assignee: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    last_sender: Mapped[str] = mapped_column(String(20), default="user", server_default="user")
+    waiting_since: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    closed_at: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    admin_read_id: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0")
+    user_read_id: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0")
+    last_user_message_id: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0")
+    last_admin_message_id: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0")
 
     messages: Mapped[list["SupportMessage"]] = relationship(
         back_populates="ticket", cascade="all, delete-orphan"
@@ -49,6 +60,7 @@ class SupportMessage(Base):
     )
     sender: Mapped[str] = mapped_column(String(20))
     text: Mapped[str] = mapped_column(Text)
+    author: Mapped[str | None] = mapped_column(String(100), nullable=True)
     created_at: Mapped[str] = mapped_column(String(30))
 
     ticket: Mapped["SupportTicket"] = relationship(back_populates="messages")

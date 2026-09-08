@@ -7,8 +7,9 @@ from pathlib import Path
 import httpx
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
-from sqlalchemy import select, func
+from pydantic import BaseModel, Field
+from sqlalchemy import select, func, or_, cast, String, case, update
+from common_db.support_workflow import metadata, record_message
 from sqlalchemy.orm import selectinload
 
 from ..auth import get_current_user
@@ -23,11 +24,15 @@ from support_attachments import AttachmentValidationError, validate_and_save_att
 router = APIRouter(prefix="/api/support", tags=["support"])
 logger = logging.getLogger(__name__)
 
-VALID_STATUSES = {"open", "in_progress", "closed"}
+VALID_STATUSES = {"open", "in_progress", "waiting_user", "closed"}
 
 
 class StatusBody(BaseModel):
     status: str
+
+
+class ReadBody(BaseModel):
+    message_id: int = Field(ge=0)
 
 
 def _now_iso() -> str:
@@ -47,6 +52,7 @@ _TICKET_SORT_COLUMNS = {
 @router.get("/tickets")
 async def list_tickets(
     status: str = Query("all"),
+    queue: str = Query("all"),
     search: str = Query(""),
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
@@ -56,7 +62,14 @@ async def list_tickets(
 ):
     async with async_session() as session:
         stmt = select(SupportTicket, User.tg_id).join(User, User.id == SupportTicket.user_id)
-        count_stmt = select(func.count()).select_from(SupportTicket)
+        counts = dict((await session.execute(select(SupportTicket.status, func.count()).group_by(SupportTicket.status))).all())
+        counters = {"needs_reply": counts.get("open", 0) + counts.get("in_progress", 0), "waiting_user": counts.get("waiting_user", 0), "closed": counts.get("closed", 0)}
+        counters["active"] = counters["needs_reply"] + counters["waiting_user"]
+        queue_filter = {"needs_reply": SupportTicket.status.in_(("open", "in_progress")), "waiting_user": SupportTicket.status == "waiting_user", "active": SupportTicket.status != "closed", "closed": SupportTicket.status == "closed", "all": True}.get(queue)
+        if queue_filter is None:
+            raise HTTPException(400, "invalid queue")
+        stmt = stmt.where(queue_filter)
+        count_stmt = select(func.count()).select_from(SupportTicket).join(User, User.id == SupportTicket.user_id).where(queue_filter)
         if status != "all":
             if status not in VALID_STATUSES:
                 raise HTTPException(400, "invalid status")
@@ -64,15 +77,21 @@ async def list_tickets(
             count_stmt = count_stmt.where(SupportTicket.status == status)
         if search:
             like = f"%{search}%"
-            stmt = stmt.where(SupportTicket.subject.ilike(like))
-            count_stmt = count_stmt.where(SupportTicket.subject.ilike(like))
+            search_filter = or_(SupportTicket.subject.ilike(like), SupportTicket.username.ilike(like), cast(SupportTicket.id, String) == search.lstrip("#"), cast(User.tg_id, String) == search)
+            stmt = stmt.where(search_filter)
+            count_stmt = count_stmt.where(search_filter)
         total = await session.scalar(count_stmt) or 0
         sort_col = _TICKET_SORT_COLUMNS.get(sort, SupportTicket.updated_at)
         sort_clause = sort_col.asc() if order == "asc" else sort_col.desc()
-        stmt = stmt.order_by(sort_clause).offset((page - 1) * per_page).limit(per_page)
+        stmt = stmt.order_by(SupportTicket.waiting_since.asc() if queue == "needs_reply" else sort_clause, SupportTicket.id.desc()).offset((page - 1) * per_page).limit(per_page)
         rows = (await session.execute(stmt)).all()
+        ids = [t.id for t, _ in rows]
+        ranked = select(SupportMessage.ticket_id, SupportMessage.text, func.row_number().over(partition_by=SupportMessage.ticket_id, order_by=SupportMessage.id.desc()).label("rn")).where(SupportMessage.ticket_id.in_(ids), SupportMessage.sender != "note").subquery()
+        previews = dict((await session.execute(select(ranked.c.ticket_id, ranked.c.text).where(ranked.c.rn == 1))).all()) if ids else {}
         items = [
             {
+                **metadata(t, admin=True),
+                "last_message_preview": (previews.get(t.id) or "📷")[:120],
                 "id": t.id,
                 "user_id": t.user_id,
                 "tg_id": tg_id,
@@ -84,7 +103,7 @@ async def list_tickets(
             }
             for t, tg_id in rows
         ]
-    return {"items": items, "total": total, "page": page, "per_page": per_page}
+    return {"items": items, "total": total, "page": page, "per_page": per_page, "counts": counters}
 
 
 @router.get("/tickets/{ticket_id}")
@@ -103,6 +122,7 @@ async def get_ticket(ticket_id: int, _: str = Depends(get_current_user)):
         user = await _repo_users.get_user_by_id(session, ticket.user_id)
         messages = sorted(ticket.messages, key=lambda m: m.id)
         return {
+            **metadata(ticket, admin=True),
             "id": ticket.id,
             "user_id": ticket.user_id,
             "tg_id": user.tg_id if user else None,
@@ -115,6 +135,7 @@ async def get_ticket(ticket_id: int, _: str = Depends(get_current_user)):
                 {
                     "id": m.id,
                     "sender": m.sender,
+                    "author": m.author,
                     "text": m.text,
                     "created_at": m.created_at,
                     "attachments": [
@@ -138,7 +159,9 @@ async def reply_ticket(
     ticket_id: int,
     text: str = Form(default=""),
     images: list[UploadFile] = File(default=[]),
-    _: str = Depends(get_current_user),
+    close: bool = Form(False),
+    internal: bool = Form(False),
+    actor: str = Depends(get_current_user),
 ):
     text = text.strip()
     if len(text) > 4000:
@@ -149,6 +172,8 @@ async def reply_ticket(
         ticket = await _repo_support.get_ticket_by_id(session, ticket_id)
         if not ticket:
             raise HTTPException(404, "ticket not found")
+        if ticket.status == "closed" and not internal:
+            raise HTTPException(409, "Reopen the ticket before replying")
         user = await _repo_users.get_user_by_id(session, ticket.user_id)
 
         try:
@@ -159,7 +184,7 @@ async def reply_ticket(
             raise HTTPException(400, str(exc)) from exc
 
         now = _now_iso()
-        msg = SupportMessage(ticket_id=ticket.id, sender="admin", text=text, created_at=now)
+        msg = SupportMessage(ticket_id=ticket.id, sender="note" if internal else "admin", author=actor, text=text, created_at=now)
         session.add(msg)
         await session.flush()
         for s in saved:
@@ -172,14 +197,15 @@ async def reply_ticket(
                 size_bytes=s.size_bytes,
                 created_at=now,
             )
-        ticket.updated_at = now
-        if ticket.status == "open":
-            ticket.status = "in_progress"
+        record_message(ticket, msg)
+        if close and not internal:
+            ticket.status = "closed"
+            ticket.closed_at = now
         await session.commit()
         tg_id = user.tg_id if user else None
         subject = ticket.subject
 
-    if tg_id:
+    if tg_id and not internal:
         token = get_bot_token()
         if token:
             preview = text or ("(no text)" if saved else "")
@@ -222,6 +248,9 @@ async def update_status(ticket_id: int, body: StatusBody, _: str = Depends(get_c
         if not ticket:
             raise HTTPException(404, "ticket not found")
         ticket.status = body.status
+        ticket.closed_at = _now_iso() if body.status == "closed" else None
+        if body.status == "open":
+            ticket.waiting_since = _now_iso()
         ticket.updated_at = _now_iso()
         await session.commit()
     return {"ok": True}
@@ -258,4 +287,36 @@ async def delete_admin_message(
             (uploads_dir / rel_path).unlink(missing_ok=True)
         except OSError as exc:
             logger.warning("failed to unlink attachment %s: %s", rel_path, exc)
+    return {"ok": True}
+
+
+@router.post("/tickets/{ticket_id}/read")
+async def mark_read(ticket_id: int, body: ReadBody, _: str = Depends(get_current_user)):
+    async with async_session() as session:
+        ticket = await _repo_support.get_ticket_by_id(session, ticket_id)
+        if not ticket:
+            raise HTTPException(404, "ticket not found")
+        cursor = min(body.message_id, ticket.last_user_message_id)
+        await session.execute(update(SupportTicket).where(SupportTicket.id == ticket_id, SupportTicket.admin_read_id < cursor).values(admin_read_id=cursor))
+        await session.commit()
+    return {"ok": True}
+
+
+@router.post("/tickets/{ticket_id}/claim")
+async def claim(ticket_id: int, actor: str = Depends(get_current_user)):
+    async with async_session() as session:
+        result = await session.execute(update(SupportTicket).where(SupportTicket.id == ticket_id, or_(SupportTicket.assignee.is_(None), SupportTicket.assignee == actor)).values(assignee=actor))
+        if not result.rowcount:
+            raise HTTPException(409, "Ticket already assigned or not found")
+        await session.commit()
+    return {"ok": True}
+
+
+@router.delete("/tickets/{ticket_id}/claim")
+async def release(ticket_id: int, actor: str = Depends(get_current_user)):
+    async with async_session() as session:
+        result = await session.execute(update(SupportTicket).where(SupportTicket.id == ticket_id, SupportTicket.assignee == actor).values(assignee=None))
+        if not result.rowcount:
+            raise HTTPException(409, "Only the assigned administrator can release this ticket")
+        await session.commit()
     return {"ok": True}

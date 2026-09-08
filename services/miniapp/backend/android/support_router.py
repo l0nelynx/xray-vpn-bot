@@ -11,6 +11,7 @@ from pathlib import Path
 
 import httpx
 from common_db.support_delivery import send_notification
+from common_db.support_workflow import metadata, record_message
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
 
@@ -85,6 +86,7 @@ async def list_tickets(
         rows = await _repo_support.list_user_tickets_with_last_message(session, user.id)
         return [
             TicketSummary(
+                **metadata(row.ticket),
                 id=row.ticket.id,
                 subject=row.ticket.subject,
                 status=row.ticket.status,
@@ -121,6 +123,7 @@ async def get_ticket(
             for m in msgs
         ]
         return TicketDetail(
+            **metadata(ticket),
             id=ticket.id,
             subject=ticket.subject,
             status=ticket.status,
@@ -161,6 +164,8 @@ async def create_ticket(
             created_at=now,
         )
         session.add(first_message)
+        await session.flush()
+        record_message(ticket, first_message)
         await session.flush()
 
         ticket_id = ticket.id
@@ -236,7 +241,7 @@ async def add_user_message(
         ]
         await session.flush()
 
-        ticket.updated_at = now
+        record_message(ticket, msg)
         msg_id = msg.id
         await session.commit()
         attachments_out = [
@@ -268,3 +273,7 @@ async def get_attachment(
     if not full_path.is_file():
         raise HTTPException(status.HTTP_404_NOT_FOUND, "file missing")
     return FileResponse(full_path, media_type=row.attachment.mime_type)
+
+
+from ..support_actions import register_actions
+register_actions(router, deps.get_current_user, telegram=False, notify=_notify_admin_reply)

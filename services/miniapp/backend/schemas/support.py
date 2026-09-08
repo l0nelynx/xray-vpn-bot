@@ -12,7 +12,17 @@ class TicketCreate(BaseModel):
         return value.strip() if isinstance(value, str) else value
 
 
-class TicketSummary(BaseModel):
+class TicketMetadata(BaseModel):
+    category: str = "other"
+    context: dict = Field(default_factory=dict)
+    last_sender: str = "user"
+    waiting_since: str | None = None
+    unread: bool = False
+    last_message_id: int = 0
+    can_reopen: bool = False
+
+
+class TicketSummary(TicketMetadata):
     id: int
     subject: str
     status: str
@@ -37,7 +47,7 @@ class MessageItem(BaseModel):
     attachments: list[AttachmentOut] = []
 
 
-class TicketDetail(BaseModel):
+class TicketDetail(TicketMetadata):
     id: int
     subject: str
     status: str

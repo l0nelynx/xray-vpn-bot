@@ -96,7 +96,7 @@ async def list_user_tickets_with_last_message(
             )
             .label("rn"),
         )
-        .where(SupportMessage.ticket_id.in_(ticket_ids))
+        .where(SupportMessage.ticket_id.in_(ticket_ids), SupportMessage.sender != "note")
         .subquery()
     )
     rows = await session.execute(
@@ -116,13 +116,14 @@ async def list_user_tickets_with_last_message(
 
 
 async def list_messages_for_ticket(
-    session: AsyncSession, ticket_id: int
+    session: AsyncSession, ticket_id: int, *, include_notes: bool = False
 ) -> list[SupportMessage]:
     """All messages on a ticket, oldest first (chat-log order), with
     attachments eager-loaded (avoids 1+N when the caller renders images)."""
     result = await session.scalars(
         select(SupportMessage)
         .where(SupportMessage.ticket_id == ticket_id)
+        .where(True if include_notes else SupportMessage.sender != "note")
         .options(selectinload(SupportMessage.attachments))
         .order_by(SupportMessage.created_at, SupportMessage.id)
     )
