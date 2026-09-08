@@ -57,7 +57,7 @@ async def list_user_tickets(
     result = await session.scalars(
         select(SupportTicket)
         .where(SupportTicket.user_id == user_id)
-        .order_by(desc(SupportTicket.created_at))
+        .order_by(SupportTicket.status == "closed", desc(SupportTicket.updated_at), desc(SupportTicket.id))
     )
     return list(result)
 
@@ -92,7 +92,7 @@ async def list_user_tickets_with_last_message(
             func.row_number()
             .over(
                 partition_by=SupportMessage.ticket_id,
-                order_by=desc(SupportMessage.created_at),
+                order_by=(desc(SupportMessage.created_at), desc(SupportMessage.id)),
             )
             .label("rn"),
         )
@@ -124,7 +124,7 @@ async def list_messages_for_ticket(
         select(SupportMessage)
         .where(SupportMessage.ticket_id == ticket_id)
         .options(selectinload(SupportMessage.attachments))
-        .order_by(SupportMessage.created_at)
+        .order_by(SupportMessage.created_at, SupportMessage.id)
     )
     return list(result)
 
@@ -142,7 +142,7 @@ async def count_open_tickets_for_user(
         .select_from(SupportTicket)
         .where(
             SupportTicket.user_id == user_id,
-            SupportTicket.status == "open",
+            SupportTicket.status.in_(("open", "in_progress", "waiting_user")),
         )
     )
     return n or 0

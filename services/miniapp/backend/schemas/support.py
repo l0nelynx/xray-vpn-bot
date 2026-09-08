@@ -1,9 +1,15 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class TicketCreate(BaseModel):
     subject: str = Field(min_length=1, max_length=200)
     message: str = Field(min_length=1, max_length=4000)
+
+
+    @field_validator("subject", "message", mode="before")
+    @classmethod
+    def strip_text(cls, value):
+        return value.strip() if isinstance(value, str) else value
 
 
 class TicketSummary(BaseModel):

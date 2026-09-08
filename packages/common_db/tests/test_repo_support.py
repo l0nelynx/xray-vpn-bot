@@ -362,7 +362,7 @@ def test_list_messages_for_ticket_chronological() -> None:
 # --- count_open_tickets_for_user ------------------------------------------
 
 
-def test_count_open_tickets_for_user_only_counts_open() -> None:
+def test_count_open_tickets_for_user_counts_all_active() -> None:
     async def go() -> None:
         engine = _make_engine()
         try:
@@ -378,11 +378,11 @@ def test_count_open_tickets_for_user_only_counts_open() -> None:
                 await _seed_ticket(session, ticket_id=3, user_id=1,
                                    status="closed", created=now)
                 await _seed_ticket(session, ticket_id=4, user_id=1,
-                                   status="resolved", created=now)
+                                   status="in_progress", created=now)
                 await session.commit()
             async with Session() as session:
                 n = await repo_support.count_open_tickets_for_user(session, 1)
-                assert n == 2
+                assert n == 3
         finally:
             await engine.dispose()
 

@@ -1,5 +1,7 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
+from html import escape
+from common_db.support_delivery import send_notification
 from pathlib import Path
 
 import httpx
@@ -29,7 +31,7 @@ class StatusBody(BaseModel):
 
 
 def _now_iso() -> str:
-    return datetime.now().isoformat(timespec="seconds")
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 _TICKET_SORT_COLUMNS = {
@@ -139,6 +141,8 @@ async def reply_ticket(
     _: str = Depends(get_current_user),
 ):
     text = text.strip()
+    if len(text) > 4000:
+        raise HTTPException(400, "message too long")
     if not text and not images:
         raise HTTPException(400, "empty text")
     async with async_session() as session:
@@ -179,17 +183,17 @@ async def reply_ticket(
         token = get_bot_token()
         if token:
             preview = text or ("(no text)" if saved else "")
-            notify = f"💬 Ответ по обращению #{ticket_id}: <b>{subject}</b>\n\n{preview}"
+            notify = f"💬 Ответ по обращению #{ticket_id}: <b>{escape(subject)}</b>\n\n{escape(preview[:3000])}"
             if saved:
                 notify += f"\n📷 {len(saved)} фото прикреплено"
             try:
                 async with httpx.AsyncClient(timeout=10.0) as client:
-                    await client.post(
+                    await send_notification(client,
                         f"https://api.telegram.org/bot{token}/sendMessage",
-                        json={"chat_id": tg_id, "text": notify, "parse_mode": "HTML"},
+                        {"chat_id": tg_id, "text": notify, "parse_mode": "HTML"},
                     )
             except Exception:
-                pass
+                logger.warning("support notification could not be sent for ticket %s", ticket_id)
     return {"ok": True}
 
 

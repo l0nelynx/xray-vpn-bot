@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
+from common_db.support_delivery import send_notification
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy import desc, func, select
@@ -50,7 +51,7 @@ async def _notify_admin(ticket_id: int, username: str | None, subject: str) -> N
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     try:
         async with httpx.AsyncClient(timeout=NOTIFY_TIMEOUT) as client:
-            await client.post(url, json={"chat_id": admin_id, "text": text})
+            await send_notification(client, url, {"chat_id": admin_id, "text": text})
     except Exception as e:
         logger.warning("admin notification failed for ticket %s: %s", ticket_id, e)
 
@@ -73,7 +74,7 @@ async def list_tickets(tg: TgUser = Depends(get_tg_user)) -> list[TicketSummary]
                 status=row.ticket.status,
                 created_at=row.ticket.created_at,
                 updated_at=row.ticket.updated_at,
-                last_message_preview=((row.last_message_text or row.ticket.message)[:120]),
+                last_message_preview=((row.ticket.message if row.last_message_text is None else row.last_message_text or "📷")[:120]),
             )
             for row in rows
         ]
@@ -191,7 +192,7 @@ async def _notify_admin_reply(
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     try:
         async with httpx.AsyncClient(timeout=NOTIFY_TIMEOUT) as client:
-            await client.post(url, json={"chat_id": admin_id, "text": body})
+            await send_notification(client, url, {"chat_id": admin_id, "text": body})
     except Exception as e:
         logger.warning("admin reply notification failed for ticket %s: %s", ticket_id, e)
 
@@ -208,6 +209,8 @@ async def add_user_message(
     tg: TgUser = Depends(get_tg_user),
 ) -> MessageItem:
     text = text.strip()
+    if len(text) > 4000:
+        raise HTTPException(400, "message too long")
     if not text and not images:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "empty message")
     now = _now_iso()
