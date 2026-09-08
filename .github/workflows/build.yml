@@ -57,13 +57,16 @@ jobs:
       release:     ${{ steps.mode.outputs.release }}
       publish:     ${{ steps.mode.outputs.publish }}
     steps:
+
       - uses: actions/checkout@v7
+
         with:
           ref: ${{ inputs.checkout_ref || github.ref }}
 
       - id: mode
         name: Resolve check/publish mode
         shell: bash
+
         env:
           REQUESTED_PUBLISH: ${{ inputs.publish }}
           EVENT_NAME: ${{ github.event_name }}
@@ -83,7 +86,9 @@ jobs:
             echo "publish=false" >> "$GITHUB_OUTPUT"
           fi
 
+
           if [[ -n "$RELEASE_VERSION" ]]; then
+
             echo "release=true" >> "$GITHUB_OUTPUT"
           else
             echo "release=false" >> "$GITHUB_OUTPUT"
@@ -142,6 +147,7 @@ jobs:
       base_tag:  ${{ steps.calc.outputs.base_tag }}
       base_pull_tag: ${{ steps.calc.outputs.base_pull_tag }}
     steps:
+
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.checkout_ref || github.ref }}
@@ -213,7 +219,9 @@ jobs:
       contents: read
       packages: write
     steps:
+
       - uses: actions/checkout@v7
+
         with:
           ref: ${{ inputs.checkout_ref || github.ref }}
 
@@ -244,7 +252,9 @@ jobs:
       contents: read
       packages: write
     steps:
+
       - uses: actions/checkout@v7
+
         with:
           ref: ${{ inputs.checkout_ref || github.ref }}
 
@@ -271,7 +281,9 @@ jobs:
       contents: read
       packages: write
     steps:
+
       - uses: actions/checkout@v7
+
         with:
           ref: ${{ inputs.checkout_ref || github.ref }}
 
@@ -302,7 +314,9 @@ jobs:
       contents: read
       packages: write
     steps:
+
       - uses: actions/checkout@v7
+
         with:
           ref: ${{ inputs.checkout_ref || github.ref }}
 
@@ -329,7 +343,9 @@ jobs:
       contents: read
       packages: write
     steps:
+
       - uses: actions/checkout@v7
+
         with:
           ref: ${{ inputs.checkout_ref || github.ref }}
 
@@ -360,7 +376,9 @@ jobs:
       contents: read
       packages: write
     steps:
+
       - uses: actions/checkout@v7
+
         with:
           ref: ${{ inputs.checkout_ref || github.ref }}
 

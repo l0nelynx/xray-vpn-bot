@@ -58,6 +58,7 @@ runs:
       id: meta
       if: inputs.push == 'true'
       uses: docker/metadata-action@v6
+
       with:
         images: |
           ghcr.io/${{ inputs.ghcr_owner }}/${{ inputs.service }}
