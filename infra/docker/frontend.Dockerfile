@@ -13,6 +13,8 @@ WORKDIR /build
 COPY package.json package-lock.json* ./
 COPY web ./web
 RUN npm ci || npm install
+# TypeScript checks the mock handlers too; they import the shared app catalog.
+COPY services/miniapp/backend/connect/app_config.default.json ./services/miniapp/backend/connect/app_config.default.json
 RUN npm run build -w xray-vpn-dashboard \
  && npm run build -w xray-vpn-miniapp
 
