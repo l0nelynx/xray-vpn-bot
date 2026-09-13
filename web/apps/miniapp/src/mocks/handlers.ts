@@ -1,3 +1,4 @@
+import bundledConnectCatalog from "../../../../../services/miniapp/backend/connect/app_config.default.json";
 import { passthrough, http, HttpResponse, type HttpHandler } from "msw";
 
 const API = "/bot/miniapp/api";
@@ -141,6 +142,7 @@ export const handlers: HttpHandler[] = [
     const selectedSubscriptions = scenario === "single" ? mockSubscriptions.slice(0, 1) : mockSubscriptions;
     const availableSubscriptions = empty ? [] : selectedSubscriptions.map((item) => ({
       ...item,
+      subscription_url: scenario === "qr-overflow" ? `https://example.com/sub/${"x".repeat(5000)}` : scenario === "long-link" ? `https://example.com/sub/${"abcdef1234".repeat(100)}?token=a%2Fb&lang=ru#test` : item.subscription_url,
       status: unknown ? "unavailable" : scenario === "expired" ? "expired" : item.status,
       days_left: scenario === "expired" ? 0 : item.days_left,
       connection_state: unknown ? "unknown" : never || scenario === "connection-progress" ? "never_connected" : item.connection_state,
@@ -166,6 +168,7 @@ export const handlers: HttpHandler[] = [
     const selectedSubscriptions = scenario === "single" ? mockSubscriptions.slice(0, 1) : mockSubscriptions;
     return HttpResponse.json({ subscriptions: selectedSubscriptions.map((item) => ({
       ...item,
+      subscription_url: scenario === "qr-overflow" ? `https://example.com/sub/${"x".repeat(5000)}` : scenario === "long-link" ? `https://example.com/sub/${"abcdef1234".repeat(100)}?token=a%2Fb&lang=ru#test` : item.subscription_url,
       status: scenario === "connection-unknown" ? "unavailable" : scenario === "expired" ? "expired" : item.status,
       days_left: scenario === "expired" ? 0 : item.days_left,
       connection_state: scenario === "connection-unknown" ? "unknown" : scenario === "connection-never" ? "never_connected" : scenario === "connection-progress" && connectionVerificationPolls < 2 ? "never_connected" : item.connection_state,
@@ -358,65 +361,12 @@ export const handlers: HttpHandler[] = [
     }),
   ),
 
-  http.get(`${API}/connect/app-config`, () =>
-    HttpResponse.json({
-      locales: ["ru", "en"],
-      version: 1,
-      platforms: {
-        ios: {
-          apps: [
-            {
-              name: "Stash",
-              featured: true,
-              blocks: [
-                {
-                  title: { ru: "Установка", en: "Install" },
-                  description: { ru: "Скачайте приложение", en: "Download the app" },
-                  buttons: [
-                    {
-                      link: "https://apps.apple.com",
-                      text: { ru: "App Store", en: "App Store" },
-                      type: "external",
-                    },
-                    {
-                      link: "",
-                      text: { ru: "Добавить подписку", en: "Add subscription" },
-                      type: "subscriptionLink",
-                    },
-                  ],
-                },
-              ],
-            },
-          ],
-        },
-        android: {
-          apps: [
-            {
-              name: "v2rayNG",
-              featured: true,
-              blocks: [
-                {
-                  title: { ru: "Установка", en: "Install" },
-                  buttons: [
-                    {
-                      link: "https://play.google.com",
-                      text: { ru: "Google Play", en: "Google Play" },
-                      type: "external",
-                    },
-                    {
-                      link: "",
-                      text: { ru: "Скопировать ссылку", en: "Copy link" },
-                      type: "copyButton",
-                    },
-                  ],
-                },
-              ],
-            },
-          ],
-        },
-      },
-    }),
-  ),
+  http.get(`${API}/connect/app-config`, ({ request }) => {
+    const { name } = scenarioFrom(request);
+    if (name === "catalog-error") return HttpResponse.json({ detail: "Unavailable" }, { status: 503 });
+    if (name === "catalog-empty") return HttpResponse.json({ ...bundledConnectCatalog, platforms: {} });
+    return HttpResponse.json(bundledConnectCatalog);
+  }),
 
   http.get(`${API}/free/check`, () =>
     HttpResponse.json({ subscribed: true, news_url: links.news_url }),

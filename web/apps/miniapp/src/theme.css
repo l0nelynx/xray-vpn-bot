@@ -744,40 +744,77 @@ summary:focus-visible {
 .connection-rail.compact { margin: 0 0 auto; }
 .connection-labels { display: grid; grid-template-columns: repeat(3, 1fr); text-align: center; color: var(--ux-fog); font-size: 10px; margin-bottom: 24px; }
 
-.connect-header { margin-bottom: 16px; }
-.connect-header h1 { margin: 0 0 5px; font-size: 24px; font-weight: 650; letter-spacing: -.03em; }
-.connect-header p, .connect-empty p { color: var(--ux-fog); margin: 0; font-size: 14px; }
-.connect-progress-card { margin-bottom: 10px; }
-.connect-progress-card .connection-rail { margin: 2px 8px 8px; }
-.connect-progress-card .connection-labels { margin-bottom: 0; }
-.platform-tabs { margin-bottom: 10px; overflow-x: auto; }
-.platform-tabs [role="tablist"] { width: max-content; min-width: 100%; height: 40px; }
-.platform-tabs [role="tab"] { min-height: 32px; }
-.connect-apps { display: flex; flex-direction: column; gap: 9px; }
-.connect-app { overflow: hidden; }
-.connect-app__header { width: 100%; min-height: 70px; padding: 12px 14px; display: flex; align-items: center; gap: 11px; background: transparent; color: inherit; border: 0; font: inherit; text-align: left; cursor: pointer; }
-.connect-app__header > span:not(.lib-icon) { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-.connect-app__header strong { font-size: 15px; }
-.connect-app__header small { color: var(--ux-fog); font-size: 11px; }
-.connect-app__header .badge svg { width: 11px; }
-.connect-app__header > svg { width: 17px; color: var(--ux-fog); transition: transform .2s; }
-.connect-app__header > svg.rotated { transform: rotate(180deg); }
-.connect-app__body { padding: 2px 14px 16px; }
-.guide-block { display: grid; grid-template-columns: 30px 1fr; gap: 9px; padding: 14px 0; border-top: 1px solid var(--border); }
-.guide-block__icon { width: 28px; height: 28px; border-radius: var(--radius-md); background: var(--muted); display: grid; place-items: center; }
-.guide-block strong { font-size: 13px; }
-.guide-block p { margin: 4px 0 10px; color: var(--ux-fog); font-size: 12px; line-height: 1.45; }
-.guide-buttons { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
-.guide-buttons button { min-height: 44px; }
-.connect-verification { min-height: 72px; margin-top: 10px; background: var(--card); }
-.connect-verification.connected > svg { color: var(--foreground); }
-.connect-verification [data-slot="spinner"] { width: 16px; height: 16px; }
-.manual-setup { margin: 10px 0 8px; color: var(--ux-fog); font-size: 12px; }
-.manual-setup summary { min-height: 48px; padding: 0 16px; display: flex; align-items: center; cursor: pointer; color: var(--foreground); font-weight: 650; }
-.manual-setup code { display: block; margin: 7px 0 12px; word-break: break-all; color: var(--ux-fog); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
-.connect-empty { padding: 50px 4px; text-align: center; }
+.connect-page { --connect-gap: 12px; }
+.connect-heading { display: flex; align-items: center; gap: 6px; margin-bottom: 14px; }
+.connect-heading h1, .connect-page > h1 { margin: 0; font-size: 23px; font-weight: 650; line-height: 1.25; letter-spacing: -.025em; overflow-wrap: anywhere; }
+.connect-heading h1:focus { outline: none; }
+.connect-heading > button { flex: 0 0 36px; margin-left: -6px; }
+.connect-subscription { border: 1px solid var(--border); border-radius: 14px; background: var(--card); padding: 10px 12px 12px; margin-bottom: 18px; }
+.connect-subscription-label { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; font-size: 13px; font-weight: 600; }
+.connect-subscription-label > span { flex-shrink: 0; }
+.connect-subscription-url { display: block; width: 100%; min-width: 0; padding: 0; margin: 1px 0 10px; height: 24px; border: 0; background: transparent; color: var(--muted-foreground); text-overflow: ellipsis; font-family: inherit; font-size: 13px; }
+.connect-resource-actions { display: flex; align-items: stretch; gap: 8px; }
+.connect-resource-actions > button { min-width: 0; min-height: 42px; height: auto; white-space: normal; line-height: 1.3; padding: 9px 10px; flex: 1; }
+.connect-resource-actions > .connect-qr-button { flex: 0 0 auto; min-width: 60px; }
+.connect-text-button { display: inline-flex; align-items: center; justify-content: flex-start; gap: 7px; border: 0; padding: 5px 0; min-height: 36px; background: transparent; color: var(--foreground); font: inherit; font-size: 13px; cursor: pointer; text-align: left; line-height: 1.4; }
+.connect-text-button svg { width: 17px; height: 17px; flex-shrink: 0; }
+.connect-subscription-picker { min-width: 0; max-width: 50%; color: var(--muted-foreground); overflow-wrap: anywhere; font-size: 12px; justify-content: flex-end; }
+.connect-question { font-size: 17px; font-weight: 600; line-height: 1.4; margin: 0; }
+.connect-device-switch { display: flex; align-items: center; gap: 10px; margin: -8px 0 16px; min-height: 44px; font-size: 13px; line-height: 1.45; cursor: pointer; }
+.connect-device-checkbox { position: relative; display: inline-flex; flex: 0 0 20px; width: 20px; height: 20px; }
+.connect-device-checkbox input { appearance: none; margin: 0; width: 20px; height: 20px; border: 1.5px solid var(--muted-foreground); border-radius: 4px; background: transparent; cursor: pointer; }
+.connect-device-checkbox input:checked { background: var(--primary); border-color: var(--primary); }
+.connect-device-checkbox svg { position: absolute; inset: 3px; width: 14px; height: 14px; color: var(--primary-foreground); pointer-events: none; opacity: 0; }
+.connect-device-checkbox input:checked + svg { opacity: 1; }
+.connect-question { margin-bottom: 14px; }
+.connect-platform-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.connect-platform-choice { display: flex; align-items: center; gap: 9px; min-height: 62px; padding: 11px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); color: var(--foreground); font: inherit; font-size: 14px; text-align: left; cursor: pointer; }
+.connect-platform-choice > svg { width: 19px; flex-shrink: 0; }
+.connect-platform-choice > svg:last-child { width: 14px; color: var(--muted-foreground); margin-left: auto; }
+.connect-platform-choice span { min-width: 0; overflow-wrap: anywhere; }
+.connect-platform-choice small { display: block; font-size: 10px; color: var(--muted-foreground); margin-top: 3px; }
+.connect-context { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: -4px 0 10px; color: var(--muted-foreground); font-size: 13px; }
+.connect-context > span { overflow-wrap: anywhere; }
+.connect-choice-list { display: flex; flex-direction: column; border-block: 1px solid var(--border); }
+.connect-choice { display: flex; align-items: center; gap: 12px; min-height: 70px; padding: 12px 4px; background: transparent; border: 0; border-bottom: 1px solid var(--border); color: var(--foreground); font: inherit; text-align: left; cursor: pointer; }
+.connect-choice:last-child { border-bottom: 0; }
+.connect-choice > span { min-width: 0; }
+.connect-choice strong { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+.connect-choice > svg:last-child { margin-left: auto; width: 18px; flex-shrink: 0; color: var(--muted-foreground); }
+.connect-choice .connect-recommendation { display: flex; align-items: center; gap: 4px; color: #e4c77e; font-size: 11px; margin-top: 3px; }
+.connect-recommendation svg { width: 12px; height: 12px; }
+.connect-platform-choice.selected { border-color: var(--muted-foreground); }
+.connect-choice.selected { background: var(--muted); }
+.connect-choice:hover, .connect-platform-choice:hover { background: var(--muted); }
+.connect-page button:focus-visible, .connect-page input:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
+.connect-change-client { margin: -10px 0 12px; }
+.connect-transfer-hint { color: var(--muted-foreground); font-size: 13px; line-height: 1.5; margin: 0 0 18px; }
+.connect-guide { margin: 0; padding: 0; list-style: none; }
+.connect-guide > li { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 10px; padding: 16px 0; border-top: 1px solid var(--border); }
+.connect-guide-number { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; background: var(--muted); font-size: 12px; font-weight: 600; }
+.connect-guide h2 { margin: 1px 0 6px; font-size: 15px; line-height: 1.4; font-weight: 600; }
+.connect-guide p { margin: 0; color: var(--muted-foreground); font-size: 13px; line-height: 1.55; overflow-wrap: anywhere; }
+.connect-guide-content > p { white-space: pre-line; }
+.connect-guide-buttons { display: flex; flex-direction: column; align-items: stretch; gap: 8px; margin-top: 10px; }
+.connect-guide-buttons > button { min-height: 44px; height: auto; white-space: normal; padding-block: 10px; line-height: 1.4; }
+.connect-transfer-resource > span { display: block; font-size: 12px; margin: 4px 0 7px; color: var(--muted-foreground); }
+.connect-verification-section { border-top: 1px solid var(--border); padding-top: 14px; margin-top: 2px; }
+.connect-verification { margin-bottom: 12px; }
+.connect-link-dialog { width: calc(100% - 24px); max-width: 420px; max-height: calc(100dvh - 32px); overflow-y: auto; border-radius: 16px; padding: 24px 18px 16px; }
+.connect-link-dialog h2 { padding-right: 22px; overflow-wrap: anywhere; line-height: 1.4; }
+.connect-link-dialog { z-index: 111; gap: 12px; }
+.connect-modal-overlay { z-index: 110; }
+.connect-link-dialog > button.absolute { min-width: 32px; min-height: 32px; display: grid; place-items: center; right: 10px; top: 12px; }
+.connect-qr-image { display: grid; place-items: center; min-height: 180px; }
+.connect-qr-image img { width: 100%; max-width: 280px; height: auto; background: white; }
+.connect-qr-image p { color: var(--muted-foreground); }
+.connect-caption { font-size: 12px; color: var(--muted-foreground); line-height: 1.5; margin: 0; }
+.connect-dialog-url { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--muted-foreground); }
+.connect-dialog-url textarea { width: 100%; resize: vertical; border: 1px solid var(--border); border-radius: 8px; padding: 8px; background: var(--card); color: var(--foreground); font-size: 13px; overflow-wrap: anywhere; }
+.connect-loading { display: grid; place-items: center; padding: 32px; }
+.connect-empty { padding: 36px 12px; text-align: center; }
+.connect-empty p { color: var(--muted-foreground); }
 .connect-empty .onboarding-glyph { margin: 0 auto 20px; }
-.connect-empty h2 { margin: 0 0 8px; }
 .connect-empty button { margin-top: 24px; }
 
 .payment-state-page { min-height: calc(100dvh - 90px); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 12px; }
@@ -790,7 +827,7 @@ summary:focus-visible {
 .payment-state-icon.waiting { color: var(--ux-snow); }
 
 @media (prefers-reduced-motion: reduce) {
-  .onboarding-progress span, .connect-app__header > svg { transition: none; }
+  .onboarding-progress span { transition: none; }
   .animate-spin { animation: none !important; }
 }
 
@@ -820,10 +857,6 @@ summary:focus-visible {
   .device-card { padding: 13px; }
   .legal-content { padding: 15px 14px 6px; }
   .support-tickets-header { align-items: flex-start; flex-wrap: wrap; }
-  .connect-app__header .badge { display: none; }
-  .connect-app__header { padding-inline: 12px; gap: 9px; }
-  .connect-app__body { padding-inline: 12px; }
-  .guide-buttons button { flex: 1 1 100%; }
   .onboarding-shell { padding-inline: var(--miniapp-gutter); }
   .onboarding-hero h1 { font-size: clamp(29px, 9vw, 36px); }
   .stack-page-header { grid-template-columns: 40px minmax(0, 1fr) 40px; gap: 6px; }

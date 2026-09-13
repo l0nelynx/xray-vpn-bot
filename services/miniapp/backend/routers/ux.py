@@ -31,6 +31,11 @@ EventName = Literal[
     "payment_succeeded",
     "payment_failed",
     "connect_started",
+    "connect_platform_selected",
+    "connect_app_selected",
+    "connect_guide_opened",
+    "connect_link_copied",
+    "connect_qr_opened",
     "app_install_opened",
     "subscription_add_opened",
     "connection_verified",
@@ -48,6 +53,8 @@ class UxEventCreate(BaseModel):
     source: str | None = Field(default=None, max_length=32)
     app: str | None = Field(default=None, max_length=64)
     outcome: str | None = Field(default=None, max_length=32)
+    device_mode: Literal["current", "other"] | None = None
+    resource: Literal["subscription", "install", "account", "import", "help"] | None = None
 
 
 @router.post("/events", status_code=status.HTTP_204_NO_CONTENT)
@@ -89,7 +96,10 @@ async def create_ux_event(
 
         metadata = {
             key: value
-            for key, value in {"app": body.app, "outcome": body.outcome}.items()
+            for key, value in {
+                "app": body.app, "outcome": body.outcome,
+                "device_mode": body.device_mode, "resource": body.resource,
+            }.items()
             if value is not None
         }
         session.add(

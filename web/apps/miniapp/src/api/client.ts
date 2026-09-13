@@ -73,6 +73,11 @@ export type UxEventName =
   | "payment_succeeded"
   | "payment_failed"
   | "connect_started"
+  | "connect_platform_selected"
+  | "connect_app_selected"
+  | "connect_guide_opened"
+  | "connect_link_copied"
+  | "connect_qr_opened"
   | "app_install_opened"
   | "subscription_add_opened"
   | "connection_verified"
@@ -88,6 +93,8 @@ export interface UxEvent {
   source?: string;
   app?: string;
   outcome?: string;
+  device_mode?: "current" | "other";
+  resource?: "subscription" | "install" | "account" | "import" | "help";
 }
 
 export const ux = {
@@ -378,8 +385,11 @@ export const free = {
 export type LocalizedText = Record<string, string>;
 
 export type ConnectButtonType = "external" | "subscriptionLink" | "copyButton";
+export type ConnectPurpose = "install" | "account" | "import" | "help";
 
 export interface ConnectButton {
+  purpose?: ConnectPurpose;
+  secondary?: boolean;
   link: string;
   text: LocalizedText;
   type: ConnectButtonType;
@@ -387,6 +397,8 @@ export interface ConnectButton {
 }
 
 export interface ConnectBlock {
+  purpose?: ConnectPurpose | "manual" | "enable";
+  otherDescription?: LocalizedText;
   title: LocalizedText;
   description?: LocalizedText;
   buttons: ConnectButton[];
@@ -395,6 +407,7 @@ export interface ConnectBlock {
 }
 
 export interface ConnectApp {
+  recommended?: boolean;
   name: string;
   blocks: ConnectBlock[];
   featured?: boolean;

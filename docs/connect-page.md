@@ -1,9 +1,29 @@
 # Connect page & app catalog
 
 The **Connect** page (`/connect` in the Telegram MiniApp) is our own UI for the
-"how to install & connect" flow — it replaces bouncing the user to the external
-Remnawave subscription page. It renders a per-platform catalog of VPN apps with
-install steps and one-tap "add subscription" deep-links.
+"how to install & connect" flow. Users explicitly choose a platform, then a
+client, then see that client's short instruction. There are no platform
+carousels, app accordions or decorative installation progress rails.
+
+The subscription URL and its copy action are visible at the top of every
+screen, including while the catalog is unavailable. A clipboard failure opens
+a selectable full URL. Multiple subscriptions use a separate selection dialog.
+The home action for an already-used subscription reads “How to connect?”.
+
+The optional **another device** mode has a visible checkbox on every selection
+and instruction screen. Toggling it preserves the current screen, platform and
+client, and immediately updates the link/QR actions. It follows the same choices and offers copy
+and QR actions for subscription, installation and browser-account links. QR
+generation runs locally in a lazy-loaded module; personal URLs are never sent
+to a QR service. Each QR identifies its resource. A subscription QR must be
+imported by a compatible VPN client; scanning it with a camera does not
+necessarily import it. TV guides retain their phone-transfer instructions.
+
+Selection is represented by `step=platform|clients|guide`, `platform`, `app`,
+and `device=other` in the route query. `subscription_id` and `source` survive
+navigation. Invalid selections return to the relevant chooser. No personal
+URL is stored in route parameters. Telegram BackButton and in-page back return
+to the previous choice; browser history and reload retain the route's choices.
 
 The only per-user datum is the `subscription_url` (from the authenticated `/me`
 response); everything else — the app catalog, install steps, deep-link templates
@@ -66,7 +86,8 @@ The override path is configurable via `connect_app_config_path` in `config.yml`
       "apps": [
         {
           "name": "Happ",
-          "featured": true,                     // featured apps sort first + get a badge
+          "featured": true,                     // legacy recommendation hint
+          "recommended": true,                  // optional explicit MiniApp preference
           "svgIconKey": "Happ",                 // brand icon key (see Icons)
           "blocks": [                           // ordered install steps
             {
@@ -106,6 +127,49 @@ The override path is configurable via `connect_app_config_path` in `config.yml`
 | `subscriptionLink` | Custom-scheme deep-link (`happ://…`). Navigates directly so the OS opens the app. Rendered as the primary button. |
 | `copyButton` | Copies the (substituted) link to the clipboard with a toast. |
 
+### Optional MiniApp metadata
+
+Existing catalogs without these fields continue to render all their blocks
+and buttons. MiniApp adds the following optional fields to the bundled catalog:
+
+- `apps[].recommended`: explicit preference. Otherwise CheezyVPN wins when
+  present, followed by the first `featured` app. Explicit `false` opts out.
+  Only the chosen recommendation receives a compact badge; all clients remain
+  visible in the same list, with equal row heights.
+- `blocks[].purpose`: `install`, `account`, `import`, `manual`, `enable`, or
+  `help`. Necessary client-specific actions (HWID, TUN, routing, TV transfer)
+  remain in the instruction.
+- `blocks[].otherDescription`: optional localized text for another-device mode.
+- `buttons[].purpose`: `install`, `account`, `import`, or `help`, independent
+  of how the button executes. This distinguishes browser sign-in from download.
+- `buttons[].secondary`: optional lower visual emphasis, e.g. “All releases”.
+
+The legacy adapter identifies account links by `/claim`, subscription actions
+by placeholders or button type, and otherwise treats external links as
+installation. For accurate help/download analytics, annotate legacy external
+help buttons with `purpose: "help"`. No behavior depends on translated labels.
+Consumers with a strict upstream schema can remove these optional metadata
+fields when exporting the catalog to Remnawave; MiniApp's legacy adapter still
+supports the original format. MiniApp currently supports Russian and English;
+upstream locales retain existing translations where unchanged and use English
+fallback for edited content.
+
+### Verification and analytics
+
+Downloading, copying or showing QR does not start verification. On the current
+device, import/account actions or the explicit “Check subscription” button may
+check the selected subscription. Another-device mode does not claim to verify
+that device. `connected` means the subscription has a connection history; it is
+not proof that this specific device is connected. Unknown status is shown only
+after a requested check. Changing the selection cancels pending polling.
+
+Events `connect_platform_selected`, `connect_app_selected`,
+`connect_guide_opened`, `connect_link_copied`, and `connect_qr_opened` use the
+existing UX endpoint. Optional `device_mode` and `resource` are finite categories
+stored in event metadata. URL contents are never included. Historical checks
+use `connection_verified` with `outcome: "subscription_history"`; do not treat
+that event as proof of a new-device conversion.
+
 > **Deep-link / query handling.** The Mini App webview can't launch custom
 > schemes (`happ://…`) directly — `tg.openLink` only opens `http(s)`. Telegram's
 > `openLink` also **strips URL fragments** on external https, and Remnawave
@@ -139,9 +203,10 @@ The bundled default ships our own clients as `featured` on four platforms:
 
 Notes:
 
-- For CheezyVPN on desktop, MiniApp renders the browser claim block first and
-  styles it as the primary action. Installation and copy/manual import remain
-  explicit fallback blocks.
+- For CheezyVPN on desktop, installation comes first, followed by browser
+  account connection and enabling VPN. The browser connection is a primary
+  action. Manual import is a short fallback beside it, using the always-visible
+  subscription link. Download labels identify x64/arm64/AppImage restrictions.
 - `cheezy://add/…` expects the **raw** subscription URL after the host segment.
   The client's deep-link parser percent-decodes `%XX` only when present, so the
   raw substitution `fillLink` performs is parsed correctly. Senders that build
@@ -204,3 +269,26 @@ The `frontend` container is static-only and mounts no files. Only the backends
 mount `config.yml`. Serving the catalog through the miniapp API is therefore the
 only way to make it operator-configurable without rebuilding the SPA — the same
 pattern as branding (`branding_name` flows through `/me`).
+
+## Local preview and regression checks
+
+Run `npm run dev:mock -w xray-vpn-miniapp` and open
+`http://127.0.0.1:5174/bot/miniapp/connect?mock=connection-never-ru`.
+The MSW mock imports the real bundled app catalog, with fictitious subscription
+URLs. Run `node scripts/support-mock-server.mjs` alongside it for the support
+tab and unread badge API. Neither command needs production credentials.
+
+`node scripts/test-miniapp-connect.mjs` checks catalog semantics and the ru/en
+browser matrix: navigation, visible alternatives at 360×640, copy and manual
+fallback, QR decoding (including long URLs), QR overflow, subscription changes,
+desktop redirects, verification outcomes, missing catalog, single subscription,
+single client and enlarged text. It writes review screenshots to
+`docs/screenshots/miniapp-connect-redesign/`. Requires Node 22.18+ and a
+Playwright browser; `PLAYWRIGHT_CHANNEL=chrome` selects installed Chrome.
+The standard MiniApp build checks TypeScript. Server telemetry checks live in
+`services/miniapp/tests/test_connect_ux_events.py`.
+
+Additional mock scenarios: `catalog-error`, `catalog-empty`, `long-link`,
+`qr-overflow`, `single`, `empty`, `connected`, `connection-unknown`, and
+`connection-never`, with `-ru` / `-en` suffixes. `preview_timeout=1` shortens
+verification only in mock mode.

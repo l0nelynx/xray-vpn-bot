@@ -28,6 +28,7 @@
     "lightningcss-linux-x64-musl": "1.32.0"
   },
   "devDependencies": {
+    "jsqr": "^1.4.0",
     "playwright": "^1.52.0"
   },
   "scripts": {

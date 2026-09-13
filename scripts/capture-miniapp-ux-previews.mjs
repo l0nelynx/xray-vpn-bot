@@ -105,9 +105,12 @@ try {
       for (const [name, scenario, path] of selectedCaptures) {
         await page.goto(withScenario(path, scenario, language), { waitUntil: "domcontentloaded" });
         await waitForApp(page);
-        if (name === "connect-timeout") {
-          await page.locator(".connect-verification + button").click();
-          await page.waitForTimeout(500);
+        if (name.startsWith("connect-") && name !== "connect-wizard") {
+          const platform = target.platform === "tdesktop" ? "windows" : target.platform;
+          await page.locator(".connect-platform-choice").filter({ hasText: platform === "ios" ? "iOS" : platform === "windows" ? "Windows" : "Android" }).first().click();
+          await page.locator(".connect-choice").first().click();
+          await page.locator(".connect-verification-section > button").click();
+          await page.locator(".connect-verification:not(.checking)").waitFor();
         }
         if (name === "home-promo") {
           await page.locator(".home-promo-trigger").click();
