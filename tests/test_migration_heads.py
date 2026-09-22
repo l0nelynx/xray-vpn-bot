@@ -36,6 +36,8 @@ def test_startup_upgrades_from_either_branch(tmp_path, monkeypatch, applied):
     engine = sa.create_engine(url)
     # Relevant schema at 0040, with existing customer data to preserve.
     with engine.begin() as conn:
+        conn.exec_driver_sql("CREATE TABLE transactions (transaction_id VARCHAR(100) PRIMARY KEY, delivery_status INTEGER, order_status VARCHAR(50), payment_method VARCHAR(50))")
+        conn.exec_driver_sql("INSERT INTO transactions VALUES ('historical-paid', 1, 'confirmed', 'CARD')")
         conn.exec_driver_sql("CREATE TABLE support_tickets (id INTEGER PRIMARY KEY, subject VARCHAR(200), status VARCHAR(20), created_at VARCHAR(30), updated_at VARCHAR(30))")
         conn.exec_driver_sql("CREATE TABLE support_messages (id INTEGER PRIMARY KEY, ticket_id INTEGER, sender VARCHAR(20), text TEXT, created_at VARCHAR(30))")
         conn.exec_driver_sql("CREATE TABLE support_attachments (id INTEGER PRIMARY KEY, created_at VARCHAR(30))")
@@ -50,7 +52,11 @@ def test_startup_upgrades_from_either_branch(tmp_path, monkeypatch, applied):
     # A second service startup must be a no-op, not repeat CREATE/ALTER.
     upgrade_to_head()
     with engine.connect() as conn:
-        assert conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalars().all() == ["0042_merge_support_branding"]
+        assert conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalars().all() == ["0044_referral_recovery"]
+        assert "web_analytics_purchases" in sa.inspect(conn).get_table_names()
+        assert conn.execute(sa.text("SELECT transaction_id, kind, points FROM referral_receipts")).all() == [("historical-paid", "legacy", 0)]
+        assert conn.execute(sa.text("SELECT status FROM referral_recovery WHERE id=1")).scalar() == "ready"
+        assert conn.execute(sa.text("SELECT COUNT(*) FROM referral_notices")).scalar() == 0
         assert sa.inspect(conn).has_table("dashboard_branding_assets")
         ticket = conn.execute(sa.text("SELECT subject, status, last_admin_message_id FROM support_tickets")).one()
         assert tuple(ticket) == ("Existing ticket", "waiting_user", 2)

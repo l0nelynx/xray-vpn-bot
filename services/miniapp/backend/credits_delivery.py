@@ -5,7 +5,6 @@ import logging
 
 from sqlalchemy import text
 from common_db.repo import credits_pay as _repo_credits_pay
-from common_db.repo import referral_rewards as _repo_referral
 from subscription_delivery import deliver_android_paid
 
 from .database.session import async_session
@@ -71,12 +70,6 @@ async def pay_and_deliver(
             await session.rollback()
             return {"status": "error", "message": "insufficient_credits"}
 
-        reward = None
-        rtg = referral_tg_id if referral_tg_id is not None else tg_id
-        if rtg:
-            reward = await _repo_referral.record_purchase_and_compute_reward(
-                session, rtg, days
-            )
         await session.commit()
 
     tx_id = purchase.transaction_id
@@ -106,6 +99,6 @@ async def pay_and_deliver(
         "balance_after": purchase.balance_after,
         "points_spent": purchase.points_spent,
         "credits_spent": purchase.credits_spent,
-        "referral_reward": reward.reward_points if reward else 0,
+        "referral_reward": 0,  # Processed asynchronously after successful delivery.
         "subscription_url": result.get("subscription_url"),
     }

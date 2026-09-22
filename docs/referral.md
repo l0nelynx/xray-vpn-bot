@@ -59,10 +59,18 @@ at activation time.
 
 ## Owner reward formula
 
-Called on **paid subscription delivery** (all surfaces) via
-`record_purchase_and_compute_reward(buyer_tg_id, days)`:
+For historical missed rewards, see [One-time referral recovery](referral-recovery.md).
 
-1. Find buyer's latest redemption → look up that code's owner
+Completed paid purchases recorded in `transactions` are picked up by the durable
+`referral_worker` (normally within five seconds) via
+`record_purchase_and_compute_reward(session, transaction_id)`. A unique purchase
+receipt, balance entry and counter update commit together. Failed attempts roll
+back and retry after five minutes, including after service restarts. Bot,
+MiniApp and Dashboard can run the worker concurrently; a database lock serializes
+rewards and recovery. Dashboard drains the Telegram notification outbox.
+
+1. Find the buyer's **referral** redemption before the purchase (promotional codes
+   do not override it); resolve the owner by Telegram ID or synthetic `-user.id`.
 2. Bump `promo.days_purchased` by purchased days
 3. Compute:
 
@@ -219,17 +227,19 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant Pay as Payment delivery
+    participant Worker as referral_worker
     participant RR as referral_rewards
     participant DB as Postgres
     participant Owner as Referrer
 
-    Pay->>RR: record_purchase_and_compute_reward(buyer, days)
-    RR->>DB: latest redemption → owner promo
+    Pay->>DB: mark transaction delivered
+    Worker->>RR: record_purchase_and_compute_reward(transaction_id)
+    RR->>DB: lock + check unique receipt + referral redemption
     RR->>DB: days_purchased += days
     RR->>RR: compute points (tier + cap)
     RR->>DB: credit owner wallet
-    RR-->>Pay: ReferralRewardInfo
-    Pay->>Owner: Telegram notification
+    RR->>DB: commit receipt + counters + credit + notice
+    Worker->>Owner: Telegram notice from durable outbox
 ```
 
 ---

@@ -17,6 +17,7 @@ import {
 } from "@xray/ui/components/table";
 import { api } from "../api/client";
 import ConfirmButton from "../components/ConfirmButton";
+import ReferralRecoveryTab from "./ReferralRecoveryTab";
 
 interface ScanUser {
   tg_id: number;
@@ -265,10 +266,12 @@ export default function TgAdminPage() {
           <TabsTrigger value="channel">Пост в канал</TabsTrigger>
           <TabsTrigger value="subclean">FREE Sub Check</TabsTrigger>
           <TabsTrigger value="telemt">Telemt Clean</TabsTrigger>
+          <TabsTrigger value="referrals">Реферальные награды</TabsTrigger>
         </TabsList>
         <TabsContent value="channel">
           <ChannelPostTab />
         </TabsContent>
+        <TabsContent value="referrals"><ReferralRecoveryTab /></TabsContent>
         <TabsContent value="subclean">
           <CleanTab
             title="FREE users sub check — пользователи без подписки на канал"

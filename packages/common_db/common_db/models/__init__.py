@@ -14,6 +14,7 @@ from .auth import (
     WebAuthorizationCode,
 )
 from .credit_ledger import CreditLedger
+from .referral_recovery import ReferralReceipt, ReferralRecovery, ReferralNotice
 from .crm import (
     CrmCampaign,
     CrmCampaignDelivery,

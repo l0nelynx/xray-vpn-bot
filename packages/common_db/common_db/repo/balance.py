@@ -36,6 +36,7 @@ def discount_percent_to_points(discount_percent: int) -> int:
 async def _lock_user(session: AsyncSession, user_id: int) -> User | None:
     return await session.scalar(
         select(User).where(User.id == user_id).with_for_update()
+        .execution_options(populate_existing=True)
     )
 
 

@@ -807,18 +807,6 @@ async def get_default_promo_credit_grant() -> int:
         return grant
 
 
-async def process_referral_reward_for_purchase(tg_id: int, days: int):
-    """Compute referral owner reward after a paid purchase. Returns ReferralRewardInfo or None."""
-    from common_db.repo import referral_rewards as _repo_referral
-
-    async with async_session() as session:
-        info = await _repo_referral.record_purchase_and_compute_reward(
-            session, tg_id, days
-        )
-        await session.commit()
-        return info
-
-
 async def get_promos_paginated(page: int, per_page: int = 10):
     """Paginated promo catalog (bot admin). Delegates to the shared repo
     query. NOTE: page is now 1-based to match the dashboard."""

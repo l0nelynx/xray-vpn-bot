@@ -11,7 +11,7 @@ from datetime import datetime
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from common_db.repo.users import PAID_ORDER_STATUSES
@@ -28,6 +28,72 @@ from ..telegram import tg_send, tg_url, tg_bot_open_url
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/tg-admin", tags=["tg-admin"])
+
+
+class ReferralPreviewRequest(BaseModel):
+    manual_adjustments: dict[str, int] = Field(default_factory=dict)
+
+
+class ReferralExecuteRequest(BaseModel):
+    preview_id: str
+    reviewed: bool
+
+
+@router.post("/referral-recovery/preview")
+async def referral_recovery_preview(body: ReferralPreviewRequest, _: str = Depends(get_current_user)):
+    from common_db.repo.referral_recovery import preview
+    async with async_session() as session:
+        try:
+            result = await preview(session, body.manual_adjustments)
+            await session.commit()
+            return result
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+
+
+@router.post("/referral-recovery/execute")
+async def referral_recovery_execute(body: ReferralExecuteRequest, _: str = Depends(get_current_user)):
+    from common_db.repo.referral_recovery import execute
+    if not body.reviewed:
+        raise HTTPException(400, "Review reward settings and manual grants before confirming")
+    async with async_session() as session:
+        try:
+            result = await execute(session, body.preview_id)
+            await session.commit()
+            return result
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+
+
+@router.get("/referral-recovery")
+async def referral_recovery_status(_: str = Depends(get_current_user)):
+    from common_db.models.referral_recovery import ReferralRecovery, ReferralNotice
+    async with async_session() as session:
+        state = await session.get(ReferralRecovery, 1)
+        notices = (await session.scalars(select(ReferralNotice).where(
+            ReferralNotice.key.like("recovery:%")
+        ).order_by(ReferralNotice.key))).all()
+        counts = {s: 0 for s in ("pending", "sending", "sent", "failed", "unknown", "unavailable")}
+        for notice in notices:
+            counts[notice.status] += 1
+        return {
+            "status": state.status if state else "uninitialized",
+            "snapshot": state.snapshot if state else None,
+            "messages": counts,
+            "message_details": [{"user_id": n.user_id, "tg_id": n.tg_id, "status": n.status, "error": n.error} for n in notices],
+        }
+
+
+@router.post("/referral-recovery/retry-messages")
+async def referral_recovery_retry(_: str = Depends(get_current_user)):
+    from sqlalchemy import update
+    from common_db.models.referral_recovery import ReferralNotice
+    async with async_session() as session:
+        result = await session.execute(update(ReferralNotice).where(
+            ReferralNotice.key.like("recovery:%"), ReferralNotice.status == "failed"
+        ).values(status="pending", error=None))
+        await session.commit()
+        return {"queued": result.rowcount}
 
 
 # ──────────────────────────────────────────────────────────────────────────────

@@ -79,6 +79,9 @@ async def lifespan(app: FastAPI):
         crypto_secret=get_payments_secrets_key(),
     )
     poll_task = asyncio.create_task(runtime_overlay_poll_loop(async_session))
+    from common_db.referral_worker import referral_loop
+    from .referral_notifications import send_referral_notice
+    referral_task = asyncio.create_task(referral_loop(async_session, send_referral_notice))
 
     pool = None
     try:
@@ -89,6 +92,11 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        referral_task.cancel()
+        try:
+            await referral_task
+        except asyncio.CancelledError:
+            pass
         poll_task.cancel()
         try:
             await poll_task

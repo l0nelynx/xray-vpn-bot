@@ -92,7 +92,7 @@ async def get_redemption_for_code(
 async def get_latest_redemption(
     session: AsyncSession, tg_id: int
 ) -> PromoRedemption | None:
-    """Most recent redemption — used for referral reward routing on purchase."""
+    """Most recent activation for display; referral rewards use referral-only routing."""
     return await session.scalar(
         select(PromoRedemption)
         .where(PromoRedemption.tg_id == tg_id)

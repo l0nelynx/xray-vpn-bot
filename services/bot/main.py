@@ -157,6 +157,8 @@ async def on_startup(dispatcher, **kwargs):
     )
     await bootstrap_runtime_overlay(async_session, _yaml_secrets, crypto_secret=crypto_secret)
     asyncio.create_task(runtime_overlay_poll_loop(async_session))
+    from common_db.referral_worker import referral_loop
+    asyncio.create_task(referral_loop(async_session))
 
     admin_id = secrets.get("admin_id")
     if admin_id:

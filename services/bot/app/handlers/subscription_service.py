@@ -197,30 +197,7 @@ async def deliver_subscription(
         elif scenario == SubscriptionScenario.ALREADY_ACTIVE:
             result = await _handle_already_active(message, username, subscription_type, lang, user_info=user_info)
 
-        # Referral owner reward: bonus points credited in record_purchase_and_compute_reward.
-        if subscription_type == SubscriptionType.PAID:
-            try:
-                reward_info = await rq.process_referral_reward_for_purchase(user_id, days)
-                if reward_info and reward_info.reward_points > 0:
-                    try:
-                        owner_lang = await get_user_lang(reward_info.owner_tg_id)
-                        await bot.send_message(
-                            chat_id=reward_info.owner_tg_id,
-                            text=owner_lang.promo_reward_notification.format(
-                                reward_points=reward_info.reward_points,
-                                total_days=reward_info.days_purchased,
-                                total_rewarded=reward_info.points_rewarded_after,
-                            ),
-                            parse_mode="HTML",
-                        )
-                    except Exception as notify_err:
-                        logging.warning(
-                            "Failed to notify promo owner %s: %s",
-                            reward_info.owner_tg_id,
-                            notify_err,
-                        )
-            except Exception as promo_err:
-                logging.error(f"Error processing referral reward: {promo_err}")
+        # Referral rewards are processed from completed transactions by the durable worker.
 
         # Обновляем delivery_status после успешной доставки
         if transaction_id:
