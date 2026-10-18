@@ -42,8 +42,12 @@ from .transactions import Transaction
 from .users import DisabledUser, SubscriptionTransfer, User, UserSubscription
 from .api_health import ApiAlertState, ApiErrorEvent, ApiMetricHour, ApiMetricMinute, ApiServiceStatus
 from .miniapp_ux import MiniappUxEvent
+from .remnawave_availability import RemnawaveAvailability, RemnawaveRecoverySubscription, RemnawaveNotice
 
 __all__ = [
+    "RemnawaveAvailability",
+    "RemnawaveRecoverySubscription",
+    "RemnawaveNotice",
     # users
     "User",
     "UserSubscription",

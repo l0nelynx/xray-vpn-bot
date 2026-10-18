@@ -77,7 +77,12 @@ export const en: Messages = {
   "subscriptions.primaryChanged": "Primary subscription changed",
   "subscriptions.connect": "Connect",
   "subscriptions.renew": "Renew",
-  "subscriptions.unavailable": "Remnawave is temporarily unavailable. The link is preserved.",
+  "subscriptions.unavailable": "Maintenance is in progress. Subscription details are temporarily unavailable, but your subscription is saved. Please try again later — everything will work again once maintenance is complete.",
+  "maintenance.title": "Maintenance in progress",
+  "maintenance.notify": "Notify me when service is restored",
+  "maintenance.subscribing": "Subscribing…",
+  "maintenance.subscribed": "We'll notify you in Telegram when service is restored.",
+  "maintenance.subscribeError": "Could not enable the notification. Please try again.",
   "subscriptions.notFound": "Subscription was not found or is no longer linked to this account",
   "subscriptions.fallbackLabel": "Subscription #{id}",
 

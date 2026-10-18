@@ -5,6 +5,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
+from remnawave_client.client import RemnawaveOperationError
+from remnawave_client.availability import is_availability_error
 
 from .config import get_expose_api_docs, get_log_level, get_redis_url, get_web_allowed_origins, get_yaml_config
 from .security_config import validate_security_config
@@ -80,9 +82,19 @@ async def lifespan(app: FastAPI):
     poll_task = asyncio.create_task(runtime_overlay_poll_loop(async_session))
     from common_db.referral_worker import referral_loop
     referral_task = asyncio.create_task(referral_loop(async_session))
+    from .remnawave_availability import monitor_loop, record_failure
+    from remnawave_client.availability import set_failure_observer
+    set_failure_observer(record_failure)
+    availability_task = asyncio.create_task(monitor_loop())
     try:
         yield
     finally:
+        set_failure_observer(None)
+        availability_task.cancel()
+        try:
+            await availability_task
+        except asyncio.CancelledError:
+            pass
         referral_task.cancel()
         try:
             await referral_task
@@ -144,6 +156,14 @@ async def _unhandled_error(request, exc):
     )
 
 
+@app.exception_handler(RemnawaveOperationError)
+async def _remnawave_error(request, exc):
+    if not is_availability_error(exc.cause):
+        return await _unhandled_error(request, exc)
+    request.state.api_exception = exc
+    return JSONResponse(status_code=503, content={"detail": "remnawave_unavailable"})
+
+
 app.include_router(me.router, prefix=BASE_PATH)
 app.include_router(support.router, prefix=BASE_PATH)
 app.include_router(devices.router, prefix=BASE_PATH)
@@ -154,6 +174,8 @@ app.include_router(promo.router, prefix=BASE_PATH)
 app.include_router(free.router, prefix=BASE_PATH)
 app.include_router(link_email.router, prefix=BASE_PATH)
 app.include_router(ux.router, prefix=BASE_PATH)
+from .remnawave_availability import router as availability_router
+app.include_router(availability_router, prefix=BASE_PATH)
 app.include_router(android_auth_router.router, prefix=BASE_PATH)
 app.include_router(android_email_router.router, prefix=BASE_PATH)
 app.include_router(android_payments_router.router, prefix=BASE_PATH)

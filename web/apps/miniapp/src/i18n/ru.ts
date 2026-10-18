@@ -77,7 +77,12 @@ export const ru: Messages = {
   "subscriptions.primaryChanged": "Основная подписка изменена",
   "subscriptions.connect": "Подключить",
   "subscriptions.renew": "Продлить",
-  "subscriptions.unavailable": "Remnawave временно недоступен. Привязка сохранена.",
+  "subscriptions.unavailable": "Сейчас проводятся технические работы. Данные подписки временно недоступны, но ваша подписка сохранена. Пожалуйста, попробуйте позже — после завершения работ всё снова заработает.",
+  "maintenance.title": "Технические работы",
+  "maintenance.notify": "Уведомить, когда всё заработает",
+  "maintenance.subscribing": "Подписываем…",
+  "maintenance.subscribed": "Сообщим в Telegram, когда всё снова заработает.",
+  "maintenance.subscribeError": "Не удалось включить уведомление. Попробуйте ещё раз.",
   "subscriptions.notFound": "Подписка не найдена или больше не привязана к аккаунту",
   "subscriptions.fallbackLabel": "Подписка #{id}",
 

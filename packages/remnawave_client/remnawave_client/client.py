@@ -4,6 +4,7 @@ import uuid as _uuid
 from typing import Optional
 
 import httpx
+from .availability import report_failure
 from pydantic import BaseModel, ConfigDict, Field
 from remnawave import RemnawaveSDK
 from remnawave.enums import TrafficLimitStrategy, UserStatus
@@ -238,6 +239,7 @@ class RemnawaveClient:
                 })
             return squads
         except Exception as e:
+            await report_failure(e)
             logger.error("Remnawave get_%s_squads failed: %s", kind, e)
             if strict:
                 raise
@@ -293,6 +295,7 @@ class RemnawaveClient:
                 return None
             return _normalize_user(response)
         except Exception as e:
+            await report_failure(e)
             if _is_not_found_error(e):
                 return None
             logger.error("Remnawave get_user_by_username(%s) failed: %s", username, e)
@@ -312,6 +315,7 @@ class RemnawaveClient:
                 if (user.email or "").strip().casefold() == normalized
             ]
         except Exception as e:
+            await report_failure(e)
             logger.error("Remnawave get_user_by_email(%s) failed: %s", email, e)
             raise RemnawaveOperationError("get_user_by_email", e) from e
 
@@ -338,6 +342,7 @@ class RemnawaveClient:
                 raise RemnawaveOperationError("get_user_by_id", e) from e
             return None
         except Exception as e:
+            await report_failure(e)
             if _is_not_found_error(e):
                 return None
             logger.error("Remnawave get_user_by_id(%s) failed: %s", rw_id, e)
@@ -358,6 +363,7 @@ class RemnawaveClient:
                 return None
             return response.model_dump(mode="json", by_alias=True, exclude_none=False)
         except Exception as e:
+            await report_failure(e)
             if _is_not_found_error(e):
                 return None
             logger.error("Remnawave get_user_by_short_uuid(%s) failed: %s", short_uuid, e)
@@ -442,6 +448,7 @@ class RemnawaveClient:
                 "tag": getattr(response, "tag", tag),
             }
         except Exception as e:
+            await report_failure(e)
             logger.error("Remnawave create_user(%s) failed: %s", username, e)
             if raise_on_error:
                 raise RemnawaveOperationError("create_user", e) from e
@@ -539,6 +546,7 @@ class RemnawaveClient:
                 "status": response.status.value.lower() if response.status else None,
             }
         except Exception as e:
+            await report_failure(e)
             logger.error("Remnawave update_user_by_id(%s) failed: %s", rw_id, e)
             if raise_on_error:
                 raise RemnawaveOperationError("update_user", e) from e
@@ -549,6 +557,7 @@ class RemnawaveClient:
             await self.sdk.users.reset_user_traffic(int(rw_id))
             return True
         except Exception as e:
+            await report_failure(e)
             logger.error("Remnawave reset_user_traffic_by_id(%s) failed: %s", rw_id, e)
             return False
 
@@ -557,6 +566,7 @@ class RemnawaveClient:
             await self.sdk.users.delete_user(int(rw_id))
             return True
         except Exception as e:
+            await report_failure(e)
             logger.error("Remnawave delete_user_by_id(%s) failed: %s", rw_id, e)
             return False
 
@@ -571,6 +581,7 @@ class RemnawaveClient:
                 response.model_dump(mode="json", by_alias=True)
             )
         except Exception as e:
+            await report_failure(e)
             logger.error("Remnawave get_user_hwid_devices_by_id(%s) failed: %s", rw_id, e)
             return None
 
@@ -584,6 +595,7 @@ class RemnawaveClient:
                 response.model_dump(mode="json", by_alias=True)
             )
         except Exception as e:
+            await report_failure(e)
             logger.error(
                 "Remnawave delete_user_hwid_device_by_id(%s, %s) failed: %s",
                 rw_id, hwid, e,

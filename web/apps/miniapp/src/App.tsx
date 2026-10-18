@@ -1,13 +1,16 @@
 import { AlertTriangle } from "lucide-react";
 import { Spinner } from "@xray/ui/components/spinner";
 import { Alert, AlertTitle } from "@xray/ui/components/alert";
+import { Button } from "@xray/ui/components/button";
 import { useCallback } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router";
 import { me as meApi, type MeResponse } from "./api/client";
 import BottomTabs from "./components/BottomTabs";
+import RemnawaveMaintenance from "./components/RemnawaveMaintenance";
 import { useMe } from "./hooks/useMe";
 import { LocaleProvider, useT } from "./i18n/LocaleContext";
 import { normalizeLocale, type Locale } from "./i18n";
+import { tg } from "./tg/webapp";
 import BuyMenuPage from "./pages/BuyMenuPage";
 import BuySuccessPage from "./pages/BuySuccessPage";
 import ConnectPage from "./pages/ConnectPage";
@@ -59,11 +62,14 @@ function AppRoutes({
             style={{ width: 48, height: 48, color: "#FF8A8A", margin: "0 auto 16px" }}
           />
           <div style={{ fontSize: 18, fontWeight: 700, color: "#FFFFFF", marginBottom: 8 }}>
-            {t("app.error.genericTitle")}
+            {t(error === "remnawave_unavailable" ? "maintenance.title" : "app.error.genericTitle")}
           </div>
           <div style={{ fontSize: 14, color: "rgba(255,255,255,0.52)", lineHeight: 1.5 }}>
-            {error}
+            {error === "remnawave_unavailable" ? t("subscriptions.unavailable") : error}
           </div>
+          {error === "remnawave_unavailable" && (
+            <Button className="mt-4" variant="outline" onClick={() => void reload()}>{t("home.refreshAria")}</Button>
+          )}
         </div>
       </div>
     );
@@ -135,10 +141,11 @@ function AppInner() {
     setUserLanguage(normalizeLocale(updated.language));
   }, [setUserLanguage]);
 
-  const locale = normalizeLocale(data?.user?.language);
+  const locale = normalizeLocale(data?.user?.language ?? tg?.initDataUnsafe?.user?.language_code);
 
   return (
     <LocaleProvider locale={locale} onLocaleChange={onLocaleChange}>
+      <RemnawaveMaintenance onRecovered={() => { void refresh(); }} subscriptionStatus={data?.subscription?.status} />
       <AppRoutes
         data={data}
         loading={loading}

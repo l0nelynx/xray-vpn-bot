@@ -11,6 +11,16 @@ export const api = createJsonClient({
   getHeaders: () => ({ "X-Telegram-Init-Data": getInitData() }),
 });
 
+export interface RemnawaveAvailability {
+  unavailable: boolean;
+  subscribed: boolean;
+}
+
+export const remnawaveAvailability = {
+  get: () => api.get<RemnawaveAvailability>("/remnawave/availability"),
+  subscribe: (language: string) => api.post<RemnawaveAvailability>("/remnawave/recovery-notification", { language }),
+};
+
 export interface UserInfo {
   tg_id: number;
   username: string | null;

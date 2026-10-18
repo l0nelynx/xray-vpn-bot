@@ -22,6 +22,9 @@ import common_db.models  # noqa: F401  -- side-effect: populate metadata
 
 
 CANONICAL_TABLES = frozenset({
+    "remnawave_availability",
+    "remnawave_recovery_subscriptions",
+    "remnawave_notices",
     "api_alert_state",
     "api_error_events",
     "api_metric_hours",
