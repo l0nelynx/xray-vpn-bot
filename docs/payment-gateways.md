@@ -101,6 +101,8 @@ Register webhook URL in @CryptoBot or rely on the HTTP endpoint.
 - API: `POST {platega_url}/v2/transaction/process`
 - Headers: `X-MerchantId`, `X-Secret`
 - `paymentMethod` from invoice node `method` or `platega_payment_method` default
+- `description`: `Оплата подписки клиенту №{users.id}` for every Platega invoice,
+  regardless of the constructor label or client-supplied description
 - `metadata.userId`: persistent `users.id`, serialized as a string
 - `metadata.user_email`: registered account email, or `{tg_id}@telegram.org`
   when no email is stored. The same rule applies to bot, MiniApp, web and Android

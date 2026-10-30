@@ -59,7 +59,7 @@ def _request(**overrides):
     ("Buyer+vpn@gmail.com", 5512345678, "Buyer+vpn@gmail.com"),
 ])
 def test_customer_metadata_is_stable_across_orders(session, email, tg_id, expected):
-    request = _request(user_email=email, user_tg_id=tg_id)
+    request = _request(user_email=email, user_tg_id=tg_id, description="СБП #1")
     provider = PlategaProvider()
     invoice = asyncio.run(provider.create_invoice(request))
     asyncio.run(provider.create_invoice(replace(request, transaction_id="order-2")))
@@ -67,6 +67,7 @@ def test_customer_metadata_is_stable_across_orders(session, email, tg_id, expect
     for url, body, headers in session.calls:
         assert url == "https://app.platega.io/v2/transaction/process"
         assert body["metadata"] == {"userId": "42", "user_email": expected}
+        assert body["description"] == "Оплата подписки клиенту №42"
         assert body["paymentMethod"] == 2
         assert body["paymentDetails"] == {"amount": 500.0, "currency": "RUB"}
         assert headers["X-MerchantId"] == "merchant"

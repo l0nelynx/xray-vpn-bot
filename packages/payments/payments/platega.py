@@ -69,7 +69,7 @@ class PlategaProvider(PaymentProvider):
                 "amount": float(request.amount),
                 "currency": request.currency.upper(),
             },
-            "description": request.description or f"TgId:{request.user_tg_id}",
+            "description": f"Оплата подписки клиенту №{request.user_id}",
             "payload": request.transaction_id,
             "metadata": {
                 "userId": str(request.user_id),
