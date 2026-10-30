@@ -29,7 +29,7 @@
   },
   "devDependencies": {
     "jsqr": "^1.4.0",
-    "playwright": "^1.52.0"
+    "playwright": "^1.55.1"
   },
   "scripts": {
     "dev:support": "node scripts/start-support-preview.mjs"

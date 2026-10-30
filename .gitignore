@@ -1,5 +1,7 @@
 # Env / secrets
 .env
+.env.*
+!.env.example
 config.yml
 fcm-sa.json
 
@@ -19,6 +21,7 @@ venv
 .test-tmp/
 .mypy_cache
 .ruff_cache
+.cache/
 
 # Node / frontend build output
 node_modules
@@ -29,6 +32,8 @@ uvicorn
 db.sqlite3
 support.db
 dig_data.json
+redis_data/
+support_uploads/
 
 # MkDocs / Pages build output
 site/

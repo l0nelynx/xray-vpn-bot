@@ -1,0 +1,14 @@
+# One resolution for the shared base, every service, and the test environment.
+# Regenerate with: uv pip compile --universal --python-version 3.13 --upgrade \
+#   infra/docker/constraints.in -o infra/docker/constraints.txt
+-r requirements-base.txt
+-r ../../services/bot/requirements.txt
+-r ../../services/dashboard/backend/requirements.txt
+-r ../../services/miniapp/backend/requirements.txt
+-r ../../services/support_bot/requirements_support.txt
+pip>=26.2.0
+setuptools>=78.1.1
+wheel>=0.46.3
+pytest>=9
+pip-audit>=2.10
+uv>=0.13

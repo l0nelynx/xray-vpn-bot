@@ -99,9 +99,19 @@ Leave `DATABASE_URL` unset. The bot and miniapp fall back to `sqlite+aiosqlite`.
 
 ### Dashboard backend
 
+Install one consistent environment from the repository root before starting
+any Python service:
+
+```bash
+python -m venv .venv
+# Activate .venv, then:
+python -m pip install -c infra/docker/constraints.txt --upgrade pip setuptools wheel
+python -m pip install --no-build-isolation -r requirements-dev.txt
+python -m pip check
+```
+
 ```bash
 cd services/dashboard
-pip install -r ../../infra/docker/dashboard-requirements.txt
 CONFIG_PATH=../../config.yml DATABASE_URL=... \
   uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
 ```
@@ -111,10 +121,9 @@ API at `http://localhost:8000/bot/dashboard/api/`.
 ### Miniapp backend
 
 ```bash
-cd services/miniapp/backend
-pip install -r ../../../infra/docker/miniapp-requirements.txt
+cd services/miniapp
 CONFIG_PATH=../../config.yml DATABASE_URL=... \
-  uvicorn main:app --host 0.0.0.0 --port 8001 --reload
+  uvicorn backend.main:app --host 0.0.0.0 --port 8001 --reload
 ```
 
 API at `http://localhost:8001/bot/miniapp/api/`.
@@ -129,7 +138,6 @@ API at `http://localhost:8001/bot/miniapp/api/`.
 
 ```bash
 cd services/bot
-pip install -r ../../infra/docker/bot-requirements.txt
 CONFIG_PATH=../../config.yml DATABASE_URL=... \
   python main.py
 ```
@@ -148,10 +156,12 @@ python -c "import asyncio; from app.database.models import async_main; asyncio.r
 
 Run from `services/bot/` with `DATABASE_URL` set.
 
-### common_db drift tests
+### Tests and dependency checks
 
 ```bash
-python -m pytest packages/common_db/tests -q
+python -m pytest -q
+pip-audit -r infra/docker/constraints.txt --no-deps --disable-pip
+npm audit --package-lock-only --ignore-scripts --audit-level=high
 ```
 
 Live Postgres tests (`test_autogenerate_diff.py`) require `COMMON_DB_PG_URL`.

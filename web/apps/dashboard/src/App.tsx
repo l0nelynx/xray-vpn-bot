@@ -1,23 +1,25 @@
+import { lazy } from "react";
 import { Routes, Route, Navigate, useLocation } from "react-router";
 import { isAuthenticated } from "./api/client";
 import Layout from "./components/Layout";
 import LoginPage from "./pages/LoginPage";
-import DashboardPage from "./pages/DashboardPage";
-import UsersPage from "./pages/UsersPage";
-import TransactionsPage from "./pages/TransactionsPage";
-import StatsPage from "./pages/StatsPage";
-import MenuEditorPage from "./pages/MenuEditorPage";
-import TelmtPage from "./pages/TelmtPage";
-import StorePage from "./pages/StorePage";
-import SupportPage from "./pages/SupportPage";
-import WebAppTariffsPage from "./pages/WebAppTariffsPage";
-import WebAppSettingsPage from "./pages/WebAppSettingsPage";
-import TgAdminPage from "./pages/TgAdminPage";
-import CrmPage from "./pages/crm/CrmPage";
-import PromocodesPage from "./pages/PromocodesPage";
-import GiveawaysPage from "./pages/GiveawaysPage";
-import PushPage from "./pages/push/PushPage";
-import ApiHealthPage from "./pages/ApiHealthPage";
+
+const DashboardPage = lazy(() => import("./pages/DashboardPage"));
+const UsersPage = lazy(() => import("./pages/UsersPage"));
+const TransactionsPage = lazy(() => import("./pages/TransactionsPage"));
+const StatsPage = lazy(() => import("./pages/StatsPage"));
+const MenuEditorPage = lazy(() => import("./pages/MenuEditorPage"));
+const TelmtPage = lazy(() => import("./pages/TelmtPage"));
+const StorePage = lazy(() => import("./pages/StorePage"));
+const SupportPage = lazy(() => import("./pages/SupportPage"));
+const WebAppTariffsPage = lazy(() => import("./pages/WebAppTariffsPage"));
+const WebAppSettingsPage = lazy(() => import("./pages/WebAppSettingsPage"));
+const TgAdminPage = lazy(() => import("./pages/TgAdminPage"));
+const CrmPage = lazy(() => import("./pages/crm/CrmPage"));
+const PromocodesPage = lazy(() => import("./pages/PromocodesPage"));
+const GiveawaysPage = lazy(() => import("./pages/GiveawaysPage"));
+const PushPage = lazy(() => import("./pages/push/PushPage"));
+const ApiHealthPage = lazy(() => import("./pages/ApiHealthPage"));
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const location = useLocation();

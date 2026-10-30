@@ -1,8 +1,9 @@
 """Guided creation with initial photos; old JSON creation remains compatible."""
 from fastapi import BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy import select
-from common_db.models import User, UserSubscription, Transaction, SupportTicket, SupportMessage
+from common_db.models import UserSubscription, Transaction, SupportTicket, SupportMessage
 from common_db.repo import support as repo
+from common_db.repo.users import get_user_by_id, get_user_by_tg_id
 from common_db.support_workflow import metadata, now_iso, record_message
 from support_attachments import AttachmentValidationError, validate_and_save_attachments
 from .database.session import async_session
@@ -14,7 +15,10 @@ CATEGORIES = {"connection": "Подключение", "speed": "Скорость
 
 def register_creation(router, authenticate, *, telegram, notify):
     async def get_user(session, identity):
-        user = await session.scalar(select(User).where(User.tg_id == identity.tg_id if telegram else User.id == identity.id).with_for_update())
+        user = (
+            await get_user_by_tg_id(session, identity.tg_id, for_update=True)
+            if telegram else await get_user_by_id(session, identity.id, for_update=True)
+        )
         if not user:
             raise HTTPException(404, "user not found")
         return user

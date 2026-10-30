@@ -22,12 +22,12 @@ RUN apk add --no-cache --virtual .build-deps gcc musl-dev postgresql-dev \
 # Install with dependencies: unlike bot/miniapp, the dashboard requirements do
 # not otherwise include aiohttp/aiosend.
 COPY packages/payments /tmp/payments
-RUN pip install --no-cache-dir /tmp/payments && rm -rf /tmp/payments
+RUN pip install --no-cache-dir /tmp/payments --no-build-isolation && rm -rf /tmp/payments
 
 # Shared with miniapp: same image-validation/save logic for support-ticket
 # attachments, so the two services can't drift on validation rules.
 COPY packages/support_attachments /tmp/support_attachments
-RUN pip install --no-cache-dir --no-deps /tmp/support_attachments && rm -rf /tmp/support_attachments
+RUN pip install --no-cache-dir --no-deps --no-build-isolation /tmp/support_attachments && rm -rf /tmp/support_attachments
 
 COPY services/dashboard/backend/ ./backend/
 COPY alembic ./alembic
@@ -36,7 +36,7 @@ COPY migrations_runner.py ./migrations_runner.py
 
 # Drop privileges: the API is stateless (writes only to Postgres over the
 # network), so it never needs root. Everything above ran as root; runtime does not.
-RUN adduser -D -u 10001 appuser
+RUN pip check && adduser -D -u 10001 appuser
 USER appuser
 
 EXPOSE 8000

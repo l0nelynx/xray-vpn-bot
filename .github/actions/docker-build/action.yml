@@ -1,47 +1,35 @@
-name: Build Docker image
-description: Build a service image and optionally publish it to GHCR and Docker Hub.
+name: Build and verify Docker image
+description: Build from this checkout, scan an immutable candidate, then promote verified tags.
 
 inputs:
   service:
-    description: Image name (e.g. bot, python-base)
+    description: Bake target / image name
     required: true
-  dockerfile:
-    description: Path to Dockerfile
-    required: true
-  context:
-    description: Build context
-    required: false
-    default: ./
   tags_meta:
-    description: Multiline tag definitions for docker/metadata-action (type=raw,...)
+    description: Multiline tag definitions for docker/metadata-action
     required: true
   ghcr_owner:
-    description: GHCR namespace (usually github.repository_owner)
-    required: false
+    description: GHCR namespace
+    required: true
   dockerhub_username:
     description: Docker Hub namespace
-    required: false
   dockerhub_token:
     description: Docker Hub access token
-    required: false
   push:
-    description: Whether to authenticate and publish the image
-    required: false
+    description: Publish a candidate and promote it after verification
     default: 'false'
-  base_image:
-    description: Optional BASE_IMAGE build-arg for backend Dockerfiles
-    required: false
-    default: ''
+  refresh:
+    description: Re-run package installation for scheduled security rebuilds
+    default: 'false'
 
 runs:
   using: composite
   steps:
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v4
+    - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
 
     - name: Log in to GHCR
       if: inputs.push == 'true'
-      uses: docker/login-action@v4
+      uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4
       with:
         registry: ghcr.io
         username: ${{ github.actor }}
@@ -49,32 +37,131 @@ runs:
 
     - name: Log in to Docker Hub
       if: inputs.push == 'true'
-      uses: docker/login-action@v4
+      uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4
       with:
         username: ${{ inputs.dockerhub_username }}
         password: ${{ inputs.dockerhub_token }}
 
-    - name: Docker metadata
+    - name: Publication metadata
       id: meta
       if: inputs.push == 'true'
-      uses: docker/metadata-action@v6
-
+      uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
       with:
         images: |
           ghcr.io/${{ inputs.ghcr_owner }}/${{ inputs.service }}
           docker.io/${{ inputs.dockerhub_username }}/${{ inputs.service }}
         tags: ${{ inputs.tags_meta }}
 
-    - name: Build image
-      uses: docker/build-push-action@v7
+    - name: Prepare isolated candidate and cache configuration
+      id: config
+      shell: bash
+      env:
+        SERVICE: ${{ inputs.service }}
+        PUBLISH: ${{ inputs.push }}
+        GHCR_OWNER: ${{ inputs.ghcr_owner }}
+        HUB_OWNER: ${{ inputs.dockerhub_username }}
+        LABELS: ${{ steps.meta.outputs.labels }}
+      run: |
+        python3 - <<'PY'
+        import json, os
+        from pathlib import Path
+        service = os.environ['SERVICE']
+        publish = os.environ['PUBLISH'] == 'true'
+        suffix = f"ci-{os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']}"
+        repos = [f"ghcr.io/{os.environ['GHCR_OWNER'].lower()}/{service}",
+                 f"docker.io/{os.environ['HUB_OWNER']}/{service}"]
+        tags = [f'{repo}:{suffix}' for repo in repos] if publish else [f'local/{service}:check']
+        cache = f'type=gha,scope={service}'
+        path = Path(os.environ['RUNNER_TEMP']) / f'bake-{service}.json'
+        labels = dict(line.split('=', 1) for line in os.environ.get('LABELS', '').splitlines() if '=' in line)
+        path.write_text(json.dumps({'target': {
+            '_common': {'cache-from': [cache, 'type=gha,scope=python-base']},
+            service: {'tags': tags, 'labels': labels, 'cache-to': [cache + ',mode=max']},
+        }}))
+        with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
+            out.write(f'file={path}\nimage={tags[0]}\nrepository={repos[0]}\n')
+        PY
+
+    - name: Build candidate (backend base is a Bake target from this checkout)
+      id: build
+      uses: docker/bake-action@59cb1203cd42bcefd40a1b6d73b589e48c86040e # v7
       with:
-        context: ${{ inputs.context }}
-        file: ${{ inputs.dockerfile }}
+        source: .
+        files: |
+          ./docker-bake.hcl
+          ${{ steps.config.outputs.file }}
+        targets: ${{ inputs.service }}
+        pull: true
+        no-cache: ${{ inputs.refresh == 'true' }}
         push: ${{ inputs.push == 'true' }}
-        tags: ${{ inputs.push == 'true' && steps.meta.outputs.tags || format('local/{0}:check', inputs.service) }}
-        labels: ${{ steps.meta.outputs.labels }}
-        cache-from: type=gha,scope=${{ inputs.service }}
-        cache-to: type=gha,mode=${{ inputs.push == 'true' && 'max' || 'min' }},scope=${{ inputs.service }}
-        provenance: ${{ inputs.push == 'true' }}
-        build-args: |
-          BASE_IMAGE=${{ inputs.base_image }}
+        load: ${{ inputs.push != 'true' }}
+        provenance: ${{ inputs.push == 'true' && 'mode=max' || 'false' }}
+        sbom: ${{ inputs.push == 'true' }}
+
+    - name: Resolve immutable scan reference
+      id: image
+      shell: bash
+      env:
+        SERVICE: ${{ inputs.service }}
+        PUBLISH: ${{ inputs.push }}
+        METADATA: ${{ steps.build.outputs.metadata }}
+        REPOSITORY: ${{ steps.config.outputs.repository }}
+        LOCAL_IMAGE: ${{ steps.config.outputs.image }}
+      run: |
+        python3 - <<'PY'
+        import json, os
+        metadata = json.loads(os.environ['METADATA'])
+        digest = metadata[os.environ['SERVICE']]['containerimage.digest']
+        ref = (os.environ['REPOSITORY'] + '@' + digest
+               if os.environ['PUBLISH'] == 'true' else os.environ['LOCAL_IMAGE'])
+        with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
+            out.write(f'ref={ref}\ndigest={digest}\n')
+        PY
+
+    - name: Scan candidate and retain full package inventory
+      uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+      with:
+        version: v0.76.1
+        image-ref: ${{ steps.image.outputs.ref }}
+        scanners: vuln
+        severity: HIGH,CRITICAL
+        list-all-pkgs: 'true'
+        format: json
+        output: ${{ runner.temp }}/trivy-${{ inputs.service }}.json
+        exit-code: '0'
+
+    - name: Enforce image security gate
+      shell: bash
+      env:
+        REPORT: ${{ runner.temp }}/trivy-${{ inputs.service }}.json
+      run: python3 scripts/ci/check_image.py "$REPORT"
+
+    - name: Check installed Python dependency compatibility
+      if: inputs.service != 'frontend'
+      shell: bash
+      env:
+        IMAGE: ${{ steps.image.outputs.ref }}
+      run: docker run --rm --network=none --entrypoint python "$IMAGE" -m pip check
+
+    - name: Promote only the scanned digest
+      if: inputs.push == 'true'
+      shell: bash
+      env:
+        TAGS: ${{ steps.meta.outputs.tags }}
+        DIGEST: ${{ steps.image.outputs.digest }}
+      run: |
+        set -euo pipefail
+        while IFS= read -r tag; do
+          [ -n "$tag" ] || continue
+          repository="${tag%:*}"
+          docker buildx imagetools create --prefer-index=false --tag "$tag" "$repository@$DIGEST"
+        done <<< "$TAGS"
+
+    - name: Upload vulnerability report
+      if: always()
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      with:
+        name: security-${{ inputs.service }}-${{ github.run_attempt }}
+        path: ${{ runner.temp }}/trivy-${{ inputs.service }}.json
+        retention-days: 14
+        if-no-files-found: ignore

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { Suspense, useState, useEffect, useMemo } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router";
 import {
   LayoutDashboard,
@@ -25,6 +25,7 @@ import {
   ChevronDown,
   type LucideIcon,
 } from "lucide-react";
+import { Spinner } from "@xray/ui/components/spinner";
 import { Button } from "@xray/ui/components/button";
 import { Sheet, SheetContent } from "@xray/ui/components/sheet";
 import {
@@ -347,7 +348,9 @@ export default function Layout() {
 
         <main className="min-h-[calc(100vh-4rem)] overflow-auto p-4 md:p-8">
           <div className="mx-auto w-full max-w-[1600px]">
-            <Outlet />
+            <Suspense fallback={<div className="flex justify-center p-8" role="status" aria-label="Loading"><Spinner className="h-8 w-8" /></div>}>
+              <Outlet />
+            </Suspense>
           </div>
         </main>
       </div>

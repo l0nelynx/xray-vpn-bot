@@ -9,7 +9,7 @@ x-logging: &default-logging
 services:
   postgres:
     container_name: xray-postgres
-    image: postgres:16-alpine
+    image: postgres:16.15-alpine@sha256:0cefaabd882e42bcb2a2f3dc56d3ce4770560ba62fd7f197f1a2e008fd5731ab
     restart: unless-stopped
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-xray}
@@ -36,7 +36,7 @@ services:
           memory: 512M
   redis:
     container_name: xray-redis
-    image: redis:7-alpine
+    image: redis:7.4.12-alpine@sha256:8da19c7399dca900c6822a1cf30f9d2285585e2c4b457ff4095b0f4500054d3f
     restart: unless-stopped
     command: ["redis-server", "--save", "", "--appendonly", "no"]
     volumes:

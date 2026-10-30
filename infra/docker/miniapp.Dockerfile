@@ -19,13 +19,13 @@ RUN apk add --no-cache --virtual .build-deps gcc musl-dev postgresql-dev \
 # Shared local packages used by bot + miniapp (common_db + remnawave_client are
 # already in the base image). --no-deps: their deps are present in base/extras.
 COPY packages/account_linking /tmp/account_linking
-RUN pip install --no-cache-dir --no-deps /tmp/account_linking && rm -rf /tmp/account_linking
+RUN pip install --no-cache-dir --no-deps --no-build-isolation /tmp/account_linking && rm -rf /tmp/account_linking
 COPY packages/payments /tmp/payments
-RUN pip install --no-cache-dir --no-deps /tmp/payments && rm -rf /tmp/payments
+RUN pip install --no-cache-dir --no-deps --no-build-isolation /tmp/payments && rm -rf /tmp/payments
 COPY packages/subscription_delivery /tmp/subscription_delivery
-RUN pip install --no-cache-dir --no-deps /tmp/subscription_delivery && rm -rf /tmp/subscription_delivery
+RUN pip install --no-cache-dir --no-deps --no-build-isolation /tmp/subscription_delivery && rm -rf /tmp/subscription_delivery
 COPY packages/support_attachments /tmp/support_attachments
-RUN pip install --no-cache-dir --no-deps /tmp/support_attachments && rm -rf /tmp/support_attachments
+RUN pip install --no-cache-dir --no-deps --no-build-isolation /tmp/support_attachments && rm -rf /tmp/support_attachments
 
 COPY services/miniapp/backend/ ./backend/
 COPY alembic ./alembic
@@ -34,7 +34,7 @@ COPY migrations_runner.py ./migrations_runner.py
 
 # Drop privileges: the API is stateless (writes only to Postgres over the
 # network), so it never needs root. Everything above ran as root; runtime does not.
-RUN adduser -D -u 10001 appuser
+RUN pip check && adduser -D -u 10001 appuser
 USER appuser
 
 EXPOSE 8001

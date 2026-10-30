@@ -9,7 +9,7 @@ WORKDIR /app
 # Use the schema/repositories from the same checkout as the script even when
 # the locally cached production base image predates the rw_id migration.
 COPY packages/common_db /tmp/common_db
-RUN pip install --no-cache-dir --no-deps /tmp/common_db && rm -rf /tmp/common_db
+RUN pip install --no-cache-dir --no-deps --no-build-isolation /tmp/common_db && rm -rf /tmp/common_db
 
 COPY scripts/backfill_remnawave_ids.py ./backfill_remnawave_ids.py
 

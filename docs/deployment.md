@@ -272,8 +272,55 @@ CI (`.github/workflows/build.yml`, `.gitlab-ci.yml`):
 | `develop` | `:staging` |
 | any | `:sha-<short>`, `:build-<n>` |
 
-`python-base` rebuilds only when its own inputs change; service-only changes
-reuse the published base.
+GitHub publishes `develop` images on push and production images through the
+release workflow. The weekly security build on the default branch refreshes
+OS package layers and the `latest` tag, without replacing semver release tags.
+
+CI uses `docker-bake.hcl`: every backend consumes the base from the same
+checkout, including on pull requests. BuildKit caches reuse unchanged base
+layers without relying on a mutable published base tag. Use
+`docker buildx bake -f docker-bake.hcl --load` to build the same graph locally.
+
+Pytest (including service tests), `pip check`, `pip-audit`, and npm audit run
+before image publication. Images are built under unique `ci-*` candidate tags;
+Trivy scans the candidate digest, and only passing digests receive environment
+or release tags. Reports are retained as CI artifacts. The image gate preserves
+the full raw report and excludes only superseded CPython build-SBOM Python
+records with a physically installed, locked, scanner-clean replacement.
+
+Python dependencies are resolved together in `infra/docker/constraints.txt`.
+After changing requirements, regenerate and review the lock from the repo root:
+
+```bash
+uv pip compile --universal --python-version 3.13 --upgrade \
+  infra/docker/constraints.in -o infra/docker/constraints.txt
+```
+
+Upstream images and data services are pinned by version and digest. Enable the
+Renovate GitHub/GitLab app for this repository to activate `renovate.json`;
+adding the configuration alone does not install the bot. Review its dependency
+and digest updates through CI. Pinned dependencies still require lock updates;
+a scheduled `--no-cache` rebuild alone does not upgrade them.
+
+Frontend pages use lazy imports. The main emitted dashboard JS entry decreased
+from about 1.41 MB to 285 KB, and the miniapp entry from 537 KB to 356 KB in the
+verified build. Additional shared/page chunks still load as needed; these entry
+sizes are not total transfer sizes. Dashboard PWA precaches its chunks for
+offline navigation.
+
+### Permissions for bot containers
+
+Bot and support-bot now run as UID/GID 10001. Before the first deployment of
+these images, make the support SQLite directory writable for that identity:
+
+```bash
+sudo install -d -o 10001 -g 10001 db
+sudo chown -R 10001:10001 db
+```
+
+The mounted config must be readable by UID 10001. Image-owned working
+directories remain writable for temporary bot backups. Existing dashboard and
+miniapp support-upload mounts keep their current UID 10001 permission rules.
 
 ## Migrations
 

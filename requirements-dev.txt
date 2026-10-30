@@ -1,0 +1,15 @@
+-c infra/docker/constraints.txt
+-r infra/docker/requirements-base.txt
+-r services/bot/requirements.txt
+-r services/dashboard/backend/requirements.txt
+-r services/miniapp/backend/requirements.txt
+-r services/support_bot/requirements_support.txt
+-e packages/common_db
+-e packages/remnawave_client
+-e packages/account_linking
+-e packages/payments
+-e packages/subscription_delivery
+-e packages/support_attachments
+pytest
+pip-audit
+uv

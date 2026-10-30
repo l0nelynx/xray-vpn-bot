@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import datetime
 import importlib.metadata
+from pathlib import Path
+import tomllib
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -226,6 +228,11 @@ def test_short_uuid_lookup_distinguishes_not_found_from_outage() -> None:
 
 
 def test_only_supported_remnawave_distribution_is_installed() -> None:
-    assert importlib.metadata.version("remnawave-api") == "3.0.1"
+    project = tomllib.loads((Path(__file__).parents[1] / "pyproject.toml").read_text())
+    requirement = next(
+        item for item in project["project"]["dependencies"]
+        if item.startswith("remnawave-api==")
+    )
+    assert importlib.metadata.version("remnawave-api") == requirement.split("==")[1]
     with pytest.raises(importlib.metadata.PackageNotFoundError):
         importlib.metadata.version("remnawave")

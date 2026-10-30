@@ -1,8 +1,16 @@
 # Remnawave v3 rollout
 
 Use this runbook only after the 2.8 ID backfill reports `ready: true`. The v3
-application release uses `remnawave-api==3.0.1` and numeric Remnawave user IDs
+application release uses `remnawave-api==3.5.0` (Panel >=3.4.4; compatible with
+the deployed Panel 3.4.7) and numeric Remnawave user IDs
 throughout delivery, CRM, account linking, webhooks and HWID operations.
+
+The 3.0.1 → 3.5.0 upgrade retains the used user/HWID controller signatures and
+request fields. The SDK updates its rapid-api-client integration internally;
+`packages/remnawave_client/tests/test_sdk_contract.py` exercises the real SDK
+over a mock HTTP transport, including JSON aliases, cursor pagination, numeric
+IDs, HWID deletion, no-content responses and 404/503 handling. Run the read-only
+smoke command below against the deployed panel after building the new images.
 
 `users.vless_uuid` is the historical Remnawave panel-user UUID despite its old
 name. It remains read-only audit/rollback data and is not used for lookup,
@@ -68,7 +76,7 @@ docker compose run --rm --no-deps bot python -c \
   "import importlib.metadata as m; print(m.version('remnawave-api')); print(m.packages_distributions().get('remnawave'))"
 ```
 
-Expected package version: `3.0.1`. The import package maps only to
+Expected package version: `3.5.0`. The import package maps only to
 `remnawave-api`; a separate distribution named `remnawave` must not be
 installed.
 

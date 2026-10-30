@@ -1,0 +1,11 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", "helpers:pinGitHubActionDigests", "docker:pinDigests"],
+  "schedule": ["before 6am on monday"],
+  "timezone": "Europe/Minsk",
+  "packageRules": [
+    {"matchManagers": ["dockerfile", "docker-compose", "github-actions"], "groupName": "CI and container security updates"},
+    {"matchManagers": ["pip_requirements", "pep621"], "groupName": "Python dependencies"},
+    {"matchManagers": ["npm"], "groupName": "npm dependencies"}
+  ]
+}

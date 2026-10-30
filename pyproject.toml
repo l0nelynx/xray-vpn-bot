@@ -4,7 +4,7 @@
 # without rewriting import statements.
 [tool.pytest.ini_options]
 pythonpath = ["services", "services/bot", "."]
-testpaths = ["tests", "packages"]
+testpaths = ["tests", "packages", "services/dashboard/backend/tests"]
 # importlib mode: lets the root tests/ and each packages/*/tests/ coexist
 # (same "tests" basename) without import-file-mismatch collisions.
 addopts = "--import-mode=importlib"

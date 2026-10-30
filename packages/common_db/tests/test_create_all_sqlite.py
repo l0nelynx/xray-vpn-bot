@@ -144,6 +144,16 @@ def test_metadata_round_trip_reflects_columns() -> None:
             "status",
             "created_at",
             "updated_at",
+            "category",
+            "context",
+            "assignee",
+            "last_sender",
+            "waiting_since",
+            "closed_at",
+            "admin_read_id",
+            "user_read_id",
+            "last_user_message_id",
+            "last_admin_message_id",
         }
     finally:
         engine.dispose()

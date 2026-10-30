@@ -3,9 +3,9 @@
 # base image — see infra/docker/requirements-base.txt.
 # JWT: PyJWT (HS256). Replaced python-jose, which had CVE-2024-33663/33664 and
 # is no longer maintained; PyJWT is also what the miniapp service uses.
-pyjwt>=2.10.1
+pyjwt>=2.15.0
 httpx>=0.28.1
 arq>=0.26.1
 google-auth>=2.32.0
 requests>=2.32.0
-CairoSVG>=2.7.1
+CairoSVG>=2.9.1

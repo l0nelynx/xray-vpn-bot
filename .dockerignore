@@ -30,9 +30,15 @@ ENV
 .env.*
 !.env.example
 config.yml
+fcm-sa.json
+*-service-account*.json
 
 # Project: local databases & backups
 db
+pg_data
+redis_data
+support_uploads
+dig_data.json
 *.sqlite3
 *.sqlite3-*
 db.sqlite3*
@@ -42,6 +48,13 @@ web/apps/*/node_modules
 web/apps/*/dist
 web/packages/*/node_modules
 node_modules
+site
+.test-tmp
+.cache
+.agents
+.claude
+.cursor
+.res
 
 # Logs / runtime junk
 *.log
@@ -53,6 +66,7 @@ docker-compose*.yml
 
 # Tests / docs we don't ship
 tests
+**/tests
 docs
 *.md
 !README.md

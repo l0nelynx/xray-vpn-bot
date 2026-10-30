@@ -2,7 +2,8 @@
 from fastapi import Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import update, select
-from common_db.models import SupportTicket, User
+from common_db.models import SupportTicket
+from common_db.repo.users import get_user_by_tg_id
 from common_db.support_workflow import can_reopen, now_iso
 from .database.session import async_session
 
@@ -18,7 +19,7 @@ class OutcomeBody(BaseModel):
 def register_actions(router, authenticate, *, telegram: bool, notify):
     async def owner(session, identity):
         if telegram:
-            user = await session.scalar(select(User).where(User.tg_id == identity.tg_id))
+            user = await get_user_by_tg_id(session, identity.tg_id)
             if not user:
                 raise HTTPException(404, "user not found")
             return user.id

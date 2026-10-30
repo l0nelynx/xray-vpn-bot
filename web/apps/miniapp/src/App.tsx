@@ -2,7 +2,7 @@ import { AlertTriangle } from "lucide-react";
 import { Spinner } from "@xray/ui/components/spinner";
 import { Alert, AlertTitle } from "@xray/ui/components/alert";
 import { Button } from "@xray/ui/components/button";
-import { useCallback } from "react";
+import { lazy, Suspense, useCallback } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router";
 import { me as meApi, type MeResponse } from "./api/client";
 import BottomTabs from "./components/BottomTabs";
@@ -11,24 +11,25 @@ import { useMe } from "./hooks/useMe";
 import { LocaleProvider, useT } from "./i18n/LocaleContext";
 import { normalizeLocale, type Locale } from "./i18n";
 import { tg } from "./tg/webapp";
-import BuyMenuPage from "./pages/BuyMenuPage";
-import BuySuccessPage from "./pages/BuySuccessPage";
-import ConnectPage from "./pages/ConnectPage";
-import DevicesPage from "./pages/DevicesPage";
-import FreeTrialPage from "./pages/FreeTrialPage";
-import AgreementPage from "./pages/AgreementPage";
 import HomePage from "./pages/HomePage";
-import InvitePage from "./pages/InvitePage";
-import PolicyPage from "./pages/PolicyPage";
-import ReferralRulesPage from "./pages/ReferralRulesPage";
-import SettingsPage from "./pages/SettingsPage";
-import SubscriptionsPage from "./pages/SubscriptionsPage";
-import SupportCreatePage from "./pages/SupportCreatePage";
-import SupportPage from "./pages/SupportPage";
-import SupportTicketPage from "./pages/SupportTicketPage";
-import WelcomePage from "./pages/WelcomePage";
-import AccountLinkPage from "./pages/AccountLinkPage";
 import OnboardingPage, { ONBOARDING_VERSION } from "./pages/OnboardingPage";
+
+const BuyMenuPage = lazy(() => import("./pages/BuyMenuPage"));
+const BuySuccessPage = lazy(() => import("./pages/BuySuccessPage"));
+const ConnectPage = lazy(() => import("./pages/ConnectPage"));
+const DevicesPage = lazy(() => import("./pages/DevicesPage"));
+const FreeTrialPage = lazy(() => import("./pages/FreeTrialPage"));
+const AgreementPage = lazy(() => import("./pages/AgreementPage"));
+const InvitePage = lazy(() => import("./pages/InvitePage"));
+const PolicyPage = lazy(() => import("./pages/PolicyPage"));
+const ReferralRulesPage = lazy(() => import("./pages/ReferralRulesPage"));
+const SettingsPage = lazy(() => import("./pages/SettingsPage"));
+const SubscriptionsPage = lazy(() => import("./pages/SubscriptionsPage"));
+const SupportCreatePage = lazy(() => import("./pages/SupportCreatePage"));
+const SupportPage = lazy(() => import("./pages/SupportPage"));
+const SupportTicketPage = lazy(() => import("./pages/SupportTicketPage"));
+const WelcomePage = lazy(() => import("./pages/WelcomePage"));
+const AccountLinkPage = lazy(() => import("./pages/AccountLinkPage"));
 
 function AppRoutes({
   data,
@@ -99,35 +100,37 @@ function AppRoutes({
 
   return (
     <div className={`app ${/^\/support\/\d+$/.test(pathname) ? "support-chat-shell" : ""}`}>
-      <Routes>
-        <Route path="/" element={<HomePage me={data} reload={reload} refresh={refresh} />} />
-        <Route path="/buy" element={<BuyMenuPage />} />
-        <Route path="/buy/success" element={<BuySuccessPage />} />
-        <Route path="/connect" element={<ConnectPage />} />
-        <Route path="/onboarding" element={<OnboardingPage me={data} reload={reload} />} />
-        <Route path="/account/link" element={<AccountLinkPage hasEmail={Boolean(data.user?.has_email)} email={data.user?.email || null} reload={reload} />} />
-        <Route path="/subscriptions" element={<SubscriptionsPage refresh={refresh} />} />
-        <Route path="/devices" element={<DevicesPage />} />
-        <Route path="/free/:mode" element={<FreeTrialPage />} />
-        <Route path="/support" element={<SupportPage />} />
-        <Route path="/support/new" element={<SupportCreatePage />} />
-        <Route path="/support/:id" element={<SupportTicketPage />} />
-        <Route
-          path="/settings"
-          element={
-            <SettingsPage
-              username={data.user?.username || ""}
-              hasEmail={Boolean(data.user?.has_email)}
-              email={data.user?.email || null}
-            />
-          }
-        />
-        <Route path="/invite" element={<InvitePage />} />
-        <Route path="/policy" element={<PolicyPage links={data.links} />} />
-        <Route path="/referral-rules" element={<ReferralRulesPage />} />
-        <Route path="/agreement" element={<AgreementPage links={data.links} />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      <Suspense fallback={<div className="spinner-wrap" role="status" aria-label="Loading"><Spinner className="h-8 w-8" /></div>}>
+        <Routes>
+          <Route path="/" element={<HomePage me={data} reload={reload} refresh={refresh} />} />
+          <Route path="/buy" element={<BuyMenuPage />} />
+          <Route path="/buy/success" element={<BuySuccessPage />} />
+          <Route path="/connect" element={<ConnectPage />} />
+          <Route path="/onboarding" element={<OnboardingPage me={data} reload={reload} />} />
+          <Route path="/account/link" element={<AccountLinkPage hasEmail={Boolean(data.user?.has_email)} email={data.user?.email || null} reload={reload} />} />
+          <Route path="/subscriptions" element={<SubscriptionsPage refresh={refresh} />} />
+          <Route path="/devices" element={<DevicesPage />} />
+          <Route path="/free/:mode" element={<FreeTrialPage />} />
+          <Route path="/support" element={<SupportPage />} />
+          <Route path="/support/new" element={<SupportCreatePage />} />
+          <Route path="/support/:id" element={<SupportTicketPage />} />
+          <Route
+            path="/settings"
+            element={
+              <SettingsPage
+                username={data.user?.username || ""}
+                hasEmail={Boolean(data.user?.has_email)}
+                email={data.user?.email || null}
+              />
+            }
+          />
+          <Route path="/invite" element={<InvitePage />} />
+          <Route path="/policy" element={<PolicyPage links={data.links} />} />
+          <Route path="/referral-rules" element={<ReferralRulesPage />} />
+          <Route path="/agreement" element={<AgreementPage links={data.links} />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
       {showTabs && <BottomTabs />}
     </div>
   );

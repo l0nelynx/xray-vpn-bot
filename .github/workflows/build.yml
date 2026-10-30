@@ -1,35 +1,36 @@
-# .github/workflows/build.yml
 name: Docker CI
 
 on:
   pull_request:
-    branches:
-      - main
-      - develop
-    paths-ignore:
-      - 'docs/**'
-      - '**.md'
+    branches: [main, develop]
+    paths-ignore: ['docs/**', '**.md']
   push:
-    branches:
-      - develop
-    paths-ignore:
-      - 'docs/**'
-      - '**.md'
+    branches: [develop]
+    paths-ignore: ['docs/**', '**.md']
+  schedule:
+    - cron: '23 3 * * 1'
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Promote verified images to the branch environment tag
+        type: boolean
+        default: false
+      refresh:
+        description: Reinstall OS and Python dependencies without build cache
+        type: boolean
+        default: true
   workflow_call:
     inputs:
       checkout_ref:
-        description: Git ref containing the exact sources to publish
-        required: false
+        description: Exact sources to publish
         type: string
         default: ''
       release_version:
-        description: Release version without the v prefix; forces a full build
-        required: false
+        description: Release version without v; forces a full build
         type: string
         default: ''
       publish:
-        description: Push images to GHCR and Docker Hub
-        required: false
+        description: Publish verified images
         type: boolean
         default: false
 
@@ -38,358 +39,187 @@ permissions:
 
 concurrency:
   group: docker-${{ github.event.pull_request.number || inputs.checkout_ref || github.ref }}
-  # New PR commits and newer develop pushes make their older image builds obsolete.
-  # Release calls are never cancelled halfway through publication.
   cancel-in-progress: ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/develop') }}
 
 jobs:
   detect:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
-      bot:         ${{ steps.filter.outputs.bot }}
-      support_bot: ${{ steps.filter.outputs.support_bot }}
-      dashboard:   ${{ steps.filter.outputs.dashboard }}
-      miniapp:     ${{ steps.filter.outputs.miniapp }}
-      frontend:    ${{ steps.filter.outputs.frontend }}
-      base:        ${{ steps.filter.outputs.base }}
-      shared:      ${{ steps.filter.outputs.shared }}
-      meta:        ${{ steps.filter.outputs.meta }}
-      release:     ${{ steps.mode.outputs.release }}
-      publish:     ${{ steps.mode.outputs.publish }}
+      matrix: ${{ steps.select.outputs.matrix }}
+      publish: ${{ steps.mode.outputs.publish }}
+      refresh: ${{ steps.mode.outputs.refresh }}
     steps:
-
-      - uses: actions/checkout@v7
-
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ inputs.checkout_ref || github.ref }}
-
-      - id: mode
-        name: Resolve check/publish mode
-        shell: bash
-
+      - name: Resolve build mode
+        id: mode
         env:
           REQUESTED_PUBLISH: ${{ inputs.publish }}
+          REQUESTED_REFRESH: ${{ inputs.refresh }}
           EVENT_NAME: ${{ github.event_name }}
           REF: ${{ github.ref }}
           RELEASE_VERSION: ${{ inputs.release_version }}
         run: |
-          set -euo pipefail
-
-          # A reusable workflow inherits the caller event name (for example,
-          # workflow_dispatch), so workflow_call cannot be detected through
-          # github.event_name. Honour the explicit input first.
-          if [[ "$REQUESTED_PUBLISH" == "true" ]]; then
-            echo "publish=true" >> "$GITHUB_OUTPUT"
-          elif [[ "$EVENT_NAME" == "push" && "$REF" == "refs/heads/develop" ]]; then
-            echo "publish=true" >> "$GITHUB_OUTPUT"
+          if [[ "$REQUESTED_PUBLISH" == true || "$EVENT_NAME" == schedule || ( "$EVENT_NAME" == push && "$REF" == refs/heads/develop ) ]]; then
+            echo 'publish=true' >> "$GITHUB_OUTPUT"
           else
-            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo 'publish=false' >> "$GITHUB_OUTPUT"
           fi
-
-
-          if [[ -n "$RELEASE_VERSION" ]]; then
-
-            echo "release=true" >> "$GITHUB_OUTPUT"
+          if [[ "$EVENT_NAME" == schedule || "$REQUESTED_REFRESH" == true ]]; then
+            echo 'refresh=true' >> "$GITHUB_OUTPUT"
           else
-            echo "release=false" >> "$GITHUB_OUTPUT"
+            echo 'refresh=false' >> "$GITHUB_OUTPUT"
           fi
-
-      - uses: dorny/paths-filter@v4
+          if [[ -n "$RELEASE_VERSION" || "$EVENT_NAME" == schedule || "$EVENT_NAME" == workflow_dispatch ]]; then
+            echo 'all=true' >> "$GITHUB_OUTPUT"
+          fi
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4
         id: filter
-        if: steps.mode.outputs.release != 'true'
+        if: steps.mode.outputs.all != 'true'
         with:
           filters: |
+            meta:
+              - '.github/**'
+              - '.dockerignore'
+              - 'docker-bake.hcl'
+              - 'scripts/ci/**'
+              - 'VERSION'
+            base:
+              - 'infra/docker/base.Dockerfile'
+              - 'infra/docker/requirements-base.txt'
+              - 'infra/docker/constraints.*'
+              - 'packages/common_db/**'
+              - 'packages/remnawave_client/**'
             shared:
               - 'packages/**'
               - 'alembic/**'
               - 'alembic.ini'
               - 'migrations_runner.py'
-
-            base:
-              - 'infra/docker/base.Dockerfile'
-              - 'infra/docker/requirements-base.txt'
-              - 'packages/common_db/**'
-              - 'packages/remnawave_client/**'
-
-            meta:
-              - '.github/workflows/**'
-              - '.github/actions/**'
-              - 'VERSION'
-
             bot:
               - 'services/bot/**'
               - 'infra/docker/bot.Dockerfile'
-
             support_bot:
               - 'services/support_bot/**'
               - 'infra/docker/support_bot.Dockerfile'
-
+              - 'infra/docker/constraints.*'
             dashboard:
               - 'services/dashboard/**'
               - 'infra/docker/dashboard.Dockerfile'
-
             miniapp:
               - 'services/miniapp/**'
               - 'infra/docker/miniapp.Dockerfile'
-
             frontend:
               - 'web/**'
-              - 'package.json'
-              - 'package-lock.json'
-              - 'infra/docker/frontend.Dockerfile'
-              - 'infra/docker/frontend.nginx.conf'
+              - 'package*.json'
+              - 'infra/docker/frontend.*'
+              - 'services/miniapp/backend/connect/app_config.default.json'
+      - name: Select affected images
+        id: select
+        env:
+          ALL: ${{ steps.mode.outputs.all }}
+          FILTERS: ${{ toJSON(steps.filter.outputs) }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          filters = json.loads(os.environ['FILTERS'])
+          changed = lambda name: filters.get(name) == 'true'
+          all_images = os.environ['ALL'] == 'true' or changed('meta')
+          backends = all_images or changed('base') or changed('shared')
+          selected = [name for name in ['python-base', 'bot', 'support-bot', 'dashboard', 'miniapp', 'frontend']
+                      if all_images or changed(name.replace('-', '_'))
+                      or (name == 'python-base' and changed('base'))
+                      or (name in {'bot', 'dashboard', 'miniapp'} and backends)]
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
+              out.write('matrix=' + json.dumps(selected) + '\n')
+          PY
+
+  checks:
+    uses: ./.github/workflows/checks.yml
+    with:
+      checkout_ref: ${{ inputs.checkout_ref || github.ref }}
 
   version:
-    needs: detect
     runs-on: ubuntu-latest
     outputs:
       tags_meta: ${{ steps.calc.outputs.tags_meta }}
-      base_tag:  ${{ steps.calc.outputs.base_tag }}
-      base_pull_tag: ${{ steps.calc.outputs.base_pull_tag }}
     steps:
-
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ inputs.checkout_ref || github.ref }}
-
       - id: calc
-        shell: bash
         env:
+          RELEASE_VERSION: ${{ inputs.release_version }}
           BUILD: ${{ github.run_number }}
           EVENT_NAME: ${{ github.event_name }}
           REF: ${{ github.ref }}
-          RELEASE_VERSION: ${{ inputs.release_version }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-          HEAD_REF: ${{ github.head_ref }}
-          BASE_REF: ${{ github.base_ref }}
         run: |
           set -euo pipefail
-
           VERSION="$(tr -d '[:space:]' < VERSION)"
           SHORT_SHA="$(git rev-parse --short=7 HEAD)"
-
           TAGS_META=""
-          add_tag() {
-            TAGS_META+="type=raw,value=${1}"$'\n'
-          }
-
+          add_tag() { TAGS_META+="type=raw,value=${1}"$'\n'; }
           if [[ -n "$RELEASE_VERSION" ]]; then
-            VER="$RELEASE_VERSION"
-            MINOR="${VER%.*}"
-            MAJOR="${VER%%.*}"
-            BASE_TAG="$VER"
-            BASE_PULL_TAG="latest"
-            add_tag "$VER"
-            add_tag "$MINOR"
-            add_tag "$MAJOR"
-            add_tag "latest"
-          elif [[ "$REF" == refs/heads/develop ]]; then
-            BASE_TAG="staging"
-            BASE_PULL_TAG="staging"
-            add_tag "${VERSION}.${BUILD}"
-            add_tag "staging"
-          elif [[ "$EVENT_NAME" == "pull_request" ]]; then
-            BASE_TAG="check-${PR_NUMBER}-${BUILD}"
-            if [[ "$HEAD_REF" == "develop" || "$BASE_REF" == "develop" ]]; then
-              BASE_PULL_TAG="staging"
-            else
-              BASE_PULL_TAG="latest"
-            fi
+            add_tag "$RELEASE_VERSION"
+            add_tag "${RELEASE_VERSION%.*}"
+            add_tag "${RELEASE_VERSION%%.*}"
+            add_tag latest
+          elif [[ "$EVENT_NAME" == pull_request ]]; then
             add_tag "pr-${PR_NUMBER}"
+          elif [[ "$REF" == refs/heads/develop ]]; then
+            add_tag "${VERSION}.${BUILD}"
+            add_tag staging
+          elif [[ "$REF" == refs/heads/main ]]; then
+            # Scheduled rebuilds never replace immutable semver release tags.
+            add_tag "security-${BUILD}"
+            add_tag latest
           else
-            echo "Unsupported workflow mode: event=$EVENT_NAME ref=$REF" >&2
-            exit 1
+            # Manual validation on a feature branch is allowed without publication.
+            add_tag "check-${BUILD}"
           fi
-
           add_tag "sha-${SHORT_SHA}"
+          { echo 'tags_meta<<EOF'; printf '%s' "$TAGS_META"; echo EOF; } >> "$GITHUB_OUTPUT"
 
-          {
-            echo "base_tag=${BASE_TAG}"
-            echo "base_pull_tag=${BASE_PULL_TAG}"
-            echo "tags_meta<<EOF"
-            printf '%s' "$TAGS_META"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-
-  build-base:
-    needs: [detect, version]
-    if: needs.detect.outputs.release == 'true' || needs.detect.outputs.base == 'true'
+  build:
+    needs: [detect, version, checks]
+    if: needs.detect.outputs.matrix != '[]'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJSON(needs.detect.outputs.matrix) }}
     steps:
-
-      - uses: actions/checkout@v7
-
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ inputs.checkout_ref || github.ref }}
-
       - uses: ./.github/actions/docker-build
         with:
-          service: python-base
-          dockerfile: ./infra/docker/base.Dockerfile
-          context: ./
+          service: ${{ matrix.service }}
           tags_meta: ${{ needs.version.outputs.tags_meta }}
           ghcr_owner: ${{ github.repository_owner }}
           dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}
           dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}
           push: ${{ needs.detect.outputs.publish }}
+          refresh: ${{ needs.detect.outputs.refresh }}
 
-  build-bot:
-    needs: [detect, version, build-base]
-    if: >-
-      ${{ !cancelled()
-          && needs.detect.result == 'success'
-          && needs['build-base'].result != 'failure'
-          && (needs.detect.outputs.release == 'true'
-              || needs.detect.outputs.bot == 'true'
-              || needs.detect.outputs.shared == 'true'
-              || needs.detect.outputs.base == 'true'
-              || needs.detect.outputs.meta == 'true') }}
+  ci:
+    name: CI passed
+    if: always()
+    needs: [detect, version, checks, build]
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
+    env:
+      DETECT: ${{ needs.detect.result }}
+      VERSION: ${{ needs.version.result }}
+      CHECKS: ${{ needs.checks.result }}
+      BUILD: ${{ needs.build.result }}
     steps:
-
-      - uses: actions/checkout@v7
-
-        with:
-          ref: ${{ inputs.checkout_ref || github.ref }}
-
-      - uses: ./.github/actions/docker-build
-        with:
-          service: bot
-          dockerfile: ./infra/docker/bot.Dockerfile
-          context: ./
-          tags_meta: ${{ needs.version.outputs.tags_meta }}
-          ghcr_owner: ${{ github.repository_owner }}
-          dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}
-          dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}
-          push: ${{ needs.detect.outputs.publish }}
-          base_image: ghcr.io/${{ github.repository_owner }}/python-base:${{ needs.detect.outputs.publish == 'true' && needs.build-base.result == 'success' && needs.version.outputs.base_tag || needs.version.outputs.base_pull_tag }}
-
-  build-support-bot:
-    needs: [detect, version]
-    if: |
-      needs.detect.outputs.release == 'true' ||
-      needs.detect.outputs.support_bot == 'true' ||
-      needs.detect.outputs.meta == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-
-      - uses: actions/checkout@v7
-
-        with:
-          ref: ${{ inputs.checkout_ref || github.ref }}
-
-      - uses: ./.github/actions/docker-build
-        with:
-          service: support-bot
-          dockerfile: ./infra/docker/support_bot.Dockerfile
-          context: ./
-          tags_meta: ${{ needs.version.outputs.tags_meta }}
-          ghcr_owner: ${{ github.repository_owner }}
-          dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}
-          dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}
-          push: ${{ needs.detect.outputs.publish }}
-
-  build-dashboard:
-    needs: [detect, version, build-base]
-    if: >-
-      ${{ !cancelled()
-          && needs.detect.result == 'success'
-          && needs['build-base'].result != 'failure'
-          && (needs.detect.outputs.release == 'true'
-              || needs.detect.outputs.dashboard == 'true'
-              || needs.detect.outputs.shared == 'true'
-              || needs.detect.outputs.base == 'true'
-              || needs.detect.outputs.meta == 'true') }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-
-      - uses: actions/checkout@v7
-
-        with:
-          ref: ${{ inputs.checkout_ref || github.ref }}
-
-      - uses: ./.github/actions/docker-build
-        with:
-          service: dashboard
-          dockerfile: ./infra/docker/dashboard.Dockerfile
-          context: ./
-          tags_meta: ${{ needs.version.outputs.tags_meta }}
-          ghcr_owner: ${{ github.repository_owner }}
-          dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}
-          dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}
-          push: ${{ needs.detect.outputs.publish }}
-          base_image: ghcr.io/${{ github.repository_owner }}/python-base:${{ needs.detect.outputs.publish == 'true' && needs.build-base.result == 'success' && needs.version.outputs.base_tag || needs.version.outputs.base_pull_tag }}
-
-  build-frontend:
-    needs: [detect, version]
-    if: |
-      needs.detect.outputs.release == 'true' ||
-      needs.detect.outputs.frontend == 'true' ||
-      needs.detect.outputs.meta == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-
-      - uses: actions/checkout@v7
-
-        with:
-          ref: ${{ inputs.checkout_ref || github.ref }}
-
-      - uses: ./.github/actions/docker-build
-        with:
-          service: frontend
-          dockerfile: ./infra/docker/frontend.Dockerfile
-          context: ./
-          tags_meta: ${{ needs.version.outputs.tags_meta }}
-          ghcr_owner: ${{ github.repository_owner }}
-          dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}
-          dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}
-          push: ${{ needs.detect.outputs.publish }}
-
-  build-miniapp:
-    needs: [detect, version, build-base]
-    if: >-
-      ${{ !cancelled()
-          && needs.detect.result == 'success'
-          && needs['build-base'].result != 'failure'
-          && (needs.detect.outputs.release == 'true'
-              || needs.detect.outputs.miniapp == 'true'
-              || needs.detect.outputs.shared == 'true'
-              || needs.detect.outputs.base == 'true'
-              || needs.detect.outputs.meta == 'true') }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-
-      - uses: actions/checkout@v7
-
-        with:
-          ref: ${{ inputs.checkout_ref || github.ref }}
-
-      - uses: ./.github/actions/docker-build
-        with:
-          service: miniapp
-          dockerfile: ./infra/docker/miniapp.Dockerfile
-          context: ./
-          tags_meta: ${{ needs.version.outputs.tags_meta }}
-          ghcr_owner: ${{ github.repository_owner }}
-          dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}
-          dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}
-          push: ${{ needs.detect.outputs.publish }}
-          base_image: ghcr.io/${{ github.repository_owner }}/python-base:${{ needs.detect.outputs.publish == 'true' && needs.build-base.result == 'success' && needs.version.outputs.base_tag || needs.version.outputs.base_pull_tag }}
+      - run: |
+          [[ "$DETECT" == success && "$VERSION" == success && "$CHECKS" == success ]]
+          [[ "$BUILD" == success || "$BUILD" == skipped ]]

@@ -44,18 +44,26 @@ def _now_iso(now: datetime | None) -> str:
 
 
 async def get_user_by_tg_id(
-    session: AsyncSession, tg_id: int
+    session: AsyncSession, tg_id: int, *, for_update: bool = False
 ) -> User | None:
     """The single most common query in this codebase. ~17 inline copies
     collapse into one call."""
-    return await session.scalar(select(User).where(User.tg_id == tg_id))
+    stmt = select(User).where(User.tg_id == tg_id)
+    if for_update:
+        stmt = stmt.with_for_update()
+    return await session.scalar(stmt)
 
 
-async def get_user_by_id(session: AsyncSession, user_id: int) -> User | None:
+async def get_user_by_id(
+    session: AsyncSession, user_id: int, *, for_update: bool = False,
+) -> User | None:
     """Internal PK lookup. Prefer ``session.get(User, user_id)`` when in
     a router that already has the session — this helper exists for
     consistency with the other lookups."""
-    return await session.scalar(select(User).where(User.id == user_id))
+    stmt = select(User).where(User.id == user_id)
+    if for_update:
+        stmt = stmt.with_for_update()
+    return await session.scalar(stmt)
 
 
 async def get_user_by_email(
