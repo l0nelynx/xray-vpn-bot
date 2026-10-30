@@ -166,6 +166,10 @@ npm audit --package-lock-only --ignore-scripts --audit-level=high
 
 Live Postgres tests (`test_autogenerate_diff.py`) require `COMMON_DB_PG_URL`.
 
+Pytest creates a temporary configuration before collecting tests, with dummy
+bot credentials and an isolated SQLite database. A clean checkout does not
+need `.env`, root `config.yml`, or `services/bot/config.yml` to run the suite.
+
 ## Project structure for contributors
 
 | Path | Role |

@@ -1,4 +1,5 @@
 import copy
+import os
 from pathlib import Path
 
 import uvicorn
@@ -32,14 +33,21 @@ limiter = Limiter(key_func=_real_client_ip)
 app_uvi.state.limiter = limiter
 
 
-def load_config(file_path="config.yml"):
-    # Получаем абсолютный путь к файлу
-    config_path = Path(__file__).parent.parent / file_path
+def load_config(file_path=None):
+    """Use CONFIG_PATH like the web services, retaining the legacy default.
+
+    An explicit relative filename is still resolved from the bot directory.
+    Environment paths follow the process working directory, as in miniapp.
+    """
+    if file_path is None and os.environ.get("CONFIG_PATH"):
+        config_path = Path(os.environ["CONFIG_PATH"])
+    else:
+        config_path = Path(__file__).parent.parent / (file_path or "config.yml")
 
     if not config_path.exists():
         raise FileNotFoundError(f"Config file not found: {config_path}")
 
-    with open(config_path, 'r') as stream:
+    with open(config_path, 'r', encoding='utf-8') as stream:
         try:
             return yaml.safe_load(stream)
         except yaml.YAMLError as exc:

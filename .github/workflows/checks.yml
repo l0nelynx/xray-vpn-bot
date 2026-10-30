@@ -14,7 +14,6 @@ jobs:
   python:
     runs-on: ubuntu-latest
     env:
-      CONFIG_PATH: ${{ github.workspace }}/config-example.yml
       DATABASE_URL: 'sqlite+aiosqlite:///:memory:'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7

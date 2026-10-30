@@ -27,7 +27,6 @@ check-python:
   stage: check
   image: python:3.13.18-alpine3.24@sha256:7984cf56ceaddebe4fefeb75d64000b9f45d8b77b11a09b24524da6cdc3af0c8
   variables:
-    CONFIG_PATH: $CI_PROJECT_DIR/config-example.yml
     DATABASE_URL: 'sqlite+aiosqlite:///:memory:'
     PIP_CACHE_DIR: $CI_PROJECT_DIR/.cache/pip
   cache:

@@ -221,5 +221,12 @@ jobs:
       BUILD: ${{ needs.build.result }}
     steps:
       - run: |
-          [[ "$DETECT" == success && "$VERSION" == success && "$CHECKS" == success ]]
-          [[ "$BUILD" == success || "$BUILD" == skipped ]]
+          printf 'detect=%s version=%s checks=%s build=%s\n' "$DETECT" "$VERSION" "$CHECKS" "$BUILD"
+          if [[ "$DETECT" != success || "$VERSION" != success || "$CHECKS" != success ]]; then
+            echo '::error::A prerequisite job failed. Inspect detect, version, or checks / python and checks / npm for the original error.'
+            exit 1
+          fi
+          if [[ "$BUILD" != success && "$BUILD" != skipped ]]; then
+            echo '::error::An image build or security gate failed. Inspect the build matrix jobs.'
+            exit 1
+          fi
