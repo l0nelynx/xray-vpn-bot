@@ -281,12 +281,18 @@ checkout, including on pull requests. BuildKit caches reuse unchanged base
 layers without relying on a mutable published base tag. Use
 `docker buildx bake -f docker-bake.hcl --load` to build the same graph locally.
 
-Pytest (including service tests), `pip check`, `pip-audit`, and npm audit run
+Pytest (including service tests), dependency compatibility checks, `pip-audit`, and npm audit run
 before image publication. Images are built under unique `ci-*` candidate tags;
 Trivy scans the candidate digest, and only passing digests receive environment
 or release tags. Reports are retained as CI artifacts. The image gate preserves
-the full raw report and excludes only superseded CPython build-SBOM Python
-records with a physically installed, locked, scanner-clean replacement.
+the full raw report and blocks every HIGH/CRITICAL finding, including vendored
+components reported through SBOM metadata. A newer standalone package does not
+replace a tool's bundled copy.
+
+Python images install and verify dependencies with a version/digest-pinned
+`uv` binary. They remove `pip` and the `ensurepip` bootstrap wheel, including
+their bundled libraries; `uv pip check --system` remains available in every
+Python image. Development and GitHub runner environments can still use pip.
 
 Python dependencies are resolved together in `infra/docker/constraints.txt`.
 After changing requirements, regenerate and review the lock from the repo root:

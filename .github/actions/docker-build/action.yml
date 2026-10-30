@@ -141,7 +141,7 @@ runs:
       shell: bash
       env:
         IMAGE: ${{ steps.image.outputs.ref }}
-      run: docker run --rm --network=none --entrypoint python "$IMAGE" -m pip check
+      run: docker run --rm --network=none --entrypoint uv "$IMAGE" pip check --system
 
     - name: Promote only the scanned digest
       if: inputs.push == 'true'

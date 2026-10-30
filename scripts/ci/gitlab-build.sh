@@ -41,7 +41,7 @@ tar -xzf "$tools_dir/$archive" -C "$tools_dir" trivy
   --list-all-pkgs --format json --output "trivy-$NAME.json" "$scan_ref"
 python3 scripts/ci/check_image.py "trivy-$NAME.json"
 if [[ "$NAME" != frontend ]]; then
-  docker run --rm --network=none --entrypoint python "$scan_ref" -m pip check
+  docker run --rm --network=none --entrypoint uv "$scan_ref" pip check --system
 fi
 
 if [[ "$publish" == true ]]; then

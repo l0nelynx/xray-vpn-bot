@@ -1,4 +1,4 @@
-"""A stale embedded SBOM must never hide an installed-package vulnerability."""
+"""A newer installed distribution cannot hide a vulnerable vendored copy."""
 from copy import deepcopy
 
 from scripts.ci.check_image import blocking_findings
@@ -8,31 +8,34 @@ def report():
     return {"Results": [{
         "Type": "python-pkg",
         "Packages": [
-            {"Name": "certifi", "Version": "2026.7.22", "AnalyzedBy": "sbom", "Identifier": {"UID": "old"}},
-            {"Name": "certifi", "Version": "2026.10.23", "AnalyzedBy": "python-pkg",
-             "FilePath": "site-packages/certifi.dist-info/METADATA", "Identifier": {"UID": "new"}},
+            {"Name": "urllib3", "Version": "2.7.0", "AnalyzedBy": "sbom", "Identifier": {"UID": "vendor"}},
+            {"Name": "urllib3", "Version": "2.8.0", "AnalyzedBy": "python-pkg",
+             "FilePath": "site-packages/urllib3.dist-info/METADATA", "Identifier": {"UID": "installed"}},
         ],
-        "Vulnerabilities": [{"PkgName": "certifi", "InstalledVersion": "2026.7.22",
-                             "Severity": "CRITICAL", "PkgIdentifier": {"UID": "old"}}],
+        "Vulnerabilities": [{"PkgName": "urllib3", "InstalledVersion": "2.7.0",
+                             "Severity": "HIGH", "PkgIdentifier": {"UID": "vendor"}}],
     }]}
 
 
-def test_gate_recognizes_only_clean_locked_installed_replacement():
-    blocking, superseded = blocking_findings(report(), "certifi==2026.10.23\n")
-    assert not blocking and len(superseded) == 1
+def test_gate_blocks_vendored_copy_even_with_clean_installed_replacement():
+    assert len(blocking_findings(report())) == 1
 
 
-def test_gate_blocks_vulnerable_installed_package_even_with_newer_version():
+def test_gate_blocks_both_vendored_and_installed_findings():
     data = report()
     finding = deepcopy(data["Results"][0]["Vulnerabilities"][0])
-    finding.update(InstalledVersion="2026.10.23", PkgIdentifier={"UID": "new"})
+    finding.update(InstalledVersion="2.8.0", PkgIdentifier={"UID": "installed"})
     data["Results"][0]["Vulnerabilities"].append(finding)
-    blocking, superseded = blocking_findings(data, "certifi==2026.10.23\n")
-    assert len(blocking) == 2 and not superseded
+    assert len(blocking_findings(data)) == 2
 
 
-def test_gate_blocks_uninstalled_or_unlocked_replacement():
-    assert blocking_findings(report(), "certifi==2026.7.22\n")[0]
+def test_gate_accepts_a_clean_scan():
     data = report()
-    data["Results"][0]["Packages"].pop()
-    assert blocking_findings(data, "certifi==2026.10.23\n")[0]
+    data["Results"][0]["Vulnerabilities"] = []
+    assert not blocking_findings(data)
+
+
+def test_gate_leaves_lower_severity_findings_outside_the_blocking_policy():
+    data = report()
+    data["Results"][0]["Vulnerabilities"][0]["Severity"] = "LOW"
+    assert not blocking_findings(data)

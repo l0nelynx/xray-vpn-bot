@@ -11,4 +11,4 @@ def test_dashboard_image_installs_shared_payments_package() -> None:
     ).read_text(encoding="utf-8")
 
     assert "COPY packages/payments /tmp/payments" in dockerfile
-    assert "pip install --no-cache-dir /tmp/payments" in dockerfile
+    assert "uv pip install --system /tmp/payments" in dockerfile

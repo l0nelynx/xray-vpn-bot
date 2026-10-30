@@ -12,17 +12,17 @@ RUN apk add --no-cache bash postgresql-client
 # Bot-specific deps on top of the shared base.
 COPY services/bot/requirements.txt ./
 RUN apk add --no-cache --virtual .build-deps gcc musl-dev postgresql-dev \
- && pip install --no-cache-dir -r requirements.txt \
+ && uv pip install --system -r requirements.txt \
  && apk del .build-deps
 
 # Shared local packages used by bot + miniapp (common_db + remnawave_client are
 # already in the base image). --no-deps: their deps are present in base/extras.
 COPY packages/account_linking /tmp/account_linking
-RUN pip install --no-cache-dir --no-deps --no-build-isolation /tmp/account_linking && rm -rf /tmp/account_linking
+RUN uv pip install --system --no-deps --no-build-isolation /tmp/account_linking && rm -rf /tmp/account_linking
 COPY packages/payments /tmp/payments
-RUN pip install --no-cache-dir --no-deps --no-build-isolation /tmp/payments && rm -rf /tmp/payments
+RUN uv pip install --system --no-deps --no-build-isolation /tmp/payments && rm -rf /tmp/payments
 COPY packages/subscription_delivery /tmp/subscription_delivery
-RUN pip install --no-cache-dir --no-deps --no-build-isolation /tmp/subscription_delivery && rm -rf /tmp/subscription_delivery
+RUN uv pip install --system --no-deps --no-build-isolation /tmp/subscription_delivery && rm -rf /tmp/subscription_delivery
 
 RUN touch ./db.sqlite3
 
@@ -33,7 +33,7 @@ COPY alembic.ini ./alembic.ini
 COPY migrations_runner.py ./migrations_runner.py
 COPY services/bot/scripts ./scripts
 
-RUN pip check \
+RUN uv pip check --system \
  && adduser -D -u 10001 appuser \
  && chown -R appuser:appuser /usr/src/app
 USER appuser
