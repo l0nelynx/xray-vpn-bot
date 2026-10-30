@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   python:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     env:
       DATABASE_URL: 'sqlite+aiosqlite:///:memory:'
     steps:
@@ -35,7 +35,7 @@ jobs:
         run: pip-audit -r infra/docker/constraints.txt --no-deps --disable-pip
 
   npm:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:

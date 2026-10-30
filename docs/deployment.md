@@ -264,6 +264,12 @@ host port mapping.
 Backends share a `python-base` image (FastAPI, SQLAlchemy, `common_db`,
 `remnawave_client` built once). The `frontend` image bakes both SPAs.
 
+GitHub Actions jobs use the explicit `ubuntu-26.04` runner label, independent
+of changes to `ubuntu-latest`. JavaScript actions use the Node.js 24 runtime
+and are pinned by commit SHA. `setup-python` and `setup-node` select the
+project's Python and Node.js versions explicitly; the Actions runtime does not
+set the application's Node.js version.
+
 CI (`.github/workflows/build.yml`, `.gitlab-ci.yml`):
 
 | Branch | Tag |

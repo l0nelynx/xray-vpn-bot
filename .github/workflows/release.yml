@@ -28,7 +28,7 @@ concurrency:
 jobs:
   bump:
     if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     outputs:
       version: ${{ steps.bump.outputs.version }}
       tag: ${{ steps.bump.outputs.tag }}
@@ -86,7 +86,7 @@ jobs:
   meta:
     needs: bump
     if: always() && (needs.bump.result == 'success' || needs.bump.result == 'skipped')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     outputs:
       version: ${{ steps.resolve.outputs.version }}
       tag: ${{ steps.resolve.outputs.tag }}
@@ -123,7 +123,7 @@ jobs:
 
   release:
     needs: [meta, publish]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
 
       - name: Skip if GitHub Release already exists
@@ -141,7 +141,7 @@ jobs:
 
       - name: Create GitHub Release
         if: steps.check.outputs.exists == 'false'
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           tag_name: ${{ needs.meta.outputs.tag }}
           name: Release ${{ needs.meta.outputs.tag }}
