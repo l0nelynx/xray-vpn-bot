@@ -44,12 +44,23 @@ async def payment_webhook_handler(request: Request, background_tasks: Background
             logger.warning(f"Platega webhook: invalid payload: {e}")
             return {"status": "error", "message": "invalid payload"}
 
+        if payment_data.status == "DISPUTED":
+            # Review reserves funds; it is not a refund or another payment.
+            # Preserve local delivery state so a later CONFIRMED stays idempotent.
+            logger.warning(
+                "Platega payment DISPUTED: %s (%s %s); funds reserved pending review",
+                payment_data.id, payment_data.amount, payment_data.currency,
+            )
+            return {"status": "received"}
+
         if payment_data.status == "CONFIRMED":
+            # Also sent after DISPUTED is resolved. The background processor
+            # claims the local transaction atomically and skips delivered orders.
             logger.info(f"Platega payment confirmed: {payment_data.id}")
             background_tasks.add_task(payment_process_background, payment_data.id)
             return {"status": "success"}
 
-        # CANCELED / CHARGEBACKED — just acknowledge so Platega stops retrying
+        # CANCELED / CHARGEBACKED / PARTIALLY_REFUNDED — acknowledge callbacks.
         logger.info(f"Platega payment status {payment_data.status} for {payment_data.id}")
         return {"status": "received"}
 

@@ -542,6 +542,8 @@ async def web_invoice(
         currency=invoice_data["currency"],
         days=invoice_data["days"],
         user_tg_id=_promo_tg_id(user),
+        user_id=user.id,
+        user_email=user.email,
         username=user.email,
         description=body.description or f"WebUser:{user.id}",
         method=invoice_data["method"],

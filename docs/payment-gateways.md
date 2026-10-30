@@ -101,8 +101,22 @@ Register webhook URL in @CryptoBot or rely on the HTTP endpoint.
 - API: `POST {platega_url}/v2/transaction/process`
 - Headers: `X-MerchantId`, `X-Secret`
 - `paymentMethod` from invoice node `method` or `platega_payment_method` default
+- `metadata.userId`: persistent `users.id`, serialized as a string
+- `metadata.user_email`: registered account email, or `{tg_id}@telegram.org`
+  when no email is stored. The same rule applies to bot, MiniApp, web and Android
+  invoices, including linked accounts. Missing identity or malformed email is
+  rejected before calling Platega.
 - Success: `status == "CONFIRMED"`
 - **Correlation ID:** provider `transactionId`
+
+`DISPUTED` callbacks are authenticated, acknowledged with HTTP 200 and logged
+at warning level. This is a temporary review of a confirmed payment, not a
+refund: local order/delivery state and the subscription are preserved. Repeated
+`DISPUTED` callbacks have no delivery side effects. When review ends with
+`CONFIRMED`, the existing atomic claim prevents a second subscription delivery;
+`CHARGEBACKED` continues to be acknowledged without automatic subscription
+revocation.
+See [Platega DISPUTED callbacks](https://docs.platega.io/disputed-46157462e0).
 
 **Sub-methods** (per invoice node `method` field):
 

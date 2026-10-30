@@ -22,6 +22,9 @@ class InvoiceRequest:
     username: str | None = None
     description: str | None = None
     method: str | None = None
+    # Persistent users.id and registered email; independent of payment surface.
+    user_id: int | None = None
+    user_email: str | None = None
 
 
 @dataclass(frozen=True)

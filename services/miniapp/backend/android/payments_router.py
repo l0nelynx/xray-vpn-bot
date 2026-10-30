@@ -335,10 +335,10 @@ async def create_payment_invoice(
         amount=invoice_data["amount"],
         currency=invoice_data["currency"],
         days=invoice_data["days"],
-        # У Android-юзеров нет tg_id. Передаём -user.id, чтобы не пересечься
-        # с настоящими tg_id; провайдеры используют это поле только для
-        # описания/payload-тэга.
-        user_tg_id=-int(user.id),
+        # Keep the legacy negative tag only for users without Telegram.
+        user_tg_id=user.tg_id or -int(user.id),
+        user_id=user.id,
+        user_email=user.email,
         username=user.email,
         description=body.description or f"AndroidUser:{user.id}",
         method=invoice_data["method"],

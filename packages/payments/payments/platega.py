@@ -1,4 +1,5 @@
 import logging
+import re
 
 import aiohttp
 
@@ -51,6 +52,17 @@ class PlategaProvider(PaymentProvider):
         if not (merchant_id and api_key and api_url):
             raise PaymentError("Platega is not configured")
 
+        if request.user_id is None or request.user_id <= 0:
+            raise PaymentError("Platega requires a persistent user ID")
+        if request.user_email:
+            user_email = request.user_email
+            if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", user_email):
+                raise PaymentError("Platega requires a valid user email")
+        elif request.user_tg_id > 0:
+            user_email = f"{request.user_tg_id}@telegram.org"
+        else:
+            raise PaymentError("Platega requires a user email or Telegram ID")
+
         body = {
             "paymentMethod": method,
             "paymentDetails": {
@@ -59,6 +71,10 @@ class PlategaProvider(PaymentProvider):
             },
             "description": request.description or f"TgId:{request.user_tg_id}",
             "payload": request.transaction_id,
+            "metadata": {
+                "userId": str(request.user_id),
+                "user_email": user_email,
+            },
         }
 
         headers = {

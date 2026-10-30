@@ -36,6 +36,7 @@ from common_db.repo.webapp_menu import (
     list_nodes,
     localized_text,
 )
+from common_db.repo.users import get_user_by_tg_id
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -215,6 +216,11 @@ async def _create_payment(callback: CallbackQuery, node_id: int) -> None:
             return
         await callback.answer(lang.msg_pay_in_stars)
     else:
+        async with async_session() as session:
+            user = await get_user_by_tg_id(session, callback.from_user.id)
+        if user is None:
+            await callback.answer("User not found", show_alert=True)
+            return
         try:
             invoice = await create_invoice(
                 target.provider,
@@ -224,6 +230,8 @@ async def _create_payment(callback: CallbackQuery, node_id: int) -> None:
                     currency=target.currency,
                     days=target.days,
                     user_tg_id=callback.from_user.id,
+                    user_id=user.id,
+                    user_email=user.email,
                     username=callback.from_user.username,
                     description=localized_text(
                         node,
