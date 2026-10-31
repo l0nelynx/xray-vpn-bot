@@ -13,6 +13,7 @@ from slowapi.errors import RateLimitExceeded
 from app.api.a_pay import payment_webhook_handler as apays_webhook_handler
 from app.api.crystal_pay import payment_webhook_handler as crystal_webhook_handler
 from app.api.crypto_pay import cryptopay_webhook_handler
+from app.api.heleket import payment_webhook_handler as heleket_webhook_handler
 from app.api.platega import payment_webhook_handler as platega_webhook_handler
 from app.api.paritypay import payment_webhook_handler as paritypay_webhook_handler
 from app.api.remnawave_webhook import remnawave_webhook_handler
@@ -129,6 +130,12 @@ async def payment_webhook_cryptopay(request: Request, background_tasks: Backgrou
 @limiter.limit("60/minute")
 async def payment_webhook_platega(request: Request, background_tasks: BackgroundTasks):
     return await platega_webhook_handler(request, background_tasks)
+
+
+@app_uvi.post("/bot/heleket_webhook")
+@limiter.limit("60/minute")
+async def payment_webhook_heleket(request: Request, background_tasks: BackgroundTasks):
+    return await heleket_webhook_handler(request, background_tasks)
 
 
 @app_uvi.post("/bot/paritypay_webhook")

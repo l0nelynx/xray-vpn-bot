@@ -59,6 +59,7 @@ Providers never read `config.yml` directly — each service calls
 | Registry name | `payment_method` (DB) | Currencies | Webhook route | Config keys |
 |---------------|------------------------|------------|---------------|-------------|
 | `crypto` | `CRYPTOPAY` | USDT, TON, BTC, ETH, LTC, BNB, TRX, USDC | `/bot/cryptopay_webhook` | `crypto_bot_token` |
+| `heleket` | `HELEKET` | USD (paid in crypto) | `/bot/heleket_webhook` | `heleket_merchant_id`, `heleket_api_key`, `heleket_webhook` |
 | `crystal` | `CRYSTAL_PAY` | RUB, USD, EUR | `/bot/crystal_webhook` | `crystal_login`, `crystal_secret`, `crystal_salt`, `crystal_webhook` |
 | `apay` | `SBP_APAY` | RUB | `/bot/apays_webhook` | `apay_id`, `apay_secret`, `apay_api_url` |
 | `platega` | `PLATEGA` | RUB | `/bot/platega_webhook` | `platega_merchant_id`, `platega_api_key`, `platega_url`, `platega_payment_method` |
@@ -79,6 +80,34 @@ Providers never read `config.yml` directly — each service calls
 - **Correlation ID:** CryptoPay `invoice_id` is stored in `provider_invoice_id`
 
 Register webhook URL in @CryptoBot or rely on the HTTP endpoint.
+
+### Heleket (`heleket`)
+
+- Uses the official [`heleket-sdk`](https://github.com/Heleket/python-sdk) (`0.3.0`).
+- Optional: services start without any Heleket credentials. Configure **Dashboard →
+  System → Payments → Heleket**, enable the provider and save:
+  - **Merchant ID** and **Payment API key** from your Heleket merchant settings
+    ([getting API keys](https://doc.heleket.com/general/getting-api-keys)). The
+    Payout API key is not used.
+  - **Webhook URL**: `https://your-domain/bot/heleket_webhook`, publicly reachable
+    on the seller bot. It is included as `url_callback` in every invoice.
+- Settings are encrypted in the database; API responses mask the Payment API
+  key. Saving or disabling the integration takes effect through the runtime
+  overlay without restarting services (normally within five seconds).
+- In **Tariff Constructor**, add a payment option with provider `heleket`,
+  currency `USD`, method `default` (Crypto), price and subscription delivery
+  settings. The same node works in the bot, MiniApp, web portal and Android.
+  Customers choose their cryptocurrency on the hosted Heleket checkout page.
+- Invoices expire after one hour, disallow partial-payment tolerance and
+  multiple payments, and pass the registered payer email when available.
+- Webhook verification uses the SDK's raw-body verifier to preserve PHP slash
+  escaping. Only `payment` events with status `paid` or `paid_over` deliver;
+  order ID, provider UUID, amount and currency must match the saved transaction.
+  Duplicate callbacks use the shared atomic delivery claim.
+- **Correlation ID:** local transaction UUID in `order_id`; Heleket's `uuid`
+  is stored separately in `provider_invoice_id`.
+- You may restrict the callback source IP at your reverse proxy according to
+  [Heleket's webhook documentation](https://doc.heleket.com/methods/payments/webhook).
 
 ### Crystal Pay (`crystal`)
 
@@ -190,7 +219,7 @@ merchant UUID or provider ID before claiming the local transaction:
 
 | Correlation mode | Providers |
 |------------------|-----------|
-| Merchant/local UUID | APay, ParityPay, Stars |
+| Merchant/local UUID | APay, ParityPay, Heleket, Stars |
 | Provider invoice ID | CryptoPay, Crystal Pay, Platega |
 
 ---

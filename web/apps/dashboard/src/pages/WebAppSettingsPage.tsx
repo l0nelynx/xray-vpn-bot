@@ -49,6 +49,16 @@ interface ProviderState {
   updated_at?: string | null;
 }
 
+const PROVIDER_LABELS: Record<string, string> = {
+  heleket: "Heleket",
+};
+
+const INTEGRATION_FIELD_LABELS: Record<string, string> = {
+  heleket_merchant_id: "Merchant ID",
+  heleket_api_key: "Payment API key",
+  heleket_webhook: "Webhook URL",
+};
+
 const RUNTIME_CORE: Record<string, string> = {
   news_id: "News channel ID",
   news_url: "News URL",
@@ -230,11 +240,19 @@ function IntegrationCards({
           <Card key={p.provider}>
             <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="flex items-center gap-2 text-sm">
-                {p.provider}
+                {PROVIDER_LABELS[p.provider] ?? p.provider}
                 {sourceBadge(p.source)}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
+              {p.provider === "heleket" && (
+                <p className="text-sm text-muted-foreground">
+                  Prices are set in USD; customers pay in cryptocurrency. Enter your Merchant ID
+                  and Payment API key from Heleket, then set the public webhook URL to
+                  https://your-domain/bot/heleket_webhook. These settings are optional for service
+                  startup and apply automatically after saving.
+                </p>
+              )}
               <div className="flex items-center gap-2">
                 <Switch
                   checked={pf.enabled}
@@ -249,9 +267,12 @@ function IntegrationCards({
               </div>
               {p.field_meta.map((f) => (
                 <div key={f.name} className="space-y-1.5">
-                  <Label>{f.name}</Label>
+                  <Label htmlFor={`${p.provider}-${f.name}`}>
+                    {INTEGRATION_FIELD_LABELS[f.name] ?? f.name}
+                  </Label>
                   {f.name.endsWith("_sa_json") || f.name.includes("sa_json") ? (
                     <Textarea
+                      id={`${p.provider}-${f.name}`}
                       rows={4}
                       placeholder={f.secret ? "paste JSON or leave blank to keep" : undefined}
                       value={pf.fields[f.name] ?? ""}
@@ -267,6 +288,7 @@ function IntegrationCards({
                     />
                   ) : (
                     <Input
+                      id={`${p.provider}-${f.name}`}
                       type={f.secret ? "password" : "text"}
                       placeholder={f.secret ? "leave blank to keep" : undefined}
                       value={pf.fields[f.name] ?? ""}
@@ -284,7 +306,7 @@ function IntegrationCards({
                 </div>
               ))}
               <Button onClick={() => onSave(p)} disabled={saving}>
-                Save {p.provider}
+                Save {PROVIDER_LABELS[p.provider] ?? p.provider}
               </Button>
             </CardContent>
           </Card>

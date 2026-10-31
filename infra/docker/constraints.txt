@@ -132,6 +132,10 @@ h11==0.16.0
     # via
     #   httpcore
     #   uvicorn
+heleket-sdk==0.3.0
+    # via
+    #   -r infra/docker/../../services/bot/requirements.txt
+    #   -r infra/docker/../../services/miniapp/backend/requirements.txt
 hiredis==3.5.0
     # via redis
 httpcore==1.0.9
@@ -244,6 +248,7 @@ pydantic==2.12.5
     #   aiogram
     #   aiosend
     #   fastapi
+    #   heleket-sdk
     #   pydantic-settings
     #   rapid-api-client
     #   remnawave-api
@@ -292,6 +297,7 @@ requests==2.34.2
     #   -r infra/docker/../../services/dashboard/backend/requirements.txt
     #   cachecontrol
     #   google-api-core
+    #   heleket-sdk
     #   pip-audit
 rich==15.0.0
     # via pip-audit

@@ -232,6 +232,7 @@ Build a **tree of menu nodes**:
 | Field | Description |
 |-------|-------------|
 | RU / EN labels | Separate localized customer-facing labels |
+| Position in Russian / English list | Independent 1-based positions among Payment Options in the same category; other options shift on save |
 | Provider | Registry gateway, including `stars` |
 | Amount | Price |
 | Currency | `RUB`, `USDT`, etc. |
@@ -255,6 +256,14 @@ and webhook correlation metadata. Stars are visible only to Bot and MiniApp.
 - Expand/collapse tree branches
 - Fix migrated `Needs attention` nodes before activation
 - Switch RU/EN preview
+
+Payment Options can appear in different orders in Russian and English. Set the
+position under each language label, save, then use the Purchase tree language
+selector to preview the result. Hidden options retain a position; clients show
+the visible options in their configured relative order. Category positions use
+the common tree order. Moving or cloning an option appends it to the new category
+unless a position is selected. Migration `0046_localized_payment_order` preserves
+the existing order in both languages.
 
 Changes are live immediately — clients read `webapp_menu_nodes` on each request.
 

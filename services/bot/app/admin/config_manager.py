@@ -18,7 +18,7 @@ PER_PAGE = 10
 SENSITIVE_KEYS = {
     "token", "support_token", "admin_bot_token", "crypto_bot_token",
     "auth_pass", "crystal_secret", "crystal_salt", "apay_secret",
-    "platega_api_key", "remnawave_token", "dig_pass",
+    "platega_api_key", "heleket_api_key", "remnawave_token", "dig_pass",
 }
 
 

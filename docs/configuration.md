@@ -210,6 +210,21 @@ Only fill in gateways you use. Full setup guide: [Payment gateways](payment-gate
 |-----|-------------|
 | `crypto_bot_token` | @CryptoBot API token |
 
+### Heleket (optional)
+
+Configure in **Dashboard → System → Payments → Heleket**. Credentials are not
+required to start any service. The dashboard stores the Payment API key encrypted
+and applies changes without restarting services. YAML fields are optional fallbacks.
+
+| Key | Description |
+|-----|-------------|
+| `heleket_merchant_id` | Merchant ID from Heleket merchant settings |
+| `heleket_api_key` | Payment API key (not the Payout API key); default empty |
+| `heleket_webhook` | Public seller-bot callback URL: `https://your-domain/bot/heleket_webhook` |
+
+In Tariff Constructor use provider `heleket`, currency `USD`, method `default`.
+Customers pay in cryptocurrency through Heleket's hosted checkout.
+
 ### Crystal Pay
 
 | Key | Description |

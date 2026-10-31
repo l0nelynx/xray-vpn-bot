@@ -23,6 +23,10 @@ class PaymentsConfig:
     apay_api_url: str = ""
     # CryptoBot
     crypto_bot_token: str = ""
+    # Heleket (optional; configured from Dashboard → System → Payments)
+    heleket_merchant_id: str = ""
+    heleket_api_key: str = ""
+    heleket_webhook: str = ""
     # CrystalPay
     crystal_login: str = ""
     crystal_secret: str = ""

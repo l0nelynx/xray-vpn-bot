@@ -59,6 +59,9 @@ class WebAppMenuNode(Base):
     text_en: Mapped[str] = mapped_column(String(255))
     action: Mapped[str] = mapped_column(String(20), default="buttons")
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    # Payment-option positions within their category; NULL uses tree order.
+    sort_order_ru: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    sort_order_en: Mapped[int | None] = mapped_column(Integer, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
 
     # Invoice action params (NULL when action != "invoice").

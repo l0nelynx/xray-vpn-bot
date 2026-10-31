@@ -19,6 +19,7 @@ import httpx
 # payment_method (as stored in the DB) -> native currency code
 PAYMENT_CURRENCY: dict[str, str] = {
     "CRYPTOPAY": "USD",
+    "HELEKET": "USD",
     "TG_STARS": "STAR",
     "CRYSTAL_PAY": "RUB",
     "SBP_APAY": "RUB",

@@ -106,6 +106,7 @@ DEFAULT_RUNTIME_CONFIG: dict[str, Any] = {
 # provider -> list of PaymentsConfig / YAML field names
 PAYMENT_PROVIDER_FIELDS: dict[str, tuple[str, ...]] = {
     "crypto": ("crypto_bot_token",),
+    "heleket": ("heleket_merchant_id", "heleket_api_key", "heleket_webhook"),
     "crystal": ("crystal_login", "crystal_secret", "crystal_salt", "crystal_webhook"),
     "apay": ("apay_id", "apay_secret", "apay_api_url"),
     "platega": (
@@ -127,6 +128,7 @@ PAYMENT_PROVIDER_FIELDS: dict[str, tuple[str, ...]] = {
 # Fields that should be masked in API responses (not echoed back).
 PAYMENT_SECRET_FIELDS: frozenset[str] = frozenset({
     "crypto_bot_token",
+    "heleket_api_key",
     "crystal_secret",
     "crystal_salt",
     "apay_secret",

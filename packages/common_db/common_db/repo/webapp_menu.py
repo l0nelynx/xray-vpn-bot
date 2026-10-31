@@ -1,8 +1,9 @@
 """Shared Tariff Constructor tree reads and invariants."""
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
+from typing import Any, TypeVar
 import re
 import uuid
 
@@ -42,6 +43,36 @@ def localized_text(node: WebAppMenuNode, lang: str) -> str:
     if lang == "en":
         return (node.text_en or node.text_ru).strip()
     return (node.text_ru or node.text_en).strip()
+
+
+_Node = TypeVar("_Node")
+
+
+def sort_menu_siblings(nodes: Iterable[_Node], lang: str) -> list[_Node]:
+    """Order payment options by language, preserving category slots.
+
+    Supports ORM nodes and the dicts used by web/Android menu builders.
+    Nodes without localized positions retain their common tree order.
+    """
+    def value(node: _Node, key: str) -> Any:
+        return node.get(key) if isinstance(node, Mapping) else getattr(node, key, None)
+
+    def tree_key(node: _Node) -> tuple[int, int]:
+        return (value(node, "sort_order") or 0, value(node, "id") or 0)
+
+    field = "sort_order_en" if lang == "en" else "sort_order_ru"
+
+    def invoice_key(node: _Node) -> tuple[int, int, int]:
+        position = value(node, field)
+        order, node_id = tree_key(node)
+        return (order if position is None else position, order, node_id)
+
+    ordered = sorted(nodes, key=tree_key)
+    invoices = iter(sorted(
+        (node for node in ordered if value(node, "action") == "invoice"),
+        key=invoice_key,
+    ))
+    return [next(invoices) if value(node, "action") == "invoice" else node for node in ordered]
 
 
 def invoice_target(
@@ -136,7 +167,7 @@ def build_tree(
     for node in rows:
         by_parent.setdefault(node.parent_id, []).append(node)
     for children in by_parent.values():
-        children.sort(key=lambda n: (n.sort_order, n.id))
+        children[:] = sort_menu_siblings(children, lang)
 
     def walk(parent_id: int | None, ancestors: frozenset[int]) -> list[dict]:
         output: list[dict] = []

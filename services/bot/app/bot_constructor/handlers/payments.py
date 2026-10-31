@@ -35,6 +35,7 @@ from common_db.repo.webapp_menu import (
     invoice_target,
     list_nodes,
     localized_text,
+    sort_menu_siblings,
 )
 from common_db.repo.users import get_user_by_tg_id
 
@@ -100,13 +101,13 @@ async def _render_level(callback: CallbackQuery, parent_id: int | None) -> None:
         await callback.answer(lang.msg_plan_not_found, show_alert=True)
         return
 
-    children = sorted(
+    children = sort_menu_siblings(
         (
             node
             for node in nodes
             if node.parent_id == parent_id and node.is_active
         ),
-        key=lambda node: (node.sort_order, node.id),
+        lang_code,
     )
     rows: list[list[InlineKeyboardButton]] = []
     for node in children:

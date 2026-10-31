@@ -38,6 +38,8 @@ def test_startup_upgrades_from_either_branch(tmp_path, monkeypatch, applied):
     with engine.begin() as conn:
         conn.exec_driver_sql("CREATE TABLE transactions (transaction_id VARCHAR(100) PRIMARY KEY, delivery_status INTEGER, order_status VARCHAR(50), payment_method VARCHAR(50))")
         conn.exec_driver_sql("INSERT INTO transactions VALUES ('historical-paid', 1, 'confirmed', 'CARD')")
+        conn.exec_driver_sql("CREATE TABLE webapp_menu_nodes (id INTEGER PRIMARY KEY, parent_id INTEGER, action VARCHAR(20), sort_order INTEGER)")
+        conn.exec_driver_sql("INSERT INTO webapp_menu_nodes VALUES (1, NULL, 'buttons', 0), (2, 1, 'invoice', 10)")
         conn.exec_driver_sql("CREATE TABLE support_tickets (id INTEGER PRIMARY KEY, subject VARCHAR(200), status VARCHAR(20), created_at VARCHAR(30), updated_at VARCHAR(30))")
         conn.exec_driver_sql("CREATE TABLE support_messages (id INTEGER PRIMARY KEY, ticket_id INTEGER, sender VARCHAR(20), text TEXT, created_at VARCHAR(30))")
         conn.exec_driver_sql("CREATE TABLE support_attachments (id INTEGER PRIMARY KEY, created_at VARCHAR(30))")
@@ -52,7 +54,8 @@ def test_startup_upgrades_from_either_branch(tmp_path, monkeypatch, applied):
     # A second service startup must be a no-op, not repeat CREATE/ALTER.
     upgrade_to_head()
     with engine.connect() as conn:
-        assert conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalars().all() == ["0045_remnawave_availability"]
+        assert conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalars().all() == ["0046_localized_payment_order"]
+        assert conn.execute(sa.text("SELECT id, sort_order_ru, sort_order_en FROM webapp_menu_nodes ORDER BY id")).all() == [(1, None, None), (2, 0, 0)]
         assert conn.execute(sa.text("SELECT incident, unavailable FROM remnawave_availability WHERE id=1")).one() == (0, False)
         assert "web_analytics_purchases" in sa.inspect(conn).get_table_names()
         assert conn.execute(sa.text("SELECT transaction_id, kind, points FROM referral_receipts")).all() == [("historical-paid", "legacy", 0)]

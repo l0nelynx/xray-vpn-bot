@@ -21,18 +21,20 @@ from payments.base import Invoice
     ("web", "buyer@gmail.com", None),
     ("android", "buyer@gmail.com", None),
 ])
-def test_invoice_uses_database_user_identity(with_app_db, monkeypatch, surface, email, tg_id):
+@pytest.mark.parametrize(("provider_name", "currency"), [("platega", "RUB"), ("heleket", "USD")])
+def test_invoice_uses_database_user_identity(with_app_db, monkeypatch, surface, email, tg_id, provider_name, currency):
     user = SimpleNamespace(id=42, tg_id=tg_id, email=email, language="ru")
     invoice_data = {
-        "provider": "platega", "amount": 500, "currency": "RUB", "method": "2",
+        "provider": provider_name, "amount": 500, "currency": currency,
+        "method": "default" if provider_name == "heleket" else "2",
         "days": 30, "tariff_slug": "test-plan", "squad_id": "squad",
         "internal_squad_ids": ["squad"], "external_squad_id": None,
         "traffic_limit_bytes": 0, "traffic_limit_strategy": "NO_RESET",
         "remnawave_description": None, "remnawave_tag": None,
     }
     create_invoice = AsyncMock(return_value=Invoice(
-        provider="platega", invoice_id="gateway-id", url="https://pay.platega.io/test",
-        amount=500, currency="RUB",
+        provider=provider_name, invoice_id="gateway-id", url="https://pay.example/test",
+        amount=500, currency=currency,
     ))
     request = Request({"type": "http", "method": "POST", "path": "/", "headers": []})
 
@@ -98,7 +100,7 @@ def test_invoice_uses_database_user_identity(with_app_db, monkeypatch, surface, 
     asyncio.run(run())
     create_invoice.assert_awaited_once()
     provider, invoice_request = create_invoice.call_args.args
-    assert provider == "platega"
+    assert provider == provider_name
     assert invoice_request.user_id == user.id
     assert invoice_request.user_email == user.email
     assert invoice_request.user_tg_id == (user.tg_id or -user.id)

@@ -278,6 +278,7 @@ export default function TransactionsTable() {
             <SelectItem value={ALL}>All methods</SelectItem>
             <SelectItem value="TG_STARS">Telegram Stars</SelectItem>
             <SelectItem value="CRYPTOPAY">CryptoPay</SelectItem>
+            <SelectItem value="HELEKET">Heleket</SelectItem>
             <SelectItem value="CRYSTAL_PAY">Crystal Pay</SelectItem>
             <SelectItem value="SBP_APAY">SBP (A-Pay)</SelectItem>
             <SelectItem value="PLATEGA">Platega</SelectItem>

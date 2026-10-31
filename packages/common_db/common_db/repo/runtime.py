@@ -133,7 +133,11 @@ async def upsert_payment_integration(
         from ..runtime_config.keys import PAYMENT_SECRET_FIELDS
 
         for field in PAYMENT_SECRET_FIELDS:
-            if field in clean and clean[field] in ("", None) and field in existing:
+            if (
+                field in allowed
+                and (field not in clean or clean[field] in ("", None))
+                and field in existing
+            ):
                 clean[field] = existing[field]
     row.enabled = enabled
     row.managed = True

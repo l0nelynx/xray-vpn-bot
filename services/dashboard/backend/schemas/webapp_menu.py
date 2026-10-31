@@ -12,6 +12,8 @@ class WebAppMenuNodeBase(BaseModel):
     text_en: str = Field(..., max_length=255)
     action: NodeAction = "buttons"
     sort_order: int = 0
+    sort_order_ru: int | None = Field(default=None, ge=0)
+    sort_order_en: int | None = Field(default=None, ge=0)
     is_active: bool = True
     invoice_provider: str | None = None
     invoice_amount: float | None = None
@@ -35,6 +37,8 @@ class WebAppMenuNodeUpdate(BaseModel):
     text_en: str | None = Field(default=None, max_length=255)
     action: NodeAction | None = None
     sort_order: int | None = None
+    sort_order_ru: int | None = Field(default=None, ge=0)
+    sort_order_en: int | None = Field(default=None, ge=0)
     is_active: bool | None = None
     parent_id: int | None = None
     invoice_provider: str | None = None

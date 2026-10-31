@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import text
-from common_db.repo.webapp_menu import get_active_node, invoice_target, list_nodes
+from common_db.repo.webapp_menu import get_active_node, invoice_target, list_nodes, sort_menu_siblings
 from common_db.repo import subscriptions as subscription_repo
 
 from ..database.models import Transaction
@@ -41,9 +41,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/android/payments", tags=["android-payments"])
 
 
-# Android exposes only fiat providers — Telegram-bound providers (CryptoBot)
-# don't make sense from a native app context.
-_ANDROID_PROVIDERS = ("apay", "platega", "paritypay")
+# Hosted gateways usable outside Telegram (including Heleket crypto checkout).
+_ANDROID_PROVIDERS = ("apay", "platega", "paritypay", "heleket")
 
 
 # --- Schemas ---------------------------------------------------------------
@@ -124,6 +123,8 @@ def _node_as_dict(node) -> dict:
         "text_en": node.text_en,
         "action": node.action,
         "sort_order": node.sort_order,
+        "sort_order_ru": node.sort_order_ru,
+        "sort_order_en": node.sort_order_en,
         "invoice_provider": node.invoice_provider,
         "invoice_amount": node.invoice_amount,
         "invoice_currency": node.invoice_currency,
@@ -194,9 +195,9 @@ def _build_tree(
     """Рекурсивный билд дерева. Узлы с action=invoice оставляем только если
     провайдер разрешён. Не-invoice узлы оставляем, только если у них есть
     хотя бы один валидный потомок (иначе пустые группы засоряли бы UI)."""
-    items = sorted(
+    items = sort_menu_siblings(
         [r for r in rows if r["parent_id"] == parent_id],
-        key=lambda r: (r["sort_order"], r["id"]),
+        lang,
     )
     out: list[dict] = []
     for r in items:

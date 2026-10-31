@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from payments import PaymentError, get_provider
 from sqlalchemy import func, select
 
-from common_db.repo.webapp_menu import invoice_target
+from common_db.repo.webapp_menu import invoice_target, sort_menu_siblings
 from remnawave_client import configure
 
 from ..auth import get_current_user
@@ -43,6 +43,8 @@ def _node_fields(node: WebAppMenuNode) -> dict:
         "text_en": node.text_en,
         "action": node.action,
         "sort_order": node.sort_order,
+        "sort_order_ru": node.sort_order_ru,
+        "sort_order_en": node.sort_order_en,
         "is_active": bool(node.is_active),
         "invoice_provider": node.invoice_provider,
         "invoice_amount": node.invoice_amount,
@@ -60,6 +62,8 @@ def _node_fields(node: WebAppMenuNode) -> dict:
 
 def _normalize_node(node: WebAppMenuNode) -> None:
     if node.action != "invoice":
+        node.sort_order_ru = None
+        node.sort_order_en = None
         return
     node.invoice_internal_squad_ids = list(
         dict.fromkeys(
@@ -164,6 +168,35 @@ async def _validate_parent(session, node: WebAppMenuNode) -> None:
         )
 
 
+async def _position_payment_options(
+    session,
+    parent_id: int | None,
+    *,
+    node: WebAppMenuNode | None = None,
+    positions: dict | None = None,
+    append: bool = False,
+) -> None:
+    """Insert at the chosen position and keep both language lists contiguous."""
+    await session.flush()
+    result = await session.execute(
+        select(WebAppMenuNode)
+        .where(WebAppMenuNode.parent_id == parent_id, WebAppMenuNode.action == "invoice")
+        .order_by(WebAppMenuNode.id)
+        .with_for_update()
+    )
+    siblings = list(result.scalars().all())
+    for lang in ("ru", "en"):
+        field = f"sort_order_{lang}"
+        ordered = sort_menu_siblings(siblings, lang)
+        position = (positions or {}).get(field)
+        if node is not None and node.action == "invoice" and (position is not None or append):
+            ordered = [sibling for sibling in ordered if sibling.id != node.id]
+            index = len(ordered) if position is None else min(position, len(ordered))
+            ordered.insert(index, node)
+        for index, sibling in enumerate(ordered):
+            setattr(sibling, field, index)
+
+
 @router.get("/tree", response_model=list[WebAppMenuNodeSchema])
 async def get_tree(_: str = Depends(get_current_user)):
     async with async_session() as session:
@@ -205,6 +238,9 @@ async def create_node(body: WebAppMenuNodeCreate, _: str = Depends(get_current_u
         await session.flush()
         await _validate_parent(session, node)
         _validate_node(node)
+        await _position_payment_options(
+            session, node.parent_id, node=node, positions=body.model_dump(), append=True,
+        )
         await session.commit()
         await session.refresh(node)
     await bump_cache_version()
@@ -227,6 +263,7 @@ async def update_node(
             raise HTTPException(404, "Node not found")
         values = body.model_dump(exclude_unset=True)
         old_parent_id = node.parent_id
+        old_action = node.action
         for field, value in values.items():
             setattr(node, field, value)
         _normalize_node(node)
@@ -260,6 +297,12 @@ async def update_node(
                 setattr(node, field, None)
         await _validate_parent(session, node)
         _validate_node(node)
+        await _position_payment_options(
+            session, node.parent_id, node=node, positions=values,
+            append=node.parent_id != old_parent_id or old_action != "invoice",
+        )
+        if node.parent_id != old_parent_id:
+            await _position_payment_options(session, old_parent_id)
         await session.commit()
         await session.refresh(node)
         response = WebAppMenuNodeSchema(
@@ -277,7 +320,9 @@ async def delete_node(node_id: int, _: str = Depends(get_current_user)):
         node = await session.get(WebAppMenuNode, node_id)
         if node is None:
             raise HTTPException(404, "Node not found")
+        parent_id = node.parent_id
         await session.delete(node)
+        await _position_payment_options(session, parent_id)
         await session.commit()
     await bump_cache_version()
     return {"ok": True}
@@ -310,10 +355,19 @@ async def reorder(body: ReorderRequest, _: str = Depends(get_current_user)):
                     raise HTTPException(400, "Menu tree cannot contain a cycle")
                 seen.add(parent_id)
                 parent_id = proposed.get(parent_id)
+        moved_invoices = [
+            nodes[item.id] for item in body.items
+            if nodes[item.id].action == "invoice" and nodes[item.id].parent_id != item.parent_id
+        ]
+        old_parents = {node.parent_id for node in moved_invoices}
         for item in body.items:
             node = nodes[item.id]
             node.parent_id = item.parent_id
             node.sort_order = item.sort_order
+        for node in moved_invoices:
+            await _position_payment_options(session, node.parent_id, node=node, append=True)
+        for parent_id in old_parents:
+            await _position_payment_options(session, parent_id)
         await session.commit()
     await bump_cache_version()
     return {"ok": True}

@@ -188,6 +188,12 @@ support_token: "yoursupportbottoken"               # [optional] Token for the le
 # --- TELEGRAM STARS + CRYPTOBOT ---
 crypto_bot_token: "your_cryptobot_api_token"       # preferred: Dashboard Payments → crypto
 
+# --- HELEKET (optional; configure in Dashboard → System → Payments) ---
+# No Heleket credentials are required to start any service.
+heleket_merchant_id: ""
+heleket_api_key: ""                              # Payment API key, not Payout API key
+heleket_webhook: ""                              # https://your-domain/bot/heleket_webhook
+
 # --- CRYSTAL PAY ---
 crystal_login: "your_crystal_login"
 crystal_secret: "your_crystal_secret"

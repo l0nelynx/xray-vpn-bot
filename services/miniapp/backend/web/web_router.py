@@ -52,6 +52,7 @@ from ..android import repo as android_repo
 from ..android import security as android_security
 from ..android.auth_router import _issue_pair, _user_summary, limiter
 from ..android.payments_router import _load_menu_rows, _load_node, _node_payload
+from common_db.repo.webapp_menu import sort_menu_siblings
 from ..bonus_points import enrich_invoice_dict, resolve_points_cost
 from ..android.schemas import AuthResponse, UserSummary
 from ..database.session import async_session
@@ -449,9 +450,9 @@ async def web_payments_menu(
     rates = await get_rub_rates_for_currencies(currencies, get_config())
 
     async def _build(parent_id) -> list[dict]:
-        items = sorted(
+        items = sort_menu_siblings(
             [r for r in rows if r["parent_id"] == parent_id],
-            key=lambda r: (r["sort_order"], r["id"]),
+            user.language or "ru",
         )
         out: list[dict] = []
         for r in items:

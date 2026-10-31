@@ -209,7 +209,7 @@ export interface DevicesResponse {
   devices: DeviceItem[];
 }
 
-export type PaymentProviderName = "apay" | "crystal" | "crypto" | "platega" | "paritypay";
+export type PaymentProviderName = "apay" | "crystal" | "crypto" | "platega" | "paritypay" | "heleket";
 
 export interface ProviderInfo {
   name: PaymentProviderName;

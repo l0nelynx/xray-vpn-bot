@@ -11,6 +11,19 @@ All comparisons use :func:`hmac.compare_digest` to avoid timing leaks.
 import hashlib
 import hmac
 
+from heleket_sdk import SignatureError, WebhookVerifier
+
+
+def verify_heleket_webhook(raw_body: bytes, api_key: str) -> bool:
+    """Heleket: verify raw JSON, preserving PHP slash escapes and key order."""
+    if not api_key or not api_key.strip():
+        return False
+    try:
+        WebhookVerifier(api_key.strip()).verify_raw(raw_body)
+    except (SignatureError, ValueError, TypeError):
+        return False
+    return True
+
 
 def verify_apay_webhook(order_id: str, status: str, sign: str, secret: str) -> bool:
     """APay: md5("<order_id>:<status>:<secret>"). Caller checks status first."""

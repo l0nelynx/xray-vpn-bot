@@ -4,6 +4,12 @@ import { referralRecoveryHandlers } from "./referralRecovery";
 
 const API = "/bot/dashboard/api";
 
+const heleketFieldMeta = [
+  { name: "heleket_merchant_id", secret: false },
+  { name: "heleket_api_key", secret: true },
+  { name: "heleket_webhook", secret: false },
+];
+
 let mockBranding = {
   branding_name: "MockVPN",
   branding_logo_url: "",
@@ -228,6 +234,8 @@ const menuTree = [
         text_en: "1 month",
         action: "invoice",
         sort_order: 0,
+        sort_order_ru: 0,
+        sort_order_en: 1,
         is_active: true,
         invoice_provider: "crypto",
         invoice_amount: 10,
@@ -250,6 +258,8 @@ const menuTree = [
         text_en: "100 Stars",
         action: "invoice",
         sort_order: 1,
+        sort_order_ru: 1,
+        sort_order_en: 0,
         is_active: true,
         invoice_provider: "stars",
         invoice_amount: 100,
@@ -460,6 +470,14 @@ export const handlers: HttpHandler[] = [
           webhook_key: "provider",
         },
         {
+          name: "heleket",
+          payment_method: "HELEKET",
+          currencies: ["USD"],
+          methods: [{ value: "default", label: "Crypto" }],
+          surfaces: ["bot", "miniapp", "web", "android"],
+          webhook_key: "merchant",
+        },
+        {
           name: "stars",
           payment_method: "TG_STARS",
           currencies: ["XTR"],
@@ -524,8 +542,25 @@ export const handlers: HttpHandler[] = [
   http.get(`${API}/settings/payments`, () =>
     HttpResponse.json({
       providers: [
-        { name: "crypto", enabled: true, configured: true },
-        { name: "platega", enabled: true, configured: true },
+        {
+          provider: "crypto", enabled: true, managed: false, source: "yaml",
+          fields: { crypto_bot_token: "••••••••" },
+          field_meta: [{ name: "crypto_bot_token", secret: true }],
+        },
+        {
+          provider: "platega", enabled: true, managed: false, source: "yaml",
+          fields: { platega_merchant_id: "demo-merchant", platega_api_key: "••••••••", platega_url: "https://app.platega.io", platega_payment_method: 2 },
+          field_meta: [
+            { name: "platega_merchant_id", secret: false },
+            { name: "platega_api_key", secret: true },
+            { name: "platega_url", secret: false },
+            { name: "platega_payment_method", secret: false },
+          ],
+        },
+        {
+          provider: "heleket", enabled: false, managed: false, source: "none",
+          fields: {}, field_meta: heleketFieldMeta,
+        },
       ],
     }),
   ),
@@ -535,7 +570,7 @@ export const handlers: HttpHandler[] = [
       provider: params.provider,
       managed: true,
       source: "dashboard",
-      field_meta: [],
+      field_meta: params.provider === "heleket" ? heleketFieldMeta : [],
       fields: {},
       enabled: true,
       ...body,

@@ -4,6 +4,7 @@ from .apay import APayProvider
 from .base import Invoice, InvoiceRequest, PaymentError, PaymentProvider
 from .crypto import CryptoPayProvider
 from .crystal import CrystalPayProvider
+from .heleket import HeleketProvider
 from .paritypay import ParityPayProvider
 from .platega import PlategaProvider
 from .stars import TelegramStarsProvider
@@ -65,6 +66,7 @@ for _provider_cls in (
     APayProvider,
     CrystalPayProvider,
     CryptoPayProvider,
+    HeleketProvider,
     PlategaProvider,
     ParityPayProvider,
     TelegramStarsProvider,

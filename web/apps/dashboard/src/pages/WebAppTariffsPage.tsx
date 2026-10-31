@@ -46,6 +46,8 @@ interface MenuNode {
   text_en: string;
   action: NodeAction;
   sort_order: number;
+  sort_order_ru: number | null;
+  sort_order_en: number | null;
   is_active: boolean;
   invoice_provider: string | null;
   invoice_amount: number | null;
@@ -75,6 +77,8 @@ interface DraftNode {
   parent_id: number | null;
   text_ru: string;
   text_en: string;
+  sort_order_ru: number | null;
+  sort_order_en: number | null;
   action: NodeAction;
   is_active: boolean;
   invoice_provider: string | null;
@@ -113,6 +117,8 @@ const emptyDraft = (parentId: number | null): DraftNode => ({
   parent_id: parentId,
   text_ru: "Новое меню",
   text_en: "New menu",
+  sort_order_ru: null,
+  sort_order_en: null,
   action: "buttons",
   is_active: true,
   invoice_provider: null,
@@ -133,6 +139,8 @@ const toDraft = (node: MenuNode): DraftNode => ({
   parent_id: node.parent_id,
   text_ru: node.text_ru,
   text_en: node.text_en,
+  sort_order_ru: node.sort_order_ru ?? null,
+  sort_order_en: node.sort_order_en ?? null,
   action: node.action,
   is_active: node.is_active,
   invoice_provider: node.invoice_provider,
@@ -147,6 +155,16 @@ const toDraft = (node: MenuNode): DraftNode => ({
   invoice_remnawave_description: node.invoice_remnawave_description,
   invoice_remnawave_tag: node.invoice_remnawave_tag,
 });
+
+function sortSiblings(nodes: MenuNode[], lang: "ru" | "en"): MenuNode[] {
+  const field = lang === "en" ? "sort_order_en" : "sort_order_ru";
+  const ordered = [...nodes].sort((a, b) => a.sort_order - b.sort_order || a.id - b.id);
+  const invoices = ordered.filter((node) => node.action === "invoice").sort((a, b) =>
+    (a[field] ?? a.sort_order) - (b[field] ?? b.sort_order) || a.sort_order - b.sort_order || a.id - b.id,
+  );
+  let index = 0;
+  return ordered.map((node) => node.action === "invoice" ? invoices[index++] : node);
+}
 
 function InternalSquadSelect({
   squads,
@@ -232,6 +250,7 @@ function TreeRow({
   onSelect,
   onExpand,
   onAdd,
+  lang,
 }: {
   node: MenuNode;
   depth: number;
@@ -240,6 +259,7 @@ function TreeRow({
   onSelect: (node: MenuNode) => void;
   onExpand: (id: number) => void;
   onAdd: (parentId: number) => void;
+  lang: "ru" | "en";
 }) {
   const open = expanded.has(node.id);
   return (
@@ -261,8 +281,8 @@ function TreeRow({
           <CircleDollarSign className="mx-1.5 h-4 w-4 text-emerald-400" />
         )}
         <button className="min-w-0 flex-1 text-left" onClick={() => onSelect(node)}>
-          <div className="truncate text-sm font-medium">{node.text_ru || node.text_en}</div>
-          <div className="truncate text-[11px] text-muted-foreground">{node.text_en}</div>
+          <div className="truncate text-sm font-medium">{lang === "en" ? node.text_en || node.text_ru : node.text_ru || node.text_en}</div>
+          <div className="truncate text-[11px] text-muted-foreground">{lang === "en" ? node.text_ru : node.text_en}</div>
         </button>
         {!node.is_active && <Badge variant="secondary">Hidden</Badge>}
         {node.needs_attention && <AlertTriangle className="h-4 w-4 text-amber-400" />}
@@ -280,7 +300,7 @@ function TreeRow({
       </div>
       {node.action === "buttons" &&
         open &&
-        node.children.map((child) => (
+        sortSiblings(node.children, lang).map((child) => (
           <TreeRow
             key={child.id}
             node={child}
@@ -290,6 +310,7 @@ function TreeRow({
             onSelect={onSelect}
             onExpand={onExpand}
             onAdd={onAdd}
+            lang={lang}
           />
         ))}
     </>
@@ -298,6 +319,7 @@ function TreeRow({
 
 export default function WebAppTariffsPage() {
   const [tree, setTree] = useState<MenuNode[]>([]);
+  const [treeLanguage, setTreeLanguage] = useState<"ru" | "en">("ru");
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [selected, setSelected] = useState<MenuNode | null>(null);
   const [draft, setDraft] = useState<DraftNode | null>(null);
@@ -392,6 +414,20 @@ export default function WebAppTariffsPage() {
 
   const provider = providers.find((item) => item.name === draft?.invoice_provider);
 
+  const otherPaymentOptions = flat.filter((node) =>
+    node.action === "invoice" && node.parent_id === draft?.parent_id && node.id !== draft?.id,
+  );
+  const paymentPosition = (lang: "ru" | "en") => {
+    if (!draft) return 0;
+    const field = lang === "en" ? "sort_order_en" : "sort_order_ru";
+    const position = draft[field];
+    if (position != null) return Math.min(position, otherPaymentOptions.length);
+    if (selected?.action === "invoice" && selected.parent_id === draft.parent_id) {
+      return sortSiblings([...otherPaymentOptions, selected], lang).findIndex((node) => node.id === selected.id);
+    }
+    return otherPaymentOptions.length;
+  };
+
   const changeProvider = (name: string) => {
     const next = providers.find((item) => item.name === name);
     setDraft((current) =>
@@ -450,6 +486,8 @@ export default function WebAppTariffsPage() {
     setSaving(true);
     const payload = {
       ...draft,
+      sort_order_ru: draft.action === "invoice" ? paymentPosition("ru") : null,
+      sort_order_en: draft.action === "invoice" ? paymentPosition("en") : null,
       invoice_provider: draft.action === "invoice" ? draft.invoice_provider : null,
       invoice_amount: draft.action === "invoice" ? draft.invoice_amount : null,
       invoice_currency: draft.action === "invoice" ? draft.invoice_currency : null,
@@ -533,6 +571,8 @@ export default function WebAppTariffsPage() {
       id: undefined,
       text_ru: `${draft.text_ru} (копия)`,
       text_en: `${draft.text_en} (Copy)`,
+      sort_order_ru: null,
+      sort_order_en: null,
       is_active: false,
       invoice_internal_squad_ids: [...(draft.invoice_internal_squad_ids ?? [])],
     });
@@ -562,14 +602,21 @@ export default function WebAppTariffsPage() {
 
       <div className="grid gap-4 lg:grid-cols-[minmax(280px,0.9fr)_minmax(0,1.4fr)]">
         <Card className="min-h-[420px]">
-          <CardHeader className="pb-2">
+          <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm">Purchase tree</CardTitle>
+            <Select value={treeLanguage} onValueChange={(value: "ru" | "en") => setTreeLanguage(value)}>
+              <SelectTrigger aria-label="Preview language" className="w-28"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ru">Russian</SelectItem>
+                <SelectItem value="en">English</SelectItem>
+              </SelectContent>
+            </Select>
           </CardHeader>
           <CardContent className="space-y-1 p-2">
             {loading ? (
               <div className="flex justify-center py-12"><Spinner /></div>
             ) : tree.length ? (
-              tree.map((node) => (
+              sortSiblings(tree, treeLanguage).map((node) => (
                 <TreeRow
                   key={node.id}
                   node={node}
@@ -585,6 +632,7 @@ export default function WebAppTariffsPage() {
                     })
                   }
                   onAdd={createAt}
+                  lang={treeLanguage}
                 />
               ))
             ) : (
@@ -621,9 +669,39 @@ export default function WebAppTariffsPage() {
                     Labels
                   </div>
                   <div className="grid gap-3 md:grid-cols-2">
-                    <div><Label>Russian</Label><Input value={draft.text_ru} onChange={(e) => patch("text_ru", e.target.value)} /></div>
-                    <div><Label>English</Label><Input value={draft.text_en} onChange={(e) => patch("text_en", e.target.value)} /></div>
+                    <div className="space-y-2">
+                      <Label htmlFor="tariff-label-ru">Russian</Label>
+                      <Input id="tariff-label-ru" value={draft.text_ru} onChange={(e) => patch("text_ru", e.target.value)} />
+                      {draft.action === "invoice" && (
+                        <div className="space-y-1.5">
+                          <Label htmlFor="tariff-position-ru">Position in Russian list</Label>
+                          <Select value={String(paymentPosition("ru"))} onValueChange={(value) => patch("sort_order_ru", Number(value))}>
+                            <SelectTrigger id="tariff-position-ru"><SelectValue /></SelectTrigger>
+                            <SelectContent>{Array.from({ length: otherPaymentOptions.length + 1 }, (_, index) => <SelectItem key={index} value={String(index)}>{index + 1}</SelectItem>)}</SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="tariff-label-en">English</Label>
+                      <Input id="tariff-label-en" value={draft.text_en} onChange={(e) => patch("text_en", e.target.value)} />
+                      {draft.action === "invoice" && (
+                        <div className="space-y-1.5">
+                          <Label htmlFor="tariff-position-en">Position in English list</Label>
+                          <Select value={String(paymentPosition("en"))} onValueChange={(value) => patch("sort_order_en", Number(value))}>
+                            <SelectTrigger id="tariff-position-en"><SelectValue /></SelectTrigger>
+                            <SelectContent>{Array.from({ length: otherPaymentOptions.length + 1 }, (_, index) => <SelectItem key={index} value={String(index)}>{index + 1}</SelectItem>)}</SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                    </div>
                   </div>
+                  {draft.action === "invoice" && (
+                    <p className="text-xs text-muted-foreground">
+                      Positions apply to payment options in this category, independently for each language.
+                      Other options shift automatically when you save. Hidden options also have a position.
+                    </p>
+                  )}
                   <div className="grid gap-3 md:grid-cols-2">
                     <div>
                       <Label>Type</Label>
@@ -649,9 +727,10 @@ export default function WebAppTariffsPage() {
                       <Label>Category</Label>
                       <Select
                         value={draft.parent_id == null ? "root" : String(draft.parent_id)}
-                        onValueChange={(value: string) =>
-                          patch("parent_id", value === "root" ? null : Number(value))
-                        }
+                        onValueChange={(value: string) => setDraft((current) => current ? {
+                          ...current, parent_id: value === "root" ? null : Number(value),
+                          sort_order_ru: null, sort_order_en: null,
+                        } : current)}
                       >
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
@@ -838,8 +917,12 @@ export default function WebAppTariffsPage() {
                   <div className="flex gap-1">
                     {draft.id && (
                       <>
-                        <Button variant="outline" size="icon" onClick={() => void move(-1)} title="Move up"><ArrowUp className="h-4 w-4" /></Button>
-                        <Button variant="outline" size="icon" onClick={() => void move(1)} title="Move down"><ArrowDown className="h-4 w-4" /></Button>
+                        {draft.action === "buttons" && (
+                          <>
+                            <Button variant="outline" size="icon" onClick={() => void move(-1)} title="Move up"><ArrowUp className="h-4 w-4" /></Button>
+                            <Button variant="outline" size="icon" onClick={() => void move(1)} title="Move down"><ArrowDown className="h-4 w-4" /></Button>
+                          </>
+                        )}
                         {draft.action === "invoice" && (
                           <Button variant="outline" size="icon" onClick={clonePaymentOption} title="Clone payment option">
                             <Copy className="h-4 w-4" />
