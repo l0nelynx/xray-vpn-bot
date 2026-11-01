@@ -30,7 +30,8 @@ from ..crm_model_adapter import (
     validate_actions,
     validate_conditions,
 )
-from ..crm_runner import resolve_targets
+from ..crm_runner import resolve_recipient_user_ids
+from ..crm_email import preview_email
 from ..crm_service import scan_segment, segment_catalog
 from ..crm_templates import get_template, list_templates
 from ..crm_variables import build_message_context, render_crm_message, variable_catalog
@@ -141,6 +142,7 @@ class ScanParams(BaseModel):
 
 class EvaluateConditionsRequest(BaseModel):
     conditions: list[dict]
+    actions: list[dict] = Field(default_factory=list)
 
 
 class LaunchCampaignRequest(BaseModel):
@@ -155,6 +157,7 @@ class LaunchCampaignRequest(BaseModel):
     bonus_days: int | None = Field(default=None, ge=0, le=365)
     bonus_traffic_gb: int | None = Field(default=None, ge=0, le=1000)
     target_tg_ids: list[int] = Field(default_factory=list)
+    target_user_ids: list[int] = Field(default_factory=list)
 
 
 class CreateCampaignRequest(LaunchCampaignRequest):
@@ -162,7 +165,9 @@ class CreateCampaignRequest(LaunchCampaignRequest):
 
 
 class ScanUser(BaseModel):
-    tg_id: int
+    user_id: int
+    tg_id: int | None
+    email: str | None = None
     username: str | None
     rw_id: int | None
     meta: dict = Field(default_factory=dict)
@@ -217,6 +222,11 @@ class MessagePreviewRequest(BaseModel):
 class MessagePreviewResponse(BaseModel):
     rendered_text: str
     sample_tg_id: int | None = None
+
+
+class EmailPreviewRequest(BaseModel):
+    subject: str = Field(min_length=1, max_length=200)
+    text: str = Field(min_length=1, max_length=20000)
 
 
 class CrmEventCreate(BaseModel):
@@ -426,6 +436,14 @@ async def preview_message(
     )
 
 
+@router.post("/emails/preview")
+async def preview_crm_email(body: EmailPreviewRequest, _: str = Depends(get_current_user)):
+    # Use catalog examples, including webhook placeholders; never send email here.
+    context = {v["key"]: v["example"] for v in variable_catalog(context="webhook")}
+    async with async_session() as session:
+        return await preview_email(session, subject=body.subject, text=body.text, context=context)
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Segments
 # ──────────────────────────────────────────────────────────────────────────────
@@ -459,7 +477,7 @@ async def evaluate_conditions_preview(
     rw = _rw_client()
     async with async_session() as session:
         tg_ids, users, total, warning = await evaluate_conditions(
-            session, rw, body.conditions
+            session, rw, body.conditions, actions=body.actions
         )
         segment_id = segment_id_from_conditions(body.conditions) or ""
     return ScanResponse(
@@ -574,6 +592,9 @@ async def create_campaign(
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
 
+    if body.target_user_ids:
+        flat["segment_params"]["target_user_ids"] = body.target_user_ids
+
     store_targets = body.target_tg_ids or flat.get("segment_params", {}).get("target_tg_ids")
 
     async with async_session() as session:
@@ -609,7 +630,7 @@ async def execute_campaign(
             raise HTTPException(404, "Campaign not found")
         if campaign.status in ("queued", "running"):
             raise HTTPException(409, "Campaign is already queued or running")
-        tg_ids = await resolve_targets(session, campaign, body.target_tg_ids)
+        tg_ids = await resolve_recipient_user_ids(session, campaign, body.target_tg_ids)
         if not tg_ids:
             raise HTTPException(400, "No target users")
         await crm_repo.queue_campaign(session, campaign)
@@ -631,6 +652,9 @@ async def launch_campaign(
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
 
+    if body.target_user_ids:
+        flat["segment_params"]["target_user_ids"] = body.target_user_ids
+
     if body.target_tg_ids:
         conditions = [c for c in conditions if c.get("type") != "tg_allowlist"]
         conditions.append({"type": "tg_allowlist", "tg_ids": body.target_tg_ids})
@@ -650,7 +674,7 @@ async def launch_campaign(
             created_by=user,
             target_tg_ids=body.target_tg_ids or None,
         )
-        tg_ids = await resolve_targets(session, campaign, None)
+        tg_ids = await resolve_recipient_user_ids(session, campaign, None)
         if not tg_ids:
             raise HTTPException(400, "No target users")
         campaign.total_targets = len(tg_ids)
@@ -927,7 +951,7 @@ async def create_webhook_rule(
 ):
     _validate_webhook_pair(body.scope, body.event)
     try:
-        validate_actions(body.actions)
+        validate_actions(body.actions, allow_webhook_email=True)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
 
@@ -980,7 +1004,7 @@ async def update_webhook_rule(
                 updates[field] = data[field]
         if "actions" in data and body.actions is not None:
             try:
-                validate_actions(body.actions)
+                validate_actions(body.actions, allow_webhook_email=True)
             except ValueError as exc:
                 raise HTTPException(400, str(exc)) from exc
             updates["actions_json"] = json.dumps(body.actions, ensure_ascii=False)

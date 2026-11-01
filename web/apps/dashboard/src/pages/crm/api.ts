@@ -24,6 +24,7 @@ export async function launchCampaign(payload: {
   conditions: CrmCondition[];
   actions: CrmAction[];
   target_tg_ids?: number[];
+  target_user_ids?: number[];
 }): Promise<CampaignSummary & { queue_status: string }> {
   return api.post("/crm/campaigns/launch", payload);
 }

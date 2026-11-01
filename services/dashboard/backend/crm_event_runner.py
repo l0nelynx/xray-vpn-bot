@@ -11,7 +11,7 @@ from common_db.repo import crm as crm_repo
 from common_db.repo import crm_events as events_repo
 
 from .config import get_remnawave_token, get_remnawave_url
-from .crm_conditions import evaluate_conditions_full
+from .crm_conditions import evaluate_audience_user_ids
 from .crm_model_adapter import get_actions, get_conditions, sync_flat_from_model
 from .database.session import async_session
 from .tasks.crm import enqueue_campaign
@@ -49,23 +49,23 @@ async def run_crm_event(
         actions = get_actions(event)
         flat = sync_flat_from_model(conditions=conditions, actions=actions)
 
-        tg_ids, warning = await evaluate_conditions_full(session, rw, conditions)
+        user_ids, warning = await evaluate_audience_user_ids(session, rw, conditions, actions)
 
         ever_sent: set[int] = set()
         recent_sent: set[int] = set()
         if event.repeat_policy == "once":
-            ever_sent = await events_repo.get_sent_tg_ids_for_event(session, event_id)
+            ever_sent = await events_repo.get_sent_user_ids(session, event_id)
         elif event.repeat_policy == "cooldown":
             since = (
                 datetime.now(timezone.utc).replace(tzinfo=None)
                 - timedelta(days=event.repeat_cooldown_days)
             ).isoformat(timespec="seconds")
-            recent_sent = await events_repo.get_recent_sent_tg_ids(
+            recent_sent = await events_repo.get_sent_user_ids(
                 session, event_id, since_iso=since
             )
 
         filtered = events_repo.filter_tg_ids_by_repeat_policy(
-            tg_ids,
+            user_ids,
             repeat_policy=event.repeat_policy,
             repeat_cooldown_days=event.repeat_cooldown_days,
             ever_sent=ever_sent,
@@ -78,22 +78,19 @@ async def run_crm_event(
             logger.info(
                 "CRM event %s: empty audience after repeat filter (scan=%d)",
                 event_id,
-                len(tg_ids),
+                len(user_ids),
             )
             return {
                 "status": "empty",
                 "event_id": event_id,
-                "scan_total": len(tg_ids),
+                "scan_total": len(user_ids),
                 "warning": warning,
             }
 
-        # Store frozen audience on the campaign (runner uses target_tg_ids fast path)
-        campaign_conditions = [
-            c for c in conditions if c.get("type") != "tg_allowlist"
-        ]
-        campaign_conditions.append(
-            {"type": "tg_allowlist", "tg_ids": filtered}
-        )
+        # Freeze stable local IDs so email-only users survive queueing.
+        campaign_conditions = list(conditions)
+        campaign_params = dict(flat.get("segment_params") or {})
+        campaign_params["target_user_ids"] = filtered
 
         campaign = await crm_repo.create_campaign(
             session,
@@ -101,13 +98,12 @@ async def run_crm_event(
             conditions=campaign_conditions,
             actions=actions,
             segment_type=flat.get("segment_type"),
-            segment_params=dict(flat.get("segment_params") or {}),
+            segment_params=campaign_params,
             message_text=flat.get("message_text") or "",
             attach_button=bool(flat.get("attach_button")),
             bonus_days=flat.get("bonus_days"),
             bonus_traffic_gb=flat.get("bonus_traffic_gb"),
             created_by="system",
-            target_tg_ids=filtered,
             event_id=event_id,
         )
         campaign.total_targets = len(filtered)

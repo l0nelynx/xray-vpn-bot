@@ -19,7 +19,7 @@ export default function CampaignTab({ onLaunched }: CampaignTabProps) {
   const [segments, setSegments] = useState<SegmentDef[]>([]);
   const [conditions, setConditions] = useState<CrmCondition[]>([]);
   const [actions, setActions] = useState<CrmAction[]>(defaultActions());
-  const [selectedTgIds, setSelectedTgIds] = useState<number[]>([]);
+  const [selectedUserIds, setSelectedUserIds] = useState<number[]>([]);
   const [scanTotal, setScanTotal] = useState<number | null>(null);
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
@@ -41,7 +41,7 @@ export default function CampaignTab({ onLaunched }: CampaignTabProps) {
   const isAllUsers = segmentId === "all_users";
 
   const hasEnabledAction = actions.some((a) => a.enabled);
-  const canLaunch = !!segmentId && hasEnabledAction && (isAllUsers || selectedTgIds.length > 0);
+  const canLaunch = !!segmentId && hasEnabledAction && (isAllUsers || selectedUserIds.length > 0);
 
   const launch = async () => {
     if (!segmentId) {
@@ -52,7 +52,7 @@ export default function CampaignTab({ onLaunched }: CampaignTabProps) {
       toast.warning("Enable at least one action");
       return;
     }
-    if (!isAllUsers && selectedTgIds.length === 0) {
+    if (!isAllUsers && selectedUserIds.length === 0) {
       toast.warning("Run a scan and select recipients");
       return;
     }
@@ -62,15 +62,15 @@ export default function CampaignTab({ onLaunched }: CampaignTabProps) {
         name: name || undefined,
         conditions,
         actions,
-        target_tg_ids: isAllUsers ? undefined : selectedTgIds,
+        target_user_ids: isAllUsers ? undefined : selectedUserIds,
       });
       toast.success(
         isAllUsers
           ? `Campaign queued (${scanTotal ?? "all"} users)`
-          : `Campaign queued for ${selectedTgIds.length} users`,
+          : `Campaign queued for ${selectedUserIds.length} users`,
       );
       setName("");
-      setSelectedTgIds([]);
+      setSelectedUserIds([]);
       setScanTotal(null);
       onLaunched();
     } catch {
@@ -93,8 +93,9 @@ export default function CampaignTab({ onLaunched }: CampaignTabProps) {
         conditions={conditions}
         onChange={setConditions}
         segmentTypes={segments}
-        selectedTgIds={selectedTgIds}
-        onSelectedTgIdsChange={setSelectedTgIds}
+        actions={actions}
+        selectedUserIds={selectedUserIds}
+        onSelectedUserIdsChange={setSelectedUserIds}
         onScanComplete={setScanTotal}
       />
 
@@ -104,7 +105,7 @@ export default function CampaignTab({ onLaunched }: CampaignTabProps) {
         <CardContent className="space-y-2 p-4">
           <ConfirmButton
             title="Launch campaign?"
-            description={`Recipients: ${isAllUsers ? scanTotal ?? "all" : selectedTgIds.length}`}
+            description={`Recipients: ${isAllUsers ? scanTotal ?? "all" : selectedUserIds.length}`}
             confirmText="Launch"
             onConfirm={launch}
           >

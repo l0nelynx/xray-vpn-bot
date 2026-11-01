@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 from typing import Any
+from types import SimpleNamespace
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,6 +21,7 @@ from .crm_model_adapter import (
     normalize_rw_tag,
 )
 from .crm_service import scan_segment, segment_catalog
+from .crm_email import has_email_action, email_action_for_user
 
 logger = logging.getLogger(__name__)
 
@@ -251,6 +253,7 @@ async def evaluate_conditions(
     conditions: list[dict],
     *,
     preview_limit: int | None = PREVIEW_LIMIT,
+    actions: list[dict] | None = None,
 ) -> tuple[list[int], list[dict], int, str | None]:
     """Return (tg_ids, preview_users, total, warning). AND semantics."""
     segment_id, params, user_type = _segment_from_conditions(conditions)
@@ -270,6 +273,7 @@ async def evaluate_conditions(
         torrent_days=int(params.get("torrent_days", 7)),
         preview_limit=None,
         user_type=str(params.get("user_type", user_type)),
+        include_email=has_email_action(actions or []),
     )
 
     rw_warning: str | None = None
@@ -282,6 +286,27 @@ async def evaluate_conditions(
     if allowlist is not None:
         users = [u for u in users if u.get("tg_id") in allowlist]
         total = len(users)
+
+    user_allowlists = [
+        set(c.get("user_ids") or []) for c in conditions
+        if c.get("type") == "user_allowlist"
+    ]
+    for allowed in user_allowlists:
+        users = [u for u in users if u.get("user_id") in allowed]
+    if has_email_action(actions or []):
+        telegram_enabled = any(
+            a.get("type") == "send_message" and a.get("enabled", True) for a in actions
+        )
+        users = [
+            u for u in users
+            if (telegram_enabled and u.get("tg_id")) or email_action_for_user(
+                actions, SimpleNamespace(
+                    tg_id=u.get("tg_id"), email=u.get("email"),
+                    email_verified_at=u.get("email_verified"),
+                ),
+            )
+        ]
+    total = len(users)
 
     tg_ids = [u["tg_id"] for u in users if u.get("tg_id") is not None]
 
@@ -301,3 +326,12 @@ async def evaluate_conditions_full(
         session, rw_client, conditions, preview_limit=None
     )
     return tg_ids, warning
+
+
+async def evaluate_audience_user_ids(
+    session: AsyncSession, rw_client, conditions: list[dict], actions: list[dict],
+) -> tuple[list[int], str | None]:
+    _, users, _, warning = await evaluate_conditions(
+        session, rw_client, conditions, preview_limit=None, actions=actions,
+    )
+    return [u["user_id"] for u in users], warning

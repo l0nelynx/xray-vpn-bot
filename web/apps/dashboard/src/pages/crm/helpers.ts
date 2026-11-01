@@ -25,6 +25,7 @@ export function defaultConditions(segmentId: string, seg?: SegmentDef): CrmCondi
 export function defaultActions(): CrmAction[] {
   return [
     { type: "send_message", enabled: false, order: 100, text: "" },
+    { type: "send_email", enabled: false, order: 102, subject: "", text: "", recipients: "without_telegram" },
     { type: "attach_button", enabled: false, order: 101, button_type: "open_bot" },
     { type: "rw_bonus_days", enabled: false, order: 10, days: 3 },
     { type: "rw_bonus_traffic", enabled: false, order: 11, gb: 5 },
@@ -103,6 +104,7 @@ export function actionSummary(actions: CrmAction[]): string {
   const parts: string[] = [];
   for (const a of actions.filter((x) => x.enabled)) {
     if (a.type === "send_message") parts.push("message");
+    if (a.type === "send_email") parts.push("email");
     if (a.type === "attach_button") parts.push("button");
     if (a.type === "rw_bonus_days") parts.push(`+${a.days}d`);
     if (a.type === "rw_bonus_traffic") parts.push(`+${a.gb}GB`);

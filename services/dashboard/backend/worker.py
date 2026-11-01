@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 from typing import Any
 
 from arq import cron
 from arq.connections import RedisSettings
 
-from .config import get_redis_url
+from .config import get_redis_url, get_yaml_config, get_payments_secrets_key
 from .crm_event_runner import tick_crm_events
 from .crm_runner import execute_crm_campaign as run_campaign
 from .crm_webhook_runner import execute_crm_webhook as run_webhook
@@ -37,7 +38,29 @@ async def execute_giveaway_broadcast(ctx, giveaway_id: int) -> None:
     await run_giveaway_broadcast(giveaway_id)
 
 
+async def startup(ctx) -> None:
+    from common_db.runtime_config import bootstrap_runtime_overlay, runtime_overlay_poll_loop
+    from .database.session import async_session
+
+    await bootstrap_runtime_overlay(
+        async_session, get_yaml_config(), crypto_secret=get_payments_secrets_key(),
+    )
+    ctx["runtime_overlay_task"] = asyncio.create_task(runtime_overlay_poll_loop(async_session))
+
+
+async def shutdown(ctx) -> None:
+    task = ctx.pop("runtime_overlay_task", None)
+    if task is not None:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+
 class WorkerSettings:
+    on_startup = startup
+    on_shutdown = shutdown
     functions = [
         execute_crm_campaign,
         tick_crm_events,

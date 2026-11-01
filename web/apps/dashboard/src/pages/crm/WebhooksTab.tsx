@@ -418,7 +418,7 @@ export default function WebhooksTab() {
                     }
                   />
                   <p className="text-xs text-muted-foreground">
-                    Skip re-running for the same user within this window. Empty = no limit.
+                    Skip repeated delivery to the same recipient within this window. Empty = no limit.
                   </p>
                 </div>
               </CardContent>

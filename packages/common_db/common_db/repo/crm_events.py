@@ -4,10 +4,10 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import desc, select
+from sqlalchemy import desc, select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models import CrmEvent, CrmEventDelivery
+from ..models import CrmEvent, CrmEventDelivery, User
 
 
 def _now_iso() -> str:
@@ -151,11 +151,13 @@ async def record_event_delivery(
     session: AsyncSession,
     *,
     event_id: int,
-    tg_id: int,
+    tg_id: int | None,
+    user_id: int | None = None,
 ) -> CrmEventDelivery:
     row = CrmEventDelivery(
         event_id=event_id,
         tg_id=tg_id,
+        user_id=user_id,
         sent_at=_now_iso(),
     )
     session.add(row)
@@ -170,7 +172,7 @@ async def get_sent_tg_ids_for_event(
     result = await session.scalars(
         select(CrmEventDelivery.tg_id).where(CrmEventDelivery.event_id == event_id)
     )
-    return {int(tg_id) for tg_id in result}
+    return {int(tg_id) for tg_id in result if tg_id is not None}
 
 
 async def get_recent_sent_tg_ids(
@@ -185,7 +187,19 @@ async def get_recent_sent_tg_ids(
             CrmEventDelivery.sent_at >= since_iso,
         )
     )
-    return {int(tg_id) for tg_id in result}
+    return {int(tg_id) for tg_id in result if tg_id is not None}
+
+
+async def get_sent_user_ids(
+    session: AsyncSession, event_id: int, *, since_iso: str | None = None,
+) -> set[int]:
+    # Include old deliveries written before the migration or by an older worker.
+    stmt = select(func.coalesce(CrmEventDelivery.user_id, User.id)).outerjoin(
+        User, User.tg_id == CrmEventDelivery.tg_id
+    ).where(CrmEventDelivery.event_id == event_id)
+    if since_iso:
+        stmt = stmt.where(CrmEventDelivery.sent_at >= since_iso)
+    return {int(uid) for uid in await session.scalars(stmt) if uid is not None}
 
 
 def filter_tg_ids_by_repeat_policy(

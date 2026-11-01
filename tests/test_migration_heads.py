@@ -43,6 +43,9 @@ def test_startup_upgrades_from_either_branch(tmp_path, monkeypatch, applied):
         conn.exec_driver_sql("CREATE TABLE support_tickets (id INTEGER PRIMARY KEY, subject VARCHAR(200), status VARCHAR(20), created_at VARCHAR(30), updated_at VARCHAR(30))")
         conn.exec_driver_sql("CREATE TABLE support_messages (id INTEGER PRIMARY KEY, ticket_id INTEGER, sender VARCHAR(20), text TEXT, created_at VARCHAR(30))")
         conn.exec_driver_sql("CREATE TABLE support_attachments (id INTEGER PRIMARY KEY, created_at VARCHAR(30))")
+        conn.exec_driver_sql("CREATE TABLE users (id BIGINT PRIMARY KEY, tg_id BIGINT)")
+        for table, owner in [("crm_campaign_deliveries", "campaign_id"), ("crm_event_deliveries", "event_id"), ("crm_webhook_deliveries", "rule_id")]:
+            conn.exec_driver_sql(f"CREATE TABLE {table} (id INTEGER PRIMARY KEY, {owner} BIGINT, tg_id BIGINT NOT NULL)")
         conn.exec_driver_sql("INSERT INTO support_tickets VALUES (1, 'Existing ticket', 'in_progress', '2026-09-01T10:00:00Z', '2026-09-01T11:00:00')")
         conn.exec_driver_sql("INSERT INTO support_messages VALUES (1, 1, 'user', 'Original question', '2026-09-01T10:00:00Z'), (2, 1, 'admin', 'Original reply', '2026-09-01T11:00:00')")
     cfg = migration_config()
@@ -54,7 +57,7 @@ def test_startup_upgrades_from_either_branch(tmp_path, monkeypatch, applied):
     # A second service startup must be a no-op, not repeat CREATE/ALTER.
     upgrade_to_head()
     with engine.connect() as conn:
-        assert conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalars().all() == ["0046_localized_payment_order"]
+        assert conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalars().all() == ["0048_crm_webhook_email"]
         assert conn.execute(sa.text("SELECT id, sort_order_ru, sort_order_en FROM webapp_menu_nodes ORDER BY id")).all() == [(1, None, None), (2, 0, 0)]
         assert conn.execute(sa.text("SELECT incident, unavailable FROM remnawave_availability WHERE id=1")).one() == (0, False)
         assert "web_analytics_purchases" in sa.inspect(conn).get_table_names()

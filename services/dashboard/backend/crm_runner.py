@@ -6,13 +6,21 @@ import asyncio
 import json
 import logging
 
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from common_db.models import User
 from common_db.repo import crm as crm_repo
-from common_db.repo.users import get_users_by_tg_ids
 from remnawave_client.segmentation import SEGMENT_ALL_USERS, SEGMENT_UNPAID_INVOICE
 
 from .config import get_remnawave_token, get_remnawave_url
 from .crm_actions import execute_user_actions
-from .crm_conditions import evaluate_conditions_full, segment_id_from_conditions
+from .crm_conditions import (
+    evaluate_conditions_full,
+    evaluate_audience_user_ids,
+    segment_id_from_conditions,
+)
+from .crm_email import has_email_action
 from .crm_model_adapter import RW_CONDITION_TYPES, get_actions, get_conditions
 from .database.session import async_session
 from .telegram import tg_bot_username
@@ -54,6 +62,24 @@ async def resolve_targets(
     return tg_ids
 
 
+async def resolve_recipient_user_ids(
+    session: AsyncSession, campaign, override_tg_ids: list[int] | None = None,
+) -> list[int]:
+    params = json.loads(campaign.segment_params or "{}")
+    if not override_tg_ids and "target_user_ids" in params:
+        return list(params["target_user_ids"])
+    actions = get_actions(campaign)
+    if not override_tg_ids and not params.get("target_tg_ids") and has_email_action(actions):
+        user_ids, _ = await evaluate_audience_user_ids(
+            session, _rw_client(), get_conditions(campaign), actions,
+        )
+        return user_ids
+    tg_ids = await resolve_targets(session, campaign, override_tg_ids)
+    return list(await session.scalars(
+        select(User.id).where(User.tg_id.in_(tg_ids), User.is_banned != True)
+    ))
+
+
 async def execute_crm_campaign(
     campaign_id: int,
     override_tg_ids: list[int] | None = None,
@@ -73,8 +99,8 @@ async def execute_crm_campaign(
                 )
                 return
 
-            tg_ids = await resolve_targets(session, campaign, override_tg_ids)
-            if not tg_ids:
+            user_ids = await resolve_recipient_user_ids(session, campaign, override_tg_ids)
+            if not user_ids:
                 await crm_repo.update_campaign_status(
                     session, campaign, status="failed", completed=True
                 )
@@ -85,7 +111,7 @@ async def execute_crm_campaign(
                 session,
                 campaign,
                 status="running",
-                total_targets=len(tg_ids),
+                total_targets=len(user_ids),
                 started=True,
             )
             await session.commit()
@@ -103,13 +129,15 @@ async def execute_crm_campaign(
         bot_username = await tg_bot_username()
 
         async with async_session() as session:
-            users = await get_users_by_tg_ids(session, tg_ids)
-            user_by_tg = {u.tg_id: u for u in users if u.tg_id is not None}
+            users = await session.scalars(
+                select(User).where(User.id.in_(user_ids), User.is_banned != True)
+            )
+            user_by_id = {u.id: u for u in users}
 
         sent = failed = perks_ok = perks_fail = 0
 
-        for i, tg_id in enumerate(tg_ids):
-            db_user = user_by_tg.get(tg_id)
+        for i, user_id in enumerate(user_ids):
+            db_user = user_by_id.get(user_id)
             perk_status = "skipped"
             message_status = "skipped"
             error_parts: list[str] = []
@@ -121,7 +149,8 @@ async def execute_crm_campaign(
                     await crm_repo.add_delivery(
                         session,
                         campaign_id=campaign_id,
-                        tg_id=tg_id,
+                        tg_id=None,
+                        user_id=user_id,
                         rw_id=None,
                         vless_uuid=None,
                         perk_status="skipped",
@@ -133,14 +162,14 @@ async def execute_crm_campaign(
 
             crm_user = crm_by_id.get(int(db_user.rw_id)) if db_user.rw_id is not None else None
 
-            async def _on_sent(eid=event_id, uid=tg_id):
+            async def _on_sent(eid=event_id, uid=user_id, tid=db_user.tg_id):
                 if not eid:
                     return
                 async with async_session() as session:
                     from common_db.repo import crm_events as events_repo
 
                     await events_repo.record_event_delivery(
-                        session, event_id=eid, tg_id=uid
+                        session, event_id=eid, tg_id=tid, user_id=uid
                     )
                     await session.commit()
 
@@ -167,17 +196,18 @@ async def execute_crm_campaign(
                 if result.message_sent:
                     sent += 1
                     message_status = "sent"
-                elif result.message_failed:
+                if result.message_failed:
                     failed += 1
-                    message_status = "failed"
-                elif not result.message_skipped:
+                    message_status = "partial" if result.message_sent else "failed"
+                elif not result.message_sent and not result.message_skipped:
                     message_status = "failed"
                     failed += 1
 
                 await crm_repo.add_delivery(
                     session,
                     campaign_id=campaign_id,
-                    tg_id=tg_id,
+                    tg_id=db_user.tg_id,
+                    user_id=db_user.id,
                     rw_id=db_user.rw_id,
                     vless_uuid=db_user.vless_uuid,
                     perk_status=perk_status,

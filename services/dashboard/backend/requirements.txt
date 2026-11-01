@@ -9,3 +9,5 @@ arq>=0.26.1
 google-auth>=2.32.0
 requests>=2.32.0
 CairoSVG>=2.9.1
+aiosmtplib>=5.1.2
+email-validator>=2.2.0

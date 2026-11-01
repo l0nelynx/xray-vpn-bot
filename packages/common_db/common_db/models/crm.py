@@ -55,7 +55,8 @@ class CrmEventDelivery(Base):
     event_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("crm_events.id", ondelete="CASCADE")
     )
-    tg_id: Mapped[int] = mapped_column(BigInteger)
+    tg_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     sent_at: Mapped[str] = mapped_column(String(30))
 
     event: Mapped["CrmEvent"] = relationship(back_populates="deliveries")
@@ -64,6 +65,7 @@ class CrmEventDelivery(Base):
         Index("ix_crm_event_deliveries_event_id", "event_id"),
         Index("ix_crm_event_deliveries_tg_id", "tg_id"),
         Index("ix_crm_event_deliveries_event_tg", "event_id", "tg_id"),
+        Index("ix_crm_event_deliveries_user", "event_id", "user_id"),
     )
 
 
@@ -115,7 +117,8 @@ class CrmCampaignDelivery(Base):
     campaign_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("crm_campaigns.id", ondelete="CASCADE")
     )
-    tg_id: Mapped[int] = mapped_column(BigInteger)
+    tg_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     rw_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     vless_uuid: Mapped[str | None] = mapped_column(String(64), nullable=True)
     perk_status: Mapped[str] = mapped_column(
@@ -132,6 +135,7 @@ class CrmCampaignDelivery(Base):
         Index("ix_crm_campaign_deliveries_campaign_id", "campaign_id"),
         Index("ix_crm_campaign_deliveries_tg_id", "tg_id"),
         Index("ix_crm_campaign_deliveries_rw_id", "rw_id"),
+        Index("ix_crm_campaign_deliveries_user", "campaign_id", "user_id"),
     )
 
 
@@ -171,7 +175,9 @@ class CrmWebhookDelivery(Base):
     rule_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("crm_webhook_rules.id", ondelete="CASCADE")
     )
-    tg_id: Mapped[int] = mapped_column(BigInteger)
+    tg_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    recipient_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
     sent_at: Mapped[str] = mapped_column(String(30))
 
     rule: Mapped["CrmWebhookRule"] = relationship(back_populates="deliveries")
@@ -180,4 +186,6 @@ class CrmWebhookDelivery(Base):
         Index("ix_crm_webhook_deliveries_rule_id", "rule_id"),
         Index("ix_crm_webhook_deliveries_tg_id", "tg_id"),
         Index("ix_crm_webhook_deliveries_rule_tg", "rule_id", "tg_id"),
+        Index("ix_crm_webhook_deliveries_user", "rule_id", "user_id"),
+        Index("ix_crm_webhook_deliveries_email", "rule_id", "recipient_email"),
     )

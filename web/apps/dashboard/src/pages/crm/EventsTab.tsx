@@ -40,7 +40,7 @@ import {
   runEventNow,
   updateEvent,
 } from "./api";
-import { actionSummary, defaultActions, defaultConditions, getSegmentCondition } from "./helpers";
+import { actionSummary, defaultActions, mergeActions, defaultConditions, getSegmentCondition } from "./helpers";
 import type { CrmAction, CrmCondition, CrmEventRow, SegmentDef } from "./types";
 import { REPEAT_POLICIES, WEEKDAYS } from "./types";
 
@@ -73,7 +73,7 @@ export default function EventsTab() {
   const [editing, setEditing] = useState<CrmEventRow | null>(null);
   const [conditions, setConditions] = useState<CrmCondition[]>([]);
   const [actions, setActions] = useState<CrmAction[]>(defaultActions());
-  const [selectedTgIds, setSelectedTgIds] = useState<number[]>([]);
+  const [selectedUserIds, setSelectedUserIds] = useState<number[]>([]);
   const [form, setForm] = useState<EventForm>(emptyForm);
 
   const patchForm = (patch: Partial<EventForm>) => setForm((f) => ({ ...f, ...patch }));
@@ -101,7 +101,7 @@ export default function EventsTab() {
     const firstSeg = segments[0];
     setConditions(firstSeg ? defaultConditions(firstSeg.id, firstSeg) : []);
     setActions(defaultActions());
-    setSelectedTgIds([]);
+    setSelectedUserIds([]);
     setForm(emptyForm);
     setDrawerOpen(true);
   };
@@ -113,8 +113,8 @@ export default function EventsTab() {
         ? row.conditions
         : defaultConditions(row.segment_type || "limited", undefined),
     );
-    setActions(row.actions?.length ? row.actions : defaultActions());
-    setSelectedTgIds([]);
+    setActions(mergeActions(row.actions));
+    setSelectedUserIds([]);
     setForm({
       name: row.name,
       enabled: row.enabled,
@@ -154,10 +154,10 @@ export default function EventsTab() {
       repeat_cooldown_days: form.repeat_cooldown_days,
     };
 
-    if (segmentId !== "all_users" && selectedTgIds.length > 0) {
+    if (segmentId !== "all_users" && selectedUserIds.length > 0) {
       payload.conditions = [
-        ...conditions.filter((c) => c.type !== "tg_allowlist"),
-        { type: "tg_allowlist", tg_ids: selectedTgIds },
+        ...conditions.filter((c) => !["tg_allowlist", "user_allowlist"].includes(c.type)),
+        { type: "user_allowlist", user_ids: selectedUserIds },
       ];
     }
 
@@ -465,8 +465,9 @@ export default function EventsTab() {
               conditions={conditions}
               onChange={setConditions}
               segmentTypes={segments}
-              selectedTgIds={selectedTgIds}
-              onSelectedTgIdsChange={setSelectedTgIds}
+              actions={actions}
+              selectedUserIds={selectedUserIds}
+              onSelectedUserIdsChange={setSelectedUserIds}
             />
 
             <ActionsBuilder actions={actions} onChange={setActions} segmentId={segmentId} />

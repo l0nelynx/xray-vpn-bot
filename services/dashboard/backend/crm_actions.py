@@ -20,9 +20,11 @@ from .crm_model_adapter import (
     ACTION_RW_RESET_TRAFFIC,
     ACTION_RW_SET_STATUS,
     ACTION_SEND_MESSAGE,
+    ACTION_SEND_EMAIL,
     normalize_actions,
 )
 from .crm_variables import build_message_context, render_crm_message
+from .crm_email import email_action_for_user, send_crm_email
 from .database.session import async_session
 from .telegram import tg_bot_deeplink, tg_bot_open_url, tg_send, tg_share_url
 
@@ -32,6 +34,23 @@ BUTTON_OPEN_BOT = "open_bot"
 BUTTON_INVITE_FRIENDS = "invite_friends"
 
 ACTION_CATALOG: list[dict[str, Any]] = [
+    {
+        "type": ACTION_SEND_EMAIL,
+        "label": "Send email",
+        "category": "email",
+        "fields": [
+            {"name": "subject", "label": "Subject", "type": "text"},
+            {"name": "text", "label": "Message", "type": "textarea"},
+            {
+                "name": "recipients", "label": "Recipients", "type": "select",
+                "default": "without_telegram",
+                "options": [
+                    {"value": "without_telegram", "label": "Only users without Telegram"},
+                    {"value": "all", "label": "All users with a verified email"},
+                ],
+            },
+        ],
+    },
     {
         "type": ACTION_SEND_MESSAGE,
         "label": "Send message",
@@ -142,7 +161,7 @@ async def execute_user_actions(
     session=None,
     message_ctx: dict[str, str] | None = None,
 ) -> UserActionResult:
-    """Run enabled actions for one user. RW actions first, then Telegram."""
+    """Run enabled actions for one user. Perks precede message delivery."""
     result = UserActionResult()
     ordered = normalize_actions(list(actions))
     enabled = [a for a in ordered if a.get("enabled", True)]
@@ -244,6 +263,9 @@ async def execute_user_actions(
             attach_button = True
             button_type = act.get("button_type") or BUTTON_OPEN_BOT
 
+    if message_text and not db_user.tg_id:
+        result.message_skipped = True
+
     if message_text and not result.message_skipped:
         ctx = message_ctx or build_message_context(
             username=db_user.username, crm_user=crm_user
@@ -278,10 +300,25 @@ async def execute_user_actions(
                         )
         if await tg_send(db_user.tg_id, personalized, reply_markup):
             result.message_sent = True
-            if on_message_sent:
-                await on_message_sent()
         else:
             result.message_failed = True
             result.errors.append("telegram send failed")
+
+    email_action = email_action_for_user(enabled, db_user)
+    if email_action:
+        result.message_skipped = False
+        try:
+            ctx = message_ctx or build_message_context(username=db_user.username, crm_user=crm_user)
+            if session is None:
+                raise ValueError("email: session required")
+            await send_crm_email(session, to=db_user.email, action=email_action, context=ctx)
+            result.message_sent = True
+        except Exception:
+            logger.exception("CRM email failed user_id=%s", db_user.id)
+            result.message_failed = True
+            result.errors.append("email send failed")
+
+    if result.message_sent and on_message_sent:
+        await on_message_sent()
 
     return result

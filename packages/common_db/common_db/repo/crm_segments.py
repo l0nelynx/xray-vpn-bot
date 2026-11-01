@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import Transaction, User
@@ -55,22 +55,31 @@ async def filter_users_by_type(
     return users
 
 
-async def get_broadcast_eligible_users(session: AsyncSession) -> list[User]:
-    """All non-banned users with a Telegram id (mass broadcast audience)."""
+def contactable_users(include_email: bool):
+    telegram = User.tg_id.is_not(None)
+    if not include_email:
+        return telegram
+    return or_(telegram, and_(
+        User.email.is_not(None), User.email != "", User.email_verified_at.is_not(None),
+    ))
+
+
+async def get_broadcast_eligible_users(session: AsyncSession, *, include_email: bool = False) -> list[User]:
+    """Non-banned Telegram users, optionally including verified email accounts."""
     result = await session.scalars(
         select(User).where(
-            User.tg_id.is_not(None),
+            contactable_users(include_email),
             User.is_banned != True,  # noqa: E712
         )
     )
     return list(result)
 
 
-async def get_remnawave_broadcast_users(session: AsyncSession) -> list[User]:
-    """Local users eligible for Telegram CRM actions."""
+async def get_remnawave_broadcast_users(session: AsyncSession, *, include_email: bool = False) -> list[User]:
+    """Contactable local users with a Remnawave account."""
     result = await session.scalars(
         select(User).where(
-            User.tg_id.is_not(None),
+            contactable_users(include_email),
             User.is_banned != True,  # noqa: E712
             User.api_provider == "remnawave",
             User.rw_id.is_not(None),
@@ -83,6 +92,7 @@ async def users_with_unpaid_invoices(
     session: AsyncSession,
     *,
     max_age_hours: int = 48,
+    include_email: bool = False,
 ) -> list[User]:
     """Users with open ``created`` transactions in the last ``max_age_hours``."""
     cutoff = (datetime.now() - timedelta(hours=max_age_hours)).isoformat(
@@ -92,7 +102,7 @@ async def users_with_unpaid_invoices(
         select(User)
         .join(Transaction, Transaction.user_id == User.id)
         .where(
-            User.tg_id.is_not(None),
+            contactable_users(include_email),
             User.is_banned != True,  # noqa: E712
             Transaction.order_status == "created",
             Transaction.created_at.is_not(None),

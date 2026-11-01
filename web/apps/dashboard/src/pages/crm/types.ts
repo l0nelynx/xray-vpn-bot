@@ -34,7 +34,7 @@ export interface ConditionTypeMeta {
 export interface ActionTypeMeta {
   type: string;
   label: string;
-  category: "telegram" | "remnawave";
+  category: "telegram" | "email" | "remnawave" | "wallet";
   available?: boolean;
   fields?: Array<Record<string, unknown>>;
 }
@@ -45,6 +45,7 @@ export interface CrmCondition {
   params?: SegmentParams;
   value?: string;
   tg_ids?: number[];
+  user_ids?: number[];
   squad_id?: string;
   limit_gb?: number;
   tag?: string;
@@ -60,6 +61,9 @@ export interface CrmAction {
   enabled: boolean;
   order?: number;
   text?: string;
+  subject?: string;
+  recipients?: "without_telegram" | "all";
+  send_to_email_from_webhook?: boolean;
   button_type?: string;
   days?: number;
   gb?: number;
@@ -67,7 +71,9 @@ export interface CrmAction {
 }
 
 export interface ScanUser {
-  tg_id: number;
+  user_id: number;
+  tg_id: number | null;
+  email?: string | null;
   username: string | null;
   rw_id: number | null;
   meta: Record<string, unknown>;

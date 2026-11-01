@@ -36,6 +36,9 @@ logger = logging.getLogger(__name__)
 
 def _scan_user_row(user: User, meta: dict | None = None) -> dict:
     return {
+        "user_id": user.id,
+        "email": user.email,
+        "email_verified": bool(user.email_verified_at),
         "tg_id": user.tg_id,
         "username": user.username,
         "rw_id": user.rw_id,
@@ -75,12 +78,13 @@ async def scan_segment(
     torrent_days: int = DEFAULT_TORRENT_DAYS,
     preview_limit: int | None = PREVIEW_LIMIT,
     user_type: str = seg_repo.USER_TYPE_ALL,
+    include_email: bool = False,
 ) -> tuple[list[dict], int, str | None]:
     """Return (preview_users, total_count, warning)."""
 
     if segment_id == SEGMENT_UNPAID_INVOICE:
         users = await seg_repo.users_with_unpaid_invoices(
-            session, max_age_hours=invoice_max_age_hours
+            session, max_age_hours=invoice_max_age_hours, include_email=include_email
         )
         users = await seg_repo.filter_users_by_type(session, users, user_type)
         rows = [_scan_user_row(u, {"order_status": "created"}) for u in users]
@@ -88,13 +92,13 @@ async def scan_segment(
         return preview, len(rows), None
 
     if segment_id == SEGMENT_ALL_USERS:
-        users = await seg_repo.get_broadcast_eligible_users(session)
+        users = await seg_repo.get_broadcast_eligible_users(session, include_email=include_email)
         users = await seg_repo.filter_users_by_type(session, users, user_type)
         rows = [_scan_user_row(u) for u in users]
         preview = rows if preview_limit is None else rows[:preview_limit]
         return preview, len(rows), None
 
-    local_users = await seg_repo.get_remnawave_broadcast_users(session)
+    local_users = await seg_repo.get_remnawave_broadcast_users(session, include_email=include_email)
     local_users = await seg_repo.filter_users_by_type(session, local_users, user_type)
     if not local_users:
         return [], 0, None

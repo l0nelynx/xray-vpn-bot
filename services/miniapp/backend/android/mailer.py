@@ -1,119 +1,12 @@
-"""SMTP email sender for Android API code flows.
-
-Picks STARTTLS vs implicit TLS based on the configured port (465 = TLS,
-587/25 = STARTTLS). Failures raise MailerError so callers can return a
-generic 5xx without leaking SMTP internals to the client.
-"""
+"""Verification-code templates and the shared SMTP sender."""
 from __future__ import annotations
 
-import logging
-from email.message import EmailMessage
-from email.utils import formatdate, make_msgid, parseaddr
-
-import aiosmtplib
-
-from ..config import (
-    get_smtp_from,
-    get_smtp_host,
-    get_smtp_password,
-    get_smtp_port,
-    get_smtp_use_tls,
-    get_smtp_user,
-)
-
-logger = logging.getLogger(__name__)
-
-
-class MailerError(Exception):
-    pass
-
-
-def _addr_domain(value: str) -> str | None:
-    """Достать домен из адреса вида `Name <user@host>` или `user@host`.
-    Возвращает host часть или None, если адрес невалидный."""
-    _, addr = parseaddr(value)
-    if not addr or "@" not in addr:
-        return None
-    return addr.rsplit("@", 1)[-1].strip().lower() or None
+from common_db.mailer import MailerError, send_email as _send_email
+from ..config import get_config
 
 
 async def send_email(*, to: str, subject: str, text: str, html: str | None = None) -> None:
-    host = get_smtp_host()
-    if not host:
-        raise MailerError("smtp_host not configured")
-
-    sender = get_smtp_from()
-    if not sender:
-        raise MailerError("smtp_from / smtp_user not configured")
-
-    sender_domain = _addr_domain(sender) or "localhost"
-
-    msg = EmailMessage()
-    msg["From"] = sender
-    msg["To"] = to
-    msg["Subject"] = subject
-    # SpamAssassin: MISSING_DATE / MISSING_MID. Без Date/Message-ID письмо
-    # выглядит как генерируемый ботом спам — добавляем оба заголовка по
-    # RFC 5322. make_msgid ставит угловые скобки и FQDN автоматически.
-    msg["Date"] = formatdate(localtime=True)
-    msg["Message-ID"] = make_msgid(domain=sender_domain)
-    # SpamAssassin: одноклавишная отписка (RFC 2369 + 8058). Для
-    # транзакционных писем достаточно mailto — реальный почтовый клиент
-    # просто пошлёт пустое письмо на этот адрес. List-Unsubscribe-Post
-    # маркирует письмо как «отписка не требует подтверждения», что
-    # требуется большинством антиспам-фильтров с 2024 года.
-    msg["List-Unsubscribe"] = f"<mailto:unsubscribe@{sender_domain}>"
-    msg["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
-    msg.set_content(text)
-    if html:
-        msg.add_alternative(html, subtype="html")
-
-    port = get_smtp_port()
-    use_tls = get_smtp_use_tls()
-    start_tls = not use_tls and port in (587, 25)
-    user = get_smtp_user()
-    password = get_smtp_password()
-
-    logger.info(
-        "SMTP send: to=%s from=%s host=%s port=%s use_tls=%s start_tls=%s "
-        "user=%s password_set=%s subject=%r",
-        to, sender, host, port, use_tls, start_tls,
-        user or "<empty>", bool(password), subject,
-    )
-
-    try:
-        await aiosmtplib.send(
-            msg,
-            hostname=host,
-            port=port,
-            username=user or None,
-            password=password or None,
-            use_tls=use_tls,
-            start_tls=start_tls,
-            timeout=20,
-        )
-    except aiosmtplib.SMTPResponseException as exc:
-        # Сервер ответил числовым кодом — это самый информативный класс
-        # ошибок (auth fail / sender rejected / quota / spam policy).
-        logger.error(
-            "SMTP send to %s failed: %s code=%s message=%r",
-            to, type(exc).__name__, exc.code, exc.message,
-        )
-        raise MailerError(f"{exc.code} {exc.message}") from exc
-    except aiosmtplib.SMTPException as exc:
-        logger.error(
-            "SMTP send to %s failed: %s: %s",
-            to, type(exc).__name__, exc, exc_info=True,
-        )
-        raise MailerError(str(exc) or type(exc).__name__) from exc
-    except (OSError, TimeoutError) as exc:
-        logger.error(
-            "SMTP transport to %s failed: %s: %s (host=%s port=%s)",
-            to, type(exc).__name__, exc, host, port, exc_info=True,
-        )
-        raise MailerError(f"transport: {type(exc).__name__}: {exc}") from exc
-
-    logger.info("SMTP send to %s succeeded", to)
+    await _send_email(config=get_config(), to=to, subject=subject, text=text, html=html)
 
 
 # --- Templates -------------------------------------------------------------

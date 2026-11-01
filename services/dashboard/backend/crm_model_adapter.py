@@ -20,6 +20,7 @@ RW_CONDITION_TYPES = frozenset({
 })
 
 ACTION_SEND_MESSAGE = "send_message"
+ACTION_SEND_EMAIL = "send_email"
 ACTION_ATTACH_BUTTON = "attach_button"
 ACTION_RW_BONUS_DAYS = "rw_bonus_days"
 ACTION_RW_BONUS_TRAFFIC = "rw_bonus_traffic"
@@ -218,10 +219,27 @@ def validate_conditions(conditions: list[dict]) -> None:
             raise ValueError("rw_tag requires a non-empty tag")
 
 
-def validate_actions(actions: list[dict]) -> None:
+def validate_actions(actions: list[dict], *, allow_webhook_email: bool = False) -> None:
     enabled = [a for a in actions if a.get("enabled", True)]
     if not enabled:
         raise ValueError("at least one enabled action is required")
+    for action in enabled:
+        if action.get("type") == ACTION_SEND_EMAIL:
+            webhook_email = action.get("send_to_email_from_webhook", False)
+            if not isinstance(webhook_email, bool):
+                raise ValueError("send_to_email_from_webhook must be a boolean")
+            if webhook_email and not allow_webhook_email:
+                raise ValueError("send_to_email_from_webhook is only available for webhooks")
+            subject = action.get("subject")
+            text = action.get("text")
+            if not isinstance(subject, str) or not subject.strip() or len(subject) > 200:
+                raise ValueError("email subject is required (max 200 characters)")
+            if "\r" in subject or "\n" in subject:
+                raise ValueError("email subject must be a single line")
+            if not isinstance(text, str) or not text.strip() or len(text) > 20000:
+                raise ValueError("email text is required (max 20000 characters)")
+            if action.get("recipients", "without_telegram") not in {"without_telegram", "all"}:
+                raise ValueError("invalid email recipients")
 
 
 def normalize_actions(actions: list[dict]) -> list[dict]:

@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@xray/ui/components/ca
 import { Button } from "@xray/ui/components/button";
 import { Input } from "@xray/ui/components/input";
 import { Textarea } from "@xray/ui/components/textarea";
+import { Label } from "@xray/ui/components/label";
 import { Switch } from "@xray/ui/components/switch";
 import {
   Dialog,
@@ -44,6 +45,21 @@ export default function ActionsBuilder({
   const [templates, setTemplates] = useState<MessageTemplate[]>(templatesProp || []);
   const [variablesOpen, setVariablesOpen] = useState(false);
   const [variables, setVariables] = useState<CrmVariable[]>([]);
+  const [emailPreview, setEmailPreview] = useState<{ subject: string; html: string } | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
+  const previewEmail = async (action: CrmAction) => {
+    setPreviewLoading(true);
+    try {
+      setEmailPreview(await api.post<{ subject: string; html: string }>("/crm/emails/preview", {
+        subject: action.subject, text: action.text,
+      }));
+    } catch {
+      toast.error("Failed to preview email. Enter a subject and message.");
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
 
   useEffect(() => {
     api.get<{ action_types: ActionTypeMeta[] }>("/crm/actions/types").then((r) => {
@@ -109,6 +125,7 @@ export default function ActionsBuilder({
   };
 
   const telegramActions = actionTypes.filter((t) => t.category === "telegram");
+  const emailActions = actionTypes.filter((t) => t.category === "email");
   const rwActions = actionTypes.filter((t) => t.category === "remnawave");
 
   const renderAction = (meta: ActionTypeMeta) => {
@@ -128,6 +145,44 @@ export default function ActionsBuilder({
         </CardHeader>
         {act.enabled && (
           <CardContent className="pt-0">
+            {meta.type === "send_email" && (
+              <div className="space-y-3">
+                {variablesContext === "webhook" && (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <Switch id="crm-email-from-webhook" checked={act.send_to_email_from_webhook || false} onCheckedChange={(value: boolean) => updateAction(meta.type, { send_to_email_from_webhook: value })} />
+                      <Label htmlFor="crm-email-from-webhook">Send to email from webhook</Label>
+                    </div>
+                    <p className="text-xs text-muted-foreground">Uses the account email received in the webhook, even without a local user. Missing or invalid addresses are skipped.</p>
+                  </div>
+                )}
+                {!act.send_to_email_from_webhook && (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="crm-email-recipients">Recipients</Label>
+                    <Select value={act.recipients || "without_telegram"} onValueChange={(v: "without_telegram" | "all") => updateAction(meta.type, { recipients: v })}>
+                      <SelectTrigger id="crm-email-recipients"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="without_telegram">Only users without Telegram</SelectItem>
+                        <SelectItem value="all">All users with a verified email</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                <div className="space-y-1.5">
+                  <Label htmlFor="crm-email-subject">Subject</Label>
+                  <Input id="crm-email-subject" maxLength={200} value={act.subject || ""} onChange={(e) => updateAction(meta.type, { subject: e.target.value })} placeholder="Your subscription expires soon" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="crm-email-text">Message</Label>
+                  <Textarea id="crm-email-text" rows={7} maxLength={20000} value={act.text || ""} onChange={(e) => updateAction(meta.type, { text: e.target.value })} placeholder={"Hi, {{username}}!\n\nYour subscription expires in {{days_left}} days."} />
+                </div>
+                <p className="text-xs text-muted-foreground">Plain text and CRM variables. Logo and team signature are added automatically. Uses the same SMTP settings as verification codes.{!act.send_to_email_from_webhook && " Only verified addresses receive email."}</p>
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" variant="outline" onClick={() => setVariablesOpen(true)}>Variables</Button>
+                  <Button size="sm" variant="outline" disabled={previewLoading || !act.subject?.trim() || !act.text?.trim()} onClick={() => previewEmail(act)}>Preview email</Button>
+                </div>
+              </div>
+            )}
             {meta.type === "send_message" && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-2">
@@ -219,6 +274,9 @@ export default function ActionsBuilder({
         <Collapsible title="Telegram" defaultOpen>
           {telegramActions.map(renderAction)}
         </Collapsible>
+        <Collapsible title="Email" defaultOpen>
+          {emailActions.map(renderAction)}
+        </Collapsible>
         <Collapsible title="Remnawave" defaultOpen>
           {rwActions.map(renderAction)}
         </Collapsible>
@@ -242,6 +300,13 @@ export default function ActionsBuilder({
               </button>
             ))}
           </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={emailPreview !== null} onOpenChange={(open) => !open && setEmailPreview(null)}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[760px]">
+          <DialogHeader><DialogTitle>Email preview</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">Variables use sample values. Preview does not send an email.</p>
+          <iframe title={emailPreview?.subject || "Email preview"} srcDoc={emailPreview?.html} sandbox="" className="h-[640px] w-full rounded-lg border bg-white" />
         </DialogContent>
       </Dialog>
     </Card>

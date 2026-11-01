@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import desc, select
+from sqlalchemy import desc, select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import CrmWebhookDelivery, CrmWebhookRule
@@ -89,11 +89,15 @@ async def record_delivery(
     session: AsyncSession,
     *,
     rule_id: int,
-    tg_id: int,
+    tg_id: int | None,
+    user_id: int | None = None,
+    recipient_email: str | None = None,
 ) -> CrmWebhookDelivery:
     row = CrmWebhookDelivery(
         rule_id=rule_id,
         tg_id=tg_id,
+        user_id=user_id,
+        recipient_email=recipient_email,
         sent_at=_now_iso(),
     )
     session.add(row)
@@ -105,8 +109,10 @@ async def has_recent_delivery(
     session: AsyncSession,
     *,
     rule_id: int,
-    tg_id: int,
+    tg_id: int | None,
     cooldown_hours: int,
+    user_id: int | None = None,
+    recipient_email: str | None = None,
 ) -> bool:
     """True if a delivery for this rule/user exists within ``cooldown_hours``."""
     if cooldown_hours <= 0:
@@ -114,10 +120,19 @@ async def has_recent_delivery(
     since = (
         datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=cooldown_hours)
     ).isoformat(timespec="seconds")
+    identities = []
+    if recipient_email is not None:
+        identities.append(CrmWebhookDelivery.recipient_email == recipient_email)
+    elif user_id is not None:
+        identities.append(CrmWebhookDelivery.user_id == user_id)
+    if recipient_email is None and tg_id is not None:
+        identities.append(CrmWebhookDelivery.tg_id == tg_id)
+    if not identities:
+        return False
     result = await session.scalar(
         select(CrmWebhookDelivery.id).where(
             CrmWebhookDelivery.rule_id == rule_id,
-            CrmWebhookDelivery.tg_id == tg_id,
+            or_(*identities),
             CrmWebhookDelivery.sent_at >= since,
         ).limit(1)
     )

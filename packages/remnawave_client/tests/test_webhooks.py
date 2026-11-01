@@ -6,6 +6,7 @@ import pytest
 
 from remnawave_client.webhooks import (
     extract_rw_id,
+    extract_user_email,
     is_torrent_block_report,
     parse_webhook,
     torrent_block_ip,
@@ -14,6 +15,28 @@ from remnawave_client.webhooks import (
 )
 
 _SECRET = "test-webhook-secret-abc123"
+
+
+@pytest.mark.parametrize("scope", ["user", "torrent_blocker", "user_hwid_devices"])
+def test_extract_account_email_uses_documented_user_object(scope):
+    user = {"id": 123, "email": "account@example.com"}
+    data = user if scope == "user" else {"user": user}
+    payload = parse_webhook(json.dumps({"scope": scope, "event": "test", "timestamp": "now", "data": data}).encode())
+    assert extract_user_email(payload) == "account@example.com"
+
+
+def test_extract_account_email_never_uses_xray_email_identifier():
+    payload = parse_webhook(json.dumps({"scope": "torrent_blocker", "event": "torrent_blocker.report", "timestamp": "now", "data": {"report": {"xrayReport": {"email": "xray@example.com"}}}}).encode())
+    assert extract_user_email(payload) is None
+
+
+def test_typed_torrent_user_preserves_account_email_on_roundtrip():
+    from remnawave_client.webhooks import RemnawaveWebhookPayload, TorrentBlockerData
+
+    data = TorrentBlockerData.model_validate({"user": {"id": 123, "email": "account@example.com"}})
+    payload = RemnawaveWebhookPayload(scope="torrent_blocker", event="torrent_blocker.report", timestamp="now", data=data)
+    assert extract_user_email(payload) == "account@example.com"
+    assert extract_user_email(parse_webhook(payload.model_dump_json(by_alias=True).encode())) == "account@example.com"
 
 _SAMPLE_PAYLOAD = {
     "scope": "torrent_blocker",

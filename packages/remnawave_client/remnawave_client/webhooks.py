@@ -12,7 +12,7 @@ import hmac
 import json
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 # Scopes supported by CRM webhook rules (subset of Remnawave panel scopes).
 SCOPE_USER = "user"
@@ -78,6 +78,7 @@ class RemnawaveWebhookUser(BaseModel):
     id: int | None = None
     telegram_id: int | None = Field(None, alias="telegramId")
     username: str | None = None
+    email: str | None = None
 
 
 class TorrentBlockerActionReport(BaseModel):
@@ -165,7 +166,10 @@ def _as_torrent_data(
     if isinstance(payload.data, TorrentBlockerData):
         return payload.data
     if isinstance(payload.data, dict):
-        return TorrentBlockerData.model_validate(payload.data)
+        try:
+            return TorrentBlockerData.model_validate(payload.data)
+        except ValidationError:
+            return None
     return None
 
 
@@ -182,6 +186,20 @@ def _find_user_dict(data: dict[str, Any]) -> dict[str, Any] | None:
         ):
             return nested
     return None
+
+
+def extract_user_data(payload: RemnawaveWebhookPayload) -> dict[str, Any]:
+    """The account object documented by user, Torrent Blocker and HWID events."""
+    data = _data_dict(payload)
+    if payload.scope == SCOPE_USER:
+        return data
+    return _find_user_dict(data) or {}
+
+
+def extract_user_email(payload: RemnawaveWebhookPayload) -> str | None:
+    """Read the account email, never Xray's unrelated report email identifier."""
+    email = extract_user_data(payload).get("email")
+    return email if isinstance(email, str) else None
 
 
 def extract_rw_id(payload: RemnawaveWebhookPayload) -> int | None:

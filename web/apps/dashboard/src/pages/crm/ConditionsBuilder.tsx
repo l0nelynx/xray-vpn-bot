@@ -21,6 +21,7 @@ import { fetchInternalSquads, normalizeRwTag } from "./api";
 import { getSegmentCondition, segmentParamDefaults, upsertRwCondition } from "./helpers";
 import type {
   CrmCondition,
+  CrmAction,
   InternalSquadOption,
   ScanResult,
   ScanUser,
@@ -33,9 +34,10 @@ interface ConditionsBuilderProps {
   conditions: CrmCondition[];
   onChange: (conditions: CrmCondition[]) => void;
   segmentTypes: SegmentDef[];
-  selectedTgIds: number[];
-  onSelectedTgIdsChange: (ids: number[]) => void;
-  onScanComplete?: (total: number) => void;
+  actions?: CrmAction[];
+  selectedUserIds: number[];
+  onSelectedUserIdsChange: (ids: number[]) => void;
+  onScanComplete?: (total: number | null) => void;
 }
 
 function SegmentParamField({
@@ -95,8 +97,9 @@ export default function ConditionsBuilder({
   conditions,
   onChange,
   segmentTypes,
-  selectedTgIds,
-  onSelectedTgIdsChange,
+  actions,
+  selectedUserIds,
+  onSelectedUserIdsChange,
   onScanComplete,
 }: ConditionsBuilderProps) {
   const [scanning, setScanning] = useState(false);
@@ -108,6 +111,15 @@ export default function ConditionsBuilder({
       .then(setInternalSquads)
       .catch(() => {});
   }, []);
+
+  const audienceKey = JSON.stringify({ conditions, channels: actions?.filter((a) => a.enabled && ["send_message", "send_email"].includes(a.type)).map((a) => [a.type, a.recipients]) });
+  useEffect(() => {
+    setScanResult(null);
+    onSelectedUserIdsChange([]);
+    onScanComplete?.(null);
+    // Only audience configuration changes invalidate a scan.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [audienceKey]);
 
   const segmentCond = getSegmentCondition(conditions);
   const userTypeCond = conditions.find((c) => c.type === "user_type");
@@ -184,7 +196,7 @@ export default function ConditionsBuilder({
       params: seg ? segmentParamDefaults(seg) : {},
     });
     setScanResult(null);
-    onSelectedTgIdsChange([]);
+    onSelectedUserIdsChange([]);
   };
 
   const runScan = async () => {
@@ -195,9 +207,9 @@ export default function ConditionsBuilder({
     setScanning(true);
     setScanResult(null);
     try {
-      const res = await api.post<ScanResult>("/crm/conditions/evaluate", { conditions });
+      const res = await api.post<ScanResult>("/crm/conditions/evaluate", { conditions, actions });
       setScanResult(res);
-      onSelectedTgIdsChange(res.users.map((u) => u.tg_id));
+      onSelectedUserIdsChange(res.users.map((u) => u.user_id));
       onScanComplete?.(res.total);
       if (res.warning) toast.warning(res.warning);
     } catch {
@@ -209,9 +221,9 @@ export default function ConditionsBuilder({
 
   const toggleUser = (tgId: number, checked: boolean) => {
     if (checked) {
-      onSelectedTgIdsChange([...selectedTgIds, tgId]);
+      onSelectedUserIdsChange([...selectedUserIds, tgId]);
     } else {
-      onSelectedTgIdsChange(selectedTgIds.filter((id) => id !== tgId));
+      onSelectedUserIdsChange(selectedUserIds.filter((id) => id !== tgId));
     }
   };
 
@@ -384,25 +396,25 @@ export default function ConditionsBuilder({
             {scanResult.users.length > 0 && (
               <>
                 <p className="text-sm text-muted-foreground">
-                  1.3 Manual selection (optional) — {selectedTgIds.length} selected
+                  1.3 Manual selection (optional) — {selectedUserIds.length} selected
                 </p>
                 <div className="max-h-64 space-y-1.5 overflow-auto rounded-lg border border-border p-2">
                   {scanResult.users.map((user) => (
                     <div
-                      key={user.tg_id}
+                      key={user.user_id}
                       className="flex items-start gap-2.5 rounded-md border border-border/60 p-2"
                     >
                       <Checkbox
-                        checked={selectedTgIds.includes(user.tg_id)}
+                        checked={selectedUserIds.includes(user.user_id)}
                         onCheckedChange={(c: boolean | "indeterminate") =>
-                          toggleUser(user.tg_id, c === true)
+                          toggleUser(user.user_id, c === true)
                         }
                       />
                       <div className="min-w-0 flex-1">
                         <div className="font-semibold text-foreground/85">
                           {user.username || "—"}
                         </div>
-                        <div className="text-xs text-muted-foreground">TG: {user.tg_id}</div>
+                        <div className="text-xs text-muted-foreground">{user.tg_id ? `TG: ${user.tg_id}` : user.email || `User #${user.user_id}`}</div>
                         <div className="mt-1 text-[11px] text-muted-foreground/70">
                           {formatScanMeta(user)}
                         </div>
