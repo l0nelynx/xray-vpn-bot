@@ -3,10 +3,12 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
+from io import BytesIO
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from PIL import Image
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -34,6 +36,61 @@ async def _with_db(check):
 
 def _user(**kwargs):
     return User(id=1, tg_id=None, email="alice@example.com", email_verified_at="2026-10-31", **kwargs)
+
+
+def _png(image):
+    output = BytesIO()
+    image.save(output, format="PNG")
+    return output.getvalue()
+
+
+def test_white_email_logo_becomes_dark_and_keeps_transparent_edges():
+    from dashboard.backend.crm_email import _monochrome_email_logo
+
+    image = Image.new("RGBA", (32, 32), (0, 0, 0, 0))
+    for x, alpha in enumerate([64, 128, 255], start=1):
+        image.putpixel((x, 1), (255, 255, 255, alpha))
+    result = Image.open(BytesIO(_monochrome_email_logo(_png(image))))
+    assert result.getchannel("A").tobytes() == image.getchannel("A").tobytes()
+    for x in range(1, 4):
+        assert result.getpixel((x, 1))[:3] == (0, 0, 0)
+
+
+def test_email_logo_keeps_internal_contrast_on_a_dark_base():
+    from dashboard.backend.crm_email import _monochrome_email_logo
+
+    image = Image.new("RGBA", (10, 10), (20, 20, 20, 255))
+    image.putpixel((5, 5), (255, 255, 255, 255))
+    result = Image.open(BytesIO(_monochrome_email_logo(_png(image))))
+    assert result.getpixel((0, 0)) == (20, 20, 20, 255)
+    assert result.getpixel((5, 5)) == (255, 255, 255, 255)
+
+
+@pytest.mark.parametrize("color", [(255, 0, 0, 128), (255, 255, 255, 0), (0, 0, 0, 255)])
+def test_email_logo_is_neutral_and_retains_alpha(color):
+    from dashboard.backend.crm_email import _monochrome_email_logo
+
+    result = Image.open(BytesIO(_monochrome_email_logo(_png(Image.new("RGBA", (2, 2), color)))))
+    r, g, b, alpha = result.getpixel((0, 0))
+    assert r == g == b
+    assert alpha == color[3]
+
+
+def test_custom_branding_svg_is_adapted_for_email_without_modifying_source():
+    from common_db.models import DashboardBrandingAsset
+    from dashboard.backend.crm_email import email_branding
+
+    original = b'<svg xmlns="http://www.w3.org/2000/svg"><path fill="white" d="M0 0h10v10H0z"/></svg>'
+    asset = DashboardBrandingAsset(id=1, content=original, mime_type="image/svg+xml", sha256="white-logo")
+    rendered = _png(Image.new("RGBA", (10, 10), (255, 255, 255, 255)))
+    async def check():
+        session = MagicMock(get=AsyncMock(return_value=asset))
+        with patch("dashboard.backend.routers.branding._render_icon", return_value=rendered), patch("dashboard.backend.crm_email.get_config", return_value={"branding_name": "TestVPN"}):
+            brand, logo = await email_branding(session)
+        assert brand == "TestVPN"
+        assert Image.open(BytesIO(logo)).getpixel((0, 0)) == (0, 0, 0, 255)
+        assert asset.content == original
+    asyncio.run(check())
 
 
 def test_email_rendering_escapes_fields_and_preserves_plain_text():

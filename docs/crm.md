@@ -153,6 +153,11 @@ preserved; HTML is not interpreted. The email includes the configured branding
 name, cached logo as an inline PNG, and team signature.
 A plain-text MIME alternative is included.
 
+The branding SVG/PNG is converted to a monochrome PNG for the white email
+background. Light logos are inverted to dark; transparency and internal contrast
+are preserved. This cached email variant is used by both preview and delivery.
+The original asset in Branding remains unchanged.
+
 Recipients default to **Only users without Telegram** (`recipients=without_telegram`).
 Choose **All users with a verified email** (`recipients=all`) to also email users
 who have linked Telegram. Unverified or missing addresses are skipped. Combine

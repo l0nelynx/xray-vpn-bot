@@ -3,9 +3,10 @@ from __future__ import annotations
 
 import base64
 import html
+from functools import lru_cache
 from io import BytesIO
 
-from PIL import Image, ImageOps
+from PIL import Image, ImageOps, ImageStat
 from email_validator import EmailNotValidError, validate_email
 
 from common_db.mailer import send_email
@@ -88,6 +89,24 @@ def render_email(
     return subject, plain, document
 
 
+@lru_cache(maxsize=32)
+def _monochrome_email_logo(png: bytes) -> bytes:
+    """Adapt a rendered logo to a white email background without flattening alpha."""
+    with Image.open(BytesIO(png)) as source:
+        rgba = source.convert("RGBA")
+        alpha = rgba.getchannel("A")
+        gray = ImageOps.grayscale(rgba)
+    # Ignore transparent padding: a white mark on transparency must become dark.
+    # Preserve internal light/dark detail in logos that already have a dark base.
+    if alpha.getbbox() and ImageStat.Stat(gray, mask=alpha).mean[0] > 127.5:
+        gray = ImageOps.invert(gray)
+    neutral = gray.convert("RGBA")
+    neutral.putalpha(alpha)
+    output = BytesIO()
+    neutral.save(output, format="PNG", optimize=True)
+    return output.getvalue()
+
+
 async def email_branding(session) -> tuple[str, bytes]:
     # Reuse the cached, validated branding asset; never fetch external URLs per recipient.
     from .routers.branding import DEFAULT_SVG, _render_icon
@@ -99,16 +118,7 @@ async def email_branding(session) -> tuple[str, bytes]:
         asset.content if asset else DEFAULT_SVG,
         asset.mime_type if asset else "image/svg+xml", 128, False,
     )
-    if asset is None:
-        # The dashboard's generic VP icon is purple. Keep the email fallback
-        # neutral while preserving any explicitly configured brand logo.
-        with Image.open(BytesIO(logo)) as source:
-            neutral = ImageOps.grayscale(source).convert("RGBA")
-            neutral.putalpha(source.getchannel("A"))
-        output = BytesIO()
-        neutral.save(output, format="PNG", optimize=True)
-        logo = output.getvalue()
-    return str(config.get("branding_name") or "YourVPN"), logo
+    return str(config.get("branding_name") or "YourVPN"), _monochrome_email_logo(logo)
 
 
 async def preview_email(session, *, subject: str, text: str, context: dict[str, str]) -> dict:
