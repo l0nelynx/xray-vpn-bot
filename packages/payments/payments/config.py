@@ -26,6 +26,7 @@ class PaymentsConfig:
     # Heleket (optional; configured from Dashboard → System → Payments)
     heleket_merchant_id: str = ""
     heleket_api_key: str = ""
+    heleket_api_url: str = "https://api.heleket.com"
     heleket_webhook: str = ""
     # CrystalPay
     crystal_login: str = ""

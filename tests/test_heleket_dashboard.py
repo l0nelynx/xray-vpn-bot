@@ -30,6 +30,7 @@ def test_dashboard_encrypts_masks_and_applies_settings_without_restart(session_f
     fields = {
         "heleket_merchant_id": "merchant", "heleket_api_key": "first-secret",
         "heleket_webhook": "https://vpn.example/bot/heleket_webhook",
+        "heleket_api_url": "https://gateway.example/heleket",
     }
 
     async def save(enabled, values):
@@ -46,21 +47,27 @@ def test_dashboard_encrypts_masks_and_applies_settings_without_restart(session_f
 
     async def run():
         assert current().heleket_api_key == ""
+        assert current().heleket_api_url == "https://api.heleket.com"
         states = await router.list_providers("admin")
         state = next(p for p in states.providers if p.provider == "heleket")
         assert state.source == "none" and not state.enabled
         assert {f.name: f.secret for f in state.field_meta} == {
             "heleket_merchant_id": False, "heleket_api_key": True, "heleket_webhook": False,
+            "heleket_api_url": False,
         }
         await save(False, {})  # Valid without any credentials.
         state = await save(True, fields)
         assert state.fields["heleket_api_key"] == "••••••••"
+        assert state.fields["heleket_api_url"] == fields["heleket_api_url"]
+        listed = await router.list_providers("admin")
+        assert next(p for p in listed.providers if p.provider == "heleket").fields["heleket_api_url"] == fields["heleket_api_url"]
         async with session_factory() as session:
             row = await get_payment_integration(session, "heleket")
             assert "first-secret" not in row.encrypted_config
             assert decrypt_json(row.encrypted_config, derive_key("test-key")) == fields
         await refresh()
         assert current().heleket_api_key == "first-secret"
+        assert current().heleket_api_url == fields["heleket_api_url"]
         assert config.get("heleket_merchant_id") == "merchant"
         # The API strips masked placeholders; saving those must keep the key.
         await save(True, state.fields)
@@ -72,6 +79,9 @@ def test_dashboard_encrypts_masks_and_applies_settings_without_restart(session_f
         await save(True, {**fields, "heleket_api_key": "rotated-secret"})
         await refresh()
         assert current().heleket_api_key == "rotated-secret"
+        await save(True, {**fields, "heleket_api_url": "https://new-gateway.example"})
+        await refresh()
+        assert current().heleket_api_url == "https://new-gateway.example"
         await save(False, {**fields, "heleket_api_key": ""})
         await refresh()
         assert current().heleket_api_key == ""

@@ -7,6 +7,7 @@ const API = "/bot/dashboard/api";
 const heleketFieldMeta = [
   { name: "heleket_merchant_id", secret: false },
   { name: "heleket_api_key", secret: true },
+  { name: "heleket_api_url", secret: false },
   { name: "heleket_webhook", secret: false },
 ];
 

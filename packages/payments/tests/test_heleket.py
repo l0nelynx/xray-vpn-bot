@@ -78,14 +78,31 @@ def test_credentials_are_read_again_after_rotation(transport, monkeypatch):
     current = [original]
     monkeypatch.setattr(config, "_provider", lambda: current[0])
     asyncio.run(create_invoice("heleket", _request()))
-    current[0] = replace(original, heleket_api_key="rotated", heleket_merchant_id="new-merchant")
+    current[0] = replace(
+        original, heleket_api_key="rotated", heleket_merchant_id="new-merchant",
+        heleket_api_url="https://gateway.example/heleket/",
+    )
     asyncio.run(create_invoice("heleket", _request()))
+    assert calls[1][1] == "https://gateway.example/heleket/v1/payment"
     assert calls[1][2]["merchant"] == "new-merchant"
     assert calls[1][2]["sign"] != calls[0][2]["sign"]
     current[0] = PaymentsConfig()
     with pytest.raises(PaymentError, match="not configured"):
         asyncio.run(create_invoice("heleket", _request()))
     assert len(calls) == 2
+
+
+@pytest.mark.parametrize("api_url, expected", [
+    ("", "https://api.heleket.com/v1/payment"),
+    ("   ", "https://api.heleket.com/v1/payment"),
+    (" https://gateway.example/ ", "https://gateway.example/v1/payment"),
+])
+def test_gateway_url_normalization_and_default(transport, monkeypatch, api_url, expected):
+    calls, _ = transport
+    cfg = replace(config.get_config(), heleket_api_url=api_url)
+    monkeypatch.setattr(config, "_provider", lambda: cfg)
+    asyncio.run(create_invoice("heleket", _request()))
+    assert calls[0][1] == expected
 
 
 @pytest.mark.parametrize("result", [

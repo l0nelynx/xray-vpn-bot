@@ -126,6 +126,7 @@ def payments_config_kwargs(yaml_config: Mapping[str, Any]) -> dict[str, Any]:
         "crypto_bot_token": yaml_config.get("crypto_bot_token", "") or "",
         "heleket_merchant_id": yaml_config.get("heleket_merchant_id", "") or "",
         "heleket_api_key": yaml_config.get("heleket_api_key", "") or "",
+        "heleket_api_url": yaml_config.get("heleket_api_url") or "https://api.heleket.com",
         "heleket_webhook": yaml_config.get("heleket_webhook", "") or "",
         "crystal_login": yaml_config.get("crystal_login", "") or "",
         "crystal_secret": yaml_config.get("crystal_secret", "") or "",

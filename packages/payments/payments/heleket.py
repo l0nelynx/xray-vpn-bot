@@ -29,6 +29,7 @@ class HeleketProvider(PaymentProvider):
                 merchant_id=cfg.heleket_merchant_id,
                 api_key=cfg.heleket_api_key,
                 options=ClientOptions(
+                    base_url=(cfg.heleket_api_url or "").strip() or "https://api.heleket.com",
                     timeout=30,
                     transport=RequestsTransport(session),
                 ),

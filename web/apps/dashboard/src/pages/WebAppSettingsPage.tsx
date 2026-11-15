@@ -56,6 +56,7 @@ const PROVIDER_LABELS: Record<string, string> = {
 const INTEGRATION_FIELD_LABELS: Record<string, string> = {
   heleket_merchant_id: "Merchant ID",
   heleket_api_key: "Payment API key",
+  heleket_api_url: "API gateway URL",
   heleket_webhook: "Webhook URL",
 };
 
@@ -249,7 +250,9 @@ function IntegrationCards({
                 <p className="text-sm text-muted-foreground">
                   Prices are set in USD; customers pay in cryptocurrency. Enter your Merchant ID
                   and Payment API key from Heleket, then set the public webhook URL to
-                  https://your-domain/bot/heleket_webhook. These settings are optional for service
+                  https://your-domain/bot/heleket_webhook. API gateway URL defaults to
+                  https://api.heleket.com; enter the base URL without /v1/payment.
+                  Leave it blank to use the default. These settings are optional for service
                   startup and apply automatically after saving.
                 </p>
               )}
@@ -290,7 +293,7 @@ function IntegrationCards({
                     <Input
                       id={`${p.provider}-${f.name}`}
                       type={f.secret ? "password" : "text"}
-                      placeholder={f.secret ? "leave blank to keep" : undefined}
+                      placeholder={f.secret ? "leave blank to keep" : f.name === "heleket_api_url" ? "https://api.heleket.com" : undefined}
                       value={pf.fields[f.name] ?? ""}
                       onChange={(e) =>
                         setForms((prev) => ({

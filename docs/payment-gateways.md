@@ -59,7 +59,7 @@ Providers never read `config.yml` directly — each service calls
 | Registry name | `payment_method` (DB) | Currencies | Webhook route | Config keys |
 |---------------|------------------------|------------|---------------|-------------|
 | `crypto` | `CRYPTOPAY` | USDT, TON, BTC, ETH, LTC, BNB, TRX, USDC | `/bot/cryptopay_webhook` | `crypto_bot_token` |
-| `heleket` | `HELEKET` | USD (paid in crypto) | `/bot/heleket_webhook` | `heleket_merchant_id`, `heleket_api_key`, `heleket_webhook` |
+| `heleket` | `HELEKET` | USD (paid in crypto) | `/bot/heleket_webhook` | `heleket_merchant_id`, `heleket_api_key`, `heleket_api_url`, `heleket_webhook` |
 | `crystal` | `CRYSTAL_PAY` | RUB, USD, EUR | `/bot/crystal_webhook` | `crystal_login`, `crystal_secret`, `crystal_salt`, `crystal_webhook` |
 | `apay` | `SBP_APAY` | RUB | `/bot/apays_webhook` | `apay_id`, `apay_secret`, `apay_api_url` |
 | `platega` | `PLATEGA` | RUB | `/bot/platega_webhook` | `platega_merchant_id`, `platega_api_key`, `platega_url`, `platega_payment_method` |
@@ -89,6 +89,9 @@ Register webhook URL in @CryptoBot or rely on the HTTP endpoint.
   - **Merchant ID** and **Payment API key** from your Heleket merchant settings
     ([getting API keys](https://doc.heleket.com/general/getting-api-keys)). The
     Payout API key is not used.
+  - **API gateway URL** (`heleket_api_url`): defaults to `https://api.heleket.com`.
+    Set a custom base URL without `/v1/payment`, or leave blank to use the default.
+    Changes apply to new invoices without restarting services.
   - **Webhook URL**: `https://your-domain/bot/heleket_webhook`, publicly reachable
     on the seller bot. It is included as `url_callback` in every invoice.
 - Settings are encrypted in the database; API responses mask the Payment API
