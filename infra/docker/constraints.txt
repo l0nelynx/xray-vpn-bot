@@ -97,7 +97,7 @@ defusedxml==0.7.1
     #   py-serializable
 deprecated==3.0.1
     # via limits
-dnspython==2.9.1
+dnspython==2.9.2
     # via email-validator
 email-validator==2.3.0
     # via
