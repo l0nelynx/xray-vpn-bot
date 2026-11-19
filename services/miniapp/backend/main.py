@@ -80,6 +80,8 @@ async def lifespan(app: FastAPI):
     # replace it a moment later.
     validate_security_config()
     poll_task = asyncio.create_task(runtime_overlay_poll_loop(async_session))
+    from .web.analytics import delivery_loop
+    analytics_task = asyncio.create_task(delivery_loop(async_session))
     from common_db.referral_worker import referral_loop
     referral_task = asyncio.create_task(referral_loop(async_session))
     from .remnawave_availability import monitor_loop, record_failure
@@ -98,6 +100,11 @@ async def lifespan(app: FastAPI):
         referral_task.cancel()
         try:
             await referral_task
+        except asyncio.CancelledError:
+            pass
+        analytics_task.cancel()
+        try:
+            await analytics_task
         except asyncio.CancelledError:
             pass
         poll_task.cancel()

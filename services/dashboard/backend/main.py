@@ -4,6 +4,8 @@ import logging
 from arq import create_pool
 from arq.connections import RedisSettings
 from fastapi import FastAPI, Request
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from . import login_guard
@@ -157,6 +159,14 @@ async def health():
 @app.get(f"{BASE_PATH}/api/health", include_in_schema=False)
 async def public_health():
     return {"status": "ok", "service": "dashboard"}
+
+
+@app.exception_handler(RequestValidationError)
+async def _validation_error(request: Request, exc: RequestValidationError):
+    # FastAPI normally echoes the invalid input, which may include credentials.
+    if request.url.path.startswith(f"{BASE_PATH}/api/settings/integrations/"):
+        return JSONResponse(status_code=422, content={"detail": "Invalid integration settings"})
+    return await request_validation_exception_handler(request, exc)
 
 
 @app.exception_handler(Exception)

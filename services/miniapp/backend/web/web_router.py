@@ -42,7 +42,7 @@ import httpx
 import jwt as _pyjwt
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from jwt import PyJWKClient as _PyJWKClient
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, ValidationError, field_validator
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
@@ -67,6 +67,7 @@ from payments import (
     validate_provider_invoice,
 )
 from . import brute_force
+from .analytics import AnalyticsContext, enqueue as enqueue_analytics
 from common_db.repo import balance as _repo_balance
 from common_db.repo import promos as _repo_promos
 from common_db.repo import subscription_onboarding as _repo_onboarding
@@ -193,6 +194,15 @@ class WebInvoiceRequest(BaseModel):
     node_id: int = Field(..., ge=1)
     description: str | None = None
     subscription_id: int | None = Field(default=None, ge=1)
+    analytics: AnalyticsContext | None = None
+
+    @field_validator("analytics", mode="wrap")
+    @classmethod
+    def optional_analytics(cls, value, handler):
+        try:
+            return handler(value)
+        except ValidationError:
+            return None
 
 
 class TelegramExchangeRequest(BaseModel):
@@ -569,6 +579,7 @@ async def web_invoice(
                 delivery_status=0,
                 payment_method=provider.payment_method,
                 amount=final_amount,
+                currency=invoice.currency,
                 created_at=_now_iso(),
                 days_ordered=invoice_data["days"],
                 squad_id=invoice_data["squad_id"],
@@ -584,6 +595,7 @@ async def web_invoice(
                 purchase_source="web",
             )
         )
+        await enqueue_analytics(session, body.analytics, transaction_id, provider.name)
         await session.commit()
 
     await notify_log(

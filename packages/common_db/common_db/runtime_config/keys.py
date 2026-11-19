@@ -140,6 +140,7 @@ PAYMENT_SECRET_FIELDS: frozenset[str] = frozenset({
 # Encrypted service integrations (SMTP password, Android JWT, Telemt header, …).
 # Non-secret siblings live in RUNTIME_KEYS; secrets are stored here.
 INTEGRATION_PROVIDER_FIELDS: dict[str, tuple[str, ...]] = {
+    "ga4": ("ga4_measurement_id", "ga4_api_secret"),
     "smtp": ("smtp_password",),
     "android": ("android_jwt_secret",),
     "telemt": ("telemt_header",),
@@ -150,6 +151,7 @@ INTEGRATION_PROVIDER_FIELDS: dict[str, tuple[str, ...]] = {
 }
 
 INTEGRATION_SECRET_FIELDS: frozenset[str] = frozenset({
+    "ga4_api_secret",
     "smtp_password",
     "android_jwt_secret",
     "telemt_header",

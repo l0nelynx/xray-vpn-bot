@@ -65,6 +65,7 @@ CANONICAL_TABLES = frozenset({
     "referral_receipts",
     "referral_recovery",
     "referral_notices",
+    "web_analytics_purchases",
     "support_attachments",
     "support_messages",
     "support_tickets",

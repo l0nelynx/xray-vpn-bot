@@ -57,7 +57,8 @@ def test_startup_upgrades_from_either_branch(tmp_path, monkeypatch, applied):
     # A second service startup must be a no-op, not repeat CREATE/ALTER.
     upgrade_to_head()
     with engine.connect() as conn:
-        assert conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalars().all() == ["0048_crm_webhook_email"]
+        assert conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalars().all() == ["0049_web_payment_confirmation"]
+        assert conn.execute(sa.text("SELECT currency, payment_confirmed_at FROM transactions")).one() == (None, None)
         assert conn.execute(sa.text("SELECT id, sort_order_ru, sort_order_en FROM webapp_menu_nodes ORDER BY id")).all() == [(1, None, None), (2, 0, 0)]
         assert conn.execute(sa.text("SELECT incident, unavailable FROM remnawave_availability WHERE id=1")).one() == (0, False)
         assert "web_analytics_purchases" in sa.inspect(conn).get_table_names()

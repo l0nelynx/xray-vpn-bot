@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+import time
 
 from sqlalchemy import select, update, func, delete, exists
 from sqlalchemy.orm import aliased
@@ -392,7 +393,10 @@ async def claim_order_for_processing(transaction_id: str) -> bool:
                     Transaction.order_status.in_(("created", "pending")),
                     func.coalesce(Transaction.delivery_status, 0) != 1,
                 )
-                .values(order_status="confirmed")
+                .values(
+                    order_status="confirmed",
+                    payment_confirmed_at=func.coalesce(Transaction.payment_confirmed_at, time.time()),
+                )
                 .returning(Transaction.created_at, Transaction.days_ordered)
             )
         ).first()

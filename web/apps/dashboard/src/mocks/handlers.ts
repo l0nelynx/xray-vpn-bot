@@ -4,6 +4,15 @@ import { referralRecoveryHandlers } from "./referralRecovery";
 
 const API = "/bot/dashboard/api";
 
+const mockGa4 = {
+  provider: "ga4", enabled: false, managed: false, source: "none",
+  fields: { ga4_measurement_id: "", ga4_api_secret: "" },
+  field_meta: [
+    { name: "ga4_measurement_id", secret: false },
+    { name: "ga4_api_secret", secret: true },
+  ],
+};
+
 const heleketFieldMeta = [
   { name: "heleket_merchant_id", secret: false },
   { name: "heleket_api_key", secret: true },
@@ -580,6 +589,7 @@ export const handlers: HttpHandler[] = [
   http.get(`${API}/settings/integrations`, () =>
     HttpResponse.json({
       providers: [
+        mockGa4,
         {
           provider: "smtp",
           enabled: true,
@@ -643,14 +653,22 @@ export const handlers: HttpHandler[] = [
     }),
   ),
   http.put(`${API}/settings/integrations/:provider`, async ({ request, params }) => {
-    const body = (await request.json()) as object;
+    const body = (await request.json()) as { enabled: boolean; fields: Record<string, string> };
+    if (params.provider === "ga4") {
+      const measurement = body.fields.ga4_measurement_id.trim();
+      const masked = body.fields.ga4_api_secret.trim() ? "••••••••" : mockGa4.fields.ga4_api_secret;
+      if (((body.enabled || measurement) && !/^G-[A-Z0-9]+$/.test(measurement)) || (body.enabled && !masked)) {
+        return HttpResponse.json({ detail: "Enter a valid Measurement ID and API secret" }, { status: 422 });
+      }
+      Object.assign(mockGa4, { managed: true, source: "dashboard", enabled: body.enabled,
+        fields: { ga4_measurement_id: measurement, ga4_api_secret: masked } });
+      return HttpResponse.json(mockGa4);
+    }
     return HttpResponse.json({
       provider: params.provider,
       managed: true,
       source: "dashboard",
       field_meta: [],
-      fields: {},
-      enabled: true,
       ...body,
     });
   }),

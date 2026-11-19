@@ -189,10 +189,11 @@ async def list_app_integrations(session: AsyncSession) -> list[AppIntegration]:
     return list(result.scalars().all())
 
 
-async def get_app_integration(session: AsyncSession, provider: str) -> AppIntegration | None:
-    return await session.scalar(
-        select(AppIntegration).where(AppIntegration.provider == provider)
-    )
+async def get_app_integration(
+    session: AsyncSession, provider: str, *, for_update: bool = False,
+) -> AppIntegration | None:
+    query = select(AppIntegration).where(AppIntegration.provider == provider)
+    return await session.scalar(query.with_for_update() if for_update else query)
 
 
 async def upsert_app_integration(
@@ -249,6 +250,8 @@ async def import_integrations_from_yaml(
     existing = {r.provider for r in await list_app_integrations(session)}
     inserted = 0
     for provider, fields in INTEGRATION_PROVIDER_FIELDS.items():
+        if provider == "ga4":
+            continue  # Dashboard-only; never seed credentials from YAML.
         if provider in existing:
             continue
         payload = {}

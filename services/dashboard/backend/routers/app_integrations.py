@@ -1,6 +1,7 @@
 """Service integrations (SMTP, Android JWT, Telemt, Store, FCM, …) dual-source."""
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -22,7 +23,7 @@ from common_db.runtime_config import (
 )
 
 from ..auth import get_current_user
-from ..config import get_payments_secrets_key, get_yaml_config
+from ..config import get_dashboard_login, get_payments_secrets_key, get_yaml_config
 from ..database.session import async_session
 
 router = APIRouter(prefix="/api/settings/integrations", tags=["app-integrations"])
@@ -58,7 +59,15 @@ def _crypto_key() -> bytes:
     return derive_key(get_payments_secrets_key())
 
 
+def _admin(user: str = Depends(get_current_user)) -> str:
+    if user != get_dashboard_login():
+        raise HTTPException(status_code=403, detail="Administrator access required")
+    return user
+
+
 def _yaml_fields(provider: str, yaml_cfg: dict) -> dict[str, Any]:
+    if provider == "ga4":
+        return {}  # GA4 is optional and managed exclusively in Dashboard.
     out: dict[str, Any] = {}
     for field in INTEGRATION_PROVIDER_FIELDS.get(provider, ()):
         if field in yaml_cfg and yaml_cfg[field] not in (None, ""):
@@ -82,7 +91,7 @@ def _field_meta(provider: str) -> list[ProviderFieldMeta]:
 
 
 @router.get("", response_model=IntegrationsResponse)
-async def list_providers(_: str = Depends(get_current_user)):
+async def list_providers(_: str = Depends(_admin)):
     yaml_cfg = get_yaml_config()
     key = _crypto_key()
     async with async_session() as session:
@@ -140,7 +149,7 @@ async def list_providers(_: str = Depends(get_current_user)):
 async def update_provider(
     provider: str,
     body: IntegrationProviderUpdate,
-    user: str = Depends(get_current_user),
+    user: str = Depends(_admin),
 ):
     if provider not in INTEGRATION_PROVIDER_FIELDS:
         raise HTTPException(status_code=404, detail="unknown provider")
@@ -157,13 +166,27 @@ async def update_provider(
 
     key = _crypto_key()
     async with async_session() as session:
-        current = await get_app_integration(session, provider)
+        current = await get_app_integration(session, provider, for_update=True)
         existing_fields: dict[str, Any] = {}
         if current and current.encrypted_config:
             try:
                 existing_fields = decrypt_json(current.encrypted_config, key)
             except Exception:
                 existing_fields = {}
+
+        if provider == "ga4":
+            for field, value in clean_fields.items():
+                if not isinstance(value, str):
+                    raise HTTPException(status_code=422, detail=f"{field} must be text")
+                clean_fields[field] = value.strip()
+            if not clean_fields.get("ga4_api_secret"):
+                clean_fields.pop("ga4_api_secret", None)
+            clean_fields = {**existing_fields, **clean_fields}
+            measurement_id = clean_fields.get("ga4_measurement_id", "")
+            if (body.enabled or measurement_id) and not re.fullmatch(r"G-[A-Z0-9]+", str(measurement_id)):
+                raise HTTPException(status_code=422, detail="Enter a Measurement ID such as G-XXXXXXXXXX")
+            if body.enabled and not clean_fields.get("ga4_api_secret"):
+                raise HTTPException(status_code=422, detail="API secret is required to enable Google Analytics")
 
         if provider == "android" and body.enabled:
             # Invalid/corrupt values from the original migration fall back to

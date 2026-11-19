@@ -50,10 +50,13 @@ interface ProviderState {
 }
 
 const PROVIDER_LABELS: Record<string, string> = {
+  ga4: "Google Analytics 4",
   heleket: "Heleket",
 };
 
 const INTEGRATION_FIELD_LABELS: Record<string, string> = {
+  ga4_measurement_id: "Measurement ID",
+  ga4_api_secret: "API secret",
   heleket_merchant_id: "Merchant ID",
   heleket_api_key: "Payment API key",
   heleket_api_url: "API gateway URL",
@@ -137,6 +140,7 @@ const NUMERIC_KEYS = new Set([
 const BOOL_KEYS = new Set(["smtp_use_tls"]);
 
 const INTEGRATION_TABS: { id: string; label: string; providers: string[]; runtime: Record<string, string> }[] = [
+  { id: "analytics", label: "Analytics", providers: ["ga4"], runtime: {} },
   { id: "email", label: "Email", providers: ["smtp"], runtime: RUNTIME_EMAIL },
   { id: "android", label: "Android", providers: ["android"], runtime: RUNTIME_ANDROID },
   { id: "store", label: "Store", providers: ["store"], runtime: RUNTIME_STORE },
@@ -256,8 +260,16 @@ function IntegrationCards({
                   startup and apply automatically after saving.
                 </p>
               )}
+              {p.provider === "ga4" && (
+                <p className="text-sm text-muted-foreground">
+                  Send confirmed web purchases to the same GA4 stream as your portal.
+                  Create the API secret in Google Analytics → Admin → Data streams → your web stream
+                  → Measurement Protocol API secrets. Changes apply automatically.
+                </p>
+              )}
               <div className="flex items-center gap-2">
                 <Switch
+                  id={`${p.provider}-enabled`}
                   checked={pf.enabled}
                   onCheckedChange={(v: boolean) =>
                     setForms((prev) => ({
@@ -266,13 +278,18 @@ function IntegrationCards({
                     }))
                   }
                 />
-                <Label>Enabled</Label>
+                <Label htmlFor={`${p.provider}-enabled`}>Enabled</Label>
               </div>
               {p.field_meta.map((f) => (
                 <div key={f.name} className="space-y-1.5">
                   <Label htmlFor={`${p.provider}-${f.name}`}>
                     {INTEGRATION_FIELD_LABELS[f.name] ?? f.name}
                   </Label>
+                  {f.name === "ga4_api_secret" && (
+                    <p className="text-xs text-muted-foreground" role="status">
+                      {p.fields[f.name] ? "API secret is set" : "API secret is not set"}
+                    </p>
+                  )}
                   {f.name.endsWith("_sa_json") || f.name.includes("sa_json") ? (
                     <Textarea
                       id={`${p.provider}-${f.name}`}
@@ -293,7 +310,8 @@ function IntegrationCards({
                     <Input
                       id={`${p.provider}-${f.name}`}
                       type={f.secret ? "password" : "text"}
-                      placeholder={f.secret ? "leave blank to keep" : f.name === "heleket_api_url" ? "https://api.heleket.com" : undefined}
+                      autoComplete={f.secret ? "new-password" : undefined}
+                      placeholder={f.secret ? "leave blank to keep" : f.name === "heleket_api_url" ? "https://api.heleket.com" : f.name === "ga4_measurement_id" ? "G-XXXXXXXXXX" : undefined}
                       value={pf.fields[f.name] ?? ""}
                       onChange={(e) =>
                         setForms((prev) => ({
@@ -703,11 +721,11 @@ export default function WebAppSettingsPage() {
 
         {INTEGRATION_TABS.map((tab) => (
           <TabsContent key={tab.id} value={tab.id}>
-            {!runtime || !integrations ? (
+            {!integrations || (!runtime && Object.keys(tab.runtime).length > 0) ? (
               <Spinner className="h-6 w-6" />
             ) : (
               <div className="space-y-4">
-                {Object.keys(tab.runtime).length > 0 && (
+                {runtime && Object.keys(tab.runtime).length > 0 && (
                   <Card>
                     <CardHeader>
                       <CardTitle className="text-sm">{tab.label} settings</CardTitle>

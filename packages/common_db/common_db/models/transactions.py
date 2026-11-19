@@ -29,6 +29,8 @@ class Transaction(Base):
     delivery_status: Mapped[int] = mapped_column(Integer)
     payment_method: Mapped[str] = mapped_column(String(50), nullable=True)
     amount: Mapped[float] = mapped_column(nullable=True)
+    currency: Mapped[str | None] = mapped_column(String(16))
+    payment_confirmed_at: Mapped[float | None] = mapped_column()
     created_at: Mapped[str] = mapped_column(String(30), nullable=True)
     days_ordered: Mapped[int] = mapped_column(BigInteger)
     expire_date: Mapped[str] = mapped_column(String(30), nullable=True)

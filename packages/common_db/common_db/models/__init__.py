@@ -39,6 +39,7 @@ from .support import SupportAttachment, SupportMessage, SupportTicket
 from .runtime import AppRuntimeSettings, AppIntegration, DashboardBrandingAsset, PaymentIntegration
 from .system import BotFeatureFlags, CacheVersion, TelmtFreeParams
 from .transactions import Transaction
+from .analytics import WebAnalyticsPurchase
 from .users import DisabledUser, SubscriptionTransfer, User, UserSubscription
 from .api_health import ApiAlertState, ApiErrorEvent, ApiMetricHour, ApiMetricMinute, ApiServiceStatus
 from .miniapp_ux import MiniappUxEvent
@@ -66,6 +67,7 @@ __all__ = [
     "CrmWebhookDelivery",
     # transactions
     "Transaction",
+    "WebAnalyticsPurchase",
     # support
     "SupportTicket",
     "SupportMessage",
