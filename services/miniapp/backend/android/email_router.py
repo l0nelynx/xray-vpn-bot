@@ -95,7 +95,8 @@ async def _send_code(
     """Generate, persist, and send a code. Old codes for the purpose are
     invalidated atomically so only the freshest code is valid."""
     ip = deps.real_client_ip(request) if request is not None else None
-    email_send_guard.check(email=to_email, ip=ip)
+    # Initial verification has a separate route-level IP budget for shared NATs.
+    email_send_guard.reserve(email=to_email, ip=None if purpose == repo.PURPOSE_VERIFY else ip)
     code = security.new_email_code()
     code_hash = security.hash_email_code(code)
     await repo.invalidate_pending_codes(user_id, purpose)
@@ -106,7 +107,6 @@ async def _send_code(
         payload=payload,
         ttl_seconds=get_email_code_ttl_seconds(),
     )
-    email_send_guard.record(email=to_email, ip=ip)
     rendered = template(code) if payload is None else template(code, payload)
     subject, body = rendered
     try:
@@ -159,7 +159,7 @@ async def _consume_code(
 
 
 @router.post("/email/send-code", response_model=SimpleStatus)
-@limiter.limit("3/minute")
+@limiter.limit("30/minute;120/day")
 async def email_send_code(
     request: Request,
     user: repo.UserRow = Depends(deps.get_current_user),
@@ -329,7 +329,7 @@ async def email_change_request(
         raise HTTPException(status.HTTP_409_CONFLICT, detail={"code": "email_taken"})
 
     ip = deps.real_client_ip(request)
-    email_send_guard.check(email=new_email, ip=ip)
+    email_send_guard.reserve(email=new_email, ip=ip)
     code = security.new_email_code()
     code_hash = security.hash_email_code(code)
     await repo.invalidate_pending_codes(user.id, repo.PURPOSE_EMAIL_CHANGE)
@@ -340,7 +340,6 @@ async def email_change_request(
         payload=new_email,
         ttl_seconds=get_email_code_ttl_seconds(),
     )
-    email_send_guard.record(email=new_email, ip=ip)
     subject, body = mailer.render_email_change(code, new_email)
     try:
         await mailer.send_email(to=new_email, subject=subject, text=body)

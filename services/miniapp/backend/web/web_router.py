@@ -8,7 +8,7 @@ Provides three groups of endpoints:
 
 2. Web registration
    POST /api/web/register — create account; optional invite code is redeemed
-       when provided; rate-limited (3/min per IP).
+       when provided; repeated attempts and distinct emails have separate limits.
 
 3. Discount-aware payment endpoints
    GET  /api/web/payments/menu    — tariff tree with prices discounted for
@@ -47,7 +47,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
 from ..android import deps
-from ..android import email_policy, register_ip_guard
+from ..android import email_policy
 from ..android import repo as android_repo
 from ..android import security as android_security
 from ..android.auth_router import _issue_pair, _user_summary, limiter
@@ -66,7 +66,7 @@ from payments import (
     create_invoice,
     validate_provider_invoice,
 )
-from . import brute_force
+from . import brute_force, registration_guard
 from .analytics import AnalyticsContext, enqueue as enqueue_analytics
 from common_db.repo import balance as _repo_balance
 from common_db.repo import promos as _repo_promos
@@ -150,6 +150,7 @@ class ValidateInviteResponse(BaseModel):
 class WebRegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
+    captcha_token: str | None = Field(default=None, min_length=1, max_length=2048)
     invite_code: str | None = Field(default=None, min_length=1, max_length=20)
     subscription_context: str | None = Field(default=None, min_length=20, max_length=4096)
     subscription_flow: bool = False
@@ -319,7 +320,7 @@ async def partnership_inquiry(
 
 
 @router.post("/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
-@limiter.limit("3/minute")
+@limiter.limit("30/minute")
 async def web_register(
     body: WebRegisterRequest,
     request: Request,
@@ -331,28 +332,31 @@ async def web_register(
     verification or by the subscription-page OAuth callback.
     """
     ip = _client_ip(request)
-    brute_force.check(ip)
-    register_ip_guard.check(ip)
-    email_policy.assert_email_allowed(str(body.email))
+    email = email_policy.assert_email_allowed(str(body.email))
+    await registration_guard.enforce(ip, email, body.captcha_token)
 
     code = body.invite_code.strip().upper() if body.invite_code else None
     claim_rw_id: int | None = None
     if body.subscription_context:
+        context_key = f"context:{ip}"
+        brute_force.check(context_key)
         try:
             claim_rw_id, _ = android_security.decode_subscription_context(
                 body.subscription_context
             )
         except android_security.JWTError as exc:
-            brute_force.record_fail(ip)
+            brute_force.record_fail(context_key)
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST,
                 detail={"code": "invalid_subscription_context"},
             ) from exc
 
+        brute_force.clear(context_key)
         grant = 0
     elif body.subscription_flow:
         grant = 0
     elif code:
+        brute_force.check(ip)
         async with async_session() as session:
             promo = await _repo_promos.get_promo_by_code(session, code)
             if promo is None:
@@ -362,10 +366,9 @@ async def web_register(
                     detail={"code": "invalid_invite"},
                 )
             grant = await _resolve_credit_grant_for_promo(promo)
+        brute_force.clear(ip)
     else:
         grant = 0
-
-    brute_force.clear(ip)
 
     subscription_flow = body.subscription_flow or claim_rw_id is not None
     pwd_hash = await android_security.hash_password(body.password)
@@ -377,7 +380,7 @@ async def web_register(
             async with async_session() as session:
                 db_user = User(
                     tg_id=None,
-                    email=str(body.email).strip().lower(),
+                    email=email,
                     password_hash=pwd_hash,
                     password_updated_at=_now_iso(),
                     api_provider="remnawave",
@@ -399,7 +402,7 @@ async def web_register(
     else:
         try:
             user_id = await android_repo.create_user_with_password(
-                str(body.email), pwd_hash
+                email, pwd_hash
             )
         except IntegrityError:
             raise HTTPException(
@@ -409,7 +412,6 @@ async def web_register(
 
     user = await android_repo.find_user_by_id(user_id)
     assert user is not None
-    register_ip_guard.record(ip)
 
     if not subscription_flow and code is not None:
         fake_tg = _fake_tg_id(user_id)
@@ -900,11 +902,10 @@ async def setup_email_request(
     from ..android import email_send_guard, mailer, security as _sec
     from ..config import get_email_code_ttl_seconds
 
+    email_send_guard.reserve(email=new_email, ip=_client_ip(request))
     password_hash = await _sec.hash_password(body.new_password)
     payload = _json.dumps({"email": new_email, "ph": password_hash})
 
-    ip = _client_ip(request)
-    email_send_guard.check(email=new_email, ip=ip)
     code = _sec.new_email_code()
     code_hash = _sec.hash_email_code(code)
     await android_repo.invalidate_pending_codes(user.id, android_repo.PURPOSE_SETUP_EMAIL)
@@ -915,7 +916,6 @@ async def setup_email_request(
         payload=payload,
         ttl_seconds=get_email_code_ttl_seconds(),
     )
-    email_send_guard.record(email=new_email, ip=ip)
     try:
         subject, text_body = mailer.render_verify(code)
         await mailer.send_email(to=new_email, subject=subject, text=text_body)

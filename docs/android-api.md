@@ -306,7 +306,7 @@ Refresh — opaque, TTL по умолчанию 60 дней (`android_refresh_tt
 
 | Метод | Путь | Auth | Rate | Назначение |
 |---|---|---|---|---|
-| POST | `/email/send-code` | Bearer | 3/min | Отправить код подтверждения текущего email |
+| POST | `/email/send-code` | Bearer | 30/min, 120/day на IP | Отправить код подтверждения текущего email. На один адрес действуют отдельные ограничения отправки. |
 | POST | `/email/verify` | Bearer | 10/min | Подтвердить код → выдаётся бесплатная подписка (если ещё нет) |
 | POST | `/password/reset-request` | — | 3/min | Запросить код сброса пароля |
 | POST | `/password/reset-confirm` | — | 10/min | Сбросить пароль по коду |

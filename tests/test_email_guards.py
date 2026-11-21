@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import time
+import asyncio
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException
@@ -115,15 +117,6 @@ def test_register_ip_day_cap():
     assert exc.value.detail["retry_after"] >= 1
 
 
-def test_register_ip_shared_bucket_android_web():
-    ip = "10.0.0.1"
-    for _ in range(3):
-        register_ip_guard.check(ip)
-        register_ip_guard.record(ip)
-    with pytest.raises(HTTPException):
-        register_ip_guard.check(ip)
-
-
 # --- email send guard ------------------------------------------------------
 
 
@@ -131,35 +124,57 @@ def test_send_guard_three_then_five_minute_block():
     email = "user@gmail.com"
     ip = "8.8.8.8"
     for _ in range(3):
-        email_send_guard.check(email=email, ip=ip)
-        email_send_guard.record(email=email, ip=ip)
+        email_send_guard.reserve(email=email, ip=ip)
     with pytest.raises(HTTPException) as exc:
-        email_send_guard.check(email=email, ip=ip)
+        email_send_guard.reserve(email=email, ip=ip)
     assert exc.value.status_code == 429
     assert 1 <= exc.value.detail["retry_after"] <= 5 * 60
 
 
+def test_verification_emails_from_shared_ip_preserve_recipient_limit(monkeypatch):
+    from miniapp.backend.android import email_router
+
+    monkeypatch.setattr(email_router.deps, "real_client_ip", lambda _: "192.0.2.15")
+    monkeypatch.setattr(email_router.repo, "invalidate_pending_codes", AsyncMock())
+    monkeypatch.setattr(email_router.repo, "store_verification_code", AsyncMock())
+    send = AsyncMock()
+    monkeypatch.setattr(email_router.mailer, "send_email", send)
+
+    async def verify(address):
+        await email_router._send_code(
+            user_id=1, purpose=email_router.repo.PURPOSE_VERIFY,
+            to_email=address, payload=None, template=lambda _: ("Subject", "Body"),
+            request=object(),
+        )
+
+    async def run():
+        for address in ("a", "b", "c", "d", "d", "d"):
+            await verify(f"{address}@gmail.com")
+        with pytest.raises(HTTPException) as limited:
+            await verify("d@gmail.com")
+        assert limited.value.status_code == 429
+        assert send.await_count == 6
+
+    asyncio.run(run())
+
+
 def test_send_guard_email_and_ip_independent():
-    email_send_guard.check(email="a@gmail.com", ip="1.1.1.1")
-    email_send_guard.record(email="a@gmail.com", ip="1.1.1.1")
+    email_send_guard.reserve(email="a@gmail.com", ip="1.1.1.1")
     # Different email, same IP — IP consecutive is 1; email is fresh.
-    email_send_guard.check(email="b@gmail.com", ip="1.1.1.1")
-    email_send_guard.record(email="b@gmail.com", ip="1.1.1.1")
-    email_send_guard.check(email="c@gmail.com", ip="1.1.1.1")
-    email_send_guard.record(email="c@gmail.com", ip="1.1.1.1")
+    email_send_guard.reserve(email="b@gmail.com", ip="1.1.1.1")
+    email_send_guard.reserve(email="c@gmail.com", ip="1.1.1.1")
     # Fourth send from same IP (across emails) should trip IP consecutive.
     with pytest.raises(HTTPException):
-        email_send_guard.check(email="d@gmail.com", ip="1.1.1.1")
+        email_send_guard.reserve(email="d@gmail.com", ip="1.1.1.1")
 
 
 def test_send_guard_clear_consecutive_does_not_lift_active_block():
     email = "clear@gmail.com"
     for _ in range(3):
-        email_send_guard.check(email=email, ip=None)
-        email_send_guard.record(email=email, ip=None)
+        email_send_guard.reserve(email=email, ip=None)
     email_send_guard.clear_consecutive(email=email)
     with pytest.raises(HTTPException):
-        email_send_guard.check(email=email, ip=None)
+        email_send_guard.reserve(email=email, ip=None)
 
 
 def test_send_guard_day_limit_blocks_48h():
@@ -172,7 +187,7 @@ def test_send_guard_day_limit_blocks_48h():
         bucket.consecutive = 0
         bucket.blocked_until = 0.0
     with pytest.raises(HTTPException) as exc:
-        email_send_guard.check(email=email, ip=None)
+        email_send_guard.reserve(email=email, ip=None)
     assert exc.value.status_code == 429
     # check() promotes day overflow into a 48h block.
     assert exc.value.detail["retry_after"] >= 47 * 3600

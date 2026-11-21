@@ -52,6 +52,28 @@ web_id: -1001234567890
 2. Copy Client Secret → `tg_client_secret` in `config.yml`
 3. In the web-portal repo CI, set `VITE_TG_BOT_ID` to the bot's numeric ID
 
+## Adaptive email registration
+
+`POST /web/register` allows three distinct normalized email addresses per client
+IP in a rolling hour. Reusing a free address refreshes its slot. Each IP/email
+pair can make six requests in ten minutes. The endpoint also caps all requests
+at 30 per minute per IP. These counters live in the single miniapp worker.
+
+To enable step-up verification, create a **Managed** widget in Cloudflare Turnstile
+and add the portal and mirror hostnames to its hostname list. Set
+`TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` in the backend Compose `.env`.
+Set the portal origins in `web_allowed_origins` or the primary URL in
+`web_portal_url` so the API can validate the proof's hostname. Deploy the portal
+form first, then recreate the miniapp container with the new environment.
+
+For a new address above the free allowance, the API returns HTTP 403 with
+`detail.code = challenge_required`, a public `site_key`, and opaque `cdata`.
+Render the widget with action `web_register` and this value as `cData`, then
+resubmit the same registration with `captcha_token`. One successful proof
+permits one attempt for that email. With the keys unset the API returns 429
+with `Retry-After` until a free slot opens. A Siteverify outage returns 503
+for requests that require verification. Regular signups do not call Cloudflare.
+
 ## API surface (summary)
 
 All routes are under `/bot/miniapp/api/web/` (see `web_router.py` for the full

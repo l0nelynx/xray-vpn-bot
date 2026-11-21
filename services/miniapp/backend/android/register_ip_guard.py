@@ -1,7 +1,7 @@
 """Sliding-window limit on successful registrations per client IP.
 
 Not a permanent 1-IP-1-account ban: capacity returns as events age out of
-the windows. Shared by Android and web register handlers.
+the windows. Used by the native Android registration handler.
 """
 from __future__ import annotations
 

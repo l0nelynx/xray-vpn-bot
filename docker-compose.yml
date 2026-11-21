@@ -279,6 +279,8 @@ services:
     ports:
       - '127.0.0.1:8001:8001'
     environment:
+      - TURNSTILE_SITE_KEY=${TURNSTILE_SITE_KEY:-}
+      - TURNSTILE_SECRET_KEY=${TURNSTILE_SECRET_KEY:-}
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-xray}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-xray_vpn_bot}
       - CONFIG_PATH=/app/config.yml
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}

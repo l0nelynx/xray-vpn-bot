@@ -42,9 +42,8 @@ def test_web_registration_creates_pending_without_subscription(
     )
     monkeypatch.setattr(web_router.brute_force, "check", lambda _ip: None)
     monkeypatch.setattr(web_router.brute_force, "clear", lambda _ip: None)
-    monkeypatch.setattr(web_router.register_ip_guard, "check", lambda _ip: None)
-    monkeypatch.setattr(web_router.register_ip_guard, "record", lambda _ip: None)
-    monkeypatch.setattr(web_router.email_policy, "assert_email_allowed", lambda _email: None)
+    monkeypatch.setattr(web_router.registration_guard, "window", web_router.registration_guard.RegistrationWindow())
+    monkeypatch.setattr(web_router.email_policy, "assert_email_allowed", lambda email: email)
     monkeypatch.setattr(
         web_router,
         "_issue_pair",

@@ -78,24 +78,17 @@ def _record_one(key: str, *, now: float) -> None:
         bucket.consecutive = 0
 
 
-def check(*, email: str | None = None, ip: str | None = None) -> None:
-    """Raise 429 if email and/or IP is currently limited."""
+def reserve(*, email: str, ip: str | None) -> None:
+    """Check all budgets and reserve one send before yielding to DB or SMTP."""
     now = time.time()
+    keys = [_key_email(email)]
+    if ip and ip != "unknown":
+        keys.append(_key_ip(ip))
     with _lock:
-        if email:
-            _check_one(_key_email(email), now=now)
-        if ip and ip != "unknown":
-            _check_one(_key_ip(ip), now=now)
-
-
-def record(*, email: str | None = None, ip: str | None = None) -> None:
-    """Record a code-send attempt for email and/or IP."""
-    now = time.time()
-    with _lock:
-        if email:
-            _record_one(_key_email(email), now=now)
-        if ip and ip != "unknown":
-            _record_one(_key_ip(ip), now=now)
+        for key in keys:
+            _check_one(key, now=now)
+        for key in keys:
+            _record_one(key, now=now)
 
 
 def clear_consecutive(*, email: str | None = None) -> None:
