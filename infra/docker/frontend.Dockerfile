@@ -31,4 +31,4 @@ COPY --from=build /build/web/apps/miniapp/dist   /usr/share/nginx/html/bot/minia
 
 EXPOSE 80
 HEALTHCHECK --interval=60s --timeout=5s --retries=3 \
-  CMD wget -qO- http://localhost/bot/miniapp/ >/dev/null 2>&1 || exit 1
+  CMD ["wget", "-O", "/dev/null", "http://127.0.0.1/bot/miniapp/"]

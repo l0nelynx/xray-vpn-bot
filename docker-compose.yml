@@ -319,7 +319,7 @@ services:
       - '127.0.0.1:8088:80'
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost/bot/miniapp/ >/dev/null 2>&1 || exit 1"]
+      test: ["CMD", "wget", "-O", "/dev/null", "http://127.0.0.1/bot/miniapp/"]
       interval: 60s
       timeout: 10s
       retries: 3
