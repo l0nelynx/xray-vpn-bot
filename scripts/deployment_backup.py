@@ -6,6 +6,7 @@ import contextlib
 import json
 import os
 from pathlib import Path
+import re
 import shlex
 import shutil
 import signal
@@ -14,7 +15,7 @@ import sys
 import tarfile
 import tempfile
 import time
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 import zipfile
 
 
@@ -48,6 +49,35 @@ def containers(*filters):
 
 def service_name(container):
     return container["Config"]["Labels"][LABEL + "service"]
+
+
+def check_postgres_url(service, url, client, postgres):
+    # Match SQLAlchemy's userinfo grammar first. It allows /, ? and # in
+    # passwords, while urlsplit treats them as the end of the authority.
+    scheme, separator, rest = url.partition("://")
+    if not separator or scheme.partition("+")[0] not in {"postgres", "postgresql"}:
+        raise ValueError(f"{service}: DATABASE_URL must use the project's PostgreSQL cluster for this backup")
+    endpoint = re.sub(r"^[^:/]*(?::[^@]*)?@", "", rest, count=1)
+    try:
+        address = urlsplit("//" + endpoint, allow_fragments=False)
+        host = address.hostname
+    except ValueError:
+        raise ValueError(f"{service}: cannot parse the PostgreSQL host in DATABASE_URL") from None
+    if not host or "@" in address.netloc:
+        raise ValueError(f"{service}: cannot identify the PostgreSQL host in DATABASE_URL")
+    if {"host", "hostaddr", "service"} & parse_qs(address.query, keep_blank_values=True).keys():
+        raise ValueError(f"{service}: DATABASE_URL overrides the PostgreSQL endpoint in its query; "
+                         "use the Compose PostgreSQL hostname in the URL authority")
+
+    networks = postgres.get("networks", {})
+    names = {"postgres"}
+    if postgres.get("container_name"):
+        names.add(postgres["container_name"])
+    for network in networks.keys() & client.get("networks", {}).keys():
+        names.update((networks[network] or {}).get("aliases") or [])
+    if host.rstrip(".").lower() not in {name.lower() for name in names}:
+        raise ValueError(f"{service}: DATABASE_URL does not match the Compose PostgreSQL container "
+                         f"(expected one of {', '.join(sorted(names))}). This backup covers its pg_data directory.")
 
 
 def inventory(root):
@@ -103,8 +133,8 @@ def inventory(root):
             raise ValueError(f"{service}: deployed environment differs from the Compose configuration")
         if env.get("REDIS_URL") and urlsplit(env["REDIS_URL"]).hostname != "redis":
             raise ValueError(f"{service}: external Redis needs its own backup")
-        if env.get("DATABASE_URL") and urlsplit(env["DATABASE_URL"]).hostname != "postgres":
-            raise ValueError(f"{service}: external database needs its own backup")
+        if env.get("DATABASE_URL"):
+            check_postgres_url(service, env["DATABASE_URL"], model, config["services"]["postgres"])
     if not {"postgres", "redis"} <= active.keys() or "migrate" in active:
         raise ValueError("Postgres and Redis must be running and migrations must be finished")
     # A completed migration container can have been removed after deployment.

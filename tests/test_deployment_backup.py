@@ -9,6 +9,27 @@ import pytest
 from scripts import deployment_backup as backup
 
 
+@pytest.mark.parametrize("host", ["postgres", "xray-postgres", "db-alias"])
+@pytest.mark.parametrize("password", ["a#b", "a/b", "a?b", "a[b", "encoded%40value"])
+def test_local_postgres_url(host, password):
+    client = {"networks": {"data": {}}}
+    postgres = {"container_name": "xray-postgres", "networks": {"data": {"aliases": ["db-alias"]}}}
+    url = f"postgresql+asyncpg://app:{password}@{host}:5432/shop"
+    backup.check_postgres_url("miniapp", url, client, postgres)
+
+
+@pytest.mark.parametrize("endpoint", [
+    "elsewhere.example/shop", "elsewhere.example/shop@postgres", "elsewhere@postgres/shop",
+    "postgres/shop?host=elsewhere.example", "other-network-alias/shop", "[invalid/shop",
+])
+def test_unverified_database_remains_blocked_without_logging_credentials(endpoint):
+    url = f"postgresql+asyncpg://app:sensitive#value@{endpoint}"
+    postgres = {"networks": {"private": {"aliases": ["other-network-alias"]}}}
+    with pytest.raises(ValueError, match="miniapp:") as error:
+        backup.check_postgres_url("miniapp", url, {"networks": {"data": {}}}, postgres)
+    assert "sensitive" not in str(error.value)
+
+
 @pytest.mark.parametrize("previous_rdb", [None, b"previous disk state"])
 def test_backup_restores_project_and_starts_saved_images(tmp_path, monkeypatch, previous_rdb):
     source = tmp_path / "deployed"
