@@ -36,6 +36,8 @@ Buy and extend plans, manage devices, open support tickets, and invite friends �
 ### Database auto-backup
 Scheduled daily PostgreSQL dumps via the admin bot — zip archives delivered to Telegram so you always have a recoverable snapshot.
 
+Run `sudo bash backup.sh` in the project directory for the interactive backup and restore menu. It includes project files, credentials, Redis, attachments and runtime images. The launcher brings its own Python. [Full deployment backup and restore](docs/deployment.md#full-deployment-backup-and-restore)
+
 ### Payments & referrals
 Multiple gateways, bonus credits wallet, promocodes, and referral rewards — prices always resolved server-side from menu nodes.
 

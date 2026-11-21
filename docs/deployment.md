@@ -470,6 +470,78 @@ wrong worker). To scale horizontally, move state to Postgres or Redis first.
 **Rate-limit correctness** requires `X-Real-IP` from edge nginx (included in the
 config above). Without it, all clients share one bucket.
 
+## Full deployment backup and restore
+
+On the Linux Docker Compose host, open the backup menu from the deployed project:
+
+```bash
+sudo bash backup.sh
+```
+
+Choose **1) Create a backup**. Press Enter to use the timestamped ZIP path in
+`/var/backups/xray/`, or enter another path outside the project. Allow a
+maintenance window and disk space for the uncompressed project, images and ZIP.
+
+The launcher supports x86-64 and ARM64 Linux. It uses Bash, Docker Compose v2
+with `up --wait`, tar, sha256sum and unzip (for recovery). On the first backup,
+curl downloads a pinned portable Python build from the
+[upstream release](https://github.com/astral-sh/python-build-standalone/releases/tag/20261110).
+The launcher verifies SHA-256, caches the archive under
+`/var/cache/xray-deployment-backup/` by default, and unpacks it temporarily for
+each run. It requires no system Python installation.
+
+The ZIP includes the whole project directory, including hidden and untracked
+files, `.env`, `config.yml`, Compose files and overrides, service-account keys,
+support attachments, the support bot's SQLite files, PostgreSQL's entire
+`pg_data/` cluster and Redis data. Backups made from the menu also include the
+launcher and its portable Python runtime alongside the recovery script and the
+actual Docker images used by the services. Treat the archive as a copy of your
+production credentials. It is created with mode `0600` and contains plaintext
+secrets. Store it on encrypted storage when taking it off the server.
+
+Image export runs while the stack is online. During the filesystem snapshot the
+script stops the applications, issues Redis `SAVE`, and stops Redis and
+PostgreSQL. It then restarts the previously running containers before compressing
+the ZIP. Keep other writers and deployments idle during the snapshot. The
+backup command refuses to replace an existing archive.
+
+**Recover on a new host.** Put the trusted ZIP and `backup.sh` in the same
+directory on a Linux Docker host of the same CPU architecture. Start the same
+menu and choose **2) Restore from a backup**. When there is one ZIP next to
+the launcher, Enter selects it. Enter a new project directory or accept
+`/opt/xray-vpn-bot`. Stop the old bot and workers before bringing the
+replacement online with the same production tokens.
+
+If you copied only the ZIP, extract its launcher in an empty directory first:
+
+```bash
+unzip -p xray-backup.zip backup.sh > backup.sh
+sudo bash backup.sh
+```
+
+Use the actual name of the archive. The bundled runtime works offline on a host
+with the same architecture and libc family. For older ZIPs, use `backup.sh` from
+this repository. The launcher fetches the runtime when the archive and cache
+do not contain the matching build.
+
+The script restores numeric owners and permissions, loads the saved images,
+creates missing external bridge networks declared by Compose,
+and runs migrations and health checks as part of
+startup. It checks for existing project containers and container-name conflicts.
+No checkout or registry access is needed for the restored services.
+
+The printed Compose command includes the original project name, Compose files
+and a generated `.xray-recovery-images.json` override that selects the saved
+images. Keep those `-p` and `-f` arguments when managing the recovered version.
+If startup fails, the recovered files remain in place. Resolve the reported
+error and retry the printed command.
+
+This procedure covers the repository's Compose deployment with local bind mounts
+and deployment settings saved in the project's files. External databases, named
+volumes and bind mounts outside the project require separate backups. The edge
+proxy, its TLS certificates, DNS and the Remnawave panel belong to their
+respective deployments. Restore or reconnect those separately when moving hosts.
+
 ## Updates
 
 ```bash
