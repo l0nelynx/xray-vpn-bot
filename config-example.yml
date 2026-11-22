@@ -1,6 +1,6 @@
 # Telegram VPN Bot — Configuration Template
 # Copy to config.yml and fill in your values. Never commit config.yml to git.
-# Shared by all backends: bot, support-bot, dashboard, miniapp.
+# Shared by the bot, dashboard and miniapp backends.
 #
 # Required keys are marked [REQUIRED]. Keys with defaults are marked [optional].
 # Operator-facing settings are preferred in Dashboard (dual-source: DB wins after Save).
@@ -174,10 +174,10 @@ tg_client_secret: ""                               # preferred: Dashboard Web (e
 
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  SUPPORT BOT (legacy standalone bot — support.py)                           ║
+# ║  SUPPORT BOT (ticket inbox in the bot service)                              ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
 
-support_token: "yoursupportbottoken"               # [optional] Token for the legacy support.py bot; omit if not using it
+support_token: ""                                  # Optional separate Telegram bot token for support tickets
 
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗

@@ -1,7 +1,7 @@
 // Backend targets consume the base built from this checkout, including on PRs.
 // No dependency on a mutable registry staging/latest tag between CI jobs.
 group "default" {
-  targets = ["bot", "support-bot", "dashboard", "miniapp", "frontend"]
+  targets = ["bot", "dashboard", "miniapp", "frontend"]
 }
 
 target "_common" {
@@ -27,12 +27,6 @@ target "bot" {
   args = { BASE_IMAGE = "python-base" }
   dockerfile = "infra/docker/bot.Dockerfile"
   tags = ["local/bot:check"]
-}
-
-target "support-bot" {
-  inherits = ["_common"]
-  dockerfile = "infra/docker/support_bot.Dockerfile"
-  tags = ["local/support-bot:check"]
 }
 
 target "dashboard" {

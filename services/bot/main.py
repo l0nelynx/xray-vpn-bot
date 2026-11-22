@@ -4,8 +4,10 @@ import asyncio
 
 from typing import Any, Awaitable, Callable
 
-from aiogram import BaseMiddleware, Dispatcher
-from aiogram.exceptions import TelegramBadRequest
+from aiogram import BaseMiddleware, Bot, Dispatcher
+from aiogram.fsm.storage.memory import SimpleEventIsolation
+from aiogram.exceptions import TelegramBadRequest, TelegramUnauthorizedError
+from aiogram.utils.token import TokenValidationError, extract_bot_id
 from aiogram.types import CallbackQuery, ErrorEvent
 from fastapi import Request, BackgroundTasks, Response, HTTPException
 from slowapi import _rate_limit_exceeded_handler
@@ -29,7 +31,7 @@ from app.bot_constructor import get_router as get_bot_constructor_router
 app_uvi.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 from common_db.api_health import ApiHealthMiddleware
-from app.database.models import async_session as _telemetry_session
+from app.database.models import async_session as _telemetry_session, engine
 import os
 app_uvi.add_middleware(
     ApiHealthMiddleware,
@@ -173,13 +175,57 @@ async def on_startup(dispatcher, **kwargs):
         logging.info("Scheduled daily backup at 01:00 for admin_id=%s", admin_id)
 
 
+def configured_support_bot():
+    token = secrets.get("support_token")
+    if not token:
+        return None
+    try:
+        bot_id = extract_bot_id(token)
+    except TokenValidationError:
+        logging.error("Support polling disabled: invalid support_token")
+        return None
+    if bot_id == bot.id or (admin_bot and bot_id == admin_bot.id):
+        logging.error("Support polling disabled: configure a separate Telegram bot token")
+        return None
+    if engine.dialect.name != "postgresql":
+        logging.warning("Support polling disabled: PostgreSQL is required")
+        return None
+    return Bot(token)
+
+
 async def main():
     dp.startup.register(on_startup)
-
-    tasks = [dp.start_polling(bot)]
+    secondary = []
     if admin_bot:
-        tasks.append(admin_dp.start_polling(admin_bot))
-    await asyncio.gather(*tasks)
+        secondary.append((admin_dp, admin_bot))
+    support = configured_support_bot()
+    if support:
+        from app.support.router import router as support_router
+        support_dp = Dispatcher(events_isolation=SimpleEventIsolation())
+        support_dp.include_router(support_router)
+        secondary.append((support_dp, support))
+
+    async def poll(dispatcher, client):
+        try:
+            await dispatcher.start_polling(client, handle_signals=False)
+        except TelegramUnauthorizedError:
+            logging.error("Telegram rejected credentials for bot %s", client.id)
+
+    pollers = []
+
+    async def start_secondary(**kwargs):
+        for dispatcher, client in secondary:
+            pollers.append(asyncio.create_task(poll(dispatcher, client)))
+
+    async def stop_secondary(**kwargs):
+        for (dispatcher, _), task in zip(secondary, pollers):
+            if not task.done():
+                await dispatcher.stop_polling()
+        await asyncio.gather(*pollers)
+
+    dp.startup.register(start_secondary)
+    dp.shutdown.register(stop_secondary)
+    await dp.start_polling(bot)
 
 
 if __name__ == "__main__":

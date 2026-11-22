@@ -156,7 +156,7 @@ git tags `v*.*.*`. Images are pushed to **both** registries with identical tags:
 - `ghcr.io/l0nelynx/<service>`
 - `docker.io/<dockerhub-username>/<service>` (same name as `DOCKERHUB_USERNAME` in CI)
 
-Services: `python-base`, `bot`, `support-bot`, `dashboard`, `miniapp`, `frontend`.
+Services: `python-base`, `bot`, `dashboard`, `miniapp`, `frontend`.
 
 The application version is stored in the root `VERSION` file. CI adds a monotonic
 build number on `develop` (`github.run_number`).
@@ -188,7 +188,6 @@ production release.
 | `redis` | `redis:7-alpine` | `6379` | — (internal) |
 | `migrate` | `bot` image | — | one-shot |
 | `bot` | `ghcr.io/l0nelynx/bot` | `5000` | `127.0.0.1:5000` |
-| `support-bot` | `support-bot` | — | no port |
 | `dashboard` | `dashboard` | `8000` | `127.0.0.1:8080` |
 | `crm-worker` | `dashboard` image | — | ARQ worker (no port) |
 | `miniapp` | `miniapp` | `8001` | `127.0.0.1:8001` |
@@ -203,7 +202,7 @@ nginx configs.
 
 ### backend-network (external)
 
-Edge nginx, `bot`, `dashboard`, `miniapp`, `frontend`, `support-bot`.
+Edge nginx, `bot`, `dashboard`, `miniapp`, `frontend`.
 
 Postgres is **not** on this network — the edge cannot reach the database directly.
 
@@ -322,21 +321,14 @@ offline navigation.
 
 ### Permissions for bot containers
 
-Bot and support-bot now run as UID/GID 10001. Before the first deployment of
-these images, make the support SQLite directory writable for that identity:
-
-```bash
-sudo install -d -o 10001 -g 10001 db
-sudo chown -R 10001:10001 db
-```
-
-The mounted config must be readable by UID 10001. Image-owned working
-directories remain writable for temporary bot backups. Existing dashboard and
-miniapp support-upload mounts keep their current UID 10001 permission rules.
+The bot, dashboard and miniapp run as UID 10001. Make the mounted config
+readable and the shared support upload directory writable by that identity.
+Before switching from the legacy support bot, stop its container and keep
+its SQLite database as an archive. See [Support workflow](support-workflow.md).
 
 ## Migrations
 
-Schema: Alembic HEAD `0014_support_attachments`. The `migrate` container runs
+The `migrate` container runs
 `alembic upgrade head` before apps boot. Dashboard and miniapp also call
 `upgrade_to_head()` on startup (no-op if current).
 
@@ -438,7 +430,7 @@ and set `web_allowed_origins` in config. See [web-portal.md](web-portal.md).
 
 ## Support-ticket attachments
 
-Shared read-write mount `./support_uploads` between `miniapp` and `dashboard`.
+Shared read-write mount `./support_uploads` for `bot`, `miniapp` and `dashboard`.
 
 - Up to 3 images per message, 5 MB each
 - Containers run as uid `10001` — host directory must be writable

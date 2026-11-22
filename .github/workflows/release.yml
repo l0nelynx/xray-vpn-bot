@@ -154,7 +154,6 @@ jobs:
             | Service | Pull (GHCR) | Pull (Docker Hub) |
             |---------|-------------|-------------------|
             | bot | `ghcr.io/${{ github.repository_owner }}/bot:${{ needs.meta.outputs.version }}` | `docker.io/${{ secrets.DOCKERHUB_USERNAME }}/bot:${{ needs.meta.outputs.version }}` |
-            | support-bot | `ghcr.io/${{ github.repository_owner }}/support-bot:${{ needs.meta.outputs.version }}` | `docker.io/${{ secrets.DOCKERHUB_USERNAME }}/support-bot:${{ needs.meta.outputs.version }}` |
             | dashboard | `ghcr.io/${{ github.repository_owner }}/dashboard:${{ needs.meta.outputs.version }}` | `docker.io/${{ secrets.DOCKERHUB_USERNAME }}/dashboard:${{ needs.meta.outputs.version }}` |
             | miniapp | `ghcr.io/${{ github.repository_owner }}/miniapp:${{ needs.meta.outputs.version }}` | `docker.io/${{ secrets.DOCKERHUB_USERNAME }}/miniapp:${{ needs.meta.outputs.version }}` |
             | frontend | `ghcr.io/${{ github.repository_owner }}/frontend:${{ needs.meta.outputs.version }}` | `docker.io/${{ secrets.DOCKERHUB_USERNAME }}/frontend:${{ needs.meta.outputs.version }}` |

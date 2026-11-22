@@ -12,7 +12,6 @@ services/                     # deployable backends (one image each)
     app/                      #   python package (name kept as `app`)
     main.py
     scripts/
-  support_bot/                # legacy support bot (own SQLite); to be retired
   dashboard/backend/          # FastAPI admin API
   miniapp/backend/            # FastAPI API for the MiniApp / web portal / Android
 web/
@@ -29,7 +28,7 @@ packages/                     # shared python packages
   subscription_delivery/      #   Android paid-subscription delivery
 infra/docker/                 # all Dockerfiles + the frontend nginx config
   base.Dockerfile             #   shared python base image (common deps)
-  bot/support_bot/dashboard/miniapp.Dockerfile
+  bot/dashboard/miniapp.Dockerfile
   frontend.Dockerfile + frontend.nginx.conf
 alembic/ alembic.ini migrations_runner.py   # shared DB migrations (repo root)
 docker-compose.yml  package.json (npm workspaces root)  config.yml
@@ -39,8 +38,7 @@ docker-compose.yml  package.json (npm workspaces root)  config.yml
 
 | Container | Image | Role |
 |-----------|-------|------|
-| `bot` | `bot` | Main Telegram bot + payment webhook endpoints (`:5000`). Keeps a `seller-bot` network alias. |
-| `support-bot` | `support-bot` | Legacy standalone support bot, own SQLite. |
+| `bot` | `bot` | Seller and support Telegram bots + payment webhook endpoints (`:5000`). Keeps a `seller-bot` network alias. |
 | `dashboard` | `dashboard` | Admin JSON API (`:8000`). |
 | `crm-worker` | `dashboard` image | ARQ worker for CRM campaigns & scheduled events (Redis). |
 | `miniapp` | `miniapp` | JSON API for MiniApp / web portal / Android (`:8001`). |

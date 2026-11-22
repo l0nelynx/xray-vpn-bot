@@ -2,7 +2,7 @@
 
 The bot sends the administrator a file named `backup_YYYYMMDD_HHMMSS.zip`, either on schedule or through the **Бекап БД** button. The production Docker Compose deployment puts a plain PostgreSQL dump called `db.sql` inside this ZIP. A bot running with SQLite puts `db.sqlite3` inside instead.
 
-The archive covers the main application database. Supply the deployment's original `.env`, `config.yml`, support uploads and any separate support-bot database from their own copies. Keep the original `payments_secrets_key` (or `dashboard_secret` when used as its fallback) so the application can decrypt stored integration credentials.
+The archive covers the main application database. Supply the deployment's original `.env`, `config.yml` and support uploads from their own copies. Keep the original `payments_secrets_key` (or `dashboard_secret` when used as its fallback) so the application can decrypt stored integration credentials.
 
 ## 1. Check the archive and target
 

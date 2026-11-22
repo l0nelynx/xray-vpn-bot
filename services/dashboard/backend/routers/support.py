@@ -204,19 +204,33 @@ async def reply_ticket(
         await session.commit()
         tg_id = user.tg_id if user else None
         subject = ticket.subject
+        via_support = ticket.reply_channel == "support_bot"
+        english = bool(user and user.language == "en")
 
     if tg_id and not internal:
-        token = get_bot_token()
+        token = get_config().get("support_token") if via_support else get_bot_token()
         if token:
-            preview = text or ("(no text)" if saved else "")
-            notify = f"💬 Ответ по обращению #{ticket_id}: <b>{escape(subject)}</b>\n\n{escape(preview[:3000])}"
-            if saved:
-                notify += f"\n📷 {len(saved)} фото прикреплено"
+            if via_support:
+                heading = "Support reply" if english else "Ответ поддержки"
+                notify = f"{heading} #{ticket_id}\n\n{escape(text)}"
+                if saved:
+                    label = "Images" if english else "Изображения"
+                    notify += f"\n📷 {label}: {len(saved)}"
+                keyboard = {"reply_markup": {"inline_keyboard": [[{
+                    "text": "Open ticket" if english else "Открыть обращение",
+                    "callback_data": f"st:view:{ticket_id}",
+                }]]}}
+            else:
+                preview = text or ("(no text)" if saved else "")
+                notify = f"💬 Ответ по обращению #{ticket_id}: <b>{escape(subject)}</b>\n\n{escape(preview[:3000])}"
+                if saved:
+                    notify += f"\n📷 {len(saved)} фото прикреплено"
+                keyboard = ticket_keyboard(get_config(), ticket_id)
             try:
                 async with httpx.AsyncClient(timeout=10.0) as client:
                     await send_notification(client,
                         f"https://api.telegram.org/bot{token}/sendMessage",
-                        {"chat_id": tg_id, "text": notify, "parse_mode": "HTML", **ticket_keyboard(get_config(), ticket_id)},
+                        {"chat_id": tg_id, "text": notify, "parse_mode": "HTML", "link_preview_options": {"is_disabled": True}, **keyboard},
                     )
             except Exception:
                 logger.warning("support notification could not be sent for ticket %s", ticket_id)

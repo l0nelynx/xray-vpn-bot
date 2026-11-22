@@ -118,6 +118,7 @@ services:
         REGISTRY: ${REGISTRY:-ghcr.io/l0nelynx/}
     volumes:
       - ./config.yml:/usr/src/app/config.yml
+      - ./support_uploads:/app/support_uploads
     # Edge (nginx proxies /bot/ here) + private data-network (Postgres). The
     # `seller-bot` network alias keeps the existing nginx upstream
     # (proxy_pass http://seller-bot:5000) working after the rename to `bot`.
@@ -150,33 +151,6 @@ services:
       resources:
         limits:
           memory: 512M
-  support-bot:
-    container_name: support-bot
-    image: ${REGISTRY:-ghcr.io/l0nelynx/}support-bot:${IMAGE_TAG:-staging}
-    build:
-      context: .
-      dockerfile: infra/docker/support_bot.Dockerfile
-    volumes:
-      - ./db:/usr/src/app/db
-      - ./config.yml:/usr/src/app/config.yml
-    restart: unless-stopped
-    # Legacy bot with its own SQLite DB — no Postgres access needed. Stays on
-    # the edge network only (outbound to Telegram).
-    # 128M is too tight for aiogram polling (~100–120MiB steady); OOM-adjacent
-    # thrashing shows up as block I/O and host swap pressure.
-    networks:
-      - backend-network
-    healthcheck:
-      test: ["CMD-SHELL", "pgrep -f support.py"]
-      interval: 60s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
-    logging: *default-logging
-    deploy:
-      resources:
-        limits:
-          memory: 256M
   dashboard:
     container_name: dashboard
     image: ${REGISTRY:-ghcr.io/l0nelynx/}dashboard:${IMAGE_TAG:-staging}

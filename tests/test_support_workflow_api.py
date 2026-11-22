@@ -15,10 +15,6 @@ from common_db.models import User, SupportTicket, SupportMessage, SupportAttachm
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
-    from miniapp.backend.routers import support as mini
-    from dashboard.backend.routers import support as admin
-    from miniapp.backend.android import support_router as android
-    from miniapp.backend import support_actions, support_create
     for model in (SupportTicket, SupportMessage, SupportAttachment):
         monkeypatch.setattr(model.__table__.c.id, "type", Integer())
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'support.sqlite'}")
@@ -31,6 +27,17 @@ def client(tmp_path, monkeypatch):
             session.add_all([User(id=1, tg_id=101, username="alice"), User(id=2, tg_id=202, username="bob")])
             await session.commit()
     asyncio.run(seed())
+    app, mini = support_api(factory, tmp_path, monkeypatch)
+    with TestClient(app) as c:
+        yield c, app, mini
+    asyncio.run(engine.dispose())
+
+
+def support_api(factory, tmp_path, monkeypatch):
+    from miniapp.backend.routers import support as mini
+    from dashboard.backend.routers import support as admin
+    from miniapp.backend.android import support_router as android
+    from miniapp.backend import support_actions, support_create
     for module in (mini, admin, android, support_actions, support_create):
         monkeypatch.setattr(module, "async_session", factory)
         if hasattr(module, "get_support_uploads_dir"):
@@ -50,9 +57,7 @@ def client(tmp_path, monkeypatch):
     app.dependency_overrides[android.deps.get_current_user] = lambda: SimpleNamespace(id=1, email="alice@example.invalid")
     app.dependency_overrides[mini.get_tg_user] = lambda: SimpleNamespace(tg_id=101, username="alice")
     app.dependency_overrides[admin.get_current_user] = lambda: "admin"
-    with TestClient(app) as c:
-        yield c, app, mini
-    asyncio.run(engine.dispose())
+    return app, mini
 
 
 def create(c):

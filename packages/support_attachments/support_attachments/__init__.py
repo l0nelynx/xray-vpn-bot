@@ -79,25 +79,19 @@ async def validate_and_save_attachments(
             f"too many images (max {MAX_ATTACHMENTS_PER_MESSAGE})"
         )
 
-    saved: list[SavedAttachment] = []
-    ticket_dir = Path(uploads_dir) / str(ticket_id)
-    ticket_dir.mkdir(parents=True, exist_ok=True)
+    verified: list[tuple[SavedAttachment, bytes]] = []
 
     for f in files:
-        data = await f.read()
+        data = await f.read(MAX_ATTACHMENT_SIZE_BYTES + 1)
         if len(data) > MAX_ATTACHMENT_SIZE_BYTES:
             raise AttachmentValidationError(
                 f"file exceeds size limit ({MAX_ATTACHMENT_SIZE_BYTES // (1024 * 1024)}MB): {f.filename}"
             )
 
         try:
-            img = Image.open(io.BytesIO(data))
-            fmt = (img.format or "").upper()
-            # verify() is a cheap structural check (does not decode full
-            # pixel data) and invalidates the Image object afterward — the
-            # format string is already captured above from the header parse
-            # that Image.open() does, so nothing further is needed from img.
-            img.verify()
+            with Image.open(io.BytesIO(data)) as img:
+                fmt = (img.format or "").upper()
+                img.verify()
         except Exception as exc:
             raise AttachmentValidationError(
                 f"not a valid image: {f.filename}"
@@ -108,17 +102,27 @@ async def validate_and_save_attachments(
             raise AttachmentValidationError(f"unsupported image type: {fmt or 'unknown'}")
 
         name = f"{uuid.uuid4().hex}{ext}"
-        (ticket_dir / name).write_bytes(data)
-
-        saved.append(
+        verified.append((
             SavedAttachment(
                 original_filename=f.filename or name,
                 stored_path=f"{ticket_id}/{name}",
                 mime_type=_MIME_BY_FORMAT[fmt],
                 size_bytes=len(data),
-            )
-        )
-    return saved
+            ), data,
+        ))
+
+    paths = []
+    try:
+        for attachment, data in verified:
+            path = Path(uploads_dir) / attachment.stored_path
+            path.parent.mkdir(parents=True, exist_ok=True)
+            paths.append(path)
+            path.write_bytes(data)
+    except OSError:
+        for path in paths:
+            path.unlink(missing_ok=True)
+        raise
+    return [attachment for attachment, _ in verified]
 
 
 __all__ = [

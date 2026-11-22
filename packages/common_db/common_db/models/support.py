@@ -30,6 +30,7 @@ class SupportTicket(Base):
     created_at: Mapped[str] = mapped_column(String(30))
     updated_at: Mapped[str] = mapped_column(String(30))
 
+    reply_channel: Mapped[str] = mapped_column(String(20), default="miniapp", server_default="miniapp")
     category: Mapped[str] = mapped_column(String(30), default="other", server_default="other")
     context: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     assignee: Mapped[str | None] = mapped_column(String(100), nullable=True)

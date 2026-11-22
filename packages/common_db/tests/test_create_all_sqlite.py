@@ -145,6 +145,7 @@ def test_metadata_round_trip_reflects_columns() -> None:
             "created_at",
             "updated_at",
             "category",
+            "reply_channel",
             "context",
             "assignee",
             "last_sender",

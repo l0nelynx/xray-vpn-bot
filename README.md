@@ -49,12 +49,11 @@ Services under `services/`, shared Python packages under `packages/`, frontends 
 
 | Service | Purpose |
 |---------|---------|
-| `bot` | Telegram seller bot + payment webhooks (`5000`) |
+| `bot` | Telegram seller bot, optional ticket bot (`support_token`) and payment webhooks (`5000`) |
 | `dashboard` | Admin FastAPI API (`8000`) |
 | `miniapp` | MiniApp API (`8001`) |
 | `frontend` | nginx serving dashboard + miniapp SPAs |
 | `postgres` / `migrate` | Shared DB + Alembic migrations |
-| `support-bot` | Legacy support bot (optional, SQLite) |
 
 Images publish to **GHCR** (`ghcr.io/l0nelynx/*`) and **Docker Hub** (`spicycheeze/*`).
 
@@ -126,7 +125,7 @@ Full key reference: [Configuration](docs/configuration.md).
 
 ```
 .
-├── services/          # bot, dashboard, miniapp, support_bot
+├── services/          # bot, dashboard, miniapp
 ├── web/               # dashboard + miniapp SPAs, shared @xray/ui
 ├── packages/          # common_db, payments, remnawave_client, …
 ├── landing/           # GitHub Pages homepage

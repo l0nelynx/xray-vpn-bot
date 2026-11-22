@@ -57,7 +57,7 @@ def test_startup_upgrades_from_either_branch(tmp_path, monkeypatch, applied):
     # A second service startup must be a no-op, not repeat CREATE/ALTER.
     upgrade_to_head()
     with engine.connect() as conn:
-        assert conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalars().all() == ["0049_web_payment_confirmation"]
+        assert conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalars().all() == ["0050_support_reply_channel"]
         assert conn.execute(sa.text("SELECT currency, payment_confirmed_at FROM transactions")).one() == (None, None)
         assert conn.execute(sa.text("SELECT id, sort_order_ru, sort_order_en FROM webapp_menu_nodes ORDER BY id")).all() == [(1, None, None), (2, 0, 0)]
         assert conn.execute(sa.text("SELECT incident, unavailable FROM remnawave_availability WHERE id=1")).one() == (0, False)
@@ -66,7 +66,7 @@ def test_startup_upgrades_from_either_branch(tmp_path, monkeypatch, applied):
         assert conn.execute(sa.text("SELECT status FROM referral_recovery WHERE id=1")).scalar() == "ready"
         assert conn.execute(sa.text("SELECT COUNT(*) FROM referral_notices")).scalar() == 0
         assert sa.inspect(conn).has_table("dashboard_branding_assets")
-        ticket = conn.execute(sa.text("SELECT subject, status, last_admin_message_id FROM support_tickets")).one()
-        assert tuple(ticket) == ("Existing ticket", "waiting_user", 2)
+        ticket = conn.execute(sa.text("SELECT subject, status, last_admin_message_id, reply_channel FROM support_tickets")).one()
+        assert tuple(ticket) == ("Existing ticket", "waiting_user", 2, "miniapp")
         assert conn.execute(sa.text("SELECT text FROM support_messages ORDER BY id")).scalars().all() == ["Original question", "Original reply"]
     engine.dispose()

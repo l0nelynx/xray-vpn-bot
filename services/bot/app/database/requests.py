@@ -20,16 +20,19 @@ from common_db.repo import system as _repo_system
 from common_db.repo import transactions as _repo_transactions
 
 
-async def set_user(tg_id, username=None):
-    async with async_session() as session:
+async def set_user(tg_id, username=None, *, initial_language=None):
+    """Register from either bot. Serialize the missing-row case as tg_id is not unique."""
+    async with async_session.begin() as session:
+        if session.get_bind().dialect.name == "postgresql":
+            await session.execute(select(func.pg_advisory_xact_lock(tg_id)))
         user = await _repo_users.get_user_by_tg_id(session, tg_id)
-
-        if not user:
-            session.add(User(tg_id=tg_id, username=username))
-            await session.commit()
+        if user is None:
+            user = User(tg_id=tg_id, username=username, language=initial_language)
+            session.add(user)
+            await session.flush()
         elif username and user.username != username:
             user.username = username
-            await session.commit()
+        return user.id
 
 
 async def get_users():

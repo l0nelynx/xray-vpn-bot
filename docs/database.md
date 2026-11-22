@@ -6,8 +6,8 @@ Production runs on **PostgreSQL 16** (separate `postgres` container, data on the
 Alembic.
 
 All backends (`bot`, `dashboard`, `miniapp`, `crm-worker`) share the same database
-through the `common_db` package. The legacy `support-bot` keeps its own SQLite
-under `./db/`. Redis is used for CRM job queues only — not as primary storage.
+through the `common_db` package. Telegram support tickets use this shared database. The old
+standalone bot's SQLite file under `./db/` is retained as an archive. Redis is used for CRM job queues only — not as primary storage.
 
 ## Single source of truth: `common_db`
 

@@ -102,10 +102,6 @@ jobs:
             bot:
               - 'services/bot/**'
               - 'infra/docker/bot.Dockerfile'
-            support_bot:
-              - 'services/support_bot/**'
-              - 'infra/docker/support_bot.Dockerfile'
-              - 'infra/docker/constraints.*'
             dashboard:
               - 'services/dashboard/**'
               - 'infra/docker/dashboard.Dockerfile'
@@ -129,7 +125,7 @@ jobs:
           changed = lambda name: filters.get(name) == 'true'
           all_images = os.environ['ALL'] == 'true' or changed('meta')
           backends = all_images or changed('base') or changed('shared')
-          selected = [name for name in ['python-base', 'bot', 'support-bot', 'dashboard', 'miniapp', 'frontend']
+          selected = [name for name in ['python-base', 'bot', 'dashboard', 'miniapp', 'frontend']
                       if all_images or changed(name.replace('-', '_'))
                       or (name == 'python-base' and changed('base'))
                       or (name in {'bot', 'dashboard', 'miniapp'} and backends)]

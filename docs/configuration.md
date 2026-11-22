@@ -194,11 +194,11 @@ Preferred: **Dashboard → Settings → Web**.
 
 See [web-portal.md](web-portal.md).
 
-## Support bot (legacy)
+## Telegram ticket bot
 
 | Key | Description |
 |-----|-------------|
-| `support_token` | Token for standalone `support.py` bot (own SQLite DB) |
+| `support_token` | Optional separate Telegram token polled by the main `bot` service for support tickets on PostgreSQL. Restart the service after changing it. |
 
 ## Payment gateways
 
@@ -321,4 +321,3 @@ returns `503 iap_not_configured`.
 | `bot` | `/usr/src/app/config.yml` |
 | `dashboard` | `/app/config.yml` |
 | `miniapp` | `/app/config.yml` |
-| `support-bot` | `/usr/src/app/config.yml` |

@@ -13,7 +13,20 @@ permissions:
 jobs:
   python:
     runs-on: ubuntu-26.04
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: support_test
+          POSTGRES_PASSWORD: support_test
+          POSTGRES_DB: support_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U support_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
     env:
+      SUPPORT_TEST_POSTGRES_URL: postgresql+asyncpg://support_test:support_test@127.0.0.1:5432/support_test
       DATABASE_URL: 'sqlite+aiosqlite:///:memory:'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7

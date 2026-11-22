@@ -162,7 +162,7 @@ Requires `redis` + `crm-worker`. Full guide: **[CRM](crm.md)**.
 
 **Route:** `/support`
 
-In-app support ticket inbox (replaces legacy support bot over time).
+The support inbox combines tickets from the Telegram support bot, Mini App and Android.
 
 **Workflow:**
 

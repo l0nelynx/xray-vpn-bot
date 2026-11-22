@@ -24,6 +24,9 @@ RUN uv pip install --system --no-deps --no-build-isolation /tmp/payments && rm -
 COPY packages/subscription_delivery /tmp/subscription_delivery
 RUN uv pip install --system --no-deps --no-build-isolation /tmp/subscription_delivery && rm -rf /tmp/subscription_delivery
 
+COPY packages/support_attachments /tmp/support_attachments
+RUN uv pip install --system --no-deps --no-build-isolation /tmp/support_attachments && rm -rf /tmp/support_attachments
+
 RUN touch ./db.sqlite3
 
 COPY services/bot/app ./app
