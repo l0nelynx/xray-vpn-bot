@@ -163,7 +163,7 @@ async def begin_draft(message, state, owner, lang, *, category=None, ticket_id=N
 async def show_draft(message, lang, draft, error=None):
     summary = label(lang, "draft").format(chars=len(draft["text"]), count=len(draft["images"]))
     prompt = label(lang, error) + "\n" if error else ""
-    await screen(message, prompt + f"<b>{summary}</b>\n" + label(lang, "replace"), draft_keyboard(lang, draft))
+    await screen(message, prompt + f"<b>{summary}</b>\n" + label(lang, "draft_help"), draft_keyboard(lang, draft))
 
 
 @router.message()
@@ -173,7 +173,8 @@ async def edit_draft(message: Message, state: FSMContext, owner, lang):
         await menu(message, owner, lang)
         return
     text = (message.text or message.caption or "").strip()
-    if len(text) > 4000:
+    combined_text = "\n\n".join(part for part in (draft["text"], text) if part)
+    if len(combined_text) > 4000:
         await show_draft(message, lang, draft, "text_limit")
         return
     file = message.photo[-1] if message.photo else message.document
@@ -191,8 +192,7 @@ async def edit_draft(message: Message, state: FSMContext, owner, lang):
     elif not message.text:
         await show_draft(message, lang, draft, "invalid")
         return
-    if text:
-        draft["text"] = text
+    draft["text"] = combined_text
     await state.set_data(draft)
     await show_draft(message, lang, draft)
 

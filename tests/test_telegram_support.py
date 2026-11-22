@@ -203,10 +203,24 @@ def test_support_chat_through_dashboard(support, monkeypatch, tmp_path):
         await feed(action=button(start, "new"))
         prompt = await feed(action="st:category:payment")
         assert "subscription link" in prompt.text
+        await feed(text="Discard this draft")
+        full = await feed(text="x" * (4000 - len("Discard this draft") - 2))
+        assert "4000/4000" in full.text
+        rejected = await feed(document={"file_id": "extra", "file_unique_id": "extra"}, caption="y")
+        assert "4000/4000" in rejected.text and "0/3 images" in rejected.text
+        assert "last message was left out" in rejected.text
+        await feed(action=button(rejected, "cancel:"))
+        await feed(action="st:category:payment")
+        await feed(text="Payment issue")
         await feed(photo=[{"file_id": "photo", "file_unique_id": "1", "width": 2, "height": 2}],
-                   caption="Payment issue", media_group_id="album")
+                   caption="Receipt attached", media_group_id="album")
         draft = await feed(document={"file_id": "doc", "file_unique_id": "2", "file_name": "screen.png"},
                            media_group_id="album")
+        expected = "Payment issue\n\nReceipt attached"
+        assert f"{len(expected)}/4000" in draft.text and "2/3 images" in draft.text
+        draft = await feed(text="Still pending")
+        expected += "\n\nStill pending"
+        assert f"{len(expected)}/4000" in draft.text
         send = button(draft, "send:")
         sent = await feed(action=send)
         view = button(sent, "view:")
@@ -220,7 +234,7 @@ def test_support_chat_through_dashboard(support, monkeypatch, tmp_path):
         path = f"/admin/api/support/tickets/{ticket_id}"
         thread = http.get(path).json()
         first = thread["messages"][0]
-        assert first["text"] == "Payment issue" and len(first["attachments"]) == 2
+        assert first["text"] == expected and len(first["attachments"]) == 2
         att = first["attachments"][0]["id"]
         assert http.get(path + f"/attachments/{att}").content == data
         image = ("operator.png", data, "image/png")

@@ -25,7 +25,9 @@ edit the same card. Account linking uses
 the existing verified linking flow.
 
 Users choose a category, enter a description (or photo caption), attach up to
-three images and tap Send. Drafts live in memory until submission or restart.
+three images and tap Send. Messages and captions accumulate in order as separate
+paragraphs. The 4,000-character counter includes the paragraph breaks. Cancel
+discards the whole draft. Drafts live in memory until submission or restart.
 Operators work in Dashboard. Their notifications contain the ticket number and
 Dashboard link. After a user writes through the support bot, public replies
 arrive in that chat with a button to view the thread and download its images.
