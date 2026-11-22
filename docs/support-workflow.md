@@ -17,8 +17,11 @@ Telegram support chat uses the same tickets and uploads as these clients.
 Set `support_token` to a separate Telegram bot token in `config.yml`. The
 `bot` service polls it alongside the seller bot when connected to PostgreSQL. Starting a private chat
 registers the Telegram account and opens the ticket menu in Russian or English.
-Users can include an order number, purchase email or subscription link in the
-description. These are optional details for the operator. Account linking uses
+New users and accounts without a linked Remnawave subscription see an optional
+tip about including an order number, purchase email or subscription link.
+Opening a ticket shows its public conversation in one card, with numbered
+image buttons. Longer conversations open on the latest page, and the arrows
+edit the same card. Account linking uses
 the existing verified linking flow.
 
 Users choose a category, enter a description (or photo caption), attach up to

@@ -4,10 +4,14 @@ import os
 from uuid import uuid4
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
+from html import unescape
+import re
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 from aiogram import Bot, Dispatcher
+from aiogram.methods import EditMessageText, SendMessage
 from aiogram.fsm.storage.memory import SimpleEventIsolation
 from aiogram.types import Update
 from fastapi.testclient import TestClient
@@ -18,7 +22,7 @@ from sqlalchemy.schema import CreateSchema, DropSchema
 from sqlalchemy import func, select
 
 from common_db import Base
-from common_db.models import SupportTicket, User
+from common_db.models import SupportTicket, User, UserSubscription
 from tests.test_support_workflow_api import support_api
 
 
@@ -50,7 +54,7 @@ def support(monkeypatch, tmp_path):
         monkeypatch.setattr(module, "async_session", factory)
     monkeypatch.setattr(tickets, "uploads_dir", lambda: str(tmp_path))
     config = {"support_token": "111:Support", "token": "222:Seller", "admin_id": 777,
-              "miniapp_url": "https://test.invalid/bot/miniapp"}
+              "miniapp_url": "https://test.invalid/bot/miniapp", "branding_name": "Cloud & VPN"}
     monkeypatch.setattr(router, "secrets", config)
     monkeypatch.setattr(dashboard, "get_config", lambda: config)
     monkeypatch.setattr(dashboard, "get_bot_token", lambda: config["token"])
@@ -69,6 +73,31 @@ def png():
     buf = BytesIO()
     Image.new("RGB", (2, 2)).save(buf, format="PNG")
     return buf.getvalue()
+
+
+def test_history_fits_short_thread_and_paginates_long_html_safely():
+    from app.support.history import history_pages
+
+    ticket = SimpleNamespace(id=42, subject="<VPN> & " * 20, status="open")
+    messages = [SimpleNamespace(id=i, sender="user", text=f"question {i}",
+                                attachments=[], created_at="2026-11-22T09:00:00+00:00") for i in range(1, 9)]
+    short, = history_pages(ticket, messages, "ru")
+    assert short.text.count("<b>👤 Вы</b>") == 8
+    assert "&lt;VPN&gt; &amp;" in short.text and "question 8" in short.text
+
+    raw = "<&🚀>" * 1000
+    messages.append(SimpleNamespace(id=9, sender="admin", text=raw, attachments=[SimpleNamespace(id=55)],
+                                    created_at="2026-11-22T09:10:00+00:00"))
+    pages = history_pages(ticket, messages, "ru")
+    recovered = []
+    for page in pages:
+        visible = unescape(re.sub(r"<[^>]+>", "", page.text))
+        assert len(visible) == page.length <= 4096
+        if page.images:
+            assert page.images == [[("📎 1", "image:42:55")]]
+            recovered.append(visible.split("📎 1\n")[1])
+    assert "".join(recovered) == raw
+    assert pages[-1].read_cursor == 9 and all(p.read_cursor == 0 for p in pages[:-1])
 
 
 def test_both_bots_register_one_account(support):
@@ -161,7 +190,16 @@ def test_support_chat_through_dashboard(support, monkeypatch, tmp_path):
                         if b.callback_data.startswith("st:" + prefix))
 
         start = await feed(text="/start")
-        assert "order number" in start.text and button(start, "list")
+        assert "Welcome to Cloud &amp; VPN support!" in start.text and button(start, "list")
+        assert "<blockquote>" in start.text and "order number" in start.text
+        async with factory.begin() as session:
+            (await session.get(User, 1)).rw_id = 101001
+            session.add(UserSubscription(user_id=2, rw_id=202002, source="test", created_at="2026-01-01", updated_at="2026-01-01"))
+        for linked in (101, 202):
+            greeting = await feed(text="/start", user=linked)
+            assert "Здравствуйте" in greeting.text and "<blockquote>" not in greeting.text
+            prompt = await feed(action="st:category:payment", user=linked)
+            assert "номер заказа" not in prompt.text
         await feed(action=button(start, "new"))
         prompt = await feed(action="st:category:payment")
         assert "subscription link" in prompt.text
@@ -196,9 +234,15 @@ def test_support_chat_through_dashboard(support, monkeypatch, tmp_path):
         assert body["reply_markup"]["inline_keyboard"][0][0]["callback_data"] == view
         calls.clear()
         await feed(action=view)
-        reply = next(m for m in calls if "Public reply" in (getattr(m, "text", "") or ""))
+        cards = [m for m in calls if isinstance(m, (EditMessageText, SendMessage))]
+        assert len(cards) == 1
+        reply = cards[0]
+        assert isinstance(reply, EditMessageText) and reply.parse_mode == "HTML"
+        assert reply.text.index("Payment issue") < reply.text.index("Public reply")
+        assert f"st:image:{ticket_id}:{att}" == button(reply, "image:")
         assert all("Private" not in (getattr(m, "text", "") or "") for m in calls)
-        image_action = button(reply, "image:")
+        public_att = http.get(path).json()["messages"][-1]["attachments"][0]["id"]
+        image_action = button(reply, f"image:{ticket_id}:{public_att}")
         assert (await feed(action=image_action)).document.path.read_bytes() == data
         assert "недоступно" in (await feed(action=image_action, user=202)).text
         assert "недоступно" in (await feed(action=view, user=202)).text
@@ -235,6 +279,12 @@ def test_support_chat_through_dashboard(support, monkeypatch, tmp_path):
         await feed(action=button(draft, "send:"), user=101)
         assert http.post(old_path + "/reply", data={"text": "Telegram channel"}).is_success
         assert customer.await_args.args[1].endswith("111:Support/sendMessage")
+        assert http.post(old_path + "/reply", data={"text": "Long reply " + "x" * 3970}).is_success
+        latest = await feed(action=f"st:view:{legacy}", user=101)
+        previous = await feed(action=button(latest, "page:"), user=101)
+        assert isinstance(previous, EditMessageText) and "From web" in previous.text
+        again = await feed(action=button(previous, "page:"), user=101)
+        assert again.text == latest.text
         await bot.session.close()
 
     asyncio.run(run())

@@ -2,9 +2,8 @@
 from pathlib import Path
 
 from sqlalchemy import select, update
-from sqlalchemy.orm import selectinload
 
-from common_db.models import SupportMessage, SupportTicket
+from common_db.models import SupportMessage, SupportTicket, User, UserSubscription
 from common_db.repo import support as repo
 from common_db.repo.users import get_user_by_id
 from common_db.support_workflow import can_reopen, now_iso, record_message
@@ -92,16 +91,19 @@ async def list_page(owner, offset):
     return rows[:8], len(rows) > 8
 
 
-async def conversation(owner, ticket_id, before=None):
+async def needs_purchase_tip(owner):
+    async with async_session() as session:
+        linked_subscription = select(UserSubscription.id).where(UserSubscription.user_id == User.id).exists()
+        linked = await session.scalar(
+            select(User.rw_id.is_not(None) | linked_subscription).where(User.id == owner)
+        )
+        return not linked
+
+
+async def conversation(owner, ticket_id):
     async with async_session() as session:
         ticket = await owned_ticket(session, owner, ticket_id)
-        stmt = select(SupportMessage).where(
-            SupportMessage.ticket_id == ticket_id, SupportMessage.sender != "note",
-        ).options(selectinload(SupportMessage.attachments))
-        if before:
-            stmt = stmt.where(SupportMessage.id < before)
-        messages = list(await session.scalars(stmt.order_by(SupportMessage.id.desc()).limit(5)))
-    return ticket, list(reversed(messages[:4])), len(messages) > 4
+        return ticket, await repo.list_messages_for_ticket(session, ticket_id)
 
 
 async def mark_read(owner, ticket_id, cursor):
