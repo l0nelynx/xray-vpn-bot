@@ -91,6 +91,7 @@ const users = [
     is_paid: true,
     vip: false,
     email: "alice@example.com",
+    email_verified: true,
     language: "ru",
     subscriptions_count: 2,
   },
@@ -105,6 +106,7 @@ const users = [
     is_paid: false,
     vip: true,
     email: null,
+    email_verified: false,
     language: "en",
     subscriptions_count: 0,
   },
@@ -119,6 +121,7 @@ const users = [
     is_paid: true,
     vip: false,
     email: "carol@example.com",
+    email_verified: false,
     language: "ru",
     subscriptions_count: 1,
   },
@@ -374,9 +377,25 @@ export const handlers: HttpHandler[] = [
   http.post(`${API}/users/:id/unvip`, () => HttpResponse.json({ ok: true })),
   http.delete(`${API}/users/:id`, () => new HttpResponse(null, { status: 204 })),
   http.patch(`${API}/users/:id/identifiers`, () => HttpResponse.json({ ok: true })),
-  http.patch(`${API}/users/:id/email`, () =>
-    HttpResponse.json({ ok: true, rw_id: 99 }),
-  ),
+  http.patch(`${API}/users/:id/email`, async ({ params, request }) => {
+    const user = users.find((u) => u.id === Number(params.id));
+    if (!user) return HttpResponse.json({ detail: "Not found" }, { status: 404 });
+    const body = (await request.json()) as { email: string };
+    const email = body.email.trim().toLowerCase();
+    if (user.email !== email) user.email_verified = false;
+    user.email = email;
+    return HttpResponse.json({ ok: true, email, rw_id: 99 });
+  }),
+  http.patch(`${API}/users/:id/email-verification`, async ({ params, request }) => {
+    const user = users.find((u) => u.id === Number(params.id));
+    if (!user) return HttpResponse.json({ detail: "Not found" }, { status: 404 });
+    const body = (await request.json()) as { email: string; verified: boolean };
+    if (!user.email || user.email !== body.email) {
+      return HttpResponse.json({ detail: "Email changed or missing" }, { status: 409 });
+    }
+    user.email_verified = body.verified;
+    return HttpResponse.json({ email_verified: user.email_verified });
+  }),
   http.post(`${API}/users/:id/credits`, () => HttpResponse.json({ ok: true, balance: 250 })),
   http.post(`${API}/users/:id/send-message`, () => HttpResponse.json({ ok: true })),
 

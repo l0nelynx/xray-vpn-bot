@@ -226,6 +226,29 @@ export default function UserDrawer({ userId, open, onClose, onChanged }: Props) 
     }
   };
 
+  const handleEmailVerification = async (verified: boolean) => {
+    if (!user?.email || emailSaving) return;
+    setEmailSaving(true);
+    try {
+      const result = await api.patch<{ email_verified: boolean }>(
+        `/users/${user.id}/email-verification`,
+        { email: user.email, verified },
+      );
+      setUser((current) => current?.id === user.id && current.email === user.email
+        ? { ...current, email_verified: result.email_verified }
+        : current);
+      toast.success(result.email_verified ? "Email marked as verified" : "Email verification removed");
+    } catch (error) {
+      if ((error as { status?: number }).status === 409) {
+        toast.error("The saved email has changed. Reopen the user to see the current address.");
+      } else {
+        toast.error("Failed to update email verification");
+      }
+    } finally {
+      setEmailSaving(false);
+    }
+  };
+
   const handleAdjustCredits = async () => {
     const delta = Number(creditsDelta);
     if (!user || !creditsDelta || Number.isNaN(delta) || delta === 0) return;
@@ -455,6 +478,7 @@ export default function UserDrawer({ userId, open, onClose, onChanged }: Props) 
                 <div className="flex gap-2">
                   <Input
                     value={emailInput}
+                    disabled={emailSaving}
                     onChange={(e) => setEmailInput(e.target.value)}
                     placeholder="user@example.com"
                     onKeyDown={(e) => e.key === "Enter" && handleSaveEmail()}
@@ -463,6 +487,15 @@ export default function UserDrawer({ userId, open, onClose, onChanged }: Props) 
                     Save
                   </Button>
                 </div>
+                <label className="mt-2 flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={user.email_verified}
+                    disabled={emailSaving || !user.email?.trim() || emailInput !== user.email}
+                    onChange={(e) => handleEmailVerification(e.target.checked)}
+                  />
+                  Email verified
+                </label>
               </div>
 
               <Separator />

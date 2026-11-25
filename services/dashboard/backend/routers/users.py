@@ -1,6 +1,6 @@
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -187,6 +187,7 @@ async def get_user(user_id: int, _: str = Depends(get_current_user)):
             "rw_id": user.rw_id,
             "api_provider": user.api_provider,
             "email": user.email,
+            "email_verified": bool(user.email_verified_at),
             "is_banned": bool(user.is_banned),
             "language": user.language,
             "vip": bool(user.vip),
@@ -540,15 +541,40 @@ class UpdateEmailRequest(BaseModel):
     email: str
 
 
+class UpdateEmailVerificationRequest(BaseModel):
+    email: str = Field(min_length=1)
+    verified: bool
+
+
+@router.patch("/{user_id}/email-verification")
+async def update_email_verification(
+    user_id: int, body: UpdateEmailVerificationRequest, _: str = Depends(get_current_user),
+):
+    async with async_session() as session:
+        user = await _repo_users.get_user_by_id(session, user_id, for_update=True)
+        if not user:
+            raise HTTPException(404, detail="User not found")
+        if not user.email or not user.email.strip() or user.email != body.email:
+            raise HTTPException(409, detail="Email changed or missing")
+        if body.verified and not user.email_verified_at:
+            user.email_verified_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        elif not body.verified:
+            user.email_verified_at = None
+        await session.commit()
+        return {"email_verified": bool(user.email_verified_at)}
+
+
 @router.patch("/{user_id}/email")
 async def update_email(user_id: int, body: UpdateEmailRequest, _: str = Depends(get_current_user)):
     email = body.email.strip().lower()
     if not re.match(r"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$", email):
         raise HTTPException(status_code=400, detail="Invalid email format")
     async with async_session() as session:
-        user = await _repo_users.get_user_by_id(session, user_id)
+        user = await _repo_users.get_user_by_id(session, user_id, for_update=True)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
+        if (user.email or "").strip().lower() != email:
+            user.email_verified_at = None
         user.email = email
         await session.commit()
 

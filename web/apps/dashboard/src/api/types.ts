@@ -31,6 +31,7 @@ export interface ManagedSubscription {
 }
 
 export interface UserDetail extends UserItem {
+  email_verified: boolean;
   transactions_count: number;
   total_spent: number;
   promo_code: string | null;
